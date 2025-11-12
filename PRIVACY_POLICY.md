@@ -1,55 +1,119 @@
-# Privacy Policy for D2D Advancer
+---
+layout: default
+title: Privacy Policy - D2D Advancer
+description: Privacy Policy for D2D Advancer - Door-to-Door Sales Management App
+---
 
-**Effective Date:** August 25, 2025  
-**Last Updated:** August 25, 2025
+<div align="center">
+  <h1>🛡️ Privacy Policy</h1>
+  <h2>D2D Advancer</h2>
+  <p><em>Door-to-Door Sales Management App</em></p>
+  
+  <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #007bff;">
+    <strong>📅 Effective Date:</strong> August 25, 2025<br>
+    <strong>🔄 Last Updated:</strong> August 25, 2025
+  </div>
+</div>
 
-## Introduction
+---
 
-D2D Advancer ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application D2D Advancer (the "App").
+## 🌟 Introduction
 
-## Information We Collect
+**D2D Advancer** ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application D2D Advancer (the "App").
 
-### Personal Information You Provide
-- **Account Information:** Email address, display name, and encrypted password for authentication
-- **Lead Data:** Names, phone numbers, addresses, notes, and other contact information you enter
-- **User Content:** Notes, tags, follow-up information, and appointment details you create
+> 💡 **TL;DR:** We only collect data necessary for the app to function, keep it secure, and never sell it to third parties.
 
-### Automatically Collected Information
-- **Location Data:** Your device's precise location (latitude/longitude coordinates) when you grant location permissions
-- **Device Information:** Device model, operating system version, and app usage analytics
-- **Usage Data:** App features used, session duration, and interaction patterns
+## 📊 Information We Collect
 
-### Third-Party Data
-- **Payment Information:** Subscription and billing data processed through Apple's App Store (we do not directly collect payment details)
+<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
+  <h3 style="color: white; margin-top: 0;">👤 Personal Information You Provide</h3>
+  <ul>
+    <li><strong>🔐 Account Information:</strong> Email address, display name, and encrypted password for authentication</li>
+    <li><strong>👥 Lead Data:</strong> Names, phone numbers, addresses, notes, and other contact information you enter</li>
+    <li><strong>📝 User Content:</strong> Notes, tags, follow-up information, and appointment details you create</li>
+  </ul>
+</div>
 
-## How We Use Your Information
+<div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
+  <h3 style="color: white; margin-top: 0;">🤖 Automatically Collected Information</h3>
+  <ul>
+    <li><strong>📍 Location Data:</strong> Your device's precise location (latitude/longitude coordinates) when you grant location permissions</li>
+    <li><strong>📱 Device Information:</strong> Device model, operating system version, and app usage analytics</li>
+    <li><strong>📈 Usage Data:</strong> App features used, session duration, and interaction patterns</li>
+  </ul>
+</div>
 
-We use the collected information to:
-- Provide and maintain the App's functionality
-- Authenticate your account and secure your data
-- Display leads on maps using location coordinates
-- Send push notifications for follow-up reminders (with your permission)
-- Process subscription payments through Apple's systems
-- Improve App performance and user experience
-- Provide customer support
+<div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
+  <h3 style="color: white; margin-top: 0;">🔗 Third-Party Data</h3>
+  <ul>
+    <li><strong>💳 Payment Information:</strong> Subscription and billing data processed through Apple's App Store (we do not directly collect payment details)</li>
+  </ul>
+</div>
 
-## Data Storage and Security
+## 🎯 How We Use Your Information
 
-### Firebase Authentication & Security
-- User accounts are managed through Firebase Authentication
-- Passwords are encrypted and never stored in plain text
-- Email verification is required for account security
-- We implement rate limiting and security blocking for suspicious activity
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
 
-### Local Data Storage
-- Lead data is stored locally on your device using Core Data
-- Data is synced with Firebase Firestore for backup and multi-device access
-- All data transmission is encrypted using industry-standard protocols
+<div style="background: #e8f5e8; padding: 20px; border-radius: 10px; border-left: 4px solid #28a745;">
+  <h4 style="color: #155724; margin-top: 0;">✅ Core Functionality</h4>
+  <ul style="color: #155724;">
+    <li>Provide and maintain the App's functionality</li>
+    <li>Authenticate your account and secure your data</li>
+    <li>Display leads on maps using location coordinates</li>
+  </ul>
+</div>
 
-### Location Data
-- Location data is only accessed when you grant permission
-- Location information is used solely for mapping and navigation features
-- We do not track your location in the background without explicit permission
+<div style="background: #fff3cd; padding: 20px; border-radius: 10px; border-left: 4px solid #ffc107;">
+  <h4 style="color: #856404; margin-top: 0;">🔔 Communications</h4>
+  <ul style="color: #856404;">
+    <li>Send push notifications for follow-up reminders (with your permission)</li>
+    <li>Provide customer support</li>
+  </ul>
+</div>
+
+<div style="background: #d1ecf1; padding: 20px; border-radius: 10px; border-left: 4px solid #17a2b8;">
+  <h4 style="color: #0c5460; margin-top: 0;">💼 Business Operations</h4>
+  <ul style="color: #0c5460;">
+    <li>Process subscription payments through Apple's systems</li>
+    <li>Improve App performance and user experience</li>
+  </ul>
+</div>
+
+</div>
+
+## 🔒 Data Storage and Security
+
+<div style="background: #f8f9fa; padding: 30px; border-radius: 15px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+
+### 🔐 Firebase Authentication & Security
+<div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #dc3545;">
+  <ul>
+    <li><strong>🛡️ Secure Authentication:</strong> User accounts are managed through Firebase Authentication</li>
+    <li><strong>🔑 Password Protection:</strong> Passwords are encrypted and never stored in plain text</li>
+    <li><strong>📧 Email Verification:</strong> Required for account security</li>
+    <li><strong>⚡ Security Monitoring:</strong> Rate limiting and blocking for suspicious activity</li>
+  </ul>
+</div>
+
+### 💾 Local Data Storage
+<div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #28a745;">
+  <ul>
+    <li><strong>📱 Device Storage:</strong> Lead data is stored locally on your device using Core Data</li>
+    <li><strong>☁️ Cloud Sync:</strong> Data is synced with Firebase Firestore for backup and multi-device access</li>
+    <li><strong>🔐 Encrypted Transmission:</strong> All data transmission uses industry-standard encryption protocols</li>
+  </ul>
+</div>
+
+### 📍 Location Data Protection
+<div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #17a2b8;">
+  <ul>
+    <li><strong>🎯 Permission-Based:</strong> Location data is only accessed when you grant permission</li>
+    <li><strong>🗺️ Purpose-Limited:</strong> Location information is used solely for mapping and navigation features</li>
+    <li><strong>🚫 No Background Tracking:</strong> We do not track your location without explicit permission</li>
+  </ul>
+</div>
+
+</div>
 
 ## Data Sharing and Disclosure
 
@@ -82,7 +146,6 @@ We may disclose your information if required by law or to:
 - We respect your notification preferences at all times
 
 ### Data Portability
-- Export your leads data in CSV format (Pro subscription feature)
 - Request a copy of your data by contacting support
 
 ## Subscription and Payment Data
@@ -114,11 +177,17 @@ We may update this Privacy Policy from time to time. We will notify you of any c
 - Updating the "Last Updated" date
 - Sending notifications for material changes (if applicable)
 
-## Contact Us
+## 📧 Contact Us
 
-If you have questions about this Privacy Policy or your data, please contact us:
-
-- **Email:** dan1sl6nd@gmail.com
+<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 15px; text-align: center; color: white; margin: 30px 0;">
+  <h3 style="color: white; margin-top: 0;">Have Questions About Your Privacy?</h3>
+  <p style="font-size: 18px; margin: 20px 0;">We're here to help! Contact us with any privacy-related questions.</p>
+  
+  <div style="background: rgba(255, 255, 255, 0.2); padding: 20px; border-radius: 10px; display: inline-block;">
+    <h4 style="color: white; margin: 0;">📬 Email Us</h4>
+    <a href="mailto:dan1sl6nd@gmail.com" style="color: #ffd700; text-decoration: none; font-size: 18px; font-weight: bold;">dan1sl6nd@gmail.com</a>
+  </div>
+</div>
 
 ## Compliance
 
@@ -137,4 +206,29 @@ California residents have additional rights under CCPA:
 
 ---
 
-**Note:** This privacy policy is generated specifically for the D2D Advancer mobile application and reflects our current data practices. For the most up-to-date version, please check within the App or visit our GitHub repository.
+<div style="background: #f8f9fa; padding: 30px; border-radius: 15px; margin: 30px 0; border: 2px dashed #dee2e6;">
+  <div style="text-align: center;">
+    <h3>📱 D2D Advancer</h3>
+    <p><em>Empowering door-to-door sales professionals with smart lead management</em></p>
+    
+    <div style="margin: 20px 0;">
+      <span style="background: #007bff; color: white; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">📊 Lead Management</span>
+      <span style="background: #28a745; color: white; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">📍 GPS Mapping</span>
+      <span style="background: #ffc107; color: black; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">⏰ Follow-ups</span>
+      <span style="background: #dc3545; color: white; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">🔒 Secure</span>
+    </div>
+    
+    <hr style="border: none; border-top: 2px solid #dee2e6; margin: 20px 0;">
+    
+    <p style="font-size: 14px; color: #6c757d; margin: 0;">
+      <strong>📝 Note:</strong> This privacy policy is generated specifically for the D2D Advancer mobile application and reflects our current data practices. For the most up-to-date version, please check within the App or visit our GitHub repository.
+    </p>
+  </div>
+</div>
+
+<div style="text-align: center; margin: 30px 0; padding: 20px;">
+  <p style="color: #6c757d; font-size: 14px;">
+    Made with ❤️ for sales professionals<br>
+    <strong>© 2025 D2D Advancer</strong>
+  </p>
+</div>
