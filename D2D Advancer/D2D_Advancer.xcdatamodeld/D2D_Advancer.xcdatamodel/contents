@@ -1,9 +1,74 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="1" systemVersion="11A491" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="false" userDefinedModelVersionIdentifier="">
-    <entity name="Item" representedClassName="Item" syncable="YES" codeGenerationType="class">
-        <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="1" systemVersion="11A491" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="true" userDefinedModelVersionIdentifier="">
+    <entity name="FollowUpCheckIn" representedClassName="FollowUpCheckIn" syncable="YES" codeGenerationType="class">
+        <attribute name="checkInDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="checkInType" optional="NO" attributeType="String" defaultValueString="door_knock"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="outcome" optional="YES" attributeType="String"/>
+        <attribute name="scheduledNextFollowUp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="lead" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Lead" inverseName="checkIns" inverseEntity="Lead"/>
+    </entity>
+    <entity name="Lead" representedClassName="Lead" syncable="YES" codeGenerationType="class">
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="id"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+        <attribute name="address" optional="YES" attributeType="String"/>
+        <attribute name="createdDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dateCreated" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dateModified" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="email" optional="YES" attributeType="String"/>
+        <attribute name="estimatedValue" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="followUpDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lastContactDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="latitude" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="longitude" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="neighborhoodId" optional="YES" attributeType="String"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="phone" optional="YES" attributeType="String"/>
+        <attribute name="price" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="priority" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="serviceCategory" optional="YES" attributeType="String"/>
+        <attribute name="source" optional="YES" attributeType="String"/>
+        <attribute name="status" optional="NO" attributeType="String" defaultValueString="not_contacted"/>
+        <attribute name="tags" optional="YES" attributeType="String"/>
+        <attribute name="updatedDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="visitCount" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="checkIns" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="FollowUpCheckIn" inverseName="lead" inverseEntity="FollowUpCheckIn"/>
+        <relationship name="neighborhood" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Neighborhood" inverseName="leads" inverseEntity="Neighborhood"/>
+    </entity>
+    <entity name="Neighborhood" representedClassName="Neighborhood" syncable="YES" codeGenerationType="class">
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="id"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+        <attribute name="ageDistribution" optional="YES" attributeType="String"/>
+        <attribute name="averageHomeValue" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="boundaryCoordinates" optional="YES" attributeType="String"/>
+        <attribute name="censusTractId" optional="YES" attributeType="String"/>
+        <attribute name="centerLatitude" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="centerLongitude" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="cityName" optional="YES" attributeType="String"/>
+        <attribute name="homeOwnershipRate" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lastUpdated" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="medianHouseholdIncome" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="populationDensity" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="score" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="state" optional="YES" attributeType="String"/>
+        <attribute name="userNotes" optional="YES" attributeType="String"/>
+        <attribute name="zipCode" optional="YES" attributeType="String"/>
+        <relationship name="leads" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Lead" inverseName="neighborhood" inverseEntity="Lead"/>
     </entity>
     <elements>
-        <element name="Item" positionX="-63" positionY="-18" width="128" height="44"/>
+        <element name="FollowUpCheckIn" positionX="-54" positionY="90" width="128" height="134"/>
+        <element name="Lead" positionX="-63" positionY="-18" width="128" height="300"/>
+        <element name="Neighborhood" positionX="-200" positionY="-18" width="128" height="300"/>
     </elements>
 </model>

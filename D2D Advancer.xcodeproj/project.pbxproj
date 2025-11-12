@@ -6,6 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		E60962392E55B6CD00950939 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E60962382E55B6CD00950939 /* FirebaseAuth */; };
+		E609623B2E55B6CD00950939 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = E609623A2E55B6CD00950939 /* FirebaseCore */; };
+		E609623D2E55B6CD00950939 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = E609623C2E55B6CD00950939 /* FirebaseFirestore */; };
+		E6265C3D2E98ED3A00B4BC85 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6265C3C2E98ED3A00B4BC85 /* StoreKit.framework */; };
+		E690EE9E2EBC1F8B00274435 /* Configuration.storekit in Resources */ = {isa = PBXBuildFile; fileRef = E690EE9D2EBC1F8B00274435 /* Configuration.storekit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		E631E7E82E51C3F400EAD3D5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,9 +32,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		E6265C3C2E98ED3A00B4BC85 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		E631E7D52E51C3F300EAD3D5 /* D2D Advancer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "D2D Advancer.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E631E7E72E51C3F400EAD3D5 /* D2D AdvancerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "D2D AdvancerTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E631E7F12E51C3F400EAD3D5 /* D2D AdvancerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "D2D AdvancerUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E690EE9D2EBC1F8B00274435 /* Configuration.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Configuration.storekit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +62,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E609623B2E55B6CD00950939 /* FirebaseCore in Frameworks */,
+				E60962392E55B6CD00950939 /* FirebaseAuth in Frameworks */,
+				E609623D2E55B6CD00950939 /* FirebaseFirestore in Frameworks */,
+				E6265C3D2E98ED3A00B4BC85 /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,12 +86,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		E6265C3B2E98ED3A00B4BC85 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				E6265C3C2E98ED3A00B4BC85 /* StoreKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		E631E7CC2E51C3F300EAD3D5 = {
 			isa = PBXGroup;
 			children = (
+				E690EE9D2EBC1F8B00274435 /* Configuration.storekit */,
 				E631E7D72E51C3F300EAD3D5 /* D2D Advancer */,
 				E631E7EA2E51C3F400EAD3D5 /* D2D AdvancerTests */,
 				E631E7F42E51C3F400EAD3D5 /* D2D AdvancerUITests */,
+				E6265C3B2E98ED3A00B4BC85 /* Frameworks */,
 				E631E7D62E51C3F300EAD3D5 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -112,6 +136,9 @@
 			);
 			name = "D2D Advancer";
 			packageProductDependencies = (
+				E60962382E55B6CD00950939 /* FirebaseAuth */,
+				E609623A2E55B6CD00950939 /* FirebaseCore */,
+				E609623C2E55B6CD00950939 /* FirebaseFirestore */,
 			);
 			productName = "D2D Advancer";
 			productReference = E631E7D52E51C3F300EAD3D5 /* D2D Advancer.app */;
@@ -171,7 +198,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1640;
-				LastUpgradeCheck = 1640;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					E631E7D42E51C3F300EAD3D5 = {
 						CreatedOnToolsVersion = 16.4;
@@ -195,6 +222,9 @@
 			);
 			mainGroup = E631E7CC2E51C3F300EAD3D5;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E60962372E55B6CD00950939 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E631E7D62E51C3F300EAD3D5 /* Products */;
 			projectDirPath = "";
@@ -212,6 +242,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E690EE9E2EBC1F8B00274435 /* Configuration.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -327,6 +358,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -383,6 +415,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -395,20 +428,32 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RF247ARQB7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "D2D Advancer";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "D2D Advancer would like access to your Calendar to save scheduled appointments and reminders.";
+				INFOPLIST_KEY_NSContactsUsageDescription = "D2D Advancer would like to save your leads to your Contacts app for easy access and to help you stay organized with your door-to-door sales.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "D2D Advancer needs location access to show your current position on the map and help you navigate to leads.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "D2D Advancer needs location access to show your current position on the map and help you navigate to leads.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "dan1sland.D2D-Advancer";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -420,22 +465,35 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_GENERATE_DEBUGGING_SYMBOLS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RF247ARQB7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "D2D Advancer";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "D2D Advancer would like access to your Calendar to save scheduled appointments and reminders.";
+				INFOPLIST_KEY_NSContactsUsageDescription = "D2D Advancer would like to save your leads to your Contacts app for easy access and to help you stay organized with your door-to-door sales.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "D2D Advancer needs location access to show your current position on the map and help you navigate to leads.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "D2D Advancer needs location access to show your current position on the map and help you navigate to leads.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "dan1sland.D2D-Advancer";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -450,7 +508,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "dan1sland.D2D-AdvancerTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -468,7 +526,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "dan1sland.D2D-AdvancerTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -484,7 +542,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "dan1sland.D2D-AdvancerUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -500,7 +558,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "dan1sland.D2D-AdvancerUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -550,6 +608,35 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E60962372E55B6CD00950939 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E60962382E55B6CD00950939 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E60962372E55B6CD00950939 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		E609623A2E55B6CD00950939 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E60962372E55B6CD00950939 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		E609623C2E55B6CD00950939 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E60962372E55B6CD00950939 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E631E7CD2E51C3F300EAD3D5 /* Project object */;
 }

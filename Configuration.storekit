@@ -1,0 +1,70 @@
+{
+  "identifier" : "Configuration",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_applicationInternalID" : "6738387157",
+    "_developerTeamID" : "RF247ARQB7",
+    "_lastSynchronizedDate" : null
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "premium_access",
+      "localizations" : [],
+      "name" : "Premium Access",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "weekly_sub",
+          "introductoryOffer" : {
+            "internalID" : "weekly_trial",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P3D"
+          },
+          "localizations" : [
+            {
+              "description" : "Weekly subscription with 3-day trial",
+              "displayName" : "Weekly Plan",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.d2dadvancer.weekly",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "Weekly Subscription",
+          "subscriptionGroupID" : "premium_access",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "36.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "yearly_sub",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Yearly subscription - best value",
+              "displayName" : "Yearly Plan",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.d2dadvancer.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Yearly Subscription",
+          "subscriptionGroupID" : "premium_access",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
