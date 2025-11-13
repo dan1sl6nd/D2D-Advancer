@@ -25,7 +25,7 @@ struct PaywallView: View {
             .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 24) {
+                VStack(spacing: 28) {
                     // Header
                     headerSection
                         .padding(.top, 20)
@@ -35,6 +35,15 @@ struct PaywallView: View {
 
                     // Benefits
                     benefitsSection
+
+                    // Social Proof
+                    socialProofSection
+
+                    // Testimonials
+                    testimonialsSection
+
+                    // FAQ
+                    faqSection
 
                     Spacer(minLength: 120)
                 }
@@ -182,6 +191,109 @@ struct PaywallView: View {
         }
     }
 
+    // MARK: - Social Proof Section
+
+    private var socialProofSection: some View {
+        let tagline = paywallManager.experience.socialProofTagline
+
+        return VStack(spacing: 16) {
+            // Rating display
+            VStack(spacing: 10) {
+                HStack(spacing: 4) {
+                    ForEach(0..<5, id: \.self) { _ in
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [Color.yellow, Color.orange],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Text("4.9")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+
+                    Text("out of 5")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+
+                Text("average rating")
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.white.opacity(0.05))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.yellow.opacity(0.2), Color.orange.opacity(0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            )
+
+            Text(tagline)
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundColor(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+        }
+    }
+
+    // MARK: - Testimonials Section
+
+    private var testimonialsSection: some View {
+        let testimonials = paywallManager.experience.testimonials
+
+        return VStack(spacing: 16) {
+            Text("What Users Say")
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 12) {
+                ForEach(testimonials) { testimonial in
+                    ModernTestimonialCard(
+                        avatar: testimonial.avatar,
+                        name: testimonial.name,
+                        quote: testimonial.quote
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: - FAQ Section
+
+    private var faqSection: some View {
+        let items = paywallManager.experience.faqItems
+
+        return VStack(spacing: 16) {
+            Text("Common Questions")
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 12) {
+                ForEach(items) { faq in
+                    ModernFAQRow(question: faq.question, answer: faq.answer)
+                }
+            }
+        }
+    }
 
     // MARK: - Floating Purchase Button
 
@@ -455,6 +567,111 @@ struct ModernBenefitRow: View {
                 .font(.system(size: 14, weight: .bold))
                 .foregroundColor(color)
         }
+    }
+}
+
+struct ModernTestimonialCard: View {
+    let avatar: String
+    let name: String
+    let quote: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Quote
+            Text("\"\(quote)\"")
+                .font(.system(size: 14, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+                .lineSpacing(4)
+
+            // Author
+            HStack(spacing: 10) {
+                Text(avatar)
+                    .font(.system(size: 24))
+
+                Text(name)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.7))
+
+                Spacer()
+
+                // Star rating
+                HStack(spacing: 2) {
+                    ForEach(0..<5, id: \.self) { _ in
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.yellow)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+    }
+}
+
+struct ModernFAQRow: View {
+    let question: String
+    let answer: String
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button(action: {
+                withAnimation(.spring(response: 0.3)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack {
+                    Text(question)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.leading)
+
+                    Spacer()
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+            }
+
+            if isExpanded {
+                Text(answer)
+                    .font(.system(size: 13, design: .rounded))
+                    .foregroundColor(.white.opacity(0.7))
+                    .lineSpacing(4)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(isExpanded ? 0.08 : 0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            isExpanded
+                                ? LinearGradient(
+                                    colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                                : LinearGradient(
+                                    colors: [Color.white.opacity(0.08), Color.white.opacity(0.05)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                            lineWidth: 1
+                        )
+                )
+        )
     }
 }
 
