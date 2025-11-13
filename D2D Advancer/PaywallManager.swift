@@ -206,9 +206,9 @@ struct PaywallExperience {
         }
 
         items.append(contentsOf: [
-            FAQ(question: "Can I cancel anytime?", answer: "Of course. Manage or cancel from your device settings whenever you want—no hidden fees, no hassle."),
-            FAQ(question: "What happens to my existing leads?", answer: "All of your current data stays safe. Premium simply removes caps and unlocks advanced features on top of what you already have."),
-            FAQ(question: "Is my data secure?", answer: "Yes. We use industry-standard encryption, regular backups, and never sell or share your customer information.")
+            FAQ(question: "Can I cancel anytime?", answer: "Yes. Cancel anytime from your device settings with no hassle. If you cancel during your 3-day trial, you won't be charged at all."),
+            FAQ(question: "What happens to my data if I cancel?", answer: "Your leads, notes, and appointments stay on your device. You can always resubscribe later and pick up right where you left off—nothing gets deleted."),
+            FAQ(question: "Is my data secure and private?", answer: "Absolutely. We use industry-standard encryption, automatic cloud backups, and never sell or share your customer information with third parties.")
         ])
 
         return items
