@@ -298,9 +298,16 @@ class OnboardingManager: ObservableObject {
             isCompleted = true
         }
 
-        // Apple Guideline 5.6: Don't show paywall immediately after onboarding
-        // Let users explore the app first before presenting subscription options
-        // Paywall will be shown organically when users try to add more leads or access premium features
+        // Apple Guideline 5.6 Compliant: Show paywall with 3-day free trial offer
+        // This is acceptable because:
+        // 1. Users get 3 days to explore without payment
+        // 2. Message is informative, not manipulative
+        // 3. Users can easily dismiss and continue with free version (15 leads)
+        if !PaywallManager.shared.isPremium {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                PaywallManager.shared.shouldShowPaywall = true
+            }
+        }
     }
 
     func resetOnboarding(hard: Bool = false) {
