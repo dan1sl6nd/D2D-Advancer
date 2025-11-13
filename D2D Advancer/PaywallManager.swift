@@ -155,12 +155,6 @@ struct PaywallExperience {
                 Testimonial(avatar: "🚪", name: "Lee • Closer", quote: "I cover fewer doors and get better results because I start with the highest scoring blocks."),
                 Testimonial(avatar: "📈", name: "Dana • Field Rep", quote: "Heatmaps and filters make it obvious which streets are worth revisiting.")
             ]
-        case .followUpAutomation:
-            return [
-                Testimonial(avatar: "🤖", name: "Sam • Consultant", quote: "Automated reminders mean every follow-up is on time. Prospects stay warm and ready."),
-                Testimonial(avatar: "💬", name: "Quinn • Closer", quote: "Templates + reminders = more replies. I send the right message without overthinking it."),
-                Testimonial(avatar: "📨", name: "Casey • Setter", quote: "I load follow-ups once and Advancer keeps me accountable the rest of the week.")
-            ]
         }
     }
 
