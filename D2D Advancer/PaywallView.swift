@@ -25,12 +25,12 @@ struct PaywallView: View {
             .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 28) {
+                VStack(spacing: 20) {
                     // Header
                     headerSection
-                        .padding(.top, 20)
+                        .padding(.top, 10)
 
-                    // Pricing Section
+                    // Pricing Section (Priority - Always visible)
                     pricingSection
 
                     // Benefits
@@ -61,8 +61,8 @@ struct PaywallView: View {
     // MARK: - Header Section
 
     private var headerSection: some View {
-        VStack(spacing: 20) {
-            // Modern Icon
+        VStack(spacing: 12) {
+            // Compact Modern Icon
             ZStack {
                 Circle()
                     .fill(
@@ -72,8 +72,8 @@ struct PaywallView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 100, height: 100)
-                    .blur(radius: 20)
+                    .frame(width: 80, height: 80)
+                    .blur(radius: 15)
 
                 Circle()
                     .fill(
@@ -83,20 +83,20 @@ struct PaywallView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 80, height: 80)
+                    .frame(width: 60, height: 60)
 
                 Image(systemName: "house.fill")
-                    .font(.system(size: 40, weight: .medium))
+                    .font(.system(size: 30, weight: .medium))
                     .foregroundColor(.white)
             }
 
-            VStack(spacing: 10) {
+            VStack(spacing: 6) {
                 Text("Choose Your Plan")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
 
                 Text("Unlock Your Full Potential")
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(
                         LinearGradient(
                             colors: [Color.blue.opacity(0.9), Color.purple.opacity(0.9)],
@@ -104,23 +104,17 @@ struct PaywallView: View {
                             endPoint: .trailing
                         )
                     )
-
-                Text("Unlimited leads • Advanced tools • Premium support")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundColor(.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 4)
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
     }
 
     // MARK: - Pricing Section
 
     private var pricingSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             // Weekly Plan (Featured with Trial)
-            ModernPricingCard(
+            CompactPricingCard(
                 badge: "3-DAY FREE TRIAL",
                 badgeGradient: [Color.orange, Color.red],
                 title: "Weekly",
@@ -138,7 +132,7 @@ struct PaywallView: View {
             }
 
             // Yearly Plan
-            ModernPricingCard(
+            CompactPricingCard(
                 badge: "BEST VALUE",
                 badgeGradient: [Color.green, Color.blue],
                 title: "Yearly",
@@ -432,6 +426,104 @@ struct PaywallView: View {
 }
 
 // MARK: - Modern Supporting Components
+
+struct CompactPricingCard: View {
+    let badge: String
+    let badgeGradient: [Color]
+    let title: String
+    let price: String
+    let period: String
+    let subtitle: String
+    let features: [String]
+    let isSelected: Bool
+    let isPopular: Bool
+
+    var body: some View {
+        HStack(spacing: 16) {
+            // Left side - Main info
+            VStack(alignment: .leading, spacing: 8) {
+                // Badge
+                Text(badge)
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        LinearGradient(
+                            colors: badgeGradient,
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(6)
+
+                // Price
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(price)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+
+                    Text(period)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+
+                // Subtitle
+                Text(subtitle)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.85))
+            }
+
+            Spacer()
+
+            // Right side - Selection indicator
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 32))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: badgeGradient,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            } else {
+                Image(systemName: "circle")
+                    .font(.system(size: 32))
+                    .foregroundColor(.white.opacity(0.2))
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(isSelected ? 0.1 : 0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            isSelected
+                                ? LinearGradient(
+                                    colors: badgeGradient,
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                                : LinearGradient(
+                                    colors: [Color.white.opacity(0.15), Color.white.opacity(0.05)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                            lineWidth: isSelected ? 2 : 1
+                        )
+                )
+                .shadow(
+                    color: isSelected ? badgeGradient.first!.opacity(0.25) : Color.clear,
+                    radius: 12,
+                    x: 0,
+                    y: 6
+                )
+        )
+    }
+}
 
 struct ModernPricingCard: View {
     let badge: String
