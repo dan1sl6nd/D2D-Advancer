@@ -227,7 +227,7 @@ class PaywallManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private let premiumKey = "isPremiumUser"
     private let leadCountKey = "totalLeadCount"
-    private let freeLeadLimit = 0 // Subscription required (3-day trial available)
+    private let freeLeadLimit = 5 // Allow 5 free leads before requiring subscription
 
     // Product IDs - UPDATE THESE to match your App Store Connect IDs
     private let weeklyProductID = "com.d2dadvancer.weekly"
