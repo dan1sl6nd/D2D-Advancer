@@ -218,45 +218,31 @@ struct PaywallView: View {
 
     private var floatingPurchaseButton: some View {
         VStack(spacing: 12) {
-            // REQUIRED SUBSCRIPTION INFORMATION - Apple Guideline 3.1.2
-            VStack(spacing: 8) {
+            // REQUIRED SUBSCRIPTION INFORMATION - Apple Guideline 3.1.2 (Compact)
+            VStack(spacing: 4) {
                 Text("D2D Advancer Premium Subscription")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.9))
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.85))
 
                 if selectedPlan == .weekly {
-                    Text("FREE 3-DAY TRIAL • FULL ACCESS • CANCEL ANYTIME")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                    Text("3-DAY TRIAL • FULL ACCESS")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundColor(Color.yellow)
-                        .padding(.bottom, 4)
 
-                    Text("Weekly Plan: Free for 3 days, then $9.99 per week")
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundColor(.white.opacity(0.8))
-
-                    Text("Trial includes unlimited leads, advanced mapping, automated follow-ups, and premium support. Cancel anytime during trial at no charge.")
-                        .font(.system(size: 10, design: .rounded))
-                        .foregroundColor(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 8)
+                    Text("Free 3 days, then $9.99/week • Cancel anytime during trial")
+                        .font(.system(size: 9, design: .rounded))
+                        .foregroundColor(.white.opacity(0.75))
                 } else {
-                    Text("BEST VALUE • SAVE 93%")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                    Text("BEST VALUE")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundColor(Color.green)
-                        .padding(.bottom, 4)
 
-                    Text("Yearly Plan: $36.99 per year (only $3.08/month)")
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundColor(.white.opacity(0.8))
-
-                    Text("Subscription includes unlimited leads, advanced mapping, automated follow-ups, and premium support. Cancel anytime in Settings.")
-                        .font(.system(size: 10, design: .rounded))
-                        .foregroundColor(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 8)
+                    Text("$36.99/year ($3.08/mo) • Cancel anytime")
+                        .font(.system(size: 9, design: .rounded))
+                        .foregroundColor(.white.opacity(0.75))
                 }
             }
-            .padding(.bottom, 8)
+            .padding(.vertical, 6)
 
             Button(action: {
                 subscribe()
@@ -300,36 +286,35 @@ struct PaywallView: View {
                 .font(.system(size: 12, design: .rounded))
             }
 
-            Text("Payment charged to Apple ID at purchase confirmation. Auto-renews unless canceled at least 24 hours before period ends. Manage subscriptions in your Apple ID Account Settings.")
-                .font(.system(size: 10, design: .rounded))
-                .foregroundColor(.white.opacity(0.7))
+            Text("Auto-renews unless canceled 24hrs before period ends.")
+                .font(.system(size: 8, design: .rounded))
+                .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
 
-            HStack(spacing: 16) {
+            HStack(spacing: 12) {
                 Button(action: {
                     openPrivacyPolicy()
                 }) {
-                    Text("Privacy Policy")
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundColor(.white.opacity(0.8))
+                    Text("Privacy")
+                        .font(.system(size: 9, design: .rounded))
+                        .foregroundColor(.white.opacity(0.75))
                         .underline()
                 }
 
                 Text("•")
                     .foregroundColor(.white.opacity(0.5))
-                    .font(.system(size: 11))
+                    .font(.system(size: 9))
 
                 Button(action: {
                     openTermsOfUse()
                 }) {
-                    Text("Terms of Use (EULA)")
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundColor(.white.opacity(0.8))
+                    Text("Terms (EULA)")
+                        .font(.system(size: 9, design: .rounded))
+                        .foregroundColor(.white.opacity(0.75))
                         .underline()
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, 2)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
