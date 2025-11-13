@@ -7,8 +7,8 @@ description: Terms of Use (EULA) for D2D Advancer - Door-to-Door Sales Managemen
 # Terms of Use (EULA)
 ## D2D Advancer
 
-**Effective Date:** January 10, 2025
-**Last Updated:** January 10, 2025
+**Effective Date:** November 12, 2025
+**Last Updated:** November 12, 2025
 
 ---
 

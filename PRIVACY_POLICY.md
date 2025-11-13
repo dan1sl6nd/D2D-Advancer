@@ -10,8 +10,8 @@ description: Privacy Policy for D2D Advancer - Door-to-Door Sales Management App
   <p><em>Door-to-Door Sales Management App</em></p>
   
   <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #007bff;">
-    <strong>📅 Effective Date:</strong> August 25, 2025<br>
-    <strong>🔄 Last Updated:</strong> August 25, 2025
+    <strong>📅 Effective Date:</strong> November 12, 2025<br>
+    <strong>🔄 Last Updated:</strong> November 12, 2025
   </div>
 </div>
 

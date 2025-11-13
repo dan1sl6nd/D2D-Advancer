@@ -1,7 +1,7 @@
 # App Store Resubmission Guide
 ## D2D Advancer - Version 1.1 Resubmission
 
-**Date:** January 10, 2025
+**Date:** November 12, 2025
 **Submission ID:** 3dc18143-8729-40f2-9dd5-9925aea4d828
 
 This guide addresses all three rejection reasons with comprehensive fixes and resubmission instructions.
@@ -328,4 +328,4 @@ If you have questions during resubmission:
 
 **Good luck with your resubmission! 🚀**
 
-Last updated: January 10, 2025
+Last updated: November 12, 2025
