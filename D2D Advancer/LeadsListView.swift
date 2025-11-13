@@ -487,7 +487,9 @@ struct LeadsListView: View {
                 }
             } catch {
                 let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+                print("❌ Delete error: \(nsError), \(nsError.userInfo)")
+                // Reset context to prevent corruption
+                viewContext.rollback()
             }
         }
         
@@ -522,7 +524,11 @@ struct LeadsListView: View {
     }
 
     private func cancelNotification(for lead: Lead) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [lead.id!.uuidString])
+        guard let leadId = lead.id else {
+            print("❌ Cannot cancel notification: lead has no ID")
+            return
+        }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [leadId.uuidString])
     }
     
     private func leadAccessibilityValue(for lead: Lead) -> String {

@@ -41,7 +41,8 @@ class PersistenceController {
             try viewContext.save()
         } catch {
             let nsError = error as NSError
-            fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+            print("❌ Preview save error: \(nsError), \(nsError.userInfo)")
+            // Don't crash in preview mode - just log the error
         }
         return result
     }()
@@ -111,11 +112,19 @@ class PersistenceController {
             } catch {
                 let nsError = error as NSError
                 print("❌ Save failed: \(nsError), \(nsError.userInfo)")
-                
+
                 // Try to recover from backup before failing
                 restoreFollowUpsFromBackup()
-                
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+
+                // Post notification to show error to user instead of crashing
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("CoreDataSaveError"),
+                    object: nil,
+                    userInfo: ["error": nsError]
+                )
+
+                // Reset context to prevent corruption
+                context.rollback()
             }
         }
     }

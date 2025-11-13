@@ -740,17 +740,30 @@ struct AddLeadView: View {
         // Add notification categories for quick actions (iOS 10+)
         content.categoryIdentifier = "LEAD_FOLLOWUP"
 
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        guard let leadId = lead.id else {
+            print("❌ Cannot schedule notification: lead has no ID")
+            return
+        }
 
-        let request = UNNotificationRequest(identifier: lead.id!.uuidString, content: content, trigger: trigger)
+        // Check notification permission first
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized else {
+                print("❌ Notification permission not granted, status: \(settings.authorizationStatus.rawValue)")
+                return
+            }
 
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                ErrorHandler.shared.handle(error, context: "Schedule Notification")
-            } else {
-                print("Notification scheduled for \(date) for lead: \(lead.displayName)")
+            let calendar = Calendar.current
+            let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+
+            let request = UNNotificationRequest(identifier: leadId.uuidString, content: content, trigger: trigger)
+
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    ErrorHandler.shared.handle(error, context: "Schedule Notification")
+                } else {
+                    print("Notification scheduled for \(date) for lead: \(lead.displayName)")
+                }
             }
         }
     }

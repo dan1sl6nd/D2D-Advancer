@@ -83,11 +83,19 @@ class NotificationService: NSObject, ObservableObject {
             trigger: trigger
         )
 
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Failed to schedule follow-up notification: \(error)")
-            } else {
-                print("Scheduled follow-up notification for \(lead.displayName) at \(notificationDate)")
+        // Check notification permission before scheduling
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized else {
+                print("❌ Notification permission not granted for follow-up, status: \(settings.authorizationStatus.rawValue)")
+                return
+            }
+
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("Failed to schedule follow-up notification: \(error)")
+                } else {
+                    print("Scheduled follow-up notification for \(lead.displayName) at \(notificationDate)")
+                }
             }
         }
     }
@@ -136,11 +144,19 @@ class NotificationService: NSObject, ObservableObject {
                 trigger: trigger
             )
 
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    print("Failed to schedule appointment notification: \(error)")
-                } else {
-                    print("Scheduled appointment notification for \(appointment.title) - \(reminderOffset.displayName) before")
+            // Check notification permission before scheduling
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                guard settings.authorizationStatus == .authorized else {
+                    print("❌ Notification permission not granted for appointment, status: \(settings.authorizationStatus.rawValue)")
+                    return
+                }
+
+                UNUserNotificationCenter.current().add(request) { error in
+                    if let error = error {
+                        print("Failed to schedule appointment notification: \(error)")
+                    } else {
+                        print("Scheduled appointment notification for \(appointment.title) - \(reminderOffset.displayName) before")
+                    }
                 }
             }
         }
@@ -180,11 +196,19 @@ class NotificationService: NSObject, ObservableObject {
             trigger: trigger
         )
 
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Failed to schedule daily summary notification: \(error)")
-            } else {
-                print("Scheduled daily summary notification")
+        // Check notification permission before scheduling
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized else {
+                print("❌ Notification permission not granted for daily summary, status: \(settings.authorizationStatus.rawValue)")
+                return
+            }
+
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("Failed to schedule daily summary notification: \(error)")
+                } else {
+                    print("Scheduled daily summary notification")
+                }
             }
         }
     }

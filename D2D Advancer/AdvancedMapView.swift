@@ -228,8 +228,12 @@ struct AdvancedMapView: UIViewRepresentable {
         
         @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
             guard gesture.state == .began else { return }
-            
-            let mapView = gesture.view as! MKMapView
+
+            guard let mapView = gesture.view as? MKMapView else {
+                print("❌ Long press gesture view is not an MKMapView")
+                return
+            }
+
             let location = gesture.location(in: mapView)
             let coordinate = mapView.convert(location, toCoordinateFrom: mapView)
             

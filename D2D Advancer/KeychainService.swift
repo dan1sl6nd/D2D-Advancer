@@ -12,7 +12,10 @@ class KeychainService {
     // MARK: - Password Storage and Retrieval
     
     func saveCredentials(email: String, password: String) -> Bool {
-        let passwordData = password.data(using: .utf8)!
+        guard let passwordData = password.data(using: .utf8) else {
+            print("❌ Failed to encode password as UTF-8")
+            return false
+        }
         
         // Use a simple, reliable keychain structure
         let deleteQuery: [String: Any] = [
@@ -84,7 +87,10 @@ class KeychainService {
     }
     
     private func updateExistingCredentials(email: String, password: String) -> Bool {
-        let passwordData = password.data(using: .utf8)!
+        guard let passwordData = password.data(using: .utf8) else {
+            print("❌ Failed to encode password as UTF-8")
+            return false
+        }
         
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
