@@ -253,7 +253,7 @@ class PaywallManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private let premiumKey = "isPremiumUser"
     private let leadCountKey = "totalLeadCount"
-    private let freeLeadLimit = 0
+    private let freeLeadLimit = 15 // Allow 15 free leads before showing paywall
 
     // Product IDs - UPDATE THESE to match your App Store Connect IDs
     private let weeklyProductID = "com.d2dadvancer.weekly"
@@ -310,10 +310,17 @@ class PaywallManager: ObservableObject {
 
         print("📊 Lead count: \(leadCount)/\(freeLeadLimit)")
 
-        // Check if we should show paywall
+        // Apple Guideline 5.6: Only show paywall when user genuinely hits the limit
+        // Don't show during onboarding or if already showing
         if !isPremium && leadCount >= freeLeadLimit {
-            shouldShowPaywall = true
-            print("💳 Paywall triggered at \(leadCount) leads")
+            // Check if onboarding is complete before showing paywall
+            let onboardingCompleted = userDefaults.bool(forKey: "onboarding_completed")
+            if onboardingCompleted && !shouldShowPaywall {
+                shouldShowPaywall = true
+                print("💳 Paywall triggered at \(leadCount) leads")
+            } else {
+                print("⏸️ Paywall deferred - onboarding: \(onboardingCompleted), already showing: \(shouldShowPaywall)")
+            }
         }
     }
 
@@ -337,9 +344,14 @@ class PaywallManager: ObservableObject {
             return true
         }
 
-        // User is not premium - show paywall
-        print("⚠️ Premium access required - showing paywall")
-        shouldShowPaywall = true
+        // Apple Guideline 5.6: Don't show paywall during onboarding
+        let onboardingCompleted = userDefaults.bool(forKey: "onboarding_completed")
+        if onboardingCompleted && !shouldShowPaywall {
+            print("⚠️ Premium access required - showing paywall")
+            shouldShowPaywall = true
+        } else {
+            print("⏸️ Premium access denied but paywall deferred (onboarding: \(onboardingCompleted))")
+        }
         return false
     }
 
@@ -369,9 +381,12 @@ class PaywallManager: ObservableObject {
             // User is not premium
             print("💎 Premium status updated: Inactive")
 
+            // Apple Guideline 5.6: Only show paywall after onboarding is complete
+            let onboardingCompleted = userDefaults.bool(forKey: "onboarding_completed")
+
             // If user was previously premium and now is not, show paywall
             // This handles subscription expiration/cancellation
-            if wasPremiouslyPremium && !premium {
+            if wasPremiouslyPremium && !premium && onboardingCompleted {
                 print("⚠️ Subscription expired or cancelled - showing paywall")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     self.shouldShowPaywall = true
@@ -379,9 +394,12 @@ class PaywallManager: ObservableObject {
             }
 
             // Also show paywall if user tries to add leads without premium
-            if leadCount >= freeLeadLimit {
+            // But only after onboarding is complete
+            if leadCount >= freeLeadLimit && onboardingCompleted && !shouldShowPaywall {
                 print("⚠️ User at free lead limit without premium - showing paywall")
                 shouldShowPaywall = true
+            } else if !onboardingCompleted {
+                print("⏸️ Paywall deferred - onboarding not complete")
             }
         }
 
