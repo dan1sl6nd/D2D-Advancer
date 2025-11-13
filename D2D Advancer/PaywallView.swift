@@ -73,15 +73,15 @@ struct PaywallView: View {
             }
 
             VStack(spacing: 12) {
-                Text("Start Your Free Trial")
+                Text("Choose Your Plan")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
 
-                Text("3 Days Free, Then Save Big")
+                Text("Start Selling Smarter Today")
                     .font(.system(size: 26, weight: .heavy, design: .rounded))
                     .foregroundColor(Color.yellow)
 
-                Text("Try all premium features free for 3 days. Cancel anytime during the trial without charge. Choose the plan that works best for you.")
+                Text("Unlock unlimited leads, advanced mapping, automated follow-ups, and premium support. Cancel anytime.")
                     .font(.system(size: 16, weight: .regular, design: .rounded))
                     .foregroundColor(.white.opacity(0.9))
                     .multilineTextAlignment(.center)
@@ -115,7 +115,7 @@ struct PaywallView: View {
                 title: "Yearly Plan",
                 price: "$36.99/year",
                 originalPrice: "$519.48",
-                subtitle: "3-day trial, then $36.99/year • Save 93%",
+                subtitle: "Only $3.08/month • Save 93% vs weekly",
                 isSelected: selectedPlan == .yearly
             )
             .onTapGesture {
@@ -226,26 +226,37 @@ struct PaywallView: View {
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundColor(.white.opacity(0.9))
 
-                Text("FREE 3-DAY TRIAL • FULL ACCESS • CANCEL ANYTIME")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundColor(Color.yellow)
-                    .padding(.bottom, 4)
-
                 if selectedPlan == .weekly {
+                    Text("FREE 3-DAY TRIAL • FULL ACCESS • CANCEL ANYTIME")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundColor(Color.yellow)
+                        .padding(.bottom, 4)
+
                     Text("Weekly Plan: Free for 3 days, then $9.99 per week")
                         .font(.system(size: 11, design: .rounded))
                         .foregroundColor(.white.opacity(0.8))
+
+                    Text("Trial includes unlimited leads, advanced mapping, automated follow-ups, and premium support. Cancel anytime during trial at no charge.")
+                        .font(.system(size: 10, design: .rounded))
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 8)
                 } else {
-                    Text("Yearly Plan: Free for 3 days, then $36.99 per year ($3.08/month)")
+                    Text("BEST VALUE • SAVE 93%")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundColor(Color.green)
+                        .padding(.bottom, 4)
+
+                    Text("Yearly Plan: $36.99 per year (only $3.08/month)")
                         .font(.system(size: 11, design: .rounded))
                         .foregroundColor(.white.opacity(0.8))
-                }
 
-                Text("Trial includes unlimited leads, advanced mapping, automated follow-ups, and premium support. Cancel anytime during trial at no charge.")
-                    .font(.system(size: 10, design: .rounded))
-                    .foregroundColor(.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 8)
+                    Text("Subscription includes unlimited leads, advanced mapping, automated follow-ups, and premium support. Cancel anytime in Settings.")
+                        .font(.system(size: 10, design: .rounded))
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 8)
+                }
             }
             .padding(.bottom, 8)
 
