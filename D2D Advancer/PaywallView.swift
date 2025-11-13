@@ -91,15 +91,15 @@ struct PaywallView: View {
             }
 
             VStack(spacing: 6) {
-                Text("Choose Your Plan")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                Text("Welcome to D2D Advancer")
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
 
-                Text("Unlock Your Full Potential")
+                Text("Start Your Free Trial Today")
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(
                         LinearGradient(
-                            colors: [Color.blue.opacity(0.9), Color.purple.opacity(0.9)],
+                            colors: [Color.orange.opacity(0.9), Color.yellow.opacity(0.9)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
@@ -155,16 +155,16 @@ struct PaywallView: View {
 
     private var benefitsSection: some View {
         VStack(spacing: 16) {
-            Text("What's Included")
+            Text("Everything You'll Get")
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(spacing: 12) {
-                ModernBenefitRow(icon: "infinity.circle.fill", title: "Unlimited Leads", color: .blue)
-                ModernBenefitRow(icon: "map.circle.fill", title: "Advanced Mapping", color: .green)
-                ModernBenefitRow(icon: "bell.badge.fill", title: "Smart Follow-ups", color: .orange)
-                ModernBenefitRow(icon: "crown.fill", title: "Premium Support", color: .purple)
+                ModernBenefitRow(icon: "infinity.circle.fill", title: "Unlimited Lead Management", color: .blue)
+                ModernBenefitRow(icon: "map.circle.fill", title: "Smart Territory Mapping", color: .green)
+                ModernBenefitRow(icon: "bell.badge.fill", title: "Automated Follow-ups", color: .orange)
+                ModernBenefitRow(icon: "crown.fill", title: "Priority Support", color: .purple)
             }
             .padding(20)
             .background(
@@ -253,7 +253,7 @@ struct PaywallView: View {
         let testimonials = paywallManager.experience.testimonials
 
         return VStack(spacing: 16) {
-            Text("What Users Say")
+            Text("Loved by Sales Professionals")
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -316,13 +316,23 @@ struct PaywallView: View {
                             if selectedPlan == .weekly {
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 18, weight: .semibold))
-                                Text("Start 3-Day Free Trial")
-                                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                VStack(spacing: 2) {
+                                    Text("Start Free Trial")
+                                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                                    Text("3 days free, then $9.99/week")
+                                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                                        .opacity(0.9)
+                                }
                             } else {
                                 Image(systemName: "crown.fill")
                                     .font(.system(size: 18, weight: .semibold))
-                                Text("Subscribe Now")
-                                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                VStack(spacing: 2) {
+                                    Text("Get Started")
+                                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                                    Text("$36.99/year - Best Value")
+                                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                                        .opacity(0.9)
+                                }
                             }
                         }
                     }
@@ -353,13 +363,23 @@ struct PaywallView: View {
                 // Legal info
                 VStack(spacing: 6) {
                     if selectedPlan == .weekly {
-                        Text("Free for 3 days • Then $9.99/week • Cancel anytime")
-                            .font(.system(size: 10, design: .rounded))
-                            .foregroundColor(.white.opacity(0.6))
+                        VStack(spacing: 2) {
+                            Text("No payment required now")
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.8))
+                            Text("Cancel anytime during your 3-day trial at no charge")
+                                .font(.system(size: 9, design: .rounded))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
                     } else {
-                        Text("$36.99/year • Cancel anytime")
-                            .font(.system(size: 10, design: .rounded))
-                            .foregroundColor(.white.opacity(0.6))
+                        VStack(spacing: 2) {
+                            Text("Get full access immediately")
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.8))
+                            Text("Save 93% compared to weekly • Cancel anytime")
+                                .font(.system(size: 9, design: .rounded))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
                     }
 
                     HStack(spacing: 8) {
@@ -375,6 +395,7 @@ struct PaywallView: View {
                                 .foregroundColor(.white.opacity(0.5))
                         }
                     }
+                    .padding(.top, 2)
                 }
             }
             .padding(.horizontal, 24)
