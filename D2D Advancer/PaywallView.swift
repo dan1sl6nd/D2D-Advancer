@@ -58,9 +58,7 @@ struct PaywallView: View {
     // MARK: - Header Section
 
     private var headerSection: some View {
-        let experience = paywallManager.experience
-
-        return VStack(spacing: 24) {
+        VStack(spacing: 24) {
             // App Icon
             ZStack {
                 Circle()
