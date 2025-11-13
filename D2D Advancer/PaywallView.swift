@@ -73,15 +73,15 @@ struct PaywallView: View {
             }
 
             VStack(spacing: 12) {
-                Text(isAtLimit ? "Unlock Premium Features" : experience.heroTitle)
+                Text("Start Your Free Trial")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
 
-                Text(experience.heroHighlight)
+                Text("3 Days Free, Then Save Big")
                     .font(.system(size: 26, weight: .heavy, design: .rounded))
                     .foregroundColor(Color.yellow)
 
-                Text(isAtLimit ? "You've reached the free plan limit. Upgrade to premium to unlock unlimited leads and advanced features" : experience.heroDescription)
+                Text("Try all premium features free for 3 days. Cancel anytime during the trial without charge. Choose the plan that works best for you.")
                     .font(.system(size: 16, weight: .regular, design: .rounded))
                     .foregroundColor(.white.opacity(0.9))
                     .multilineTextAlignment(.center)
@@ -94,6 +94,20 @@ struct PaywallView: View {
 
     private var pricingSection: some View {
         return VStack(spacing: 12) {
+            // Weekly Plan (Featured with Trial)
+            SimplePricingCard(
+                badge: "3-DAY FREE TRIAL",
+                badgeColor: Color.orange,
+                title: "Weekly Plan",
+                price: "$9.99/week",
+                originalPrice: nil,
+                subtitle: "Try free for 3 days, then $9.99/week • Cancel anytime",
+                isSelected: selectedPlan == .weekly
+            )
+            .onTapGesture {
+                selectedPlan = .weekly
+            }
+
             // Yearly Plan
             SimplePricingCard(
                 badge: "BEST VALUE",
@@ -101,25 +115,11 @@ struct PaywallView: View {
                 title: "Yearly Plan",
                 price: "$36.99/year",
                 originalPrice: "$519.48",
-                subtitle: "Save 93% • Only $3.08/month",
+                subtitle: "3-day trial, then $36.99/year • Save 93%",
                 isSelected: selectedPlan == .yearly
             )
             .onTapGesture {
                 selectedPlan = .yearly
-            }
-
-            // Weekly Plan
-            SimplePricingCard(
-                badge: "3-DAY FREE TRIAL",
-                badgeColor: Color.orange,
-                title: "Weekly Plan",
-                price: "$9.99/week",
-                originalPrice: nil,
-                subtitle: "3 days free, then $9.99/week • Cancel anytime",
-                isSelected: selectedPlan == .weekly
-            )
-            .onTapGesture {
-                selectedPlan = .weekly
             }
         }
     }
@@ -226,17 +226,22 @@ struct PaywallView: View {
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundColor(.white.opacity(0.9))
 
+                Text("FREE 3-DAY TRIAL • FULL ACCESS • CANCEL ANYTIME")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundColor(Color.yellow)
+                    .padding(.bottom, 4)
+
                 if selectedPlan == .weekly {
-                    Text("Weekly Plan: 3 days free, then $9.99 per week")
+                    Text("Weekly Plan: Free for 3 days, then $9.99 per week")
                         .font(.system(size: 11, design: .rounded))
                         .foregroundColor(.white.opacity(0.8))
                 } else {
-                    Text("Yearly Plan: $36.99 per year (equivalent to $3.08/month)")
+                    Text("Yearly Plan: Free for 3 days, then $36.99 per year ($3.08/month)")
                         .font(.system(size: 11, design: .rounded))
                         .foregroundColor(.white.opacity(0.8))
                 }
 
-                Text("Subscription includes unlimited lead management, advanced mapping features, automated follow-ups, and premium support.")
+                Text("Trial includes unlimited leads, advanced mapping, automated follow-ups, and premium support. Cancel anytime during trial at no charge.")
                     .font(.system(size: 10, design: .rounded))
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
@@ -284,17 +289,6 @@ struct PaywallView: View {
                 }
                 .foregroundColor(.white.opacity(0.75))
                 .font(.system(size: 12, design: .rounded))
-
-                if !isAtLimit {
-                    Text("•")
-                        .foregroundColor(.white.opacity(0.5))
-
-                    Button("Continue with Free") {
-                        dismiss()
-                    }
-                    .foregroundColor(.white.opacity(0.75))
-                    .font(.system(size: 12, design: .rounded))
-                }
             }
 
             Text("Payment charged to Apple ID at purchase confirmation. Auto-renews unless canceled at least 24 hours before period ends. Manage subscriptions in your Apple ID Account Settings.")

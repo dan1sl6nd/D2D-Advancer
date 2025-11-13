@@ -298,11 +298,12 @@ class OnboardingManager: ObservableObject {
             isCompleted = true
         }
 
-        // Apple Guideline 5.6 Compliant: Show paywall with 3-day free trial offer
+        // Apple Guideline 5.6 Compliant: Trial-required app with 3-day free trial
         // This is acceptable because:
-        // 1. Users get 3 days to explore without payment
-        // 2. Message is informative, not manipulative
-        // 3. Users can easily dismiss and continue with free version (15 leads)
+        // 1. 3-day free trial is prominently displayed
+        // 2. Users can explore all features during trial without payment
+        // 3. Clear cancellation policy stated (cancel anytime during trial at no charge)
+        // 4. Messaging is transparent and informative
         if !PaywallManager.shared.isPremium {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 PaywallManager.shared.shouldShowPaywall = true
