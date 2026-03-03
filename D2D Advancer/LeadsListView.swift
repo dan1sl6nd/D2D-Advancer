@@ -97,7 +97,31 @@ struct LeadsListView: View {
     }
     
     // MARK: - Extracted View Components
-    
+
+    @ViewBuilder
+    private func tabLabel(_ tab: LeadTab) -> some View {
+        let isSelected = selectedTab == tab
+        Text(tab.rawValue)
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .foregroundColor(isSelected ? .white : Color.themeTextSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? AnyShapeStyle(Color.themePrimary) : AnyShapeStyle(.ultraThinMaterial))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(
+                        isSelected ? Color.clear : Color.themeBorder,
+                        lineWidth: 0.5
+                    )
+            )
+    }
+
     private func safeAreaSpacer(geometry: GeometryProxy) -> some View {
         Rectangle()
             .fill(
@@ -121,28 +145,7 @@ struct LeadsListView: View {
                         selectedTab = tab
                     }
                 }) {
-                    Text(tab.rawValue)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(selectedTab == tab ? .white : Color.themeTextSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            Group {
-                                if selectedTab == tab {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.themePrimary)
-                                } else {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(.ultraThinMaterial)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .stroke(Color.themeBorder, lineWidth: 0.5)
-                                        )
-                                }
-                            }
-                        )
+                    tabLabel(tab)
                 }
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel("\(tab.rawValue) leads")
