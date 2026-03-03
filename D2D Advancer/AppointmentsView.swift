@@ -10,6 +10,7 @@ struct AppointmentsView: View {
     @State private var selectedLead: Lead?
     @State private var selectedAppointment: Appointment?
     @State private var selectedView: AppointmentView = .active
+    @ObservedObject private var paywallManager = PaywallManager.shared
     
     enum AppointmentView: String, CaseIterable {
         case active = "Active"
@@ -53,13 +54,15 @@ struct AppointmentsView: View {
                 .ignoresSafeArea(.all, edges: .top)
             }
             .navigationBarHidden(true)
-            .background(Color(UIColor.systemGroupedBackground))
+            .background(Color.themeBackground)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
+                        guard paywallManager.gateAction() else { return }
                         showingScheduleView = true
                     }) {
                         Image(systemName: "plus")
+                            .premiumLock()
                     }
                 }
             }
@@ -95,8 +98,8 @@ struct AppointmentsView: View {
             .fill(
                 LinearGradient(
                     gradient: Gradient(colors: [
-                        Color(UIColor.systemBackground),
-                        Color(UIColor.systemBackground).opacity(0.98)
+                        Color.themeBackground,
+                        Color.themeBackground.opacity(0.98)
                     ]),
                     startPoint: .top,
                     endPoint: .bottom
@@ -106,7 +109,7 @@ struct AppointmentsView: View {
     }
     
     private var tabSelectionView: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 8) {
             ForEach(AppointmentView.allCases, id: \.self) { tab in
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -116,13 +119,25 @@ struct AppointmentsView: View {
                     Text(tab.rawValue)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(selectedView == tab ? .white : .primary)
+                        .foregroundColor(selectedView == tab ? .white : Color.themeTextSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(selectedView == tab ? Color.blue : Color.clear)
+                                .fill(selectedView == tab ? Color.themePrimary : Color.clear)
                                 .opacity(selectedView == tab ? 1 : 0)
+                        )
+                        .background(
+                            Group {
+                                if selectedView != tab {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(.ultraThinMaterial)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.themeBorder, lineWidth: 1)
+                                        )
+                                }
+                            }
                         )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -138,7 +153,7 @@ struct AppointmentsView: View {
         .padding(.bottom, 4)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color(UIColor.tertiarySystemBackground))
+                .fill(Color.themeBackground)
                 .padding(.horizontal, 12)
         )
     }
@@ -175,20 +190,23 @@ struct AppointmentsView: View {
     }
     
     private func updateAppointmentStatus(_ appointment: Appointment, to status: Appointment.AppointmentStatus) {
+        guard paywallManager.gateAction() else { return }
         Task {
             var updatedAppointment = appointment
             updatedAppointment.status = status
             _ = await AppointmentManager.shared.updateAppointment(updatedAppointment)
         }
     }
-    
+
     private func deleteAppointment(_ appointment: Appointment) {
+        guard paywallManager.gateAction() else { return }
         Task {
             await AppointmentManager.shared.deleteAppointment(appointment)
         }
     }
-    
+
     private func handleLongPressDelete(_ appointment: Appointment) {
+        guard paywallManager.gateAction() else { return }
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
         
@@ -222,29 +240,29 @@ struct AppointmentsView: View {
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Spacer()
-            
+
             Circle()
-                .fill(Color.gray.opacity(0.2))
+                .fill(Color.themePrimary.opacity(0.15))
                 .frame(width: 80, height: 80)
                 .overlay(
                     Image(systemName: selectedView.icon)
                         .font(.system(size: 32))
-                        .foregroundColor(.gray)
+                        .foregroundColor(Color.themePrimary)
                 )
-            
+
             VStack(spacing: 8) {
                 Text("No \(selectedView.rawValue.lowercased()) appointments")
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 Text(emptyMessage)
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
-            
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -292,17 +310,17 @@ struct AppointmentInteractiveRowView: View {
                         .foregroundColor(.white)
                 )
                 .accessibilityHidden(true)
-            
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(appointment.title)
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.themeTextPrimary)
                         .accessibilityAddTraits(.isHeader)
-                    
+
                     Spacer()
-                    
+
                     // Quick action: Open in Maps (location)
                     if !appointment.location.isEmpty {
                         Button(action: {
@@ -312,10 +330,10 @@ struct AppointmentInteractiveRowView: View {
                                 .font(.system(size: 16, weight: .semibold))
                         }
                         .buttonStyle(PlainButtonStyle())
-                        .foregroundColor(.orange)
+                        .foregroundColor(Color.themeWarning)
                         .accessibilityLabel("Open in Maps")
                     }
-                    
+
                     // Quick action: Calendar (add or open)
                     Button(action: {
                         if (appointment.calendarEventId ?? "").isEmpty {
@@ -328,32 +346,32 @@ struct AppointmentInteractiveRowView: View {
                             .font(.system(size: 16, weight: .semibold))
                     }
                     .buttonStyle(PlainButtonStyle())
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .accessibilityLabel((appointment.calendarEventId ?? "").isEmpty ? "Add to Calendar" : "Open in Calendar")
-                    
+
                     // Status badge
                     AppointmentStatusBadge(status: appointment.status)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Status")
                     .accessibilityValue(appointment.status.rawValue)
                 }
-                
+
                 // Date and time
                 HStack(spacing: 4) {
                     Image(systemName: "clock.fill")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .accessibilityHidden(true)
                     Text("\(appointment.startDate.formatted(.dateTime.month().day())) at \(appointment.startDate.formatted(.dateTime.hour().minute()))")
                         .font(.system(size: 14, weight: .regular, design: .rounded))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .lineLimit(1)
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Date and time")
                 .accessibilityValue("\(appointment.startDate.formatted(.dateTime.month().day())) at \(appointment.startDate.formatted(.dateTime.hour().minute()))")
-                
+
                 HStack {
                     Text(appointment.displayName(using: customTypeManager.customTypes))
                         .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -364,31 +382,12 @@ struct AppointmentInteractiveRowView: View {
                             Capsule()
                                 .fill(appointment.displayColor(using: customTypeManager.customTypes).opacity(0.15))
                         )
-                    
+
                     Spacer()
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
+        .glassCard()
         .padding(.horizontal, 16)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -465,11 +464,7 @@ struct AppointmentInteractiveRowView: View {
     }
 
     private func openMaps(for location: String) {
-        guard !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let encoded = location.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let url = URL(string: "http://maps.apple.com/?q=\(encoded)") {
-            UIApplication.shared.open(url)
-        }
+        Utilities.openMapsSearch(query: location)
     }
 
     private func openCalendarDate(_ date: Date) {
@@ -505,7 +500,7 @@ struct AppointmentRowView: View {
     @ObservedObject private var customTypeManager = CustomAppointmentTypeManager.shared
     @State private var associatedLead: Lead?
     @State private var refreshId = UUID()
-    
+
     var body: some View {
         HStack(spacing: 16) {
             // Appointment type icon circle
@@ -518,40 +513,40 @@ struct AppointmentRowView: View {
                         .foregroundColor(.white)
                 )
                 .accessibilityHidden(true)
-            
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(appointment.title)
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.themeTextPrimary)
                         .accessibilityAddTraits(.isHeader)
-                    
+
                     Spacer()
-                    
+
                     // Status badge
                     AppointmentStatusBadge(status: appointment.status)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Status")
                     .accessibilityValue(appointment.status.rawValue)
                 }
-                
+
                 // Date and time
                 HStack(spacing: 4) {
                     Image(systemName: "clock.fill")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .accessibilityHidden(true)
                     Text("\(appointment.startDate.formatted(.dateTime.month().day())) at \(appointment.startDate.formatted(.dateTime.hour().minute()))")
                         .font(.system(size: 14, weight: .regular, design: .rounded))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .lineLimit(1)
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Date and time")
                 .accessibilityValue("\(appointment.startDate.formatted(.dateTime.month().day())) at \(appointment.startDate.formatted(.dateTime.hour().minute()))")
-                
+
                 HStack {
                     Text(appointment.displayName(using: customTypeManager.customTypes))
                         .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -562,31 +557,12 @@ struct AppointmentRowView: View {
                             Capsule()
                                 .fill(appointment.displayColor(using: customTypeManager.customTypes).opacity(0.15))
                         )
-                    
+
                     Spacer()
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
+        .glassCard()
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
@@ -618,27 +594,28 @@ struct AppointmentRowView: View {
 
 struct EmptyAppointmentsView: View {
     let selectedView: AppointmentsView.AppointmentView
-    
+
     var body: some View {
         VStack(spacing: 24) {
             Image(systemName: selectedView.icon)
                 .font(.system(size: 64))
-                .foregroundColor(.secondary)
-            
+                .foregroundColor(Color.themeTextSecondary)
+
             VStack(spacing: 8) {
                 Text("No \(selectedView.rawValue.lowercased()) appointments")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 Text(emptyMessage)
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
+        .background(Color.themeBackground)
     }
     
     private var emptyMessage: String {
@@ -691,75 +668,75 @@ struct AppointmentCard: View {
             // Date and time
             HStack {
                 Image(systemName: "clock")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .frame(width: 16)
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(appointment.startDate.formatted(.dateTime.day().month().year()))
                         .font(.subheadline)
                         .fontWeight(.medium)
-                    
+
                     Text("\(appointment.startDate.formatted(.dateTime.hour().minute())) - \(appointment.endDate.formatted(.dateTime.hour().minute()))")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                 }
-                
+
                 Spacer()
             }
-            
+
             // Location
             if !appointment.location.isEmpty {
                 HStack {
                     Image(systemName: "location")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .frame(width: 16)
-                    
+
                     Text(appointment.location)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .lineLimit(2)
-                    
+
                     Spacer()
                 }
             }
-            
+
             // Notes preview
             if !appointment.notes.isEmpty {
                 HStack {
                     Image(systemName: "note.text")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .frame(width: 16)
-                    
+
                     Text(appointment.notes)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .lineLimit(2)
-                    
+
                     Spacer()
                 }
             }
-            
+
             // Customer info
             if let lead = associatedLead {
                 HStack {
                     Image(systemName: "person")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .frame(width: 16)
-                    
+
                     Text(lead.displayName)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                    
+
                     Spacer()
-                    
+
                     Button("View Lead") {
                         showingLeadDetail = true
                     }
                     .font(.caption)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                 }
             }
-            
+
             // Action buttons
             HStack(spacing: 8) {
                 Button("Details") {
@@ -767,7 +744,7 @@ struct AppointmentCard: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                
+
                 if appointment.status == .scheduled || appointment.status == .confirmed {
                     Button("Complete") {
                         markComplete()
@@ -775,41 +752,27 @@ struct AppointmentCard: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .foregroundColor(.white)
-                    .background(.green)
-                    
+                    .background(Color.themeSuccess)
+
                     Button("Cancel") {
                         markCancelled()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.themeError)
                 } else if appointment.status == .completed || appointment.status == .cancelled {
                     Button("Reactivate") {
                         reactivateAppointment()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                 }
-                
+
                 Spacer()
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
+        .glassCard()
         .onAppear {
             loadAssociatedLead()
         }
@@ -905,7 +868,7 @@ struct SelectLeadForAppointmentView: View {
                     VStack(spacing: 16) {
                         Image(systemName: "person.3.fill")
                             .font(.system(size: 48))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                         
                         Text("No eligible leads found")
                             .font(.headline)
@@ -913,7 +876,7 @@ struct SelectLeadForAppointmentView: View {
                         
                         Text("Only interested, scheduled, or converted leads can have appointments scheduled.")
                             .font(.body)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 32)
                     }
@@ -941,12 +904,12 @@ struct SelectLeadForAppointmentView: View {
                             .font(.headline)
                             .fontWeight(.semibold)
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(UIColor.secondarySystemBackground))
+                            .fill(Color.themeSurface)
                             .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                     )
                 }
@@ -954,7 +917,7 @@ struct SelectLeadForAppointmentView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
+                        .fill(Color.themeBackground)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -973,12 +936,12 @@ struct LeadSelectionRow: View {
                     Text(lead.displayName)
                         .font(.headline)
                         .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.themeTextPrimary)
                     
                     if let address = lead.address {
                         Text(address)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .lineLimit(1)
                     }
                     
@@ -988,7 +951,7 @@ struct LeadSelectionRow: View {
                 Spacer()
                 
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .font(.caption)
             }
             .padding(.vertical, 4)
@@ -1058,15 +1021,16 @@ struct AppointmentDetailView: View {
                             VStack(spacing: 16) {
                                 Image(systemName: "calendar.badge.exclamationmark")
                                     .font(.system(size: 48))
-                                    .foregroundColor(.secondary)
-                                
+                                    .foregroundColor(Color.themeTextSecondary)
+
                                 Text("Appointment Not Found")
                                     .font(.headline)
                                     .fontWeight(.semibold)
-                                
+                                    .foregroundColor(Color.themeTextPrimary)
+
                                 Text("This appointment may have been deleted.")
                                     .font(.body)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.themeTextSecondary)
                                     .multilineTextAlignment(.center)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1075,7 +1039,7 @@ struct AppointmentDetailView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 20)
                 }
-                .background(Color(UIColor.systemGroupedBackground))
+                .background(Color.themeBackground)
             }
             .navigationTitle("Appointment Details")
             .navigationBarTitleDisplayMode(.inline)
@@ -1108,12 +1072,12 @@ struct AppointmentDetailView: View {
                                     RoundedRectangle(cornerRadius: 16)
                                         .fill(
                                             LinearGradient(
-                                                gradient: Gradient(colors: [Color.green, Color.green.opacity(0.8)]),
+                                                gradient: Gradient(colors: [Color.themeSuccess, Color.themeSuccess.opacity(0.8)]),
                                                 startPoint: .topLeading,
                                                 endPoint: .bottomTrailing
                                             )
                                         )
-                                        .shadow(color: .green.opacity(0.3), radius: 4, x: 0, y: 2)
+                                        .shadow(color: Color.themeSuccess.opacity(0.3), radius: 4, x: 0, y: 2)
                                 )
                             }
                             
@@ -1139,12 +1103,12 @@ struct AppointmentDetailView: View {
                                     RoundedRectangle(cornerRadius: 16)
                                         .fill(
                                             LinearGradient(
-                                                gradient: Gradient(colors: [Color.red, Color.red.opacity(0.8)]),
+                                                gradient: Gradient(colors: [Color.themeError, Color.themeError.opacity(0.8)]),
                                                 startPoint: .topLeading,
                                                 endPoint: .bottomTrailing
                                             )
                                         )
-                                        .shadow(color: .red.opacity(0.3), radius: 4, x: 0, y: 2)
+                                        .shadow(color: Color.themeError.opacity(0.3), radius: 4, x: 0, y: 2)
                                 )
                             }
                         }
@@ -1164,12 +1128,12 @@ struct AppointmentDetailView: View {
                                         .font(.subheadline)
                                         .fontWeight(.medium)
                                 }
-                                .foregroundColor(.primary)
+                                .foregroundColor(Color.themeTextPrimary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
                                 .background(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color(UIColor.secondarySystemBackground))
+                                        .fill(Color.themeSurface)
                                 )
                             }
 
@@ -1188,7 +1152,7 @@ struct AppointmentDetailView: View {
                                 .padding(.vertical, 12)
                                 .background(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.blue)
+                                        .fill(Color.themePrimary)
                                 )
                             }
                         }
@@ -1205,12 +1169,12 @@ struct AppointmentDetailView: View {
                                                 .font(.subheadline)
                                                 .fontWeight(.medium)
                                         }
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(Color.themePrimary)
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 12)
                                         .background(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.blue.opacity(0.1))
+                                                .fill(Color.themePrimary.opacity(0.1))
                                         )
                                     }
 
@@ -1222,12 +1186,12 @@ struct AppointmentDetailView: View {
                                                 .font(.subheadline)
                                                 .fontWeight(.medium)
                                         }
-                                        .foregroundColor(.purple)
+                                        .foregroundColor(Color.themeAccent)
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 12)
                                         .background(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.purple.opacity(0.1))
+                                                .fill(Color.themeAccent.opacity(0.1))
                                         )
                                     }
                                 }
@@ -1240,12 +1204,12 @@ struct AppointmentDetailView: View {
                                             .font(.subheadline)
                                             .fontWeight(.medium)
                                     }
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color.themePrimary)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
                                     .background(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.blue.opacity(0.1))
+                                            .fill(Color.themePrimary.opacity(0.1))
                                     )
                                 }
                             }
@@ -1267,12 +1231,12 @@ struct AppointmentDetailView: View {
                                         .font(.subheadline)
                                         .fontWeight(.medium)
                                 }
-                                .foregroundColor(.green)
+                                .foregroundColor(Color.themeSuccess)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
                                 .background(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.green.opacity(0.1))
+                                        .fill(Color.themeSuccess.opacity(0.1))
                                 )
                             }
                         }
@@ -1282,8 +1246,8 @@ struct AppointmentDetailView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                        .fill(Color.themeBackground)
+                        .shadow(color: Color.themeShadow.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
             .sheet(isPresented: $showingEditView) {
@@ -1332,11 +1296,7 @@ struct AppointmentDetailView: View {
     }
 
     private func openMaps(for location: String) {
-        guard !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let encoded = location.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let url = URL(string: "http://maps.apple.com/?q=\(encoded)") {
-            UIApplication.shared.open(url)
-        }
+        Utilities.openMapsSearch(query: location)
     }
     
     private func appointmentHeaderCard(appointment: Appointment) -> some View {
@@ -1344,7 +1304,7 @@ struct AppointmentDetailView: View {
             // Header
             HStack {
                 Image(systemName: "calendar.badge.checkmark")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Appointment Details")
@@ -1374,24 +1334,10 @@ struct AppointmentDetailView: View {
                 Text(appointment.title)
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
+        .glassCard()
     }
     
     private func dateTimeCard(appointment: Appointment) -> some View {
@@ -1399,7 +1345,7 @@ struct AppointmentDetailView: View {
             // Header
             HStack {
                 Image(systemName: "clock.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Date & Time")
@@ -1412,7 +1358,7 @@ struct AppointmentDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Image(systemName: "calendar")
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.themePrimary)
                         .frame(width: 20)
                     
                     VStack(alignment: .leading, spacing: 4) {
@@ -1422,7 +1368,7 @@ struct AppointmentDetailView: View {
                         
                         Text("\(appointment.startDate.formatted(.dateTime.hour().minute())) - \(appointment.endDate.formatted(.dateTime.hour().minute()))")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
                     
                     Spacer()
@@ -1436,32 +1382,18 @@ struct AppointmentDetailView: View {
                 
                 HStack {
                     Image(systemName: "hourglass")
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.themePrimary)
                         .frame(width: 20)
                     
                     Text("Duration: \(durationText)")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                     
                     Spacer()
                 }
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
+        .glassCard()
     }
     
     private func locationCard(appointment: Appointment) -> some View {
@@ -1469,7 +1401,7 @@ struct AppointmentDetailView: View {
             // Header
             HStack {
                 Image(systemName: "location.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Location")
@@ -1482,37 +1414,23 @@ struct AppointmentDetailView: View {
                         openMaps(for: appointment.location)
                     }
                     .font(.caption)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                 }
             }
             
             HStack {
                 Image(systemName: "mappin.circle.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .frame(width: 20)
                 
                 Text(appointment.location)
                     .font(.body)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                 
                 Spacer()
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
+        .glassCard()
     }
     
     private func customerInformationCard(lead: Lead) -> some View {
@@ -1520,7 +1438,7 @@ struct AppointmentDetailView: View {
             // Header
             HStack {
                 Image(systemName: "person.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Customer Information")
@@ -1533,10 +1451,10 @@ struct AppointmentDetailView: View {
                     showingLeadDetail = true
                 }
                 .font(.caption)
-                .foregroundColor(.blue)
+                .foregroundColor(Color.themePrimary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color.blue.opacity(0.1))
+                .background(Color.themePrimary.opacity(0.1))
                 .cornerRadius(8)
             }
             
@@ -1546,13 +1464,13 @@ struct AppointmentDetailView: View {
                     if let name = lead.name, !name.isEmpty {
                         HStack {
                             Image(systemName: "person.circle.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
                             
                             Text(name)
                                 .font(.headline)
                                 .fontWeight(.semibold)
-                                .foregroundColor(.primary)
+                                .foregroundColor(Color.themeTextPrimary)
                             
                             Spacer()
                         }
@@ -1561,12 +1479,12 @@ struct AppointmentDetailView: View {
                     if let address = lead.address, !address.isEmpty {
                         HStack {
                             Image(systemName: "house.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
                             
                             Text(address)
                                 .font(.body)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                             
                             Spacer()
                         }
@@ -1578,22 +1496,20 @@ struct AppointmentDetailView: View {
                     if let phone = lead.phone, !phone.isEmpty {
                         HStack {
                             Image(systemName: "phone.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
                             
                             Text(phone)
                                 .font(.body)
-                                .foregroundColor(.primary)
+                                .foregroundColor(Color.themeTextPrimary)
                             
                             Spacer()
                             
                             Button(action: {
-                                if let url = URL(string: "tel:\(phone)") {
-                                    UIApplication.shared.open(url)
-                                }
+                                Utilities.makePhoneCall(to: phone)
                             }) {
                                 Image(systemName: "phone.circle.fill")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(Color.themeSuccess)
                                     .font(.title3)
                             }
                         }
@@ -1602,22 +1518,20 @@ struct AppointmentDetailView: View {
                     if let email = lead.email, !email.isEmpty {
                         HStack {
                             Image(systemName: "envelope.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
                             
                             Text(email)
                                 .font(.body)
-                                .foregroundColor(.primary)
+                                .foregroundColor(Color.themeTextPrimary)
                             
                             Spacer()
                             
                             Button(action: {
-                                if let url = URL(string: "mailto:\(email)") {
-                                    UIApplication.shared.open(url)
-                                }
+                                Utilities.sendEmail(to: email)
                             }) {
                                 Image(systemName: "envelope.circle.fill")
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color.themePrimary)
                                     .font(.title3)
                             }
                         }
@@ -1629,7 +1543,7 @@ struct AppointmentDetailView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Status")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .fontWeight(.medium)
                         
                         LeadStatusBadge(status: LeadStatus.from(leadStatus: lead.leadStatus))
@@ -1639,13 +1553,13 @@ struct AppointmentDetailView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Priority")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                                 .fontWeight(.medium)
                             
                             HStack {
                                 ForEach(1...Int(lead.priority), id: \.self) { _ in
                                     Image(systemName: "star.fill")
-                                        .foregroundColor(.orange)
+                                        .foregroundColor(Color.themeWarning)
                                         .font(.caption)
                                 }
                             }
@@ -1661,13 +1575,13 @@ struct AppointmentDetailView: View {
                         if lead.price > 0 {
                             HStack {
                                 Image(systemName: "dollarsign.circle.fill")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(Color.themeSuccess)
                                     .frame(width: 20)
                                 
                                 Text("Price: $\(lead.price, specifier: "%.2f")")
                                     .font(.body)
                                     .fontWeight(.medium)
-                                    .foregroundColor(.primary)
+                                    .foregroundColor(Color.themeTextPrimary)
                                 
                                 Spacer()
                             }
@@ -1676,12 +1590,12 @@ struct AppointmentDetailView: View {
                         if lead.estimatedValue > 0 && lead.estimatedValue != lead.price {
                             HStack {
                                 Image(systemName: "chart.line.uptrend.xyaxis.circle.fill")
-                                    .foregroundColor(.orange)
+                                    .foregroundColor(Color.themeWarning)
                                     .frame(width: 20)
                                 
                                 Text("Estimated: $\(lead.estimatedValue, specifier: "%.2f")")
                                     .font(.body)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.themeTextSecondary)
                                 
                                 Spacer()
                             }
@@ -1694,12 +1608,12 @@ struct AppointmentDetailView: View {
                     if let source = lead.source, !source.isEmpty {
                         HStack {
                             Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
                             
                             Text("Source: \(source)")
                                 .font(.body)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                             
                             Spacer()
                         }
@@ -1708,12 +1622,12 @@ struct AppointmentDetailView: View {
                     if lead.visitCount > 0 {
                         HStack {
                             Image(systemName: "person.2.circle.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
                             
                             Text("Visits: \(lead.visitCount)")
                                 .font(.body)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                             
                             Spacer()
                         }
@@ -1722,12 +1636,12 @@ struct AppointmentDetailView: View {
                     if let lastContact = lead.lastContactDate {
                         HStack {
                             Image(systemName: "clock.arrow.circlepath")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
                             
                             Text("Last Contact: \(lastContact.formatted(.dateTime.month().day().year()))")
                                 .font(.body)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                             
                             Spacer()
                         }
@@ -1739,35 +1653,21 @@ struct AppointmentDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Tags")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .fontWeight(.medium)
                         
                         Text(tags)
                             .font(.body)
-                            .foregroundColor(.primary)
+                            .foregroundColor(Color.themeTextPrimary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(Color(UIColor.tertiarySystemBackground))
+                            .background(Color.themeSurface)
                             .cornerRadius(8)
                     }
                 }
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
+        .glassCard()
     }
     
     private func notesCard(appointment: Appointment) -> some View {
@@ -1775,7 +1675,7 @@ struct AppointmentDetailView: View {
             // Header
             HStack {
                 Image(systemName: "note.text")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Notes")
@@ -1787,24 +1687,10 @@ struct AppointmentDetailView: View {
             
             Text(appointment.notes)
                 .font(.body)
-                .foregroundColor(.primary)
+                .foregroundColor(Color.themeTextPrimary)
                 .padding(.leading, 32)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
+        .glassCard()
     }
     
     private func loadAssociatedLead() {
@@ -1867,7 +1753,7 @@ struct DetailSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .frame(width: 20)
                 
                 Text(title)
@@ -2034,7 +1920,7 @@ struct EditAppointmentDetailsSection: View {
             // Header
             HStack {
                 Image(systemName: "calendar.badge.plus")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Appointment Details")
@@ -2047,10 +1933,10 @@ struct EditAppointmentDetailsSection: View {
                     showingCustomTypeCreator = true
                 }
                 .font(.caption)
-                .foregroundColor(.blue)
+                .foregroundColor(Color.themePrimary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color.blue.opacity(0.1))
+                .background(Color.themePrimary.opacity(0.1))
                 .cornerRadius(8)
             }
             
@@ -2059,7 +1945,7 @@ struct EditAppointmentDetailsSection: View {
                 Text("Appointment Type")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                     .clipped()
                 
@@ -2091,18 +1977,18 @@ struct EditAppointmentDetailsSection: View {
                 Text("Appointment Title")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                     .clipped()
                 
                 TextField("Enter appointment title", text: $title)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                     )
                     .clipped()
             }
@@ -2113,22 +1999,22 @@ struct EditAppointmentDetailsSection: View {
                 Text("Notes")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                 
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $notes)
                         .frame(minHeight: 100)
                         .padding(12)
-                        .background(Color(UIColor.tertiarySystemBackground))
+                        .background(Color.themeSurface)
                         .cornerRadius(10)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                         )
                     
                     if notes.isEmpty {
                         Text("Add appointment notes...")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .padding(.horizontal, 16)
                             .padding(.top, 20)
                             .allowsHitTesting(false)
@@ -2136,21 +2022,7 @@ struct EditAppointmentDetailsSection: View {
                 }
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
+        .glassCard()
         .clipped()
         .sheet(isPresented: $showingCustomTypeCreator) {
             CustomAppointmentTypeCreatorView()
@@ -2223,7 +2095,7 @@ struct EditAppointmentTypeChipWrapper: View {
                         Button(action: onDelete) {
                             Image(systemName: "minus.circle.fill")
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                .foregroundColor(Color.themeError)
                                 .background(Color.white, in: Circle())
                         }
                         .offset(x: 8, y: -8)
@@ -2236,7 +2108,7 @@ struct EditAppointmentTypeChipWrapper: View {
             .frame(maxWidth: .infinity, minHeight: 70)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? typeWrapper.color.opacity(0.2) : Color(UIColor.tertiarySystemBackground))
+                    .fill(isSelected ? typeWrapper.color.opacity(0.2) : Color.themeSurface)
             )
             .foregroundColor(isSelected ? typeWrapper.color : .primary)
             .overlay(
@@ -2268,7 +2140,7 @@ struct EditAppointmentTypeChip: View {
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? type.color.opacity(0.2) : Color(UIColor.tertiarySystemBackground))
+                    .fill(isSelected ? type.color.opacity(0.2) : Color.themeSurface)
             )
             .foregroundColor(isSelected ? type.color : .primary)
             .overlay(
@@ -2291,7 +2163,7 @@ struct EditDateTimeSection: View {
             // Header
             HStack {
                 Image(systemName: "clock.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Date & Time")
@@ -2306,18 +2178,18 @@ struct EditDateTimeSection: View {
                 Text("Start Date & Time")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                 
                 DatePicker("", selection: $selectedDate, displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                     )
             }
             
@@ -2326,7 +2198,7 @@ struct EditDateTimeSection: View {
                 Text("Duration")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                 
                 Menu {
                     ForEach(Array(durationOptions.enumerated()), id: \.offset) { _, option in
@@ -2338,7 +2210,7 @@ struct EditDateTimeSection: View {
                                 if duration == option.1 {
                                     Spacer()
                                     Image(systemName: "checkmark")
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(Color.themePrimary)
                                 }
                             }
                         }
@@ -2346,25 +2218,25 @@ struct EditDateTimeSection: View {
                 } label: {
                     HStack {
                         Image(systemName: "hourglass")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 20)
                         
                         Text(durationOptions.first(where: { $0.1 == duration })?.0 ?? "1 hour")
-                            .foregroundColor(.primary)
+                            .foregroundColor(Color.themeTextPrimary)
                         
                         Spacer()
                         
                         Image(systemName: "chevron.down")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .font(.caption)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                     )
                 }
             }
@@ -2374,40 +2246,26 @@ struct EditDateTimeSection: View {
                 Text("End Time")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                 
                 HStack {
                     Image(systemName: "clock.arrow.circlepath")
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.themePrimary)
                         .frame(width: 20)
                     
                     Text(endDate.formatted(.dateTime.day().month().year().hour().minute()))
                         .font(.body)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                     
                     Spacer()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color(UIColor.tertiarySystemBackground).opacity(0.5))
+                .background(Color.themeSurface.opacity(0.5))
                 .cornerRadius(10)
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
+        .glassCard()
     }
 }
 
@@ -2419,7 +2277,7 @@ struct EditLocationSection: View {
             // Header
             HStack {
                 Image(systemName: "location.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Location")
@@ -2434,11 +2292,11 @@ struct EditLocationSection: View {
                 Text("Appointment Location")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                 
                 HStack {
                     Image(systemName: "mappin.circle.fill")
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.themePrimary)
                         .frame(width: 20)
                     
                     TextField("Enter appointment location", text: $location)
@@ -2446,34 +2304,20 @@ struct EditLocationSection: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color(UIColor.tertiarySystemBackground))
+                .background(Color.themeSurface)
                 .cornerRadius(10)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
                 
                 Text("Optional: Add specific location details for this appointment")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .padding(.horizontal, 4)
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
+        .glassCard()
     }
 }
 
