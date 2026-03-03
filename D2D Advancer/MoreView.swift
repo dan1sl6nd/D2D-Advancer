@@ -21,22 +21,22 @@ struct MoreView: View {
                         .fill(
                             LinearGradient(
                                 gradient: Gradient(colors: [
-                                    Color(UIColor.systemBackground),
-                                    Color(UIColor.systemBackground).opacity(0.98)
+                                    Color.themeBackground,
+                                    Color.themeBackground.opacity(0.98)
                                 ]),
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
                         )
                         .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
-                    
+
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             // Overview Card (monetization disabled)
                             NavigationLink(destination: OverviewContentView()) {
                                 MoreCardView(
                                     icon: "chart.bar.fill",
-                                    iconColor: .blue,
+                                    iconColor: Color.themePrimary,
                                     title: "Overview",
                                     subtitle: "View statistics and performance metrics",
                                     showChevron: true
@@ -58,9 +58,9 @@ struct MoreView: View {
                                             }) {
                                                 Image(systemName: "gear")
                                                     .font(.system(size: 14))
-                                                    .foregroundColor(.blue)
+                                                    .foregroundColor(Color.themePrimary)
                                                     .padding(8)
-                                                    .background(Color.blue.opacity(0.1))
+                                                    .background(Color.themePrimary.opacity(0.1))
                                                     .clipShape(Circle())
                                             }
 
@@ -77,7 +77,7 @@ struct MoreView: View {
                                                 .frame(minWidth: 45)
                                                 .padding(.horizontal, 12)
                                                 .padding(.vertical, 6)
-                                                .background(Color.blue)
+                                                .background(Color.themePrimary)
                                                 .cornerRadius(14)
                                             }
                                         }
@@ -106,7 +106,7 @@ struct MoreView: View {
                             // Dark Mode Card
                             MoreCardView(
                                 icon: "moon.fill",
-                                iconColor: .purple,
+                                iconColor: Color.themePrimary,
                                 title: "Dark Mode",
                                 subtitle: nil,
                                 trailingContent: {
@@ -119,13 +119,13 @@ struct MoreView: View {
                             // Version Card
                             MoreCardView(
                                 icon: "info.circle",
-                                iconColor: .blue,
+                                iconColor: Color.themePrimary,
                                 title: "Version",
                                 subtitle: nil,
                                 trailingContent: {
                                     Text("1.1")
                                         .font(.subheadline)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(Color.themeTextSecondary)
                                 }
                             )
 
@@ -167,16 +167,16 @@ struct MoreView: View {
     private var syncStatusColor: Color {
         switch syncManager.syncStatus {
         case .idle:
-            return .blue
+            return Color.themePrimary
         case .syncing:
-            return .blue
+            return Color.themePrimary
         case .completed:
-            return .green
+            return Color.themeSuccess
         case .failed(_):
-            return .red
+            return Color.themeError
         }
     }
-    
+
     private var syncStatusText: String {
         switch syncManager.syncStatus {
         case .idle:
@@ -215,22 +215,22 @@ struct OverviewContentView: View {
                         .fill(
                             LinearGradient(
                                 gradient: Gradient(colors: [
-                                    Color(UIColor.systemBackground),
-                                    Color(UIColor.systemBackground).opacity(0.98)
+                                    Color.themeBackground,
+                                    Color.themeBackground.opacity(0.98)
                                 ]),
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
                         )
                         .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
-                    
+
                     if isLoading {
                         VStack {
                             ProgressView()
                                 .scaleEffect(1.2)
                             Text("Loading statistics...")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                                 .padding(.top, 8)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -271,19 +271,19 @@ struct OverviewContentView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                        gradient: Gradient(colors: [Color.themePrimary, Color.themePrimary.opacity(0.8)]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(
                         Rectangle()
-                            .fill(Color(UIColor.systemBackground))
+                            .fill(Color.themeBackground)
                             .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                     )
                 }
@@ -377,21 +377,21 @@ struct OverviewContentView: View {
                 title: "Active Leads",
                 value: "\(statistics.activeLeadsCount)",
                 icon: "person.3.fill",
-                color: .blue
+                color: Color.themePrimary
             )
-            
+
             StatCardView(
                 title: "Converted",
                 value: "\(statistics.convertedCount)",
                 icon: "checkmark.circle.fill",
-                color: .green
+                color: Color.themeSuccess
             )
-            
+
             StatCardView(
                 title: "Interested",
                 value: "\(statistics.interestedCount)",
                 icon: "heart.fill",
-                color: .orange
+                color: Color.themeWarning
             )
         }
         .accessibilityElement(children: .contain)
@@ -421,21 +421,21 @@ struct OverviewContentView: View {
                 title: "Leads added today",
                 count: statistics.leadsAddedToday,
                 icon: "plus.circle.fill",
-                color: .blue
+                color: Color.themePrimary
             )
-            
+
             RecentActivityCardView(
                 title: "Leads updated this week",
                 count: statistics.leadsUpdatedThisWeek,
                 icon: "pencil.circle.fill",
-                color: .orange
+                color: Color.themeWarning
             )
-            
+
             RecentActivityCardView(
                 title: "Follow ups due this week",
                 count: statistics.followUpsDueThisWeek,
                 icon: "clock.circle.fill",
-                color: .purple
+                color: Color.themePrimary
             )
         }
         .accessibilityElement(children: .contain)
@@ -495,28 +495,28 @@ struct MoreCardView<TrailingContent: View>: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
                 )
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                     .lineLimit(1)
-                
+
                 if let subtitle = subtitle {
                     Text(subtitle)
                         .font(.system(size: 14, weight: .regular, design: .rounded))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .lineLimit(1)
                 }
             }
-            
+
             Spacer()
-            
+
             if let trailingContent = trailingContent {
                 trailingContent()
             } else if showChevron {
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .font(.system(size: 14, weight: .medium))
             }
         }
@@ -527,8 +527,8 @@ struct MoreCardView<TrailingContent: View>: View {
                 .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                            Color.themeSurface,
+                            Color.themeSurface.opacity(0.8)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -536,9 +536,9 @@ struct MoreCardView<TrailingContent: View>: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
@@ -562,7 +562,7 @@ struct UserInfoCardView: View {
         HStack(spacing: 16) {
             // User Avatar
             Circle()
-                .fill(isGuest ? Color.green : Color.blue)
+                .fill(isGuest ? Color.themeSuccess : Color.themePrimary)
                 .frame(width: 48, height: 48)
                 .overlay(
                     Image(systemName: isGuest ? "person.crop.circle.badge.questionmark" : "person.fill")
@@ -573,11 +573,11 @@ struct UserInfoCardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(userAccountManager.currentUser?.displayName ?? "Anonymous User")
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
 
                 Text(userAccountManager.currentUser?.email ?? (isGuest ? "Tap to sign in or create account" : "No email"))
                     .font(.system(size: 14, weight: .regular, design: .rounded))
-                    .foregroundColor(isGuest ? .green : .secondary)
+                    .foregroundColor(isGuest ? Color.themeSuccess : Color.themeTextSecondary)
                     .lineLimit(1)
             }
 
@@ -585,7 +585,7 @@ struct UserInfoCardView: View {
 
             if showChevron {
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .font(.system(size: 14, weight: .medium))
             }
         }
@@ -596,8 +596,8 @@ struct UserInfoCardView: View {
                 .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                            Color.themeSurface,
+                            Color.themeSurface.opacity(0.8)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -605,9 +605,9 @@ struct UserInfoCardView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
@@ -625,7 +625,7 @@ struct SignOutCardView: View {
             HStack(spacing: 16) {
                 // Sign Out Icon
                 Circle()
-                    .fill(Color.red)
+                    .fill(Color.themeError)
                     .frame(width: 48, height: 48)
                     .overlay(
                         Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -635,7 +635,7 @@ struct SignOutCardView: View {
 
                 Text("Sign Out")
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.themeError)
 
                 Spacer()
             }
@@ -646,8 +646,8 @@ struct SignOutCardView: View {
                     .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                            Color.themeSurface,
+                            Color.themeSurface.opacity(0.8)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -655,9 +655,9 @@ struct SignOutCardView: View {
                 )
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themeError.opacity(0.3), lineWidth: 1)
                     )
-                    .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                    .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
@@ -681,7 +681,7 @@ struct StatCardView: View {
     let value: String
     let icon: String
     let color: Color
-    
+
     var body: some View {
         HStack(spacing: 16) {
             // Icon
@@ -693,17 +693,17 @@ struct StatCardView: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
                 )
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 Text(value)
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundColor(color)
             }
-            
+
             Spacer()
         }
         .padding(.horizontal, 16)
@@ -713,8 +713,8 @@ struct StatCardView: View {
                 .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                            Color.themeSurface,
+                            Color.themeSurface.opacity(0.8)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -722,9 +722,9 @@ struct StatCardView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
@@ -743,11 +743,11 @@ struct StatusProgressCardView: View {
     
     private var statusColor: Color {
         switch status {
-        case .notContacted: return .gray
+        case .notContacted: return Color.themeTextSecondary
         case .notHome: return .brown
-        case .interested: return .orange
-        case .converted: return .green
-        case .notInterested: return .red
+        case .interested: return Color.themeWarning
+        case .converted: return Color.themeSuccess
+        case .notInterested: return Color.themeError
         }
     }
     
@@ -767,22 +767,22 @@ struct StatusProgressCardView: View {
                 HStack {
                     Text(status.displayName)
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundColor(.primary)
-                    
+                        .foregroundColor(Color.themeTextPrimary)
+
                     Spacer()
-                    
+
                     Text("\(count)")
                         .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundColor(statusColor)
                 }
-                
+
                 // Progress bar
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(UIColor.tertiarySystemBackground))
+                            .fill(Color.themeSurface)
                             .frame(height: 6)
-                        
+
                         RoundedRectangle(cornerRadius: 4)
                             .fill(statusColor)
                             .frame(width: geometry.size.width * percentage, height: 6)
@@ -798,8 +798,8 @@ struct StatusProgressCardView: View {
                 .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                            Color.themeSurface,
+                            Color.themeSurface.opacity(0.8)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -807,9 +807,9 @@ struct StatusProgressCardView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
@@ -831,7 +831,7 @@ struct RecentActivityCardView: View {
     let count: Int
     let icon: String
     let color: Color
-    
+
     var body: some View {
         HStack(spacing: 16) {
             // Icon
@@ -843,17 +843,17 @@ struct RecentActivityCardView: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
                 )
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 Text("\(count)")
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundColor(color)
             }
-            
+
             Spacer()
         }
         .padding(.horizontal, 16)
@@ -863,8 +863,8 @@ struct RecentActivityCardView: View {
                 .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                            Color.themeSurface,
+                            Color.themeSurface.opacity(0.8)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -872,9 +872,9 @@ struct RecentActivityCardView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
@@ -898,7 +898,7 @@ struct SyncSettingsView: View {
                             
                             Text("Choose how often your data syncs automatically")
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                         }
                         Spacer()
                     }
@@ -906,7 +906,7 @@ struct SyncSettingsView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
                 .padding(.bottom, 24)
-                .background(Color(UIColor.systemBackground))
+                .background(Color.themeBackground)
                 
                 ScrollView {
                     VStack(spacing: 16) {
@@ -921,7 +921,7 @@ struct SyncSettingsView: View {
                                         
                                         Text("Automatically sync your data at regular intervals")
                                             .font(.caption)
-                                            .foregroundColor(.secondary)
+                                            .foregroundColor(Color.themeTextSecondary)
                                     }
                                     
                                     Spacer()
@@ -959,7 +959,7 @@ struct SyncSettingsView: View {
                     .padding(.bottom, 40)
                 }
             }
-            .background(Color(UIColor.systemBackground))
+            .background(Color.themeBackground)
             .navigationBarHidden(true)
         }
         .presentationDetents([.height(600)])
@@ -974,15 +974,15 @@ struct SyncSettingsView: View {
                     Text(interval.displayName)
                         .font(.body)
                         .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.themeTextPrimary)
                 }
-                
+
                 Spacer()
-                
+
                 if syncManager.syncInterval == interval {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 20))
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.themePrimary)
                 }
             }
             .padding(.vertical, 8)
@@ -994,19 +994,19 @@ struct SyncSettingsView: View {
         HStack {
             Image(systemName: icon)
                 .font(.system(size: 16))
-                .foregroundColor(.blue)
+                .foregroundColor(Color.themePrimary)
                 .frame(width: 24)
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.body)
                     .fontWeight(.medium)
-                
+
                 Text(description)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
             }
-            
+
             Spacer()
         }
         .padding(.vertical, 4)
@@ -1016,24 +1016,24 @@ struct SyncSettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text(title)
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 Spacer()
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
-            
+
             content()
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
         }
-        .background(Color(.systemGray6))
+        .background(Color.themeSurface)
         .cornerRadius(16)
     }
 }

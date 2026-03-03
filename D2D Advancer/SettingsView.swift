@@ -27,13 +27,13 @@ struct SettingsView: View {
     private var syncStatusColor: Color {
         switch syncManager.syncStatus {
         case .idle:
-            return .blue
+            return Color.themePrimary
         case .syncing:
-            return .blue
+            return Color.themePrimary
         case .completed:
-            return .green
+            return Color.themeSuccess
         case .failed(_):
-            return .red
+            return Color.themeError
         }
     }
     
@@ -65,10 +65,10 @@ struct SettingsView: View {
                         NavigationLink(destination: CreateAccountFromGuestView(userAccountManager: userAccountManager)) {
                             HStack {
                                 Image(systemName: "person.crop.circle.badge.plus")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(Color.themeSuccess)
                                     .frame(width: 20)
                                 Text("Create Account")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(Color.themeSuccess)
                                     .fontWeight(.semibold)
                                 Spacer()
                             }
@@ -79,7 +79,7 @@ struct SettingsView: View {
                         NavigationLink(destination: AccountManagementView(userAccountManager: userAccountManager)) {
                             HStack {
                                 Image(systemName: "person.crop.circle.badge.gearshape")
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color.themePrimary)
                                     .frame(width: 20)
                                 Text("Manage Account")
                                 Spacer()
@@ -95,7 +95,7 @@ struct SettingsView: View {
                         if syncManager.syncStatus == .syncing {
                             ProgressView()
                                 .scaleEffect(0.8)
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                                 .accessibilityLabel("Syncing in progress")
                         } else {
                             Image(systemName: syncStatusIcon)
@@ -121,7 +121,7 @@ struct SettingsView: View {
                                 syncManager.syncWithServer()
                             }
                             .font(.caption)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .accessibilityLabel("Sync data now")
                             .accessibilityHint("Synchronize local data with cloud storage")
                         }
@@ -141,7 +141,7 @@ struct SettingsView: View {
                 Section("Preferences") {
                     HStack {
                         Image(systemName: "moon.fill")
-                            .foregroundColor(.purple)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 20)
                         
                         Text("Dark Mode")
@@ -154,7 +154,7 @@ struct SettingsView: View {
                     NavigationLink(destination: NotificationSettingsView()) {
                         HStack {
                             Image(systemName: "bell.fill")
-                                .foregroundColor(.orange)
+                                .foregroundColor(Color.themeWarning)
                                 .frame(width: 20)
                             Text("Notifications")
                             Spacer()
@@ -163,7 +163,7 @@ struct SettingsView: View {
                     NavigationLink(destination: ThemeSettingsView()) {
                         HStack {
                             Image(systemName: "paintbrush")
-                                .foregroundColor(.purple)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
                             Text("Theme")
                             Spacer()
@@ -172,7 +172,7 @@ struct SettingsView: View {
                     NavigationLink(destination: CalendarSettingsView()) {
                         HStack {
                             Image(systemName: "calendar")
-                                .foregroundColor(.red)
+                                .foregroundColor(Color.themeError)
                                 .frame(width: 20)
                             Text("Calendar")
                             Spacer()
@@ -181,7 +181,7 @@ struct SettingsView: View {
                     NavigationLink(destination: AppPreferencesView()) {
                         HStack {
                             Image(systemName: "gearshape.2.fill")
-                                .foregroundColor(.gray)
+                                .foregroundColor(Color.themeTextSecondary)
                                 .frame(width: 20)
                             Text("App Preferences")
                             Spacer()
@@ -191,7 +191,7 @@ struct SettingsView: View {
                     NavigationLink(destination: AppointmentTypePresetsView()) {
                         HStack {
                             Image(systemName: "calendar.badge.plus")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
                             Text("Appointment Types")
                             Spacer()
@@ -203,10 +203,10 @@ struct SettingsView: View {
                     }) {
                         HStack {
                             Image(systemName: "arrow.counterclockwise.circle")
-                                .foregroundColor(.red)
+                                .foregroundColor(Color.themeError)
                                 .frame(width: 20)
                             Text("Reset Theme")
-                                .foregroundColor(.red)
+                                .foregroundColor(Color.themeError)
                             Spacer()
                         }
                     }
@@ -221,7 +221,7 @@ struct SettingsView: View {
                     }) {
                         MoreCardView(
                             icon: "questionmark.circle",
-                            iconColor: .blue,
+                            iconColor: Color.themePrimary,
                             title: "Show Tutorial",
                             subtitle: "Walk through features and best practices",
                             showChevron: false
@@ -237,15 +237,15 @@ struct SettingsView: View {
                 Section("About") {
                     HStack {
                         Image(systemName: "info.circle")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 20)
-                        
+
                         Text("Version")
-                        
+
                         Spacer()
-                        
+
                         Text("1.0.0")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
                 }
                 
@@ -277,16 +277,16 @@ struct GuestInfoRowView: View {
     var body: some View {
         HStack {
             Image(systemName: "person.crop.circle.badge.questionmark")
-                .foregroundColor(.green)
+                .foregroundColor(Color.themeSuccess)
                 .frame(width: 24, height: 24)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Guest Account")
                     .font(.headline)
-                    .foregroundColor(.green)
+                    .foregroundColor(Color.themeSuccess)
                 Text("Data stored locally on this device")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
             }
 
             Spacer()
@@ -301,7 +301,7 @@ struct UserInfoRowView: View {
     var body: some View {
         HStack {
             Image(systemName: "person.circle.fill")
-                .foregroundColor(.blue)
+                .foregroundColor(Color.themePrimary)
                 .frame(width: 24, height: 24)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -310,7 +310,7 @@ struct UserInfoRowView: View {
                         .font(.headline)
                     Text(user.email ?? "Unknown")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                 }
             }
 
@@ -330,11 +330,11 @@ struct ExitGuestModeRowView: View {
         }) {
             HStack {
                 Image(systemName: "rectangle.portrait.and.arrow.right")
-                    .foregroundColor(.orange)
+                    .foregroundColor(Color.themeWarning)
                     .frame(width: 20, height: 20)
 
                 Text("Exit Guest Mode")
-                    .foregroundColor(.orange)
+                    .foregroundColor(Color.themeWarning)
 
                 Spacer()
             }
@@ -368,8 +368,8 @@ struct CreateAccountFromGuestView: View {
                     .fill(
                         LinearGradient(
                             gradient: Gradient(colors: [
-                                Color(UIColor.systemBackground),
-                                Color(UIColor.systemBackground).opacity(0.98)
+                                Color.themeBackground,
+                                Color.themeBackground.opacity(0.98)
                             ]),
                             startPoint: .top,
                             endPoint: .bottom
@@ -382,12 +382,12 @@ struct CreateAccountFromGuestView: View {
                         // Header
                         VStack(spacing: 12) {
                             Circle()
-                                .fill(Color.green.opacity(0.1))
+                                .fill(Color.themeSuccess.opacity(0.1))
                                 .frame(width: 80, height: 80)
                                 .overlay(
                                     Image(systemName: "person.crop.circle.badge.plus")
                                         .font(.system(size: 32))
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color.themeSuccess)
                                 )
 
                             VStack(spacing: 6) {
@@ -397,7 +397,7 @@ struct CreateAccountFromGuestView: View {
 
                                 Text("Save your data and access it from any device")
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.themeTextSecondary)
                                     .multilineTextAlignment(.center)
                             }
                         }
@@ -408,7 +408,7 @@ struct CreateAccountFromGuestView: View {
                         VStack(alignment: .leading, spacing: 16) {
                             HStack {
                                 Image(systemName: "person.text.rectangle")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(Color.themeSuccess)
                                     .font(.title2)
 
                                 Text("Account Information")
@@ -434,14 +434,14 @@ struct CreateAccountFromGuestView: View {
                                 .fill(
                                     LinearGradient(
                                         gradient: Gradient(colors: [
-                                            Color(UIColor.tertiarySystemBackground),
-                                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                                            Color.themeSurface,
+                                            Color.themeSurface.opacity(0.8)
                                         ]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
                         )
                         .padding(.horizontal, 16)
 
@@ -469,16 +469,16 @@ struct CreateAccountFromGuestView: View {
                                 RoundedRectangle(cornerRadius: 16)
                                     .fill(
                                         isFormValid ? LinearGradient(
-                                            gradient: Gradient(colors: [Color.green, Color.green.opacity(0.8)]),
+                                            gradient: Gradient(colors: [Color.themeSuccess, Color.themeSuccess.opacity(0.8)]),
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
                                         ) : LinearGradient(
-                                            gradient: Gradient(colors: [Color.gray, Color.gray]),
+                                            gradient: Gradient(colors: [Color.themeTextSecondary, Color.themeTextSecondary]),
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
                                         )
                                     )
-                                    .shadow(color: isFormValid ? Color.green.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 2)
+                                    .shadow(color: isFormValid ? Color.themeSuccess.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 2)
                             )
                         }
                         .disabled(!isFormValid || userAccountManager.authStatus == .loading)
@@ -489,18 +489,18 @@ struct CreateAccountFromGuestView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
                                     Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundColor(.red)
+                                        .foregroundColor(Color.themeError)
                                     Text("Error")
                                         .fontWeight(.semibold)
                                 }
                                 Text(error)
                                     .font(.subheadline)
-                                    .foregroundColor(.red)
+                                    .foregroundColor(Color.themeError)
                             }
                             .padding()
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.red.opacity(0.1))
+                                    .fill(Color.themeError.opacity(0.1))
                             )
                             .padding(.horizontal, 16)
                         }
@@ -510,23 +510,23 @@ struct CreateAccountFromGuestView: View {
                             VStack(spacing: 16) {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color.themeSuccess)
                                         .font(.title)
                                     Text("Account Created!")
                                         .font(.title3)
                                         .fontWeight(.semibold)
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color.themeSuccess)
                                 }
 
                                 Text("Your data has been successfully migrated to your new account.")
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.themeTextSecondary)
                                     .multilineTextAlignment(.center)
                             }
                             .padding()
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.green.opacity(0.1))
+                                    .fill(Color.themeSuccess.opacity(0.1))
                             )
                             .padding(.horizontal, 16)
                         }
@@ -556,19 +556,19 @@ struct CreateAccountFromGuestView: View {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(
                                 LinearGradient(
-                                    gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                    gradient: Gradient(colors: [Color.themePrimary, Color.themePrimary.opacity(0.8)]),
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                            .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                     )
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
+                        .fill(Color.themeBackground)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -582,7 +582,7 @@ struct CreateAccountFromGuestView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .foregroundColor(.green)
+                    .foregroundColor(Color.themeSuccess)
                     .frame(width: 18)
 
                 Text(title)
@@ -602,11 +602,11 @@ struct CreateAccountFromGuestView: View {
             .font(.body)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color(UIColor.systemBackground))
+            .background(Color.themeBackground)
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+                    .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
             )
         }
     }
@@ -664,12 +664,12 @@ struct SignOutRowView: View {
                         .frame(width: 20, height: 20)
                 } else {
                     Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .foregroundColor(.red)
+                        .foregroundColor(Color.themeError)
                         .frame(width: 20, height: 20)
                 }
-                
+
                 Text(userAccountManager.authStatus == .loading ? "Syncing & Signing Out..." : "Sign Out")
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.themeError)
                 
                 Spacer()
             }
@@ -702,15 +702,15 @@ struct AccountManagementView: View {
                         .fill(
                             LinearGradient(
                                 gradient: Gradient(colors: [
-                                    Color(UIColor.systemBackground),
-                                    Color(UIColor.systemBackground).opacity(0.98)
+                                    Color.themeBackground,
+                                    Color.themeBackground.opacity(0.98)
                                 ]),
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
                         )
                         .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
-                    
+
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             // Name editing card
@@ -718,22 +718,22 @@ struct AccountManagementView: View {
                                 VStack(alignment: .leading, spacing: 16) {
                                     HStack(spacing: 16) {
                                         Circle()
-                                            .fill(Color.blue)
+                                            .fill(Color.themePrimary)
                                             .frame(width: 48, height: 48)
                                             .overlay(
                                                 Image(systemName: "person.fill")
                                                     .font(.system(size: 18, weight: .semibold))
                                                     .foregroundColor(.white)
                                             )
-                                        
+
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text("Edit Name")
                                                 .font(.system(size: 17, weight: .semibold, design: .rounded))
-                                                .foregroundColor(.primary)
-                                            
+                                                .foregroundColor(Color.themeTextPrimary)
+
                                             Text("Update your display name")
                                                 .font(.system(size: 14))
-                                                .foregroundColor(.secondary)
+                                                .foregroundColor(Color.themeTextSecondary)
                                         }
                                         
                                         Spacer()
@@ -744,11 +744,11 @@ struct AccountManagementView: View {
                                             .font(.body)
                                             .padding(.horizontal, 16)
                                             .padding(.vertical, 12)
-                                            .background(Color(UIColor.tertiarySystemBackground))
+                                            .background(Color.themeSurface)
                                             .cornerRadius(12)
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+                                                    .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
                                             )
                                             .textContentType(.name)
                                             .autocapitalization(.words)
@@ -760,12 +760,12 @@ struct AccountManagementView: View {
                                             }
                                             .font(.headline)
                                             .fontWeight(.semibold)
-                                            .foregroundColor(.primary)
+                                            .foregroundColor(Color.themeTextPrimary)
                                             .frame(maxWidth: .infinity)
                                             .frame(height: 50)
-                                            .background(Color(UIColor.tertiarySystemBackground))
+                                            .background(Color.themeSurface)
                                             .cornerRadius(12)
-                                            
+
                                             Button("Save") {
                                                 userAccountManager.updateUserName(newName: newName)
                                                 editingName = false
@@ -775,7 +775,7 @@ struct AccountManagementView: View {
                                             .foregroundColor(.white)
                                             .frame(maxWidth: .infinity)
                                             .frame(height: 50)
-                                            .background(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.gray : Color.blue)
+                                            .background(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.themeTextSecondary : Color.themePrimary)
                                             .cornerRadius(12)
                                             .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                                         }
@@ -788,8 +788,8 @@ struct AccountManagementView: View {
                                         .fill(
                                         LinearGradient(
                                             gradient: Gradient(colors: [
-                                                Color(UIColor.tertiarySystemBackground),
-                                                Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                                                Color.themeSurface,
+                                                Color.themeSurface.opacity(0.8)
                                             ]),
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
@@ -797,16 +797,16 @@ struct AccountManagementView: View {
                                     )
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 16)
-                                                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                                                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                                         )
-                                        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                                        .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
                                 )
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 4)
                             } else {
                                 AccountCardView(
                                     icon: "person.fill",
-                                    iconColor: .blue,
+                                    iconColor: Color.themePrimary,
                                     title: "Name",
                                     subtitle: userAccountManager.currentUserDisplayName ?? userAccountManager.currentUser?.displayName ?? "Unknown",
                                     trailingContent: {
@@ -819,16 +819,16 @@ struct AccountManagementView: View {
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 6)
-                                        .background(Color.blue)
+                                        .background(Color.themePrimary)
                                         .cornerRadius(16)
                                     }
                                 )
                             }
-                            
+
                             // Email card
                             AccountCardView(
                                 icon: "envelope.fill",
-                                iconColor: .green,
+                                iconColor: Color.themeSuccess,
                                 title: "Email",
                                 subtitle: userAccountManager.currentUser?.email ?? "Unknown",
                                 trailingContent: {
@@ -839,7 +839,7 @@ struct AccountManagementView: View {
                                             .foregroundColor(.white)
                                             .padding(.horizontal, 12)
                                             .padding(.vertical, 6)
-                                            .background(Color.green)
+                                            .background(Color.themeSuccess)
                                             .cornerRadius(16)
                                     } else {
                                         Button("Verify") {
@@ -850,7 +850,7 @@ struct AccountManagementView: View {
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 6)
-                                        .background(Color.orange)
+                                        .background(Color.themeWarning)
                                         .cornerRadius(16)
                                     }
                                 }
@@ -861,9 +861,9 @@ struct AccountManagementView: View {
                                 VStack(alignment: .leading, spacing: 12) {
                                     HStack {
                                         Image(systemName: "exclamationmark.triangle.fill")
-                                            .foregroundColor(.orange)
+                                            .foregroundColor(Color.themeWarning)
                                         Text("Email not verified")
-                                            .foregroundColor(.orange)
+                                            .foregroundColor(Color.themeWarning)
                                             .fontWeight(.semibold)
                                         Spacer()
                                     }
@@ -873,7 +873,7 @@ struct AccountManagementView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
-                                    .background(Color.green)
+                                    .background(Color.themeSuccess)
                                     .foregroundColor(.white)
                                     .cornerRadius(12)
                                     .fontWeight(.semibold)
@@ -884,7 +884,7 @@ struct AccountManagementView: View {
                                         }
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 12)
-                                        .background(Color.blue)
+                                        .background(Color.themePrimary)
                                         .foregroundColor(.white)
                                         .cornerRadius(12)
                                         .fontWeight(.semibold)
@@ -893,7 +893,7 @@ struct AccountManagementView: View {
                                     
                                     Text("Check your email first, then use the button above to refresh your verification status.")
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(Color.themeTextSecondary)
                                         .multilineTextAlignment(.center)
                                 }
                                 .padding(.horizontal, 16)
@@ -903,8 +903,8 @@ struct AccountManagementView: View {
                                         .fill(
                                         LinearGradient(
                                             gradient: Gradient(colors: [
-                                                Color(UIColor.tertiarySystemBackground),
-                                                Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                                                Color.themeSurface,
+                                                Color.themeSurface.opacity(0.8)
                                             ]),
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
@@ -912,9 +912,9 @@ struct AccountManagementView: View {
                                     )
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 16)
-                                                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                                                .stroke(Color.themeWarning.opacity(0.3), lineWidth: 1)
                                         )
-                                        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                                        .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
                                 )
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 4)
@@ -926,7 +926,7 @@ struct AccountManagementView: View {
                             }) {
                                 AccountCardView(
                                     icon: "key.fill",
-                                    iconColor: .orange,
+                                    iconColor: Color.themeWarning,
                                     title: "Change Password",
                                     showChevron: true
                                 )
@@ -939,9 +939,9 @@ struct AccountManagementView: View {
                             }) {
                                 AccountCardView(
                                     icon: "trash.fill",
-                                    iconColor: .red,
+                                    iconColor: Color.themeError,
                                     title: "Delete Account",
-                                    titleColor: .red
+                                    titleColor: Color.themeError
                                 )
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -977,19 +977,19 @@ struct AccountManagementView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                        gradient: Gradient(colors: [Color.themePrimary, Color.themePrimary.opacity(0.8)]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(
                         Rectangle()
-                            .fill(Color(UIColor.systemBackground))
+                            .fill(Color.themeBackground)
                             .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                     )
                 }
@@ -1012,14 +1012,14 @@ struct AccountManagementView: View {
         case .loading:
             AccountCardView(
                 icon: "arrow.clockwise",
-                iconColor: .orange,
+                iconColor: Color.themeWarning,
                 title: "Updating...",
                 subtitle: "Please wait"
             )
         case .success:
             AccountCardView(
                 icon: "checkmark.circle.fill",
-                iconColor: .green,
+                iconColor: Color.themeSuccess,
                 title: "Update successful",
                 subtitle: "Changes have been saved"
             )
@@ -1027,22 +1027,22 @@ struct AccountManagementView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Circle()
-                        .fill(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? Color.orange : Color.red)
+                        .fill(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? Color.themeWarning : Color.themeError)
                         .frame(width: 48, height: 48)
                         .overlay(
                             Image(systemName: error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? "shield.checkerboard" : "exclamationmark.triangle.fill")
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(.white)
                         )
-                    
+
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Error")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
-                            .foregroundColor(.primary)
-                        
+                            .foregroundColor(Color.themeTextPrimary)
+
                         Text(error)
                             .font(.system(size: 14, weight: .regular, design: .rounded))
-                            .foregroundColor(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? .orange : .red)
+                            .foregroundColor(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? Color.themeWarning : Color.themeError)
                             .lineLimit(nil)
                     }
                     
@@ -1052,19 +1052,19 @@ struct AccountManagementView: View {
                 if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
                     Text("This is a temporary security measure. Your account is safe.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .multilineTextAlignment(.leading)
-                    
+
                     if userAccountManager.isSecurityBlocked && userAccountManager.securityBlockTimeRemaining > 0 {
                         HStack {
                             Image(systemName: "clock")
-                                .foregroundColor(.orange)
+                                .foregroundColor(Color.themeWarning)
                                 .font(.caption)
-                            
+
                             Text("Try again in: \(userAccountManager.formattedTimeRemaining)")
                                 .font(.caption)
                                 .fontWeight(.medium)
-                                .foregroundColor(.orange)
+                                .foregroundColor(Color.themeWarning)
                         }
                     }
                 }
@@ -1076,8 +1076,8 @@ struct AccountManagementView: View {
                     .fill(
                         LinearGradient(
                             gradient: Gradient(colors: [
-                                Color(UIColor.tertiarySystemBackground),
-                                Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                                Color.themeSurface,
+                                Color.themeSurface.opacity(0.8)
                             ]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -1085,7 +1085,7 @@ struct AccountManagementView: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color(UIColor.separator), lineWidth: 0.5)
+                            .stroke(Color.themeBorder, lineWidth: 0.5)
                     )
             )
             .padding(.horizontal, 16)
@@ -1126,11 +1126,11 @@ struct PasswordChangeView: View {
                                         .scaleEffect(0.8)
                                     Text("Updating password...")
                                         .font(.subheadline)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(Color.themeTextSecondary)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 50)
-                                .background(Color(UIColor.tertiarySystemBackground))
+                                .background(Color.themeSurface)
                                 .cornerRadius(12)
                             } else {
                                 Button("Change Password") {
@@ -1149,7 +1149,7 @@ struct PasswordChangeView: View {
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 50)
-                                .background(isFormValid ? Color.blue : Color(UIColor.separator).opacity(0.3))
+                                .background(isFormValid ? Color.themePrimary : Color.themeBorder.opacity(0.3))
                                 .cornerRadius(12)
                                 .disabled(!isFormValid || userAccountManager.authStatus == .loading)
                             }
@@ -1163,24 +1163,24 @@ struct PasswordChangeView: View {
                                 HStack {
                                     if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
                                         Image(systemName: "shield.checkerboard")
-                                            .foregroundColor(.orange)
+                                            .foregroundColor(Color.themeWarning)
                                             .font(.title2)
                                     } else {
                                         Image(systemName: "exclamationmark.triangle.fill")
-                                            .foregroundColor(.red)
+                                            .foregroundColor(Color.themeError)
                                             .font(.title2)
                                     }
-                                    
+
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(error)
-                                            .foregroundColor(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? .orange : .red)
+                                            .foregroundColor(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? Color.themeWarning : Color.themeError)
                                             .font(.subheadline)
                                             .fontWeight(.medium)
                                         
                                         if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
                                             Text("This is a temporary security measure. Your account is safe.")
                                                 .font(.caption)
-                                                .foregroundColor(.secondary)
+                                                .foregroundColor(Color.themeTextSecondary)
                                         }
                                     }
                                     
@@ -1191,18 +1191,18 @@ struct PasswordChangeView: View {
                                     if userAccountManager.isSecurityBlocked && userAccountManager.securityBlockTimeRemaining > 0 {
                                         HStack {
                                             Image(systemName: "clock")
-                                                .foregroundColor(.orange)
-                                            
+                                                .foregroundColor(Color.themeWarning)
+
                                             Text("Try again in: \(userAccountManager.formattedTimeRemaining)")
                                                 .font(.subheadline)
                                                 .fontWeight(.medium)
-                                                .foregroundColor(.orange)
-                                            
+                                                .foregroundColor(Color.themeWarning)
+
                                             Spacer()
                                         }
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 12)
-                                        .background(Color.orange.opacity(0.1))
+                                        .background(Color.themeWarning.opacity(0.1))
                                         .cornerRadius(8)
                                     }
                                 }
@@ -1216,18 +1216,18 @@ struct PasswordChangeView: View {
                             VStack(spacing: 16) {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color.themeSuccess)
                                         .font(.title2)
-                                    
+
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("Password Updated")
                                             .font(.subheadline)
                                             .fontWeight(.medium)
-                                            .foregroundColor(.green)
-                                        
+                                            .foregroundColor(Color.themeSuccess)
+
                                         Text("Your password has been successfully changed")
                                             .font(.caption)
-                                            .foregroundColor(.secondary)
+                                            .foregroundColor(Color.themeTextSecondary)
                                     }
                                     
                                     Spacer()
@@ -1241,7 +1241,7 @@ struct PasswordChangeView: View {
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 50)
-                                .background(Color.green)
+                                .background(Color.themeSuccess)
                                 .cornerRadius(12)
                             }
                         }
@@ -1272,19 +1272,19 @@ struct PasswordChangeView: View {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(
                                 LinearGradient(
-                                    gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                    gradient: Gradient(colors: [Color.themePrimary, Color.themePrimary.opacity(0.8)]),
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                            .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                     )
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
+                        .fill(Color.themeBackground)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -1292,24 +1292,24 @@ struct PasswordChangeView: View {
             userAccountManager.authStatus = .idle
         }
     }
-    
+
     private func modernSectionCard<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text(title)
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 Spacer()
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
-            
+
             content()
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -1319,49 +1319,49 @@ struct PasswordChangeView: View {
                 .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                            Color.themeSurface,
+                            Color.themeSurface.opacity(0.8)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
         )
         .cornerRadius(16)
     }
-    
+
     private func modernTextField(title: String, text: Binding<String>, icon: String, isSecure: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .frame(width: 20)
-                
+
                 Text(title)
                     .font(.headline)
                     .fontWeight(.semibold)
             }
-            
+
             if isSecure {
                 SecureField(title, text: text)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
                     )
             } else {
                 TextField(title, text: text)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
                     )
             }
         }
@@ -1387,21 +1387,21 @@ struct AppPreferencesView: View {
                         .fill(
                             LinearGradient(
                                 gradient: Gradient(colors: [
-                                    Color(UIColor.systemBackground),
-                                    Color(UIColor.systemBackground).opacity(0.98)
+                                    Color.themeBackground,
+                                    Color.themeBackground.opacity(0.98)
                                 ]),
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
                         )
                         .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
-                    
+
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             // Default Lead Status
                             PreferenceCardView(
                                 icon: "person.badge.plus",
-                                iconColor: .blue,
+                                iconColor: Color.themePrimary,
                                 title: "Default Lead Status",
                                 subtitle: "Status assigned to new leads",
                                 trailingContent: {
@@ -1419,7 +1419,7 @@ struct AppPreferencesView: View {
                             // Default Lead Sort
                             PreferenceCardView(
                                 icon: "arrow.up.arrow.down",
-                                iconColor: .orange,
+                                iconColor: Color.themeWarning,
                                 title: "Default Lead Sort",
                                 subtitle: "How leads are sorted in lists",
                                 trailingContent: {
@@ -1435,7 +1435,7 @@ struct AppPreferencesView: View {
                             // Default Follow-up Time
                             PreferenceCardView(
                                 icon: "clock.badge.checkmark",
-                                iconColor: .green,
+                                iconColor: Color.themeSuccess,
                                 title: "Default Follow-up Time",
                                 subtitle: "Time interval for new follow-ups",
                                 trailingContent: {
@@ -1453,7 +1453,7 @@ struct AppPreferencesView: View {
                             // Default Check-in Type
                             PreferenceCardView(
                                 icon: "door.left.hand.open",
-                                iconColor: .purple,
+                                iconColor: Color.themePrimary,
                                 title: "Default Check-in Type",
                                 subtitle: "Method used for follow-up check-ins",
                                 trailingContent: {
@@ -1522,15 +1522,15 @@ struct DeleteAccountView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 50))
-                        .foregroundColor(.red)
-                    
+                        .foregroundColor(Color.themeError)
+
                     Text("Delete Account")
                         .font(.largeTitle)
                         .fontWeight(.bold)
-                    
+
                     Text("This action cannot be undone and will permanently delete all your data.")
                         .font(.body)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
@@ -1556,7 +1556,7 @@ struct DeleteAccountView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(isPasswordValid ? Color.red : Color.gray)
+                    .background(isPasswordValid ? Color.themeError : Color.themeTextSecondary)
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .disabled(!isPasswordValid || userAccountManager.authStatus == .loading)
@@ -1568,16 +1568,16 @@ struct DeleteAccountView: View {
                         HStack {
                             if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
                                 Image(systemName: "shield.checkerboard")
-                                    .foregroundColor(.orange)
+                                    .foregroundColor(Color.themeWarning)
                                     .font(.caption)
                             } else {
                                 Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.red)
+                                    .foregroundColor(Color.themeError)
                                     .font(.caption)
                             }
-                            
+
                             Text(error)
-                                .foregroundColor(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? .orange : .red)
+                                .foregroundColor(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? Color.themeWarning : Color.themeError)
                                 .font(.caption)
                                 .multilineTextAlignment(.center)
                         }
@@ -1585,20 +1585,20 @@ struct DeleteAccountView: View {
                         if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
                             Text("This is a temporary security measure. Your account is safe.")
                                 .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                                 .multilineTextAlignment(.center)
-                            
+
                             // Show countdown timer if security block is active
                             if userAccountManager.isSecurityBlocked && userAccountManager.securityBlockTimeRemaining > 0 {
                                 HStack {
                                     Image(systemName: "clock")
-                                        .foregroundColor(.orange)
+                                        .foregroundColor(Color.themeWarning)
                                         .font(.caption2)
-                                    
+
                                     Text("Try again in: \(userAccountManager.formattedTimeRemaining)")
                                         .font(.caption2)
                                         .fontWeight(.medium)
-                                        .foregroundColor(.orange)
+                                        .foregroundColor(Color.themeWarning)
                                 }
                                 .padding(.top, 2)
                             }
@@ -1611,9 +1611,9 @@ struct DeleteAccountView: View {
                     VStack(spacing: 16) {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
+                                .foregroundColor(Color.themeSuccess)
                             Text("Account deleted successfully")
-                                .foregroundColor(.green)
+                                .foregroundColor(Color.themeSuccess)
                                 .fontWeight(.semibold)
                         }
                         .padding()
@@ -1621,7 +1621,7 @@ struct DeleteAccountView: View {
                         Text("Your account and all associated data have been permanently deleted.")
                             .font(.caption)
                             .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .padding(.horizontal)
                         
                         Button("Close") {
@@ -1629,7 +1629,7 @@ struct DeleteAccountView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.green)
+                        .background(Color.themeSuccess)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                         .padding(.horizontal)
@@ -1667,13 +1667,13 @@ struct AccountCardView<TrailingContent: View>: View {
     let titleColor: Color
     let showChevron: Bool
     let trailingContent: (() -> TrailingContent)?
-    
+
     init(
         icon: String,
         iconColor: Color,
         title: String,
         subtitle: String? = nil,
-        titleColor: Color = .primary,
+        titleColor: Color = Color.themeTextPrimary,
         showChevron: Bool = false,
         @ViewBuilder trailingContent: @escaping () -> TrailingContent
     ) {
@@ -1685,13 +1685,13 @@ struct AccountCardView<TrailingContent: View>: View {
         self.showChevron = showChevron
         self.trailingContent = trailingContent
     }
-    
+
     init(
         icon: String,
         iconColor: Color,
         title: String,
         subtitle: String? = nil,
-        titleColor: Color = .primary,
+        titleColor: Color = Color.themeTextPrimary,
         showChevron: Bool = false
     ) where TrailingContent == EmptyView {
         self.icon = icon
@@ -1702,7 +1702,7 @@ struct AccountCardView<TrailingContent: View>: View {
         self.showChevron = showChevron
         self.trailingContent = nil
     }
-    
+
     var body: some View {
         HStack(spacing: 16) {
             // Icon
@@ -1714,27 +1714,27 @@ struct AccountCardView<TrailingContent: View>: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
                 )
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .foregroundColor(titleColor)
-                
+
                 if let subtitle = subtitle {
                     Text(subtitle)
                         .font(.system(size: 14, weight: .regular, design: .rounded))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .lineLimit(2)
                 }
             }
-            
+
             Spacer()
-            
+
             if let trailingContent = trailingContent {
                 trailingContent()
             } else if showChevron {
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .font(.system(size: 14, weight: .medium))
             }
         }
@@ -1745,8 +1745,8 @@ struct AccountCardView<TrailingContent: View>: View {
                 .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                            Color.themeSurface,
+                            Color.themeSurface.opacity(0.8)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -1754,9 +1754,9 @@ struct AccountCardView<TrailingContent: View>: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
@@ -1795,22 +1795,22 @@ struct PreferenceCardView<TrailingContent: View>: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
                 )
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 if let subtitle = subtitle {
                     Text(subtitle)
                         .font(.system(size: 14, weight: .regular, design: .rounded))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .lineLimit(2)
                 }
             }
-            
+
             Spacer()
-            
+
             trailingContent()
         }
         .padding(.horizontal, 16)
@@ -1820,8 +1820,8 @@ struct PreferenceCardView<TrailingContent: View>: View {
                 .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
+                            Color.themeSurface,
+                            Color.themeSurface.opacity(0.8)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -1829,9 +1829,9 @@ struct PreferenceCardView<TrailingContent: View>: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.themeShadow.opacity(0.08), radius: 4, x: 0, y: 2)
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
