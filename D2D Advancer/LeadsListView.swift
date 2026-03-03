@@ -18,6 +18,7 @@ struct LeadsListView: View {
     @State private var filterUpdateTask: Task<Void, Never>? = nil
     @State private var selectedLead: Lead?
     @State private var messageLead: Lead?
+    @ObservedObject private var paywallManager = PaywallManager.shared
     
     private let pageSize = 50
     
@@ -56,7 +57,7 @@ struct LeadsListView: View {
                 .ignoresSafeArea(.all, edges: .top)
             }
             .navigationBarHidden(true)
-            .background(Color(UIColor.systemGroupedBackground))
+            .background(Color.themeBackground)
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
             }
@@ -102,8 +103,8 @@ struct LeadsListView: View {
             .fill(
                 LinearGradient(
                     gradient: Gradient(colors: [
-                        Color(UIColor.systemBackground),
-                        Color(UIColor.systemBackground).opacity(0.98)
+                        Color.themeBackground,
+                        Color.themeBackground.opacity(0.98)
                     ]),
                     startPoint: .top,
                     endPoint: .bottom
@@ -113,7 +114,7 @@ struct LeadsListView: View {
     }
     
     private var tabSelectionSection: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 8) {
             ForEach(LeadTab.allCases, id: \.self) { tab in
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -123,13 +124,24 @@ struct LeadsListView: View {
                     Text(tab.rawValue)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(selectedTab == tab ? .white : .primary)
+                        .foregroundColor(selectedTab == tab ? .white : Color.themeTextSecondary)
                         .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(selectedTab == tab ? Color.blue : Color.clear)
-                                .opacity(selectedTab == tab ? 1 : 0)
+                            Group {
+                                if selectedTab == tab {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.themePrimary)
+                                } else {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(.ultraThinMaterial)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.themeBorder, lineWidth: 0.5)
+                                        )
+                                }
+                            }
                         )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -143,11 +155,7 @@ struct LeadsListView: View {
         .accessibilityLabel("Lead filter tabs")
         .padding(.horizontal, 16)
         .padding(.bottom, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(UIColor.tertiarySystemBackground))
-                .padding(.horizontal, 12)
-        )
+        .background(Color.themeBackground)
     }
     
     private var searchAndFiltersSection: some View {
@@ -185,37 +193,37 @@ struct LeadsListView: View {
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Spacer()
-            
+
             Circle()
-                .fill(Color.gray.opacity(0.2))
+                .fill(Color.themePrimary.opacity(0.15))
                 .frame(width: 80, height: 80)
                 .overlay(
                     Image(systemName: "person.3.fill")
                         .font(.system(size: 32))
-                        .foregroundColor(.gray)
+                        .foregroundColor(Color.themePrimary)
                 )
-            
+
             VStack(spacing: 8) {
                 Text("No Leads Found")
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Text(selectedTab == .active ? 
+                    .foregroundColor(Color.themeTextPrimary)
+
+                Text(selectedTab == .active ?
                     "Start adding leads to build your customer database and track your progress." :
                     "Inactive leads will appear here when you mark them as not interested or not home.")
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
-            
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("No leads found")
-        .accessibilityValue(selectedTab == .active ? 
+        .accessibilityValue(selectedTab == .active ?
             "Start adding leads to build your customer database" :
             "Inactive leads will appear here when marked as not interested or not home")
     }
@@ -227,20 +235,27 @@ struct LeadsListView: View {
                     LeadRowView(
                         lead: lead,
                         onTap: { selectedLead = lead },
-                        onDelete: { handleLongPressDelete(lead) },
+                        onDelete: {
+                            guard paywallManager.gateAction() else { return }
+                            handleLongPressDelete(lead)
+                        },
                         onCall: {
+                            guard paywallManager.gateAction() else { return }
                             if let phone = lead.phone, !phone.isEmpty {
                                 Utilities.makePhoneCall(to: phone)
                             }
                         },
                         onMessage: {
+                            guard paywallManager.gateAction() else { return }
                             messageLead = lead
                         },
                         onFollowUp: {
+                            guard paywallManager.gateAction() else { return }
                             quickSetFollowUp(for: lead)
                         }
                     )
                     .onLongPressGesture {
+                        guard paywallManager.gateAction() else { return }
                         handleLongPressDelete(lead)
                     }
                         .accessibilityElement(children: .combine)
@@ -262,7 +277,7 @@ struct LeadsListView: View {
                             .scaleEffect(0.8)
                         Text("Loading more leads...")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
                     .padding()
                     .accessibilityLabel("Loading more leads")
@@ -562,27 +577,28 @@ struct LeadsListView: View {
 struct SearchBar: View {
     @Binding var text: String
     @FocusState private var isSearchFocused: Bool
-    
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.themePrimary)
                 .font(.system(size: 16, weight: .medium))
-            
+
             TextField("Search leads...", text: $text)
                 .focused($isSearchFocused)
                 .font(.system(size: 16, weight: .regular, design: .rounded))
+                .foregroundColor(Color.themeTextPrimary)
                 .textFieldStyle(PlainTextFieldStyle())
                 .accessibilityLabel("Search leads")
                 .accessibilityHint("Enter text to search leads by name, address, phone, or email")
                 .accessibilityValue(text.isEmpty ? "Empty" : text)
-            
+
             if !text.isEmpty {
                 Button(action: {
                     text = ""
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .font(.system(size: 16, weight: .medium))
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -594,10 +610,10 @@ struct SearchBar: View {
         .padding(.vertical, 14)
         .background(
             RoundedRectangle(cornerRadius: 14)
-                .fill(Color(UIColor.tertiarySystemBackground))
+                .fill(.ultraThinMaterial)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14)
-                        .stroke(isSearchFocused ? Color.blue : Color.clear, lineWidth: 2)
+                        .stroke(isSearchFocused ? Color.themePrimary : Color.themeBorder, lineWidth: isSearchFocused ? 2 : 0.5)
                 )
         )
         .padding(.horizontal, 16)
@@ -610,7 +626,7 @@ struct FilterBar: View {
     @Binding var sortBy: LeadsListView.SortOption
     @Binding var sortAscending: Bool
     @Binding var showingFilters: Bool
-    
+
     var body: some View {
         if showingFilters {
             VStack(spacing: 8) {
@@ -618,29 +634,29 @@ struct FilterBar: View {
                     Text("Sort by:")
                         .font(.caption)
                         .foregroundColor(Color.themeTextSecondary)
-                    
+
                     Picker("Sort by", selection: $sortBy) {
                         ForEach(LeadsListView.SortOption.allCases, id: \.self) { option in
                             Text(option.rawValue).tag(option)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    
+
                     Spacer()
-                    
+
                     Button(action: {
                         sortAscending.toggle()
                     }) {
                         Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                     }
                 }
-                
+
                 Divider()
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
-            .background(Color(UIColor.tertiarySystemBackground))
+            .background(.ultraThinMaterial)
         }
     }
 }
@@ -664,9 +680,15 @@ struct LeadRowView: View {
     
     var body: some View {
         HStack(spacing: 16) {
-            // Lead initial circle
+            // Lead initial circle with purple gradient
             Circle()
-                .fill(leadInitialColor)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.themePrimary, Color.themeSecondary],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .frame(width: 48, height: 48)
                 .overlay(
                     Text(leadInitial)
@@ -675,83 +697,64 @@ struct LeadRowView: View {
                         .foregroundColor(.white)
                 )
                 .accessibilityHidden(true) // Hide decorative element
-            
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(lead.displayName)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.themeHeadline)
                         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.themeTextPrimary)
                         .accessibilityAddTraits(.isHeader)
-                    
+
                     Spacer()
-                    
+
                     if let followUpDate = lead.followUpDate {
                         HStack(spacing: 4) {
                             Image(systemName: "calendar.badge.clock")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.orange)
+                                .foregroundColor(Color.themeWarning)
                                 .accessibilityHidden(true) // Hide decorative element
                             Text(followUpDate, format: .dateTime.day().month())
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                                .foregroundColor(.orange)
+                                .foregroundColor(Color.themeWarning)
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(
                             Capsule()
-                                .fill(Color.orange.opacity(0.15))
+                                .fill(Color.themeWarning.opacity(0.15))
                         )
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("Follow-up scheduled")
                         .accessibilityValue(DateFormatter.localizedString(from: followUpDate, dateStyle: .medium, timeStyle: .short))
                     }
                 }
-                
+
                 if let address = lead.address, !address.isEmpty {
                     HStack(spacing: 4) {
                         Image(systemName: "location.fill")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .accessibilityHidden(true) // Hide decorative element
                         Text(address)
                             .font(.system(size: 14, weight: .regular, design: .rounded))
                             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .lineLimit(1)
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Address")
                     .accessibilityValue(address)
                 }
-                
+
                 HStack {
                     ModernStatusBadge(status: lead.leadStatus)
                     Spacer()
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
+        .glassCard()
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
@@ -764,9 +767,9 @@ struct LeadRowView: View {
             } label: {
                 Label("View Details", systemImage: "eye")
             }
-            
+
             Divider()
-            
+
             Button(role: .destructive) {
                 onDelete?()
             } label: {
@@ -780,7 +783,7 @@ struct LeadRowView: View {
                 } label: {
                     Label("Follow-up", systemImage: "calendar.badge.plus")
                 }
-                .tint(.orange)
+                .tint(Color.themeWarning)
             }
             if onMessage != nil {
                 Button {
@@ -788,7 +791,7 @@ struct LeadRowView: View {
                 } label: {
                     Label("Message", systemImage: "message")
                 }
-                .tint(.blue)
+                .tint(Color.themePrimary)
             }
             if onCall != nil {
                 Button {
@@ -796,7 +799,7 @@ struct LeadRowView: View {
                 } label: {
                     Label("Call", systemImage: "phone")
                 }
-                .tint(.green)
+                .tint(Color.themeSuccess)
             }
         }
         .accessibilityElement(children: .combine)
@@ -806,11 +809,6 @@ struct LeadRowView: View {
         String(lead.displayName.prefix(1)).uppercased()
     }
     
-    private var leadInitialColor: Color {
-        let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .indigo, .teal]
-        let hash = lead.displayName.hash
-        return colors[abs(hash) % colors.count]
-    }
 }
 
 struct ModernStatusBadge: View {
@@ -842,15 +840,15 @@ struct ModernStatusBadge: View {
     private var statusColor: Color {
         switch status {
         case .notContacted:
-            return .gray
+            return Color.statusNotContacted
         case .interested:
-            return .green
+            return Color.statusInterested
         case .notInterested:
-            return .red
+            return Color.statusNotInterested
         case .notHome:
-            return .orange
+            return Color.statusNotHome
         case .converted:
-            return .blue
+            return Color.statusConverted
         }
     }
 }
