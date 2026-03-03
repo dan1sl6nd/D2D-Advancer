@@ -28,7 +28,7 @@ struct PaywallView: View {
                 VStack(spacing: 20) {
                     // Header
                     headerSection
-                        .padding(.top, 10)
+                        .padding(.top, 40)
 
                     // Pricing Section (Priority - Always visible)
                     pricingSection
@@ -48,6 +48,24 @@ struct PaywallView: View {
                     Spacer(minLength: 120)
                 }
                 .padding(.horizontal, 24)
+            }
+
+            // Close button overlay
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 32, height: 32)
+                            .background(Color.white.opacity(0.15))
+                            .clipShape(Circle())
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.top, 12)
+                }
+                Spacer()
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -977,6 +995,32 @@ extension View {
                             .stroke(Color.white.opacity(0.2), lineWidth: 1)
                     )
             )
+    }
+}
+
+// MARK: - Premium Lock Overlay
+
+struct PremiumLockOverlay: ViewModifier {
+    @ObservedObject private var paywallManager = PaywallManager.shared
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .bottomTrailing) {
+            if !paywallManager.isPremium {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(4)
+                    .background(Color.orange)
+                    .clipShape(Circle())
+                    .offset(x: 4, y: 4)
+            }
+        }
+    }
+}
+
+extension View {
+    func premiumLock() -> some View {
+        modifier(PremiumLockOverlay())
     }
 }
 

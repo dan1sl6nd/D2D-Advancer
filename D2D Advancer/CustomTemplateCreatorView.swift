@@ -62,7 +62,7 @@ struct CustomTemplateCreatorView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
@@ -71,7 +71,7 @@ struct CustomTemplateCreatorView: View {
                                 .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                         )
                     }
-                    
+
                     Button(action: {
                         saveTemplate()
                     }) {
@@ -90,14 +90,14 @@ struct CustomTemplateCreatorView: View {
                                 .fill(
                                     LinearGradient(
                                         gradient: Gradient(colors: [
-                                            !isValidTemplate ? Color.gray : Color.blue,
-                                            !isValidTemplate ? Color.gray.opacity(0.8) : Color.blue.opacity(0.8)
+                                            !isValidTemplate ? Color.themeTextSecondary : Color.themePrimary,
+                                            !isValidTemplate ? Color.themeTextSecondary.opacity(0.8) : Color.themePrimary.opacity(0.8)
                                         ]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: !isValidTemplate ? .clear : .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: !isValidTemplate ? .clear : Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                     .disabled(!isValidTemplate)
@@ -106,7 +106,7 @@ struct CustomTemplateCreatorView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
+                        .fill(Color.themeBackground)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -157,13 +157,13 @@ struct CustomTemplateCreatorView: View {
             // Header
             HStack {
                 Image(systemName: "doc.text.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text("Template Details")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -172,16 +172,16 @@ struct CustomTemplateCreatorView: View {
                 Text("Template Name")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 TextField("Enter template name", text: $title)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                     )
             }
             
@@ -190,7 +190,7 @@ struct CustomTemplateCreatorView: View {
                 Text("Category")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                 
                 Menu {
                     ForEach(MessageTemplate.MessageCategory.allCases, id: \.self) { category in
@@ -210,22 +210,22 @@ struct CustomTemplateCreatorView: View {
                 } label: {
                     HStack {
                         Image(systemName: selectedCategory.icon)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 20)
                         Text(selectedCategory.rawValue)
-                            .foregroundColor(.primary)
+                            .foregroundColor(Color.themeTextPrimary)
                         Spacer()
                         Image(systemName: "chevron.down")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .font(.caption)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                     )
                 }
             }
@@ -235,51 +235,51 @@ struct CustomTemplateCreatorView: View {
                 Text("Message Channels")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 VStack(spacing: 12) {
                     HStack {
                         Image(systemName: "message.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 20)
                         Text("SMS Messages")
                             .font(.body)
                         Spacer()
                         Toggle("", isOn: $isForSMS)
-                            .toggleStyle(SwitchToggleStyle(tint: .blue))
+                            .toggleStyle(SwitchToggleStyle(tint: Color.themePrimary))
                     }
-                    
+
                     HStack {
                         Image(systemName: "envelope.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 20)
                         Text("Email Messages")
                             .font(.body)
                         Spacer()
                         Toggle("", isOn: $isForEmail)
-                            .toggleStyle(SwitchToggleStyle(tint: .blue))
+                            .toggleStyle(SwitchToggleStyle(tint: Color.themePrimary))
                     }
                 }
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private var messageContentCard: some View {
         VStack(alignment: .leading, spacing: 20) {
             // Header
             HStack {
                 Image(systemName: "text.bubble.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text("Message Content")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -288,22 +288,22 @@ struct CustomTemplateCreatorView: View {
                 Text("Template Message")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
 
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $message)
                         .frame(minHeight: 120)
                         .padding(12)
-                        .background(Color(UIColor.tertiarySystemBackground))
+                        .background(Color.themeSurface)
                         .cornerRadius(10)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                         )
 
                     if message.isEmpty {
                         Text("Type your message here...")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .padding(.horizontal, 16)
                             .padding(.top, 20)
                             .allowsHitTesting(false)
@@ -315,30 +315,30 @@ struct CustomTemplateCreatorView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Image(systemName: "tag.fill")
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.themePrimary)
                         .font(.caption)
                     Text("Insert Placeholders")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.themeTextPrimary)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Tap to insert placeholder into your message")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
 
                     HStack(spacing: 4) {
                         Image(systemName: "info.circle.fill")
                             .font(.caption2)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                         Text("Use math with price: {price + 50}, {price * 1.1}, {price - 100}, {price / 2}")
                             .font(.caption2)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                     }
                     .padding(.vertical, 4)
                     .padding(.horizontal, 8)
-                    .background(Color.blue.opacity(0.05))
+                    .background(Color.themePrimary.opacity(0.05))
                     .cornerRadius(6)
                 }
 
@@ -352,18 +352,18 @@ struct CustomTemplateCreatorView: View {
                                     Text(item.placeholder)
                                         .font(.caption)
                                         .fontWeight(.semibold)
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(Color.themePrimary)
                                     Text(item.description)
                                         .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(Color.themeTextSecondary)
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(Color.blue.opacity(0.1))
+                                .background(Color.themePrimary.opacity(0.1))
                                 .cornerRadius(8)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                        .stroke(Color.themePrimary.opacity(0.3), lineWidth: 1)
                                 )
                             }
                         }
@@ -381,20 +381,20 @@ struct CustomTemplateCreatorView: View {
                         Text("Preview Message")
                     }
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .padding(.vertical, 12)
                     .padding(.horizontal, 20)
-                    .background(Color.blue.opacity(0.1))
+                    .background(Color.themePrimary.opacity(0.1))
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themePrimary.opacity(0.3), lineWidth: 1)
                     )
                 }
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -440,13 +440,13 @@ struct PreviewTemplateView: View {
             // Header
             HStack {
                 Image(systemName: "doc.text.viewfinder")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text("Template Information")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -454,19 +454,19 @@ struct PreviewTemplateView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Image(systemName: category.icon)
-                        .foregroundColor(category == .urgent ? .red : .blue)
+                        .foregroundColor(category == .urgent ? Color.themeError : Color.themePrimary)
                         .font(.title2)
                         .frame(width: 24)
-                    
+
                     VStack(alignment: .leading, spacing: 4) {
                         Text(title)
                             .font(.headline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        
+                            .foregroundColor(Color.themeTextPrimary)
+
                         Text(category.rawValue)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
                     
                     Spacer()
@@ -475,23 +475,23 @@ struct PreviewTemplateView: View {
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private var messagePreviewCard: some View {
         VStack(alignment: .leading, spacing: 20) {
             // Header
             HStack {
                 Image(systemName: "eye.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text("Message Preview")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -500,61 +500,61 @@ struct PreviewTemplateView: View {
                 Text("Preview with Sample Data")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: "person.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 16)
                         Text("Customer: John Smith")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
 
                     HStack {
                         Image(systemName: "location.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 16)
                         Text("Address: 123 Main St, Toronto")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
 
                     HStack {
                         Image(systemName: "dollarsign.circle.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 16)
                         Text("Price: $2,500.00 CAD")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
 
                     HStack {
                         Image(systemName: "tag.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 16)
                         Text("Service: Window Cleaning")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
 
                     HStack {
                         Image(systemName: "phone.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 16)
                         Text("Phone: (416) 555-1234")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
 
                     HStack {
                         Image(systemName: "envelope.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 16)
                         Text("Email: john.smith@example.com")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
                 }
             }
@@ -564,26 +564,26 @@ struct PreviewTemplateView: View {
                 Text("Personalized Message")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 Text(previewMessage)
                     .font(.body)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                     .padding(16)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(12)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                     )
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private var previewMessage: String {
         var preview = message
         let samplePrice: Double = 2500.00

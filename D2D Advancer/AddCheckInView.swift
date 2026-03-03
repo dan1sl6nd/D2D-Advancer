@@ -30,7 +30,7 @@ struct AddCheckInView: View {
                                     if let address = lead.address {
                                         Text(address)
                                             .font(.subheadline)
-                                            .foregroundColor(.secondary)
+                                            .foregroundColor(Color.themeTextSecondary)
                                     }
                                 }
                                 
@@ -41,7 +41,7 @@ struct AddCheckInView: View {
                             
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color.themePrimary)
                                     .frame(width: 20)
                                 
                                 Text("Check-in #\(lead.checkInCount + 1)")
@@ -67,7 +67,7 @@ struct AddCheckInView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Image(systemName: "note.text")
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color.themePrimary)
                                     .frame(width: 20)
                                 
                                 Text("Check-in Notes")
@@ -79,15 +79,15 @@ struct AddCheckInView: View {
                                 .frame(minHeight: 100)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
-                                .background(Color(UIColor.tertiarySystemBackground))
+                                .background(Color.themeSurface)
                                 .cornerRadius(12)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                                 )
                                 .placeholder(when: notes.isEmpty) {
                                     Text("Add notes about this follow-up...")
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(Color.themeTextSecondary)
                                         .padding(.horizontal, 20)
                                         .padding(.vertical, 20)
                                 }
@@ -123,7 +123,7 @@ struct AddCheckInView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
@@ -132,7 +132,7 @@ struct AddCheckInView: View {
                                 .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                         )
                     }
-                    
+
                     Button(action: {
                         saveCheckIn()
                     }) {
@@ -150,12 +150,12 @@ struct AddCheckInView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                        gradient: Gradient(colors: [Color.themePrimary, Color.themePrimary.opacity(0.8)]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                 }
@@ -163,7 +163,7 @@ struct AddCheckInView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
+                        .fill(Color.themeBackground)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -195,7 +195,7 @@ struct AddCheckInView: View {
                                 Text("Cancel")
                                     .font(.headline)
                                     .fontWeight(.semibold)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.themeTextSecondary)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
                                     .background(
@@ -215,13 +215,13 @@ struct AddCheckInView: View {
                                     .padding(.vertical, 12)
                                     .background(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.blue)
+                                            .fill(Color.themePrimary)
                                     )
                             }
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(Color(UIColor.systemBackground))
+                        .background(Color.themeBackground)
                     }
                 }
                 .presentationDetents([.height(250)])
@@ -279,14 +279,14 @@ struct AddCheckInView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text(title)
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 Spacer()
             }
             .padding(.horizontal, 20)
@@ -298,12 +298,12 @@ struct AddCheckInView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemBackground))
+                .fill(Color.themeBackground)
                 .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(UIColor.separator).opacity(0.2), lineWidth: 1)
+                .stroke(Color.themeBorder.opacity(0.2), lineWidth: 1)
         )
     }
     
@@ -312,14 +312,14 @@ struct AddCheckInView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .frame(width: 20)
-                
+
                 Text(title)
                     .font(.headline)
                     .fontWeight(.semibold)
             }
-            
+
             Menu {
                 Picker(title, selection: selection) {
                     ForEach(FollowUpCheckIn.CheckInType.allCases, id: \.self) { type in
@@ -330,19 +330,19 @@ struct AddCheckInView: View {
             } label: {
                 HStack {
                     Label(selection.wrappedValue.displayName, systemImage: selection.wrappedValue.icon)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.themeTextPrimary)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .font(.caption)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color(UIColor.tertiarySystemBackground))
+                .background(Color.themeSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
             }
         }
@@ -353,14 +353,14 @@ struct AddCheckInView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .frame(width: 20)
-                
+
                 Text(title)
                     .font(.headline)
                     .fontWeight(.semibold)
             }
-            
+
             Menu {
                 Picker(title, selection: selection) {
                     ForEach(FollowUpCheckIn.Outcome.allCases, id: \.self) { outcome in
@@ -371,19 +371,19 @@ struct AddCheckInView: View {
             } label: {
                 HStack {
                     Text(selection.wrappedValue.displayName)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.themeTextPrimary)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .font(.caption)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color(UIColor.tertiarySystemBackground))
+                .background(Color.themeSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
             }
         }
@@ -394,45 +394,45 @@ struct AddCheckInView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .frame(width: 20)
-                
+
                 Text(title)
                     .font(.headline)
                     .fontWeight(.semibold)
             }
-            
+
             Button(action: action) {
                 HStack {
                     if let selectedDate = date.wrappedValue {
                         Text(selectedDate.formatted(.dateTime.day().month().year().hour().minute()))
-                            .foregroundColor(.primary)
-                        
+                            .foregroundColor(Color.themeTextPrimary)
+
                         Spacer()
-                        
+
                         Button(action: {
                             date.wrappedValue = nil
                         }) {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                         }
                     } else {
                         Text("Set Date & Time")
-                            .foregroundColor(.secondary)
-                        
+                            .foregroundColor(Color.themeTextSecondary)
+
                         Spacer()
-                        
+
                         Image(systemName: "calendar")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color(UIColor.tertiarySystemBackground))
+                .background(Color.themeSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
             }
         }

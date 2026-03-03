@@ -61,10 +61,10 @@ struct NeighborhoodDetailView: View {
 
                         HStack {
                             Image(systemName: "mappin.circle.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                             Text("\(neighborhood.cityName ?? ""), \(neighborhood.state ?? "")")
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -75,7 +75,7 @@ struct NeighborhoodDetailView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Area Score")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
 
                             HStack(spacing: 8) {
                                 Text(String(format: "%.0f", neighborhood.score))
@@ -85,7 +85,7 @@ struct NeighborhoodDetailView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("out of 100")
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(Color.themeTextSecondary)
 
                                     Text(neighborhood.scoreGrade)
                                         .font(.caption)
@@ -115,14 +115,14 @@ struct NeighborhoodDetailView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .background(Color.blue)
+                            .background(Color.themePrimary)
                             .cornerRadius(10)
                         }
                     }
                     .padding(16)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(UIColor.tertiarySystemBackground))
+                            .fill(Color.themeSurface)
                     )
                     .padding(.horizontal, 20)
 
@@ -137,28 +137,28 @@ struct NeighborhoodDetailView: View {
                                 icon: "dollarsign.circle.fill",
                                 label: "Median Income",
                                 value: neighborhood.formattedIncome,
-                                color: .green
+                                color: .themeSuccess
                             )
 
                             DemographicRow(
                                 icon: "house.circle.fill",
                                 label: "Avg Home Value",
                                 value: neighborhood.formattedHomeValue,
-                                color: .blue
+                                color: .themePrimary
                             )
 
                             DemographicRow(
                                 icon: "person.3.circle.fill",
                                 label: "Population",
                                 value: neighborhood.formattedPopulation,
-                                color: .purple
+                                color: .themePrimary
                             )
 
                             DemographicRow(
                                 icon: "key.circle.fill",
                                 label: "Homeownership",
                                 value: String(format: "%.0f%%", neighborhood.homeOwnershipRate * 100),
-                                color: .orange
+                                color: .themeWarning
                             )
                         }
                         .padding(.horizontal, 20)
@@ -188,25 +188,25 @@ struct NeighborhoodDetailView: View {
                                 // TODO: Add note editing
                             }
                             .font(.subheadline)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                         }
                         .padding(.horizontal, 20)
 
                         if let notes = neighborhood.userNotes, !notes.isEmpty {
                             Text(notes)
                                 .font(.body)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                                 .padding(16)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color(UIColor.tertiarySystemBackground))
+                                        .fill(Color.themeSurface)
                                 )
                                 .padding(.horizontal, 20)
                         } else {
                             Text("No notes yet")
                                 .font(.body)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
                                 .italic()
                                 .padding(.horizontal, 20)
                         }
@@ -221,15 +221,15 @@ struct NeighborhoodDetailView: View {
     private var scoreColor: Color {
         switch neighborhood.score {
         case 90...100:
-            return .green
+            return .themeSuccess
         case 75..<90:
             return Color(red: 0.7, green: 0.9, blue: 0.4)
         case 60..<75:
             return .yellow
         case 45..<60:
-            return .orange
+            return .themeWarning
         default:
-            return .red
+            return .themeError
         }
     }
 
@@ -262,7 +262,7 @@ struct DemographicRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
 
                 Text(value)
                     .font(.headline)
@@ -274,7 +274,7 @@ struct DemographicRow: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(UIColor.tertiarySystemBackground))
+                .fill(Color.themeSurface)
         )
     }
 }
@@ -286,30 +286,30 @@ struct PerformanceStatsView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 16) {
-                StatBox(label: "Total Leads", value: "\(stats.total)", color: .blue)
-                StatBox(label: "Converted", value: "\(stats.converted)", color: .green)
-                StatBox(label: "Interested", value: "\(stats.interested)", color: .orange)
+                StatBox(label: "Total Leads", value: "\(stats.total)", color: .themePrimary)
+                StatBox(label: "Converted", value: "\(stats.converted)", color: .themeSuccess)
+                StatBox(label: "Interested", value: "\(stats.interested)", color: .themeWarning)
             }
 
             HStack {
                 Image(systemName: "chart.line.uptrend.xyaxis.circle.fill")
-                    .foregroundColor(.green)
+                    .foregroundColor(Color.themeSuccess)
 
                 Text("Conversion Rate")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
 
                 Spacer()
 
                 Text(String(format: "%.1f%%", stats.conversionRate))
                     .font(.headline)
                     .fontWeight(.bold)
-                    .foregroundColor(.green)
+                    .foregroundColor(Color.themeSuccess)
             }
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.green.opacity(0.1))
+                    .fill(Color.themeSuccess.opacity(0.1))
             )
         }
         .onAppear {
@@ -345,7 +345,7 @@ struct StatBox: View {
 
             Text(label)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.themeTextSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)

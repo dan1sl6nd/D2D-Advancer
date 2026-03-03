@@ -20,7 +20,7 @@ struct AppointmentTypePresetsView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 20)
                 }
-                .background(Color(UIColor.systemGroupedBackground))
+                .background(Color.themeBackground)
             }
             .navigationTitle("Appointment Types")
             .navigationBarTitleDisplayMode(.inline)
@@ -40,13 +40,13 @@ struct AppointmentTypePresetsView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(Color.blue)
+                        .background(Color.themePrimary)
                         .cornerRadius(20)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(Color(UIColor.systemBackground).opacity(0.95))
+                .background(Color.themeBackground.opacity(0.95))
             }
             .safeAreaInset(edge: .bottom) {
                 // Card-based Done button
@@ -67,19 +67,19 @@ struct AppointmentTypePresetsView: View {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(
                                 LinearGradient(
-                                    gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                    gradient: Gradient(colors: [Color.themePrimary, Color.themePrimary.opacity(0.8)]),
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                            .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                     )
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
+                        .fill(Color.themeBackground)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -97,9 +97,9 @@ struct AppointmentTypePresetsView: View {
             // Header
             HStack {
                 Image(systemName: "star.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text("Default Types")
                     .font(.headline)
                     .fontWeight(.semibold)
@@ -110,8 +110,8 @@ struct AppointmentTypePresetsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("These are the built-in appointment types that cannot be modified.")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
+                    .foregroundColor(Color.themeTextSecondary)
+
                 LazyVGrid(columns: [
                     GridItem(.adaptive(minimum: 140), spacing: 12)
                 ], spacing: 12) {
@@ -122,17 +122,17 @@ struct AppointmentTypePresetsView: View {
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private var customTypesCard: some View {
         VStack(alignment: .leading, spacing: 20) {
             // Header
             HStack {
                 Image(systemName: "paintbrush.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Custom Types")
@@ -143,10 +143,10 @@ struct AppointmentTypePresetsView: View {
                 
                 Button("Add New") { showingCreateView = true }
                 .font(.caption)
-                .foregroundColor(.blue)
+                .foregroundColor(Color.themePrimary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color.blue.opacity(0.1))
+                .background(Color.themePrimary.opacity(0.1))
                 .cornerRadius(8)
             }
             
@@ -154,7 +154,7 @@ struct AppointmentTypePresetsView: View {
                 VStack(spacing: 16) {
                     Image(systemName: "calendar.badge.plus")
                         .font(.system(size: 48))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                     
                     Text("No Custom Types")
                         .font(.headline)
@@ -162,7 +162,7 @@ struct AppointmentTypePresetsView: View {
                     
                     Text("Create custom appointment types that fit your specific business needs.")
                         .font(.body)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                     
@@ -175,7 +175,7 @@ struct AppointmentTypePresetsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Tap to edit or swipe to delete custom appointment types.")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                     
                     LazyVGrid(columns: [
                         GridItem(.adaptive(minimum: 140), spacing: 12)
@@ -198,7 +198,7 @@ struct AppointmentTypePresetsView: View {
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -220,11 +220,11 @@ struct DefaultTypeChip: View {
                 Text(type.rawValue)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.themeTextPrimary)
+
                 Text("Built-in")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
             }
             
             Spacer()
@@ -257,12 +257,12 @@ struct CustomTypeChip: View {
                 Text(customType.name)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
                     .lineLimit(1)
-                
+
                 Text("Custom")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
             }
             
             Spacer()
@@ -274,7 +274,7 @@ struct CustomTypeChip: View {
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .font(.title3)
             }
             .buttonStyle(PlainButtonStyle())

@@ -38,9 +38,9 @@ struct OnboardingProfile: Codable, Equatable {
 
         var accent: Color {
             switch self {
-            case .organizePipeline: return .blue
-            case .bookMoreAppointments: return .orange
-            case .territoryPlanning: return .green
+            case .organizePipeline: return .themePrimary
+            case .bookMoreAppointments: return .themeWarning
+            case .territoryPlanning: return .themeSuccess
             }
         }
     }
@@ -78,9 +78,9 @@ struct OnboardingProfile: Codable, Equatable {
 
         var accent: Color {
             switch self {
-            case .territoryInsights: return .green
-            case .automatedReminders: return .orange
-            case .leadOrganization: return .blue
+            case .territoryInsights: return .themeSuccess
+            case .automatedReminders: return .themeWarning
+            case .leadOrganization: return .themePrimary
             }
         }
     }
@@ -284,6 +284,12 @@ class OnboardingManager: ObservableObject {
         if !PaywallManager.shared.isPremium {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 PaywallManager.shared.shouldShowPaywall = true
+            }
+        }
+
+        if FirebaseService.shared.isAuthenticated {
+            Task {
+                await FirebaseService.shared.syncCurrentAccountProfileToClouds()
             }
         }
     }
@@ -530,7 +536,7 @@ struct OnboardingView: View {
                         icon: style.icon,
                         title: style.title,
                         subtitle: style.subtitle,
-                        accent: .purple,
+                        accent: .themePrimary,
                         isSelected: onboardingManager.profile.workflowStyle == style
                     ) {
                         onboardingManager.selectWorkflowStyle(style)
@@ -555,7 +561,7 @@ struct OnboardingView: View {
                 RoundedRectangle(cornerRadius: 24)
                     .fill(
                         LinearGradient(
-                            colors: [Color.blue.opacity(0.18), Color.purple.opacity(0.18)],
+                            colors: [Color.themePrimary.opacity(0.18), Color.themePrimary.opacity(0.18)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -565,7 +571,7 @@ struct OnboardingView: View {
                         Image(systemName: "sparkles")
                             .font(.system(size: 72))
                             .foregroundStyle(LinearGradient(
-                                colors: [Color.blue, Color.purple],
+                                colors: [Color.themePrimary, Color.themePrimary],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ))
@@ -600,7 +606,7 @@ struct OnboardingView: View {
                 RoundedRectangle(cornerRadius: 24)
                     .fill(
                         LinearGradient(
-                            colors: [Color.green.opacity(0.18), Color.blue.opacity(0.18)],
+                            colors: [Color.themeSuccess.opacity(0.18), Color.themePrimary.opacity(0.18)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -610,7 +616,7 @@ struct OnboardingView: View {
                         Image(systemName: "location.circle.fill")
                             .font(.system(size: 72))
                             .foregroundStyle(LinearGradient(
-                                colors: [Color.green, Color.blue],
+                                colors: [Color.themeSuccess, Color.themePrimary],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ))
@@ -650,7 +656,7 @@ struct OnboardingView: View {
                 RoundedRectangle(cornerRadius: 24)
                     .fill(
                         LinearGradient(
-                            colors: [Color.purple.opacity(0.18), Color.pink.opacity(0.18)],
+                            colors: [Color.themePrimary.opacity(0.18), Color.pink.opacity(0.18)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -660,7 +666,7 @@ struct OnboardingView: View {
                         Image(systemName: "bell.badge.fill")
                             .font(.system(size: 72))
                             .foregroundStyle(LinearGradient(
-                                colors: [Color.purple, Color.pink],
+                                colors: [Color.themePrimary, Color.pink],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ))
@@ -813,11 +819,11 @@ struct OnboardingView: View {
     private var buttonColor: (Color, Color) {
         switch onboardingManager.currentPage {
         case .locationPermission:
-            return (Color.green, Color.blue)
+            return (Color.themeSuccess, Color.themePrimary)
         case .notificationPermission:
-            return (Color.purple, Color.pink)
+            return (Color.themePrimary, Color.pink)
         default:
-            return (Color.blue, Color.purple)
+            return (Color.themePrimary, Color.themePrimary)
         }
     }
 
@@ -924,12 +930,12 @@ private struct OnboardingProgressIndicator: View {
                     .fill(
                         index <= currentIndex
                         ? LinearGradient(
-                            colors: [Color.blue, Color.purple],
+                            colors: [Color.themePrimary, Color.themePrimary],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                         : LinearGradient(
-                            colors: [Color.gray.opacity(0.25), Color.gray.opacity(0.18)],
+                            colors: [Color.themeTextSecondary.opacity(0.25), Color.themeTextSecondary.opacity(0.18)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
@@ -1080,11 +1086,11 @@ private struct FeatureHighlightRow: View {
         HStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.2))
+                    .fill(Color.themePrimary.opacity(0.2))
                     .frame(width: 48, height: 48)
                 Image(systemName: icon)
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -1122,7 +1128,7 @@ private struct SummaryCard: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color.blue.opacity(0.25), Color.purple.opacity(0.2)],
+                            colors: [Color.themePrimary.opacity(0.25), Color.themePrimary.opacity(0.2)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -1132,7 +1138,7 @@ private struct SummaryCard: View {
                 Image(systemName: icon)
                     .font(.system(size: 40, weight: .semibold))
                     .foregroundStyle(LinearGradient(
-                        colors: [Color.blue, Color.purple],
+                        colors: [Color.themePrimary, Color.themePrimary],
                         startPoint: .top,
                         endPoint: .bottom
                     ))
@@ -1209,7 +1215,7 @@ private struct SummaryItemView: View {
         HStack(alignment: .top, spacing: 16) {
             Image(systemName: item.icon)
                 .font(.system(size: 22))
-                .foregroundColor(.blue)
+                .foregroundColor(Color.themePrimary)
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -1233,12 +1239,8 @@ extension View {
         of value: Value,
         perform action: @escaping (Value) -> Void
     ) -> some View {
-        if #available(iOS 17, *) {
-            onChange(of: value, initial: false) { _, newValue in
-                action(newValue)
-            }
-        } else {
-            onChange(of: value, perform: action)
+        onChange(of: value, initial: false) { _, newValue in
+            action(newValue)
         }
     }
 }

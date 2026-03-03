@@ -166,13 +166,13 @@ struct LeadInfoCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "person.crop.circle.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text("Customer Information")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -184,26 +184,26 @@ struct LeadInfoCard: View {
                 if let address = lead.address {
                     HStack {
                         Image(systemName: "location")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .frame(width: 16)
                         Text(address)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
                 }
-                
+
                 if let phone = lead.phone {
                     HStack {
                         Image(systemName: "phone")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .frame(width: 16)
                         Text(phone)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
                 }
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -225,13 +225,13 @@ struct AppointmentDetailsSection: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "calendar.badge.plus")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text("Appointment Details")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -280,12 +280,12 @@ struct AppointmentDetailsSection: View {
                         .frame(maxWidth: .infinity)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.blue.opacity(0.1))
+                                .fill(Color.themePrimary.opacity(0.1))
                         )
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.themePrimary)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.blue.opacity(0.4), lineWidth: 1)
+                                .stroke(Color.themePrimary.opacity(0.4), lineWidth: 1)
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -309,16 +309,16 @@ struct AppointmentDetailsSection: View {
                 TextEditor(text: $notes)
                     .frame(minHeight: 80)
                     .padding(8)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                     )
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         .sheet(isPresented: $showingCustomTypeCreator) {
@@ -396,9 +396,9 @@ struct AppointmentTypeWrapperChip: View {
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? typeWrapper.color.opacity(0.2) : Color(UIColor.tertiarySystemBackground))
+                    .fill(isSelected ? typeWrapper.color.opacity(0.2) : Color.themeSurface)
             )
-            .foregroundColor(isSelected ? typeWrapper.color : .primary)
+            .foregroundColor(isSelected ? typeWrapper.color : Color.themeTextPrimary)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(typeWrapper.color.opacity(isSelected ? 0.8 : 0.3), lineWidth: isSelected ? 2 : 1)
@@ -412,8 +412,8 @@ struct AppointmentTypeWrapperChip: View {
                                 Spacer()
                                 Image(systemName: "ellipsis.circle.fill")
                                     .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                    .background(Color(UIColor.systemBackground))
+                                    .foregroundColor(Color.themeTextSecondary)
+                                    .background(Color.themeBackground)
                                     .clipShape(Circle())
                             }
                             Spacer()
@@ -469,9 +469,9 @@ struct AppointmentTypeChip: View {
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? type.color.opacity(0.2) : Color(UIColor.tertiarySystemBackground))
+                    .fill(isSelected ? type.color.opacity(0.2) : Color.themeSurface)
             )
-            .foregroundColor(isSelected ? type.color : .primary)
+            .foregroundColor(isSelected ? type.color : Color.themeTextPrimary)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(type.color.opacity(isSelected ? 0.8 : 0.3), lineWidth: isSelected ? 2 : 1)
@@ -491,13 +491,13 @@ struct DateTimeSection: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "clock")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text("Date & Time")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -525,21 +525,21 @@ struct DateTimeSection: View {
                 } label: {
                     HStack {
                         Text(durationOptions.first(where: { $0.1 == duration })?.0 ?? "1 hour")
-                            .foregroundColor(.primary)
-                        
+                            .foregroundColor(Color.themeTextPrimary)
+
                         Spacer()
-                        
+
                         Image(systemName: "chevron.down")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .font(.caption)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                     )
                 }
             }
@@ -548,15 +548,15 @@ struct DateTimeSection: View {
                 Text("End Time")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-                
+                    .foregroundColor(Color.themeTextSecondary)
+
                 Text(endDate.formatted(.dateTime.day().month().year().hour().minute()))
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -570,13 +570,13 @@ struct LocationSection: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "location")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text("Location")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -594,12 +594,12 @@ struct LocationSection: View {
                             Text("Use customer address")
                                 .font(.caption)
                         }
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
-                                .fill(Color(.tertiarySystemBackground))
+                                .fill(Color.themeSurface)
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -607,7 +607,7 @@ struct LocationSection: View {
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }

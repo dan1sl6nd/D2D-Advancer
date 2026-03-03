@@ -54,10 +54,10 @@ struct FirstMessageConfirmationView: View {
                 VStack {
                     Image(systemName: "message.slash")
                         .font(.system(size: 48))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                     Text("SMS not available on this device")
                         .font(.headline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                 }
                 .padding()
             }
@@ -74,7 +74,7 @@ struct FirstMessageConfirmationView: View {
         VStack(spacing: 12) {
             Image(systemName: "message.badge.checkmark.rtl")
                 .font(.system(size: 48))
-                .foregroundColor(.blue)
+                .foregroundColor(Color.themePrimary)
             
             Text("Great! Your lead has been saved.")
                 .font(.title2)
@@ -83,11 +83,11 @@ struct FirstMessageConfirmationView: View {
             
             Text("Would you like to send your first message now?")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.themeTextSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding()
-        .background(Color(UIColor.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
     }
     
@@ -95,7 +95,7 @@ struct FirstMessageConfirmationView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "person.circle.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Lead Information")
@@ -108,7 +108,7 @@ struct FirstMessageConfirmationView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: "person.fill")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .frame(width: 16)
                     Text(lead.displayName)
                         .font(.headline)
@@ -117,29 +117,29 @@ struct FirstMessageConfirmationView: View {
                 if let phone = lead.phone, !phone.isEmpty {
                     HStack {
                         Image(systemName: "phone.fill")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .frame(width: 16)
                         Text(phone)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                     }
                 }
                 
                 if let address = lead.address, !address.isEmpty {
                     HStack {
                         Image(systemName: "location.fill")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .frame(width: 16)
                         Text(address)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.themeTextSecondary)
                             .lineLimit(2)
                     }
                 }
             }
         }
         .padding()
-        .background(Color(UIColor.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
     }
     
@@ -147,7 +147,7 @@ struct FirstMessageConfirmationView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "doc.text.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
                 
                 Text("Choose a Template")
@@ -161,7 +161,7 @@ struct FirstMessageConfirmationView: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.themePrimary)
                 }
                 .accessibilityLabel("Add new template")
             }
@@ -170,11 +170,11 @@ struct FirstMessageConfirmationView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "doc.text")
                         .font(.system(size: 32))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                     
                     Text("No SMS templates available")
                         .font(.headline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
@@ -211,16 +211,16 @@ struct FirstMessageConfirmationView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Or write a custom message:")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                 
                 TextEditor(text: $customMessage)
                     .frame(height: 80)
                     .padding(8)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.themeSurface)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                     )
                     .onChange(of: customMessage) { oldValue, newValue in
                         // Only clear template selection if user manually edited the message
@@ -234,7 +234,7 @@ struct FirstMessageConfirmationView: View {
             }
         }
         .padding()
-        .background(Color(UIColor.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(12)
     }
     
@@ -254,8 +254,8 @@ struct FirstMessageConfirmationView: View {
                 .padding(.vertical, 16)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(canSendMessage ? Color.blue : Color.gray)
-                        .shadow(color: canSendMessage ? .blue.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
+                        .fill(canSendMessage ? Color.themePrimary : Color.themeTextSecondary)
+                        .shadow(color: canSendMessage ? Color.themePrimary.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
                 )
                 .foregroundColor(.white)
             }
@@ -268,7 +268,7 @@ struct FirstMessageConfirmationView: View {
             }) {
                 Text("Skip for now")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
             }
@@ -302,14 +302,14 @@ struct TemplateCard: View {
                 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.themePrimary)
                         .font(.title3)
                 }
             }
             
             Text(personalizedMessage)
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.themeTextSecondary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -317,11 +317,11 @@ struct TemplateCard: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Color.blue.opacity(0.1) : Color(UIColor.tertiarySystemBackground))
+                .fill(isSelected ? Color.themePrimary.opacity(0.1) : Color.themeSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 1.5)
+                .stroke(isSelected ? Color.themePrimary : Color.clear, lineWidth: 1.5)
         )
         .onTapGesture {
             action()
@@ -369,7 +369,7 @@ struct EnhancedTemplateCard: View {
                         .foregroundColor(.white)
                         .frame(width: 80)
                         .frame(maxHeight: .infinity)
-                        .background(Color.blue)
+                        .background(Color.themePrimary)
                     }
                     
                     Button(action: {
@@ -387,7 +387,7 @@ struct EnhancedTemplateCard: View {
                         .foregroundColor(.white)
                         .frame(width: 80)
                         .frame(maxHeight: .infinity)
-                        .background(Color.red)
+                        .background(Color.themeError)
                     }
                 }
                 .cornerRadius(8, corners: [.topRight, .bottomRight])
@@ -398,7 +398,7 @@ struct EnhancedTemplateCard: View {
                 HStack {
                     HStack(spacing: 8) {
                         Image(systemName: template.category.icon)
-                            .foregroundColor(template.category == .urgent ? .red : .blue)
+                            .foregroundColor(template.category == .urgent ? Color.themeError : Color.themePrimary)
                             .font(.system(size: 16, weight: .medium))
                         
                         Text(template.title)
@@ -415,20 +415,20 @@ struct EnhancedTemplateCard: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
-                            .background(Color.purple)
+                            .background(Color.themePrimary)
                             .cornerRadius(4)
                     }
                     
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .font(.title3)
                     }
                 }
                 
                 Text(personalizedMessage)
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.themeTextSecondary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -436,11 +436,11 @@ struct EnhancedTemplateCard: View {
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? Color.blue.opacity(0.1) : Color(UIColor.tertiarySystemBackground))
+                    .fill(isSelected ? Color.themePrimary.opacity(0.1) : Color.themeSurface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 1.5)
+                    .stroke(isSelected ? Color.themePrimary : Color.clear, lineWidth: 1.5)
             )
             .offset(x: offset, y: 0)
             .onTapGesture {
