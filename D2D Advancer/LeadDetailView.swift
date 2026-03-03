@@ -28,6 +28,7 @@ struct LeadDetailView: View {
     @State private var isUpdatingAddress = false
 
     @ObservedObject private var categoryManager = ServiceCategoryManager.shared
+    @ObservedObject private var paywallManager = PaywallManager.shared
     
     @FetchRequest private var checkIns: FetchedResults<FollowUpCheckIn>
     
@@ -81,13 +82,13 @@ struct LeadDetailView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(UIColor.secondarySystemBackground))
-                                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                                .fill(Color.themeSurface)
+                                .shadow(color: Color.themeShadow, radius: 2, x: 0, y: 1)
                         )
                     }
                     
@@ -108,12 +109,12 @@ struct LeadDetailView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                        gradient: Gradient(colors: [Color.themePrimary, Color.themeSecondary]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                 }
@@ -121,13 +122,14 @@ struct LeadDetailView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                        .fill(Color.themeBackground)
+                        .shadow(color: Color.themeShadow, radius: 8, x: 0, y: -2)
                 )
             } else {
                 // Show Edit and Delete buttons when not editing
                 HStack(spacing: 16) {
                     Button(action: {
+                        guard paywallManager.gateAction() else { return }
                         showingDeleteAlert = true
                     }) {
                         HStack {
@@ -144,12 +146,12 @@ struct LeadDetailView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.red, Color.red.opacity(0.8)]),
+                                        gradient: Gradient(colors: [Color.themeError, Color.themeError.opacity(0.8)]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: .red.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.themeError.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                     
@@ -170,12 +172,12 @@ struct LeadDetailView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                        gradient: Gradient(colors: [Color.themePrimary, Color.themeSecondary]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                 }
@@ -183,8 +185,8 @@ struct LeadDetailView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                        .fill(Color.themeBackground)
+                        .shadow(color: Color.themeShadow, radius: 8, x: 0, y: -2)
                 )
             }
         }
@@ -204,23 +206,18 @@ struct LeadDetailView: View {
             }
             
                         Text(lead.displayName)
-                .font(.title2)
-                .fontWeight(.bold)
-            
+                .font(.themeLargeTitle)
+                .foregroundColor(Color.themeTextPrimary)
+
             HStack {
                 Text("Created: \(lead.createdDate?.formatted(.dateTime.day().month().year().hour().minute()) ?? "Unknown")")
                 Spacer()
             }
-            .font(.caption)
-            .foregroundColor(.secondary)
+            .font(.themeCaption)
+            .foregroundColor(Color.themeTextSecondary)
         }
         .padding()
-        .background(Color(UIColor.tertiarySystemBackground))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
-        )
+        .glassCard()
     }
     
     private var detailView: some View {
@@ -232,22 +229,22 @@ struct LeadDetailView: View {
                         title: "Name",
                         value: lead.name ?? "Not provided",
                         icon: "person.fill",
-                        iconColor: .blue
+                        iconColor: Color.themePrimary
                     )
-                    
+
                     modernDetailCell(
                         title: "Phone",
                         value: lead.phone ?? "Not provided",
                         icon: "phone.fill",
-                        iconColor: .green,
+                        iconColor: Color.themeSuccess,
                         isCallable: lead.phone != nil
                     )
-                    
+
                     modernDetailCell(
                         title: "Email",
                         value: lead.email ?? "Not provided",
                         icon: "envelope.fill",
-                        iconColor: .orange,
+                        iconColor: Color.themeWarning,
                         isEmailable: lead.email != nil
                     )
                 }
@@ -260,15 +257,15 @@ struct LeadDetailView: View {
                         title: "Address",
                         value: lead.address ?? "Not provided",
                         icon: "location.fill",
-                        iconColor: .red,
+                        iconColor: Color.themeError,
                         hasAddress: lead.address != nil
                     )
-                    
+
                     modernDetailCell(
                         title: "Deal Value",
                         value: String(format: "$%.2f CAD", lead.price),
                         icon: "dollarsign.circle.fill",
-                        iconColor: .purple
+                        iconColor: Color.themePrimary
                     )
                 }
             }
@@ -280,7 +277,7 @@ struct LeadDetailView: View {
                         title: "Lead Status",
                         status: lead.leadStatus,
                         icon: "checkmark.circle.fill",
-                        iconColor: .blue
+                        iconColor: Color.themePrimary
                     )
                     
                 }
@@ -295,16 +292,16 @@ struct LeadDetailView: View {
                                 title: "Follow Up Date",
                                 value: followUpDate.formatted(.dateTime.day().month().year().hour().minute()),
                                 icon: "clock.fill",
-                                iconColor: .purple
+                                iconColor: Color.themePrimary
                             )
                         }
-                        
+
                         if let notes = lead.notes, !notes.isEmpty {
                             modernNotesCell(
                                 title: "Notes",
                                 value: notes,
                                 icon: "note.text",
-                                iconColor: .indigo
+                                iconColor: Color.themePrimary
                             )
                         }
                     }
@@ -340,7 +337,7 @@ struct LeadDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Image(systemName: "location.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
 
                             Text("Address")
@@ -370,7 +367,7 @@ struct LeadDetailView: View {
                                 .padding(.vertical, 6)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.blue)
+                                        .fill(Color.themePrimary)
                                 )
                             }
                             .disabled(isUpdatingAddress)
@@ -379,11 +376,11 @@ struct LeadDetailView: View {
                         TextField("Address", text: $editedAddress)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .background(Color(UIColor.tertiarySystemBackground))
+                            .background(Color.themeSurface)
                             .cornerRadius(8)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+                                    .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
                             )
 
                         // Update status indicator
@@ -393,7 +390,7 @@ struct LeadDetailView: View {
                                     .scaleEffect(0.8)
                                 Text("Updating address from current location...")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.themeTextSecondary)
                             }
                             .padding(.leading, 8)
                         }
@@ -412,7 +409,7 @@ struct LeadDetailView: View {
                 VStack(spacing: 16) {
                     HStack {
                         Image(systemName: "tag.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 20)
 
                         Text("Service Type")
@@ -426,7 +423,7 @@ struct LeadDetailView: View {
                         } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                         }
                         .accessibilityLabel("Add new service category")
                     }
@@ -435,21 +432,21 @@ struct LeadDetailView: View {
                         VStack(spacing: 12) {
                             Image(systemName: "tag")
                                 .font(.system(size: 24))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
 
                             Text("No service categories available")
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.themeTextSecondary)
 
                             Button("Add Service Category") {
                                 showingServiceCategoryCreator = true
                             }
                             .font(.caption)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 20)
-                        .background(Color(UIColor.tertiarySystemBackground))
+                        .background(Color.themeSurface)
                         .cornerRadius(8)
                     } else {
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -483,7 +480,7 @@ struct LeadDetailView: View {
                 VStack(spacing: 16) {
                     HStack {
                         Image(systemName: "flag.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                             .frame(width: 20)
                         Text("Status")
                             .font(.headline)
@@ -510,72 +507,72 @@ struct LeadDetailView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "clock.fill")
-                                .foregroundColor(.orange)
+                                .foregroundColor(Color.themeWarning)
                                 .frame(width: 20)
                             Text("Follow Up Date")
                                 .font(.headline)
                                 .fontWeight(.semibold)
-                            
+
                             Spacer()
-                            
+
                             if editedFollowUpDate != nil {
                                 Button("Clear") {
                                     editedFollowUpDate = nil
                                 }
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                .foregroundColor(Color.themeError)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
-                                .background(Color.red.opacity(0.1))
+                                .background(Color.themeError.opacity(0.1))
                                 .cornerRadius(16)
                             }
                         }
-                        
+
                         Button(action: {
                             showingDatePicker = true
                         }) {
                             HStack {
                                 Image(systemName: editedFollowUpDate != nil ? "calendar.badge.clock" : "calendar.badge.plus")
-                                    .foregroundColor(editedFollowUpDate != nil ? .blue : .gray)
-                                
+                                    .foregroundColor(editedFollowUpDate != nil ? Color.themePrimary : Color.themeTextSecondary)
+
                                 Text(editedFollowUpDate?.formatted(.dateTime.day().month().year().hour().minute()) ?? "Set follow up date & time")
-                                    .foregroundColor(editedFollowUpDate != nil ? .primary : .secondary)
-                                
+                                    .foregroundColor(editedFollowUpDate != nil ? Color.themeTextPrimary : Color.themeTextSecondary)
+
                                 Spacer()
-                                
+
                                 Image(systemName: "chevron.right")
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(Color.themeTextSecondary)
                                     .font(.caption)
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .background(Color(UIColor.tertiarySystemBackground))
+                            .background(Color.themeSurface)
                             .cornerRadius(12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+                                    .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
                             )
                         }
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "note.text")
-                                .foregroundColor(.purple)
+                                .foregroundColor(Color.themePrimary)
                                 .frame(width: 20)
                             Text("Notes")
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        
+
                         TextEditor(text: $editedNotes)
                             .frame(minHeight: 100)
                             .padding(12)
-                            .background(Color(UIColor.tertiarySystemBackground))
+                            .background(Color.themeSurface)
                             .cornerRadius(12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                                    .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                             )
                     }
                 }
@@ -589,7 +586,7 @@ struct LeadDetailView: View {
     private var mapSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Location")
-                .font(.headline)
+                .font(.themeHeadline)
             
             Map(initialPosition: .region(MKCoordinateRegion(
                 center: lead.coordinate,
@@ -625,7 +622,7 @@ struct LeadDetailView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.blue)
+                    .background(Color.themePrimary)
                     .cornerRadius(16)
                 }
             }
@@ -634,42 +631,42 @@ struct LeadDetailView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.title2)
-                        .foregroundColor(.gray)
-                    
+                        .foregroundColor(Color.themeTextSecondary)
+
                     Text("No follow-ups recorded yet")
                         .font(.body)
-                        .foregroundColor(.secondary)
-                    
+                        .foregroundColor(Color.themeTextSecondary)
+
                     Text("Start tracking your interactions with this lead")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
-                .background(Color(UIColor.tertiarySystemBackground))
+                .background(Color.themeSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
                 )
             } else {
                 VStack(spacing: 8) {
                     HStack {
                         Text("\(checkIns.count) check-ins recorded")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        
+                            .foregroundColor(Color.themeTextSecondary)
+
                         Spacer()
-                        
+
                         if checkIns.count > 2 {
                             Button("View All") {
                                 showingFullHistory = true
                             }
                             .font(.caption)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                         }
                     }
-                    
+
                     // Show last 2 check-ins
                     ForEach(Array(checkIns.prefix(2)), id: \.id) { checkIn in
                         CheckInRowView(checkIn: checkIn) {
@@ -677,11 +674,11 @@ struct LeadDetailView: View {
                         }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(Color(UIColor.tertiarySystemBackground))
+                            .background(Color.themeSurface)
                             .cornerRadius(8)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+                                    .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
                             )
                     }
                 }
@@ -726,6 +723,7 @@ struct LeadDetailView: View {
                 // Schedule Appointment Button (only for interested, scheduled, or converted leads)
                 if shouldShowScheduleButton {
                     Button(action: {
+                        guard paywallManager.gateAction() else { return }
                         showingScheduleAppointment = true
                     }) {
                         VStack(spacing: 8) {
@@ -747,18 +745,16 @@ struct LeadDetailView: View {
                         .padding(.horizontal, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.blue.gradient)
+                                .fill(Color.themePrimary.gradient)
                         )
-                        .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
                 
                 // Call Button (if phone number exists)
                 if let phone = lead.phone, !phone.isEmpty {
                     Button(action: {
-                        if let url = URL(string: "tel:\(phone)") {
-                            UIApplication.shared.open(url)
-                        }
+                        Utilities.makePhoneCall(to: phone)
                     }) {
                         VStack(spacing: 8) {
                             Image(systemName: "phone.fill")
@@ -779,9 +775,9 @@ struct LeadDetailView: View {
                         .padding(.horizontal, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.green.gradient)
+                                .fill(Color.themeSuccess.gradient)
                         )
-                        .shadow(color: .green.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.themeSuccess.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
                 
@@ -809,18 +805,16 @@ struct LeadDetailView: View {
                         .padding(.horizontal, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.purple.gradient)
+                                .fill(Color.themePrimary.gradient)
                         )
-                        .shadow(color: .purple.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
                 
                 // Email Button (if email exists)
                 if let email = lead.email, !email.isEmpty {
                     Button(action: {
-                        if let url = URL(string: "mailto:\(email)") {
-                            UIApplication.shared.open(url)
-                        }
+                        Utilities.sendEmail(to: email)
                     }) {
                         VStack(spacing: 8) {
                             Image(systemName: "envelope.fill")
@@ -841,9 +835,9 @@ struct LeadDetailView: View {
                         .padding(.horizontal, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.orange.gradient)
+                                .fill(Color.themeInfo.gradient)
                         )
-                        .shadow(color: .orange.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.themeInfo.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
             }
@@ -853,31 +847,31 @@ struct LeadDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: "calendar.badge.checkmark")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.themePrimary)
                         Text("Upcoming Appointments")
                             .font(.headline)
                             .fontWeight(.semibold)
                         Spacer()
                     }
-                    
+
                     ForEach(leadAppointments.prefix(2), id: \.id) { appointment in
                         AppointmentSummaryRow(appointment: appointment)
                     }
-                    
+
                     if leadAppointments.count > 2 {
                         Button("View all \(leadAppointments.count) appointments") {
                             // Navigate to appointments view filtered for this lead
                         }
                         .font(.caption)
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.themePrimary)
                     }
                 }
                 .padding(16)
-                .background(Color(UIColor.tertiarySystemBackground))
+                .background(Color.themeSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
                 )
             }
         }
@@ -902,32 +896,29 @@ struct LeadDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text(title)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .font(.themeTitle)
+                    .foregroundColor(Color.themeTextPrimary)
+
                 Spacer()
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
-            
+
             content()
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-        )
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(UIColor.separator).opacity(0.2), lineWidth: 1)
+                .stroke(Color.themeBorder, lineWidth: 0.5)
         )
+        .shadow(color: Color.themeShadow, radius: 8, x: 0, y: 2)
     }
     
     @ViewBuilder
@@ -935,22 +926,22 @@ struct LeadDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .frame(width: 20)
-                
+
                 Text(title)
                     .font(.headline)
                     .fontWeight(.semibold)
             }
-            
+
             TextField(title, text: text)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color(UIColor.tertiarySystemBackground))
+                .background(Color.themeSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
                 )
         }
     }
@@ -968,6 +959,7 @@ struct LeadDetailView: View {
     }
     
     private func startEditing() {
+        guard paywallManager.gateAction() else { return }
         isEditing = true
     }
     
@@ -1033,7 +1025,7 @@ struct LeadDetailView: View {
                     self.editedAddress = addressString
                     self.lead.latitude = userLocation.coordinate.latitude
                     self.lead.longitude = userLocation.coordinate.longitude
-                    print("✅ Address updated from current location: \(addressString)")
+                    print("✅ Address updated from current location: \(Utilities.redactedText(addressString))")
 
                     // Success haptic feedback
                     let successFeedback = UINotificationFeedbackGenerator()
@@ -1151,7 +1143,7 @@ struct LeadDetailView: View {
 
         // Check notification permission first
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            guard settings.authorizationStatus == .authorized else {
+            guard NotificationService.isAuthorizationAllowed(settings.authorizationStatus) else {
                 print("❌ Notification permission not granted, status: \(settings.authorizationStatus.rawValue)")
                 return
             }
@@ -1180,25 +1172,7 @@ struct LeadDetailView: View {
 
     private func openInMaps() {
         let coordinate = lead.coordinate
-        
-        // Validate coordinates
-        guard coordinate.latitude != 0.0 || coordinate.longitude != 0.0 else {
-            print("Invalid coordinates for navigation")
-            return
-        }
-        
-        // Create Apple Maps URL with coordinates
-        let urlString = "http://maps.apple.com/?daddr=\(coordinate.latitude),\(coordinate.longitude)&dirflg=d"
-        guard let mapsURL = URL(string: urlString) else {
-            print("Failed to create Maps URL")
-            return
-        }
-        
-        if UIApplication.shared.canOpenURL(mapsURL) {
-            UIApplication.shared.open(mapsURL)
-        } else {
-            print("Cannot open Maps application")
-        }
+        Utilities.openMapsDirections(latitude: coordinate.latitude, longitude: coordinate.longitude)
     }
     
     private func migrateCheckInOutcomes() {
@@ -1232,6 +1206,7 @@ struct LeadDetailView: View {
     }
     
     private func deleteCheckIn(_ checkIn: FollowUpCheckIn) {
+        lead.updatedDate = Date()
         viewContext.delete(checkIn)
         
         do {
@@ -1251,51 +1226,46 @@ struct LeadDetailView: View {
                 .foregroundColor(iconColor)
                 .frame(width: 24, height: 24)
                 .font(.title3)
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
+                    .font(.themeCaption)
+                    .foregroundColor(Color.themeTextSecondary)
                     .textCase(.uppercase)
-                
+
                 Text(value)
-                    .font(.body)
+                    .font(.themeBody)
                     .fontWeight(.medium)
-                    .foregroundColor(value == "Not provided" ? .secondary : .primary)
+                    .foregroundColor(value == "Not provided" ? Color.themeTextSecondary : Color.themeTextPrimary)
             }
-            
+
             Spacer()
-            
+
             if isCallable && value != "Not provided" {
                 Button(action: {
-                    if let url = URL(string: "tel:\(value.filter { $0.isNumber })") {
-                        UIApplication.shared.open(url)
-                    }
+                    Utilities.makePhoneCall(to: value)
                 }) {
                     Image(systemName: "phone.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(Color.themeSuccess)
                         .font(.title2)
                 }
             } else if isEmailable && value != "Not provided" {
                 Button(action: {
-                    if let url = URL(string: "mailto:\(value)") {
-                        UIApplication.shared.open(url)
-                    }
+                    Utilities.sendEmail(to: value)
                 }) {
                     Image(systemName: "envelope.circle.fill")
-                        .foregroundColor(.orange)
+                        .foregroundColor(Color.themeWarning)
                         .font(.title2)
                 }
             }
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(Color(UIColor.tertiarySystemBackground))
+        .background(Color.themeSurface)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 0.5)
+                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 0.5)
         )
     }
     
@@ -1306,23 +1276,22 @@ struct LeadDetailView: View {
                 .foregroundColor(iconColor)
                 .frame(width: 24, height: 24)
                 .font(.title3)
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
+                    .font(.themeCaption)
+                    .foregroundColor(Color.themeTextSecondary)
                     .textCase(.uppercase)
-                
+
                 Text(value)
-                    .font(.body)
+                    .font(.themeBody)
                     .fontWeight(.medium)
-                    .foregroundColor(value == "Not provided" ? .secondary : .primary)
+                    .foregroundColor(value == "Not provided" ? Color.themeTextSecondary : Color.themeTextPrimary)
                     .lineLimit(2)
             }
-            
+
             Spacer()
-            
+
             if hasAddress && value != "Not provided" {
                 Button(action: {
                     openInMaps()
@@ -1336,18 +1305,18 @@ struct LeadDetailView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.blue)
+                    .background(Color.themePrimary)
                     .cornerRadius(16)
                 }
             }
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(Color(UIColor.tertiarySystemBackground))
+        .background(Color.themeSurface)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 0.5)
+                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 0.5)
         )
     }
     
@@ -1358,31 +1327,30 @@ struct LeadDetailView: View {
                 .foregroundColor(iconColor)
                 .frame(width: 24, height: 24)
                 .font(.title3)
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
+                    .font(.themeCaption)
+                    .foregroundColor(Color.themeTextSecondary)
                     .textCase(.uppercase)
-                
+
                 Text(status.displayName)
-                    .font(.body)
+                    .font(.themeBody)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.themeTextPrimary)
             }
-            
+
             Spacer()
-            
+
             StatusBadge(status: LeadStatus.from(leadStatus: status))
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(Color(UIColor.tertiarySystemBackground))
+        .background(Color.themeSurface)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 0.5)
+                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 0.5)
         )
     }
     
@@ -1395,30 +1363,29 @@ struct LeadDetailView: View {
                     .foregroundColor(iconColor)
                     .frame(width: 24, height: 24)
                     .font(.title3)
-                
+
                 Text(title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
+                    .font(.themeCaption)
+                    .foregroundColor(Color.themeTextSecondary)
                     .textCase(.uppercase)
-                
+
                 Spacer()
             }
-            
+
             Text(value)
-                .font(.body)
+                .font(.themeBody)
                 .fontWeight(.medium)
-                .foregroundColor(.primary)
+                .foregroundColor(Color.themeTextPrimary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(nil)
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(Color(UIColor.tertiarySystemBackground))
+        .background(Color.themeSurface)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 0.5)
+                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 0.5)
         )
     }
 
@@ -1427,14 +1394,14 @@ struct LeadDetailView: View {
 struct DetailRow: View {
     let title: String
     let value: String
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.headline)
+                .font(.themeHeadline)
             Text(value)
-                .font(.body)
-                .foregroundColor(value == "Not provided" ? .secondary : .primary)
+                .font(.themeBody)
+                .foregroundColor(value == "Not provided" ? Color.themeTextSecondary : Color.themeTextPrimary)
         }
     }
 }
@@ -1454,22 +1421,22 @@ struct AppointmentSummaryRow: View {
                     Image(systemName: appointment.appointmentType.icon)
                         .foregroundColor(appointment.appointmentType.color)
                         .font(.caption)
-                    
+
                     Text(appointment.startDate.formatted(.dateTime.day().month().hour().minute()))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.themeCaption)
+                        .foregroundColor(Color.themeTextSecondary)
                 }
             }
-            
+
             Spacer()
-            
+
             VStack(alignment: .trailing, spacing: 4) {
                 AppointmentStatusBadge(status: appointment.status)
-                
+
                 if !appointment.location.isEmpty {
                     Text(appointment.location)
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.themeTextSecondary)
                         .lineLimit(1)
                         .multilineTextAlignment(.trailing)
                 }
@@ -1477,7 +1444,7 @@ struct AppointmentSummaryRow: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
-        .background(Color(.systemBackground))
+        .background(Color.themeBackground)
         .cornerRadius(8)
     }
 }
@@ -1513,9 +1480,9 @@ struct ModernStatusCard: View {
                 
                 // Status Text
                 Text(status.displayName)
-                    .font(.caption)
+                    .font(.themeCaption)
                     .fontWeight(.semibold)
-                    .foregroundColor(isSelected ? .white : .primary)
+                    .foregroundColor(isSelected ? .white : Color.themeTextPrimary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
@@ -1524,7 +1491,7 @@ struct ModernStatusCard: View {
             .padding(.horizontal, 8)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? AnyShapeStyle(status.uiColor.gradient) : AnyShapeStyle(Color(.systemBackground)))
+                    .fill(isSelected ? AnyShapeStyle(status.uiColor.gradient) : AnyShapeStyle(Color.themeSurface))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(status.uiColor.opacity(isSelected ? 0 : 0.3), lineWidth: isSelected ? 0 : 1.5)
