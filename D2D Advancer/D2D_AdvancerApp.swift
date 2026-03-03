@@ -8,17 +8,19 @@
 import SwiftUI
 import UserNotifications
 import FirebaseCore
+import CoreData
 
 @main
 struct D2D_AdvancerApp: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var userAccountManager = FirebaseUserAccountManager.shared
     @StateObject private var firebaseService = FirebaseService.shared
-    @AppStorage("isDarkMode") private var isDarkMode = false
-
     init() {
         FirebaseApp.configure()
         print("🚀 D2D Advancer App Starting...")
+
+        // Check for Apple Search Ads attribution
+        AppleSearchAdsAttribution.shared.checkAttribution()
 
         // Only request notification authorization if onboarding is completed
         let onboardingCompleted = UserDefaults.standard.bool(forKey: "onboarding_completed")
@@ -34,8 +36,18 @@ struct D2D_AdvancerApp: App {
         // Start monitoring connectivity to auto-recover listeners/sync
         NetworkMonitor.shared.start()
 
-        // Clean up any duplicate leads from Core Data
-        Utilities.removeDuplicateLeads(from: persistenceController.container.viewContext)
+        // Clean up duplicates on a background context once Core Data is ready.
+        let persistence = persistenceController
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            guard persistence.hasPersistentStore else {
+                print("⏭️ Skipping duplicate cleanup: Core Data store not ready yet")
+                return
+            }
+
+            let cleanupContext = persistence.container.newBackgroundContext()
+            cleanupContext.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
+            Utilities.removeDuplicateLeads(from: cleanupContext)
+        }
 
         // Auto-enable guest mode on first launch if not logged in
         Task { @MainActor in
@@ -50,7 +62,7 @@ struct D2D_AdvancerApp: App {
         WindowGroup {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
-            .preferredColorScheme(isDarkMode ? .dark : .light)
+            .preferredColorScheme(nil)
             .customThemed()
             .alert("Save Password to Keychain", isPresented: $userAccountManager.shouldShowPasswordSavePrompt) {
                 Button("Save to Keychain") {
@@ -111,7 +123,7 @@ struct D2D_AdvancerApp: App {
                                 Text("⏰ Try again in: \(userAccountManager.formattedTimeRemaining)")
                                     .font(.caption)
                                     .fontWeight(.medium)
-                                    .foregroundColor(.orange)
+                                    .foregroundColor(Color.themeWarning)
                             }
                         }
                     } else {
@@ -122,7 +134,6 @@ struct D2D_AdvancerApp: App {
                 }
             }
             .errorAlert()
-            // No paywall needed; monetization disabled
         }
     }
 
