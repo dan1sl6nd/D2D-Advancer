@@ -10,6 +10,7 @@ enum SyncError: Error {
     case dataCorruption(String)
 }
 
+@MainActor
 class UserDataSyncManager: ObservableObject {
     static let shared = UserDataSyncManager()
     
@@ -19,6 +20,7 @@ class UserDataSyncManager: ObservableObject {
     @Published var syncInterval: SyncInterval = .oneHour  // Default to 1 hour
     
     private let db = Firestore.firestore()
+    private let cloudKitBackupService = CloudKitLeadBackupService.shared
     private let firebaseService = FirebaseService.shared
     private var syncTimer: Timer?
     
@@ -143,6 +145,11 @@ class UserDataSyncManager: ObservableObject {
         restartSyncTimer()
         print("⏰ Sync interval updated to: \(interval.displayName)")
     }
+
+    func reloadSyncSettingsFromUserDefaults() {
+        loadSyncSettings()
+        restartSyncTimer()
+    }
     
     func toggleAutoSync(_ enabled: Bool) {
         isAutoSyncEnabled = enabled
@@ -195,7 +202,7 @@ class UserDataSyncManager: ObservableObject {
         }
         
         print("🚪 Performing sync before sign out...")
-        startSync()
+        startSync(includeAppointments: false)
     }
     
     func syncWithServer() {
@@ -221,6 +228,9 @@ class UserDataSyncManager: ObservableObject {
                     guard firebaseService.isAuthenticated, let userId = firebaseService.currentUser?.uid else {
                         throw SyncError.notAuthenticated
                     }
+
+                    // Keep account/profile preferences mirrored alongside lead data sync.
+                    await self.firebaseService.syncCurrentAccountProfileToClouds()
                     
                     // Perform sync operations on background thread
                     print("🔄 Starting background sync operations...")
@@ -232,8 +242,13 @@ class UserDataSyncManager: ObservableObject {
                     guard firebaseService.isAuthenticated else {
                         throw SyncError.notAuthenticated
                     }
-                    
-                    try await self.uploadLeadsToFirestore(userId: userId)
+
+                    let leadPayloads = try await self.fetchLeadSyncPayloads()
+
+                    // Keep a CloudKit mirror as a second independent backup channel.
+                    await self.uploadLeadsToCloudKitBackup(userId: userId, payloads: leadPayloads)
+
+                    try await self.uploadLeadsToFirestore(userId: userId, payloads: leadPayloads)
                     
                     // Check auth again before download
                     guard firebaseService.isAuthenticated else {
@@ -241,7 +256,21 @@ class UserDataSyncManager: ObservableObject {
                     }
                     
                     // Download leads from Firebase (background operation)
-                    try await self.downloadLeadsFromFirestore(userId: userId)
+                    do {
+                        let downloadSummary = try await self.downloadLeadsFromFirestore(userId: userId)
+                        if downloadSummary.remoteCount == 0 {
+                            _ = await self.restoreLeadsFromCloudKitBackupIfPossible(userId: userId, reason: "Firestore lead collection was empty")
+                        }
+                    } catch {
+                        print("⚠️ Firebase lead download failed: \(error.localizedDescription)")
+                        let restoredCount = await self.restoreLeadsFromCloudKitBackupIfPossible(
+                            userId: userId,
+                            reason: "Firebase lead download failed"
+                        )
+                        if restoredCount == 0 {
+                            throw error
+                        }
+                    }
                     
                     // Check auth again before appointment sync
                     guard firebaseService.isAuthenticated else {
@@ -281,83 +310,152 @@ class UserDataSyncManager: ObservableObject {
         }
     }
     
-    private func uploadLeadsToFirestore(userId: String) async throws {
-        print("📤 Uploading leads to Firebase...")
-        
-        // Use background context for better performance
+    private func fetchLeadSyncPayloads() async throws -> [LeadSyncPayload] {
         let container = PersistenceController.shared.container
         let backgroundContext = container.newBackgroundContext()
-        
-        let leads = try await backgroundContext.perform {
-            // Fetch leads from Core Data on background context
+
+        return try await backgroundContext.perform {
             let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-            return try backgroundContext.fetch(fetchRequest)
+            let leads = try backgroundContext.fetch(fetchRequest)
+
+            var payloads: [LeadSyncPayload] = []
+            var generatedMissingIds = 0
+            var generatedMissingCheckInIds = 0
+
+            for lead in leads {
+                let leadId: UUID
+                if let existingId = lead.id {
+                    leadId = existingId
+                } else {
+                    let generatedId = UUID()
+                    lead.id = generatedId
+                    leadId = generatedId
+                    generatedMissingIds += 1
+                }
+
+                let createdDate = lead.createdDate ?? lead.dateCreated ?? Date()
+                let updatedDate = lead.updatedDate ?? lead.dateModified ?? createdDate
+
+                // Keep legacy/modern date fields aligned to prevent drift.
+                lead.createdDate = createdDate
+                lead.dateCreated = createdDate
+                lead.updatedDate = updatedDate
+                lead.dateModified = updatedDate
+
+                let checkInObjects = (lead.checkIns?.allObjects as? [FollowUpCheckIn] ?? [])
+                    .sorted { ($0.checkInDate ?? Date.distantPast) < ($1.checkInDate ?? Date.distantPast) }
+
+                var checkInPayloads: [LeadCheckInSyncPayload] = []
+                checkInPayloads.reserveCapacity(checkInObjects.count)
+
+                for checkIn in checkInObjects {
+                    let checkInId: UUID
+                    if let existingCheckInId = checkIn.id {
+                        checkInId = existingCheckInId
+                    } else {
+                        let generatedCheckInId = UUID()
+                        checkIn.id = generatedCheckInId
+                        checkInId = generatedCheckInId
+                        generatedMissingCheckInIds += 1
+                    }
+
+                    let checkInDate = checkIn.checkInDate ?? updatedDate
+                    if checkIn.checkInDate == nil {
+                        checkIn.checkInDate = checkInDate
+                    }
+
+                    let normalizedCheckInType = UserDataSyncManager.normalizedCheckInType(checkIn.checkInType)
+                    if checkIn.checkInType != normalizedCheckInType {
+                        checkIn.checkInType = normalizedCheckInType
+                    }
+
+                    checkInPayloads.append(
+                        LeadCheckInSyncPayload(
+                            id: checkInId,
+                            checkInDate: checkInDate,
+                            checkInType: normalizedCheckInType,
+                            outcome: UserDataSyncManager.optionalTrimmedString(checkIn.outcome),
+                            notes: UserDataSyncManager.optionalTrimmedString(checkIn.notes),
+                            scheduledNextFollowUp: checkIn.scheduledNextFollowUp
+                        )
+                    )
+                }
+
+                payloads.append(
+                    LeadSyncPayload(
+                        id: leadId,
+                        name: lead.name ?? "",
+                        address: lead.address ?? "",
+                        phone: lead.phone ?? "",
+                        email: lead.email ?? "",
+                        latitude: lead.latitude,
+                        longitude: lead.longitude,
+                        status: UserDataSyncManager.normalizeLeadStatus(lead.status ?? Lead.Status.notContacted.rawValue),
+                        notes: lead.notes ?? "",
+                        createdDate: createdDate,
+                        updatedDate: updatedDate,
+                        priority: lead.priority,
+                        source: lead.source ?? "",
+                        estimatedValue: lead.estimatedValue,
+                        price: lead.price,
+                        tags: lead.tags ?? "",
+                        visitCount: lead.visitCount,
+                        serviceCategory: UserDataSyncManager.optionalTrimmedString(lead.serviceCategory),
+                        neighborhoodId: UserDataSyncManager.optionalTrimmedString(lead.neighborhoodId),
+                        lastContactDate: lead.lastContactDate,
+                        followUpDate: lead.followUpDate,
+                        checkIns: checkInPayloads
+                    )
+                )
+            }
+
+            if generatedMissingIds > 0 || generatedMissingCheckInIds > 0 || backgroundContext.hasChanges {
+                try backgroundContext.save()
+            }
+
+            if generatedMissingIds > 0 {
+                print("🔧 Assigned IDs to \(generatedMissingIds) leads before cloud sync")
+            }
+            if generatedMissingCheckInIds > 0 {
+                print("🔧 Assigned IDs to \(generatedMissingCheckInIds) follow-up check-ins before cloud sync")
+            }
+
+            return payloads
         }
-        
-        // Simplified sync summary
-        let namedLeads = leads.filter { !($0.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }
-        let unnamedLeads = leads.filter { ($0.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }
-        
-        print("📤 Syncing \(leads.count) leads: \(namedLeads.count) contacts, \(unnamedLeads.count) visited houses")
-        
-        // Sync each lead to Firestore
-        for lead in leads {
-            var leadData: [String: Any] = [
-                "name": lead.name ?? "",
-                "address": lead.address ?? "",
-                "phone": lead.phone ?? "",
-                "email": lead.email ?? "",
-                "latitude": lead.latitude,
-                "longitude": lead.longitude,
-                "status": lead.status ?? "not_contacted",
-                "notes": lead.notes ?? "",
-                "dateCreated": lead.createdDate ?? Date(),
-                "dateModified": lead.updatedDate ?? Date(),
-                "priority": lead.priority,
-                "source": lead.source ?? "",
-                "estimatedValue": lead.estimatedValue,
-                "tags": lead.tags ?? "",
-                "visitCount": lead.visitCount
-            ]
-            
-            // Handle optional dates properly for Firebase
-            if let lastContactDate = lead.lastContactDate {
-                leadData["lastContactDate"] = lastContactDate
-            }
-            
-            // Only sync follow-up date if it exists - don't delete existing Firebase data
-            if let followUpDate = lead.followUpDate {
-                leadData["followUpDate"] = followUpDate
-            }
-            // If no follow-up date locally, don't modify the Firebase field
-            // This preserves existing follow-up dates that might be set in Firebase
-            
-            // Use lead's UUID as document ID, or create one if missing
-            let documentId = lead.id?.uuidString ?? UUID().uuidString
-            
+    }
+
+    private func uploadLeadsToCloudKitBackup(userId: String, payloads: [LeadSyncPayload]) async {
+        do {
+            let uploadedCount = try await cloudKitBackupService.uploadLeads(payloads, for: userId)
+            print("☁️ CloudKit backup upload completed: \(uploadedCount) leads")
+        } catch {
+            print("⚠️ CloudKit backup upload skipped: \(error.localizedDescription)")
+        }
+    }
+
+    private func uploadLeadsToFirestore(userId: String, payloads: [LeadSyncPayload]) async throws {
+        print("📤 Uploading leads to Firebase...")
+
+        let namedLeadCount = payloads.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+        let unnamedLeadCount = payloads.count - namedLeadCount
+
+        print("📤 Syncing \(payloads.count) leads: \(namedLeadCount) contacts, \(unnamedLeadCount) visited houses")
+
+        for payload in payloads {
             try await db.collection("users")
                 .document(userId)
                 .collection("leads")
-                .document(documentId)
-                .setData(leadData, merge: true)
+                .document(payload.id.uuidString)
+                .setData(payload.firestoreData, merge: true)
         }
-        // Debug: Check for potential issues with leads
-        let leadsWithoutId = leads.filter { $0.id == nil }
-        let leadsWithoutName = leads.filter { $0.name?.isEmpty != false }
-        let duplicateIds = Dictionary(grouping: leads.compactMap { $0.id }, by: { $0 })
+
+        let duplicateIds = Dictionary(grouping: payloads.map(\.id), by: { $0 })
             .filter { $1.count > 1 }
-        
-        if !leadsWithoutId.isEmpty {
-            print("⚠️ Found \(leadsWithoutId.count) leads without IDs")
-        }
-        if !leadsWithoutName.isEmpty {
-            print("⚠️ Found \(leadsWithoutName.count) leads without names")
-        }
         if !duplicateIds.isEmpty {
-            print("⚠️ Found duplicate IDs: \(duplicateIds.keys)")
+            print("⚠️ Found duplicate IDs in sync payload: \(duplicateIds.keys)")
         }
-        
-        print("📤 Upload completed: \(leads.count) leads")
+
+        print("📤 Upload completed: \(payloads.count) leads")
     }
     
     func deleteLeadFromFirebase(leadId: String) async throws {
@@ -373,6 +471,15 @@ class UserDataSyncManager: ObservableObject {
             .collection("leads")
             .document(leadId)
             .delete()
+
+        if let leadUUID = UUID(uuidString: leadId) {
+            do {
+                try await cloudKitBackupService.deleteLead(leadUUID, for: userId)
+                print("☁️ Lead \(leadId) deleted from CloudKit backup")
+            } catch {
+                print("⚠️ Failed to delete lead from CloudKit backup: \(error.localizedDescription)")
+            }
+        }
         
         print("✅ Lead \(leadId) deleted from Firebase")
     }
@@ -393,125 +500,423 @@ class UserDataSyncManager: ObservableObject {
     }
     
     deinit {
-        stopSyncTimer()
+        syncTimer?.invalidate()
+        syncTimer = nil
     }
     
-    private func downloadLeadsFromFirestore(userId: String) async throws {
+    private struct LeadDownloadSummary {
+        let remoteCount: Int
+        let downloaded: Int
+        let updated: Int
+        let skipped: Int
+    }
+
+    private func downloadLeadsFromFirestore(userId: String) async throws -> LeadDownloadSummary {
         print("📥 Downloading leads from Firebase...")
-        
-        // Get leads from Firestore
+
         let snapshot = try await db.collection("users")
             .document(userId)
             .collection("leads")
             .getDocuments()
-        
+
         // Clean up any existing leads with nil IDs before processing new data
         await cleanupCorruptedLeads()
-        
-        // Use background context for better performance
+
         let container = PersistenceController.shared.container
         let backgroundContext = container.newBackgroundContext()
-        
-        try await backgroundContext.perform {
+
+        let summary = try await backgroundContext.perform {
             var downloadedCount = 0
             var updatedCount = 0
-            
+            var skippedCount = 0
+
             for document in snapshot.documents {
-                let data = document.data()
-                
-                // Debug follow-up dates only if there are issues
-                // (Removed verbose logging)
-                
-                // Check if lead already exists
-                let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-                if let documentUUID = UUID(uuidString: document.documentID) {
-                    fetchRequest.predicate = NSPredicate(format: "id == %@", documentUUID as CVarArg)
-                } else {
-                    // Skip invalid document ID
-                    continue
-                }
-                
-                do {
-                    let existingLeads = try backgroundContext.fetch(fetchRequest)
-                    let lead: Lead
-                    
-                    if let existingLead = existingLeads.first {
-                        // Check if local lead was recently modified (within last 5 minutes)
-                        let fiveMinutesAgo = Date().addingTimeInterval(-300)
-                        let localModified = existingLead.updatedDate ?? Date.distantPast
-                        let firebaseModified = data["dateModified"] as? Date ?? Date.distantPast
-                        
-                        // Only update if Firebase data is newer or local wasn't recently modified
-                        if firebaseModified > localModified || localModified < fiveMinutesAgo {
-                            lead = existingLead
-                            updatedCount += 1
-                        } else {
-                            // Skip update to preserve recent local changes
-                            print("🔄 Skipping update for recently modified lead: \(existingLead.displayName)")
-                            continue
-                        }
-                    } else {
-                        // Create new lead
-                        lead = Lead(context: backgroundContext)
-                        // Ensure we always have a valid UUID, either from document ID or create new one
-                        if let validUUID = UUID(uuidString: document.documentID) {
-                            lead.id = validUUID
-                        } else {
-                            lead.id = UUID()
-                        }
-                        downloadedCount += 1
-                    }
-                    
-                    // Update lead properties from Firebase data
-                    lead.name = data["name"] as? String
-                    lead.address = data["address"] as? String
-                    lead.phone = data["phone"] as? String
-                    lead.email = data["email"] as? String
-                    lead.latitude = data["latitude"] as? Double ?? 0.0
-                    lead.longitude = data["longitude"] as? Double ?? 0.0
-                    if let rawStatus = data["status"] as? String, !rawStatus.isEmpty {
-                        lead.status = UserDataSyncManager.normalizeLeadStatus(rawStatus)
-                    } else {
-                        // Ensure we always have a valid status
-                        lead.status = Lead.Status.notContacted.rawValue
-                    }
-                    lead.notes = data["notes"] as? String
-                    lead.createdDate = data["dateCreated"] as? Date ?? Date()
-                    lead.updatedDate = data["dateModified"] as? Date ?? Date()
-                    lead.lastContactDate = data["lastContactDate"] as? Date
-                    
-                    // Handle follow-up date - preserve local data if Firebase doesn't have it
-                    if let followUpDate = data["followUpDate"] as? Date {
-                        lead.followUpDate = followUpDate
-                    } else if let followUpValue = data["followUpDate"], !(followUpValue is NSNull) {
-                        // Try to handle Firebase timestamp
-                        if let timestamp = followUpValue as? Timestamp {
-                            lead.followUpDate = timestamp.dateValue()
-                        }
-                        // Try to handle timestamp conversion if it's stored as a number
-                        else if let timestamp = followUpValue as? TimeInterval {
-                            lead.followUpDate = Date(timeIntervalSince1970: timestamp)
-                        }
-                        // Don't modify the local follow-up date if we can't parse Firebase data
-                    }
-                    // Don't set to nil - this preserves any existing local follow-up date
-                    
-                    lead.priority = data["priority"] as? Int16 ?? 0
-                    lead.source = data["source"] as? String
-                    lead.estimatedValue = data["estimatedValue"] as? Double ?? 0.0
-                    lead.tags = data["tags"] as? String
-                    lead.visitCount = data["visitCount"] as? Int16 ?? 0
-                } catch {
-                    print("❌ Failed to fetch existing leads: \(error)")
-                    throw error
+                let mergeOutcome = try UserDataSyncManager.mergeLeadDocumentData(
+                    document.data(),
+                    documentId: document.documentID,
+                    in: backgroundContext
+                )
+
+                switch mergeOutcome {
+                case .inserted:
+                    downloadedCount += 1
+                case .updated:
+                    updatedCount += 1
+                case .skipped:
+                    skippedCount += 1
                 }
             }
-            
-            // Save the background context
-            try backgroundContext.save()
-            print("📥 Download completed: \(downloadedCount) new leads, \(updatedCount) updated leads")
+
+            if backgroundContext.hasChanges {
+                try backgroundContext.save()
+            }
+
+            return LeadDownloadSummary(
+                remoteCount: snapshot.documents.count,
+                downloaded: downloadedCount,
+                updated: updatedCount,
+                skipped: skippedCount
+            )
+        }
+
+        print("📥 Download completed: \(summary.downloaded) new leads, \(summary.updated) updated leads, \(summary.skipped) skipped")
+        return summary
+    }
+
+    private func restoreLeadsFromCloudKitBackupIfPossible(userId: String, reason: String) async -> Int {
+        do {
+            let restoredCount = try await restoreLeadsFromCloudKitBackup(userId: userId)
+            if restoredCount > 0 {
+                print("☁️ Restored \(restoredCount) leads from CloudKit backup (\(reason))")
+            } else {
+                print("☁️ CloudKit backup had no leads to restore (\(reason))")
+            }
+            return restoredCount
+        } catch {
+            print("⚠️ CloudKit restore unavailable (\(reason)): \(error.localizedDescription)")
+            return 0
         }
     }
+
+    private func restoreLeadsFromCloudKitBackup(userId: String) async throws -> Int {
+        let backupPayloads = try await cloudKitBackupService.fetchLeads(for: userId)
+        guard !backupPayloads.isEmpty else {
+            return 0
+        }
+
+        let container = PersistenceController.shared.container
+        let backgroundContext = container.newBackgroundContext()
+
+        let restoredCount = try await backgroundContext.perform {
+            var mergedCount = 0
+
+            for payload in backupPayloads {
+                let mergeOutcome = try UserDataSyncManager.mergeLeadDocumentData(
+                    payload.syncDictionary,
+                    documentId: payload.id.uuidString,
+                    in: backgroundContext
+                )
+
+                if case .skipped = mergeOutcome {
+                    continue
+                }
+                mergedCount += 1
+            }
+
+            if backgroundContext.hasChanges {
+                try backgroundContext.save()
+            }
+
+            return mergedCount
+        }
+
+        return restoredCount
+    }
+
+    private enum LeadMergeOutcome {
+        case inserted
+        case updated
+        case skipped
+    }
+
+    private static func mergeLeadDocumentData(
+        _ data: [String: Any],
+        documentId: String,
+        in context: NSManagedObjectContext
+    ) throws -> LeadMergeOutcome {
+        guard let documentUUID = UUID(uuidString: documentId) else {
+            return .skipped
+        }
+
+        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", documentUUID as CVarArg)
+
+        let existingLeads = try context.fetch(fetchRequest)
+        let remoteModifiedDate = UserDataSyncManager.parseDateValue(data["updatedDate"])
+            ?? UserDataSyncManager.parseDateValue(data["dateModified"])
+            ?? UserDataSyncManager.parseDateValue(data["createdDate"])
+            ?? UserDataSyncManager.parseDateValue(data["dateCreated"])
+            ?? Date.distantPast
+
+        if let existingLead = existingLeads.first {
+            let fiveMinutesAgo = Date().addingTimeInterval(-300)
+            let localModifiedDate = existingLead.updatedDate ?? existingLead.dateModified ?? Date.distantPast
+
+            // Skip remote update if local data is newer AND was edited recently (within 5 min)
+            if remoteModifiedDate <= localModifiedDate && localModifiedDate >= fiveMinutesAgo {
+                return .skipped
+            }
+
+            applyLeadDocumentData(data, to: existingLead)
+            return .updated
+        }
+
+        let lead = Lead(context: context)
+        lead.id = documentUUID
+        applyLeadDocumentData(data, to: lead)
+        return .inserted
+    }
+
+    private static func applyLeadDocumentData(_ data: [String: Any], to lead: Lead) {
+        lead.name = UserDataSyncManager.optionalStringValue(data["name"])
+        lead.address = UserDataSyncManager.optionalStringValue(data["address"])
+        lead.phone = UserDataSyncManager.optionalStringValue(data["phone"])
+        lead.email = UserDataSyncManager.optionalStringValue(data["email"])
+        lead.latitude = UserDataSyncManager.parseDoubleValue(data["latitude"]) ?? 0.0
+        lead.longitude = UserDataSyncManager.parseDoubleValue(data["longitude"]) ?? 0.0
+
+        if let rawStatus = UserDataSyncManager.optionalStringValue(data["status"]) {
+            lead.status = UserDataSyncManager.normalizeLeadStatus(rawStatus)
+        } else {
+            lead.status = Lead.Status.notContacted.rawValue
+        }
+
+        lead.notes = UserDataSyncManager.optionalStringValue(data["notes"])
+
+        let createdDate = UserDataSyncManager.parseDateValue(data["createdDate"])
+            ?? UserDataSyncManager.parseDateValue(data["dateCreated"])
+            ?? lead.createdDate
+            ?? lead.dateCreated
+            ?? Date()
+        let updatedDate = UserDataSyncManager.parseDateValue(data["updatedDate"])
+            ?? UserDataSyncManager.parseDateValue(data["dateModified"])
+            ?? lead.updatedDate
+            ?? lead.dateModified
+            ?? createdDate
+
+        // Keep both date fields in sync for compatibility.
+        lead.createdDate = createdDate
+        lead.dateCreated = createdDate
+        lead.updatedDate = updatedDate
+        lead.dateModified = updatedDate
+
+        lead.lastContactDate = UserDataSyncManager.parseDateValue(data["lastContactDate"])
+
+        // Preserve local follow-up date if remote doesn't provide a value.
+        if let followUpDate = UserDataSyncManager.parseDateValue(data["followUpDate"]) {
+            lead.followUpDate = followUpDate
+        }
+
+        lead.priority = UserDataSyncManager.parseInt16Value(data["priority"]) ?? 0
+        lead.source = UserDataSyncManager.optionalStringValue(data["source"])
+        lead.estimatedValue = UserDataSyncManager.parseDoubleValue(data["estimatedValue"]) ?? 0.0
+        lead.price = UserDataSyncManager.parseDoubleValue(data["price"]) ?? 0.0
+        lead.tags = UserDataSyncManager.optionalStringValue(data["tags"])
+        lead.visitCount = UserDataSyncManager.parseInt16Value(data["visitCount"]) ?? 0
+        lead.serviceCategory = UserDataSyncManager.optionalStringValue(data["serviceCategory"])
+        lead.neighborhoodId = UserDataSyncManager.optionalStringValue(data["neighborhoodId"])
+
+        // Check-ins are mirrored as nested payloads under each lead.
+        // The schema flag avoids treating legacy payloads as authoritative empty arrays.
+        let checkInsSchemaVersion = UserDataSyncManager.parseInt16Value(data["checkInsSchemaVersion"]) ?? 0
+        if checkInsSchemaVersion > 0 {
+            UserDataSyncManager.applyCheckInData(data["checkIns"], to: lead)
+        }
+    }
+
+    private static func applyCheckInData(_ value: Any?, to lead: Lead) {
+        guard let normalizedCheckIns = parseCheckInArray(value) else {
+            return
+        }
+
+        guard let context = lead.managedObjectContext else {
+            return
+        }
+
+        let existingCheckIns = lead.checkIns?.allObjects as? [FollowUpCheckIn] ?? []
+        var existingById: [UUID: FollowUpCheckIn] = [:]
+        for checkIn in existingCheckIns {
+            if let id = checkIn.id {
+                existingById[id] = checkIn
+            }
+        }
+
+        var seenIds = Set<UUID>()
+
+        for payload in normalizedCheckIns {
+            let checkIn = existingById[payload.id] ?? FollowUpCheckIn(context: context)
+            checkIn.id = payload.id
+            checkIn.lead = lead
+            checkIn.checkInDate = payload.checkInDate
+            checkIn.checkInType = normalizedCheckInType(payload.checkInType)
+            checkIn.outcome = payload.outcome
+            checkIn.notes = payload.notes
+            checkIn.scheduledNextFollowUp = payload.scheduledNextFollowUp
+            seenIds.insert(payload.id)
+        }
+
+        // The remote payload is authoritative for check-ins once present.
+        for (checkInId, localCheckIn) in existingById where !seenIds.contains(checkInId) {
+            context.delete(localCheckIn)
+        }
+    }
+
+    private static func parseCheckInArray(_ value: Any?) -> [LeadCheckInSyncPayload]? {
+        guard let value else { return nil }
+
+        if let checkInMaps = value as? [[String: Any]] {
+            return checkInMaps.compactMap(parseCheckInDictionary)
+        }
+
+        if let checkInValues = value as? [Any] {
+            let parsed = checkInValues.compactMap { item -> LeadCheckInSyncPayload? in
+                guard let itemMap = item as? [String: Any] else { return nil }
+                return parseCheckInDictionary(itemMap)
+            }
+            return parsed
+        }
+
+        if let jsonString = value as? String,
+           let jsonData = jsonString.data(using: .utf8),
+           let jsonObject = try? JSONSerialization.jsonObject(with: jsonData),
+           let jsonArray = jsonObject as? [[String: Any]] {
+            return jsonArray.compactMap(parseCheckInDictionary)
+        }
+
+        return nil
+    }
+
+    private static func parseCheckInDictionary(_ dictionary: [String: Any]) -> LeadCheckInSyncPayload? {
+        guard let rawId = optionalStringValue(dictionary["id"]) ?? optionalStringValue(dictionary["checkInId"]),
+              let checkInId = UUID(uuidString: rawId) else {
+            return nil
+        }
+
+        let checkInDate = parseDateValue(dictionary["checkInDate"]) ?? Date()
+        let checkInType = normalizedCheckInType(optionalStringValue(dictionary["checkInType"]))
+        let outcome = optionalStringValue(dictionary["outcome"])
+        let notes = optionalStringValue(dictionary["notes"])
+        let scheduledNextFollowUp = parseDateValue(dictionary["scheduledNextFollowUp"])
+
+        return LeadCheckInSyncPayload(
+            id: checkInId,
+            checkInDate: checkInDate,
+            checkInType: checkInType,
+            outcome: outcome,
+            notes: notes,
+            scheduledNextFollowUp: scheduledNextFollowUp
+        )
+    }
+
+    private static func parseDateValue(_ value: Any?) -> Date? {
+        if let date = value as? Date {
+            return date
+        }
+        if let timestamp = value as? Timestamp {
+            return timestamp.dateValue()
+        }
+        if let interval = value as? TimeInterval {
+            return Date(timeIntervalSince1970: interval)
+        }
+        if let number = value as? NSNumber {
+            return Date(timeIntervalSince1970: number.doubleValue)
+        }
+        if let string = value as? String {
+            if let interval = TimeInterval(string) {
+                return Date(timeIntervalSince1970: interval)
+            }
+            if let isoDate = iso8601DateFormatter.date(from: string) {
+                return isoDate
+            }
+            if let isoDate = iso8601DateFormatterNoFractional.date(from: string) {
+                return isoDate
+            }
+        }
+        return nil
+    }
+
+    private static func parseDoubleValue(_ value: Any?) -> Double? {
+        if let double = value as? Double {
+            return double
+        }
+        if let float = value as? Float {
+            return Double(float)
+        }
+        if let int = value as? Int {
+            return Double(int)
+        }
+        if let int64 = value as? Int64 {
+            return Double(int64)
+        }
+        if let number = value as? NSNumber {
+            return number.doubleValue
+        }
+        if let string = value as? String {
+            return Double(string)
+        }
+        return nil
+    }
+
+    private static func parseInt16Value(_ value: Any?) -> Int16? {
+        if let int16 = value as? Int16 {
+            return int16
+        }
+        if let int = value as? Int {
+            return Int16(clamping: int)
+        }
+        if let int64 = value as? Int64 {
+            return Int16(clamping: Int(int64))
+        }
+        if let double = value as? Double {
+            return Int16(clamping: Int(double))
+        }
+        if let number = value as? NSNumber {
+            return Int16(clamping: number.intValue)
+        }
+        if let string = value as? String, let int = Int(string) {
+            return Int16(clamping: int)
+        }
+        return nil
+    }
+
+    private static func optionalStringValue(_ value: Any?) -> String? {
+        if let string = value as? String {
+            return optionalTrimmedString(string)
+        }
+        if let number = value as? NSNumber {
+            return optionalTrimmedString(number.stringValue)
+        }
+        return nil
+    }
+
+    private static func optionalTrimmedString(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func normalizedCheckInType(_ value: String?) -> String {
+        let normalized = optionalTrimmedString(value)?.lowercased() ?? FollowUpCheckIn.CheckInType.doorKnock.rawValue
+
+        switch normalized {
+        case "door_knock", "doorknock", "door":
+            return FollowUpCheckIn.CheckInType.doorKnock.rawValue
+        case "phone_call", "phonecall", "call":
+            return FollowUpCheckIn.CheckInType.phoneCall.rawValue
+        case "sms_message", "sms", "text":
+            return FollowUpCheckIn.CheckInType.smsMessage.rawValue
+        case "email", "mail":
+            return FollowUpCheckIn.CheckInType.email.rawValue
+        case "virtual_meeting", "virtual", "zoom", "meeting_virtual":
+            return FollowUpCheckIn.CheckInType.virtualMeeting.rawValue
+        case "in_person_meeting", "inperson", "meeting":
+            return FollowUpCheckIn.CheckInType.inPersonMeeting.rawValue
+        default:
+            return FollowUpCheckIn.CheckInType.doorKnock.rawValue
+        }
+    }
+
+    private static let iso8601DateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let iso8601DateFormatterNoFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
 
     // Normalize remote status strings to current app values
     private static func normalizeLeadStatus(_ status: String) -> String {
@@ -562,9 +967,11 @@ class UserDataSyncManager: ObservableObject {
                         let leadId = lead.id?.uuidString ?? "No ID"
                         
                         if !hasId {
-                            print("🗑️ Removing lead with nil ID: \(leadName)")
+                            print("🗑️ Removing lead with nil ID: \(Utilities.redactedText(leadName))")
                         } else {
-                            print("🗑️ Removing corrupted lead with no name/address: \(leadName) - \(leadAddress) (ID: \(leadId))")
+                            let redactedName = Utilities.redactedText(leadName)
+                            let redactedAddress = Utilities.redactedText(leadAddress)
+                            print("🗑️ Removing corrupted lead with no name/address: \(redactedName) - \(redactedAddress) (ID: \(leadId))")
                         }
                         
                         backgroundContext.delete(lead)

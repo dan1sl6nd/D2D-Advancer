@@ -287,8 +287,8 @@ class OnboardingManager: ObservableObject {
             }
         }
 
-        if FirebaseService.shared.isAuthenticated {
-            Task {
+        Task { @MainActor in
+            if FirebaseService.shared.isAuthenticated {
                 await FirebaseService.shared.syncCurrentAccountProfileToClouds()
             }
         }

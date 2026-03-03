@@ -109,6 +109,7 @@ struct Appointment: Identifiable, Equatable, Sendable {
 
 // MARK: - Appointment Manager
 
+@MainActor
 class AppointmentManager: ObservableObject {
     static let shared = AppointmentManager()
     

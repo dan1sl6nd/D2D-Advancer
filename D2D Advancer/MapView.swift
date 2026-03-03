@@ -14,6 +14,8 @@ struct MapView: View {
     @State private var mapPitch: Double = 0.0
     @State private var leadToChangeStatus: Lead? // New state variable
     @State private var triggerMapAnimation = false
+    @State private var isMapMenuExpanded = false
+    @ObservedObject private var paywallManager = PaywallManager.shared
     
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)],
@@ -39,8 +41,6 @@ struct MapView: View {
             .navigationBarHidden(true)
             .ignoresSafeArea(.all, edges: .top)
             .onAppear {
-                // Clean up any leads without addresses on app start
-                cleanupLeadsWithoutAddresses()
             }
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
@@ -159,95 +159,183 @@ struct MapView: View {
     
     
     private var overlayControls: some View {
-        VStack {
-            HStack {
-                // Left Side Controls
-                VStack(spacing: 8) {
-                    // Center Location Button
+        ZStack {
+            // Dismiss overlay when menu is expanded (tap anywhere to close)
+            if isMapMenuExpanded {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            isMapMenuExpanded = false
+                        }
+                    }
+            }
+
+            // Location button - top right
+            VStack {
+                HStack {
+                    Spacer()
                     Button(action: {
                         centerOnUserLocationWithAnimation()
                     }) {
                         Circle()
-                            .fill(Color.blue)
+                            .fill(.ultraThinMaterial)
                             .frame(width: 44, height: 44)
                             .overlay(
                                 Image(systemName: "location.fill")
                                     .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(Color.themePrimary)
                             )
-                    }
-
-                    // Add Lead Button
-                    Button(action: {
-                        showingAddLead = true
-                        addLeadCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
-                    }) {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 44, height: 44)
                             .overlay(
-                                Image(systemName: "plus")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
+                                Circle()
+                                    .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
                             )
+                            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
                     }
-
-                    // Map Type Button
-                    Button(action: {
-                        cycleMapType()
-                    }) {
-                        Circle()
-                            .fill(Color.purple)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: mapTypeIcon)
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            )
-                    }
-
-                    // Not Home Button
-                    Button(action: {
-                        createQuickLead(status: .notHome)
-                    }) {
-                        Circle()
-                            .fill(Color.brown)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: "house.slash.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-
-                    // Not Interested Button
-                    Button(action: {
-                        createQuickLead(status: .notInterested)
-                    }) {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: "hand.raised.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            )
-                    }
-                    .buttonStyle(PlainButtonStyle())
+                    .padding(.trailing, 16)
+                    .padding(.top, 60)
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(.systemBackground).opacity(0.95))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-                )
-                .padding(.leading, 16)
-                .padding(.top, 60) // Extra padding for Dynamic Island area
-
                 Spacer()
             }
-            Spacer()
+
+            // FAB and expanded menu - bottom right
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    VStack(spacing: 12) {
+                        // Expanded menu items
+                        if isMapMenuExpanded {
+                            // Map Type Button (no paywall gate)
+                            Button(action: {
+                                cycleMapType()
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isMapMenuExpanded = false
+                                }
+                            }) {
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                                    .frame(width: 44, height: 44)
+                                    .overlay(
+                                        Image(systemName: mapTypeIcon)
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(Color.themePrimary)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                                    )
+                                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                            }
+                            .transition(.scale.combined(with: .opacity))
+
+                            // Not Interested Button
+                            Button(action: {
+                                guard paywallManager.gateAction() else { return }
+                                createQuickLead(status: .notInterested)
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isMapMenuExpanded = false
+                                }
+                            }) {
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                                    .frame(width: 44, height: 44)
+                                    .overlay(
+                                        Image(systemName: "hand.raised.fill")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(Color.statusNotInterested)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                                    )
+                                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                                    .premiumLock()
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .transition(.scale.combined(with: .opacity))
+
+                            // Not Home Button
+                            Button(action: {
+                                guard paywallManager.gateAction() else { return }
+                                createQuickLead(status: .notHome)
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isMapMenuExpanded = false
+                                }
+                            }) {
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                                    .frame(width: 44, height: 44)
+                                    .overlay(
+                                        Image(systemName: "house.slash.fill")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(Color.statusNotHome)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                                    )
+                                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                                    .premiumLock()
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .transition(.scale.combined(with: .opacity))
+
+                            // Add Lead Button
+                            Button(action: {
+                                guard paywallManager.gateAction() else { return }
+                                showingAddLead = true
+                                addLeadCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isMapMenuExpanded = false
+                                }
+                            }) {
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                                    .frame(width: 44, height: 44)
+                                    .overlay(
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(Color.themePrimary)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                                    )
+                                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                                    .premiumLock()
+                            }
+                            .transition(.scale.combined(with: .opacity))
+                        }
+
+                        // Main FAB button
+                        Button(action: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                isMapMenuExpanded.toggle()
+                            }
+                        }) {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.themePrimary, Color.themeSecondary],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 56, height: 56)
+                                .overlay(
+                                    Image(systemName: isMapMenuExpanded ? "xmark" : "plus")
+                                        .font(.system(size: 22, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .rotationEffect(.degrees(isMapMenuExpanded ? 90 : 0))
+                                )
+                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 8, x: 0, y: 4)
+                        }
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 24)
+                }
+            }
         }
     }
     
@@ -287,44 +375,44 @@ struct MapView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "location.slash")
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.themeError)
                     .font(.title2)
-                
+
                 Text("Location Access")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
-                
+
                 Spacer()
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
-            
+
             VStack(spacing: 20) {
                 // Status Display
                 VStack(spacing: 16) {
                     Circle()
-                        .fill(Color.red.opacity(0.1))
+                        .fill(Color.themeError.opacity(0.1))
                         .frame(width: 80, height: 80)
                         .overlay(
                             Image(systemName: "location.slash")
                                 .font(.system(size: 32))
-                                .foregroundColor(.red)
+                                .foregroundColor(Color.themeError)
                         )
-                    
+
                     VStack(spacing: 8) {
                         Text("Location Access Denied")
                             .font(.headline)
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
-                        
+
                         Text("To use map features and navigate to leads, please enable location access in Settings.")
                             .font(.body)
                             .multilineTextAlignment(.center)
                             .foregroundColor(.secondary)
                     }
                 }
-                
+
                 // Action Button
                 Button("Open Settings") {
                     if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
@@ -336,13 +424,13 @@ struct MapView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(Color.red)
+                .background(Color.themeError)
                 .cornerRadius(12)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }
-        .background(Color(UIColor.tertiarySystemBackground))
+        .background(.ultraThinMaterial)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
         .padding()
@@ -352,49 +440,49 @@ struct MapView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "location.badge.questionmark")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.themePrimary)
                     .font(.title2)
-                
+
                 Text("Location Permission")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
-                
+
                 Spacer()
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
-            
+
             VStack(spacing: 20) {
                 // Status Display
                 VStack(spacing: 16) {
                     Circle()
-                        .fill(Color.blue.opacity(0.1))
+                        .fill(Color.themePrimary.opacity(0.1))
                         .frame(width: 80, height: 80)
                         .overlay(
                             Image(systemName: "location.badge.questionmark")
                                 .font(.system(size: 32))
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.themePrimary)
                         )
-                    
+
                     VStack(spacing: 8) {
                         Text("Location Permission Required")
                             .font(.headline)
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
-                        
+
                         Text("D2D Advancer needs location access to show your position on the map and help navigate to leads.")
                             .font(.body)
                             .multilineTextAlignment(.center)
                             .foregroundColor(.secondary)
                     }
                 }
-                
+
                 // Action Button
                 Button("Grant Location Access") {
                     print("Location permission button tapped")
                     locationManager.requestLocationPermission()
-                    
+
                     // Force immediate request if still not determined
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         if locationManager.authorizationStatus == .notDetermined {
@@ -407,13 +495,13 @@ struct MapView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(Color.blue)
+                .background(Color.themePrimary)
                 .cornerRadius(12)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }
-        .background(Color(UIColor.tertiarySystemBackground))
+        .background(.ultraThinMaterial)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
         .padding()
@@ -423,43 +511,43 @@ struct MapView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "location.fill")
-                    .foregroundColor(.green)
+                    .foregroundColor(Color.themeSuccess)
                     .font(.title2)
-                
+
                 Text("Location Active")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
-                
+
                 Spacer()
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
-            
+
             VStack(spacing: 20) {
                 // Status Display
                 VStack(spacing: 16) {
                     Circle()
-                        .fill(Color.green.opacity(0.1))
+                        .fill(Color.themeSuccess.opacity(0.1))
                         .frame(width: 80, height: 80)
                         .overlay(
                             Image(systemName: "location.fill")
                                 .font(.system(size: 32))
-                                .foregroundColor(.green)
+                                .foregroundColor(Color.themeSuccess)
                         )
-                    
+
                     VStack(spacing: 8) {
                         Text("Location Tracking Active")
                             .font(.headline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.green)
-                        
+                            .foregroundColor(Color.themeSuccess)
+
                         VStack(spacing: 4) {
                             Text("Long press map to add lead at specific location")
                                 .font(.body)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
-                            
+
                             Text("Use controls above for map view and navigation")
                                 .font(.body)
                                 .foregroundColor(.secondary)
@@ -471,7 +559,7 @@ struct MapView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }
-        .background(Color(UIColor.tertiarySystemBackground))
+        .background(.ultraThinMaterial)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
         .padding()
@@ -546,10 +634,12 @@ struct MapView: View {
     }
     
     private func handleLongPress(coordinate: CLLocationCoordinate2D?, lead: Lead?) {
+        guard paywallManager.gateAction() else { return }
+
         // Show haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
-        
+
         if let lead = lead {
             leadToChangeStatus = lead
         } else if let coordinate = coordinate {
@@ -618,9 +708,9 @@ struct MapView: View {
     }
     
     private func createQuickLeadAt(coordinate: CLLocationCoordinate2D, status: Lead.Status) {
-        // Ensure context is in a clean state
+        // Save any pending changes from other views before creating a new lead
         if viewContext.hasChanges {
-            viewContext.rollback()
+            try? viewContext.save()
         }
         
         // Find the nearest building/house using geocoding with precise location
@@ -650,7 +740,7 @@ struct MapView: View {
                 
                 do {
                     try viewContext.save()
-                    print("✅ Quick lead created: \(status.displayName) at \(addressString)")
+                    print("✅ Quick lead created: \(status.displayName) at \(Utilities.redactedText(addressString))")
                     
                 } catch {
                     print("❌ Error creating quick lead: \(error.localizedDescription)")
@@ -704,28 +794,6 @@ struct MapView: View {
         return location1.distance(from: location2)
     }
     
-    private func cleanupLeadsWithoutAddresses() {
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "address == nil OR address == ''")
-        
-        do {
-            let leadsToDelete = try viewContext.fetch(fetchRequest)
-            print("🧹 Found \(leadsToDelete.count) leads without addresses to delete")
-            
-            for lead in leadsToDelete {
-                print("🗑️ Deleting lead: \(lead.displayName) (no address)")
-                viewContext.delete(lead)
-            }
-            
-            if !leadsToDelete.isEmpty {
-                try viewContext.save()
-                print("✅ Deleted \(leadsToDelete.count) leads without addresses")
-            }
-            
-        } catch {
-            print("❌ Error cleaning up leads without addresses: \(error)")
-        }
-    }
     
 }
 

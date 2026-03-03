@@ -19,6 +19,8 @@ struct LeadDetailView: View {
     @State private var editedStatus = Lead.Status.notContacted
     @State private var editedFollowUpDate: Date?
     @State private var editedServiceCategory: ServiceCategory?
+    @State private var editedLatitude: Double = 0.0
+    @State private var editedLongitude: Double = 0.0
     @State private var showingDatePicker = false
     @State private var showingAddCheckIn = false
     @State private var showingFullHistory = false
@@ -953,6 +955,8 @@ struct LeadDetailView: View {
         editedAddress = lead.address ?? ""
         editedNotes = lead.notes ?? ""
         editedPrice = lead.price
+        editedLatitude = lead.latitude
+        editedLongitude = lead.longitude
         editedStatus = lead.leadStatus
         editedFollowUpDate = lead.followUpDate
         editedServiceCategory = lead.serviceCategoryObject
@@ -975,6 +979,8 @@ struct LeadDetailView: View {
         lead.phone = editedPhone.isEmpty ? nil : editedPhone
         lead.email = editedEmail.isEmpty ? nil : editedEmail
         lead.address = editedAddress.isEmpty ? nil : editedAddress
+        lead.latitude = editedLatitude
+        lead.longitude = editedLongitude
         lead.notes = editedNotes.isEmpty ? nil : editedNotes
         lead.price = editedPrice
         lead.leadStatus = editedStatus
@@ -1023,8 +1029,8 @@ struct LeadDetailView: View {
 
                 if let addressString = addressString, !addressString.isEmpty {
                     self.editedAddress = addressString
-                    self.lead.latitude = userLocation.coordinate.latitude
-                    self.lead.longitude = userLocation.coordinate.longitude
+                    self.editedLatitude = userLocation.coordinate.latitude
+                    self.editedLongitude = userLocation.coordinate.longitude
                     print("✅ Address updated from current location: \(Utilities.redactedText(addressString))")
 
                     // Success haptic feedback
