@@ -75,7 +75,7 @@ struct MessageSelectionView: View {
                             .font(.headline)
                             .fontWeight(.semibold)
                     }
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(
@@ -88,7 +88,7 @@ struct MessageSelectionView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color.themeBackground)
+                        .fill(Color.obsidianBlack)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -126,7 +126,7 @@ struct MessageSelectionView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "person.circle.fill")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
 
                 Text("Customer Information")
@@ -141,21 +141,21 @@ struct MessageSelectionView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Image(systemName: "person.fill")
-                                .foregroundColor(Color.themeTextSecondary)
+                                .foregroundColor(Color.textSecondary)
                                 .frame(width: 16)
                             Text(lead.displayName)
                                 .font(.headline)
-                                .foregroundColor(Color.themeTextPrimary)
+                                .foregroundColor(Color.textPrimary)
                         }
                         
                         if let address = lead.address {
                             HStack {
                                 Image(systemName: "location.fill")
-                                    .foregroundColor(Color.themeTextSecondary)
+                                    .foregroundColor(Color.textSecondary)
                                     .frame(width: 16)
                                 Text(address)
                                     .font(.subheadline)
-                                    .foregroundColor(Color.themeTextSecondary)
+                                    .foregroundColor(Color.textSecondary)
                                     .lineLimit(2)
                             }
                         }
@@ -164,22 +164,22 @@ struct MessageSelectionView: View {
                             if let phone = lead.phone {
                                 HStack {
                                     Image(systemName: "phone.fill")
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                         .frame(width: 16)
                                     Text(phone)
                                         .font(.subheadline)
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                 }
                             }
                             
                             if let email = lead.email {
                                 HStack {
                                     Image(systemName: "envelope.fill")
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                         .frame(width: 16)
                                     Text(email)
                                         .font(.subheadline)
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                         .lineLimit(1)
                                 }
                             }
@@ -193,7 +193,7 @@ struct MessageSelectionView: View {
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -202,7 +202,7 @@ struct MessageSelectionView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "message.circle.fill")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
                 
                 Text("Message Type")
@@ -221,7 +221,7 @@ struct MessageSelectionView: View {
                     }) {
                         HStack {
                             Image(systemName: type.icon)
-                                .foregroundColor(messageType == type ? .white : Color.themePrimary)
+                                .foregroundColor(messageType == type ? .white : Color.electricViolet)
                                 .font(.system(size: 16, weight: .medium))
                             
                             Text(type.rawValue)
@@ -233,11 +233,11 @@ struct MessageSelectionView: View {
                         .frame(maxWidth: .infinity)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(messageType == type ? Color.themePrimary : Color.themeSurface)
+                                .fill(messageType == type ? Color.electricViolet : Color.obsidianSurface)
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
-                                .stroke(messageType == type ? Color.themePrimary : Color.themeBorder.opacity(0.3), lineWidth: 1)
+                                .stroke(messageType == type ? Color.electricViolet : Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -245,7 +245,7 @@ struct MessageSelectionView: View {
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -254,7 +254,7 @@ struct MessageSelectionView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "tag.circle.fill")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
                 
                 Text("Message Category")
@@ -280,7 +280,7 @@ struct MessageSelectionView: View {
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -289,7 +289,7 @@ struct MessageSelectionView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "doc.text.fill")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
                 
                 Text("Message Templates")
@@ -301,7 +301,7 @@ struct MessageSelectionView: View {
                 if !availableTemplates.isEmpty {
                     Text("\(availableTemplates.count) templates")
                         .font(.caption)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                 }
                 
                 Button {
@@ -309,7 +309,7 @@ struct MessageSelectionView: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Color.themePrimary)
+                        .foregroundColor(Color.electricViolet)
                 }
                 .accessibilityLabel("Add new template")
             }
@@ -318,15 +318,15 @@ struct MessageSelectionView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "doc.text")
                         .font(.system(size: 48))
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                     
                     Text("No templates available")
                         .font(.headline)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                     
                     Text("Switch to a different category or create a custom template.")
                         .font(.subheadline)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
@@ -361,7 +361,7 @@ struct MessageSelectionView: View {
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -370,7 +370,7 @@ struct MessageSelectionView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "pencil.circle.fill")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
                 
                 Text("Custom Message")
@@ -383,16 +383,16 @@ struct MessageSelectionView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Edit or write your own message")
                     .font(.subheadline)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                 
                 TextEditor(text: $customMessage)
                     .frame(minHeight: 100)
                     .padding(12)
-                    .background(Color.themeSurface)
+                    .background(Color.obsidianSurface)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                     )
                     .overlay(
                         Group {
@@ -400,7 +400,7 @@ struct MessageSelectionView: View {
                                 VStack {
                                     HStack {
                                         Text("Type your message here...")
-                                            .foregroundColor(Color.themeTextSecondary)
+                                            .foregroundColor(Color.textSecondary)
                                             .padding(.horizontal, 16)
                                             .padding(.top, 20)
                                         Spacer()
@@ -413,7 +413,7 @@ struct MessageSelectionView: View {
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -423,26 +423,26 @@ struct MessageSelectionView: View {
             if messageType == .sms && (lead.phone?.isEmpty ?? true) {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(Color.themeError)
+                        .foregroundColor(Color.statusNotInterested)
                     Text("No phone number available for SMS")
                         .font(.subheadline)
-                        .foregroundColor(Color.themeError)
+                        .foregroundColor(Color.statusNotInterested)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(Color.themeError.opacity(0.1))
+                .background(Color.statusNotInterested.opacity(0.1))
                 .cornerRadius(8)
             } else if messageType == .email && (lead.email?.isEmpty ?? true) {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(Color.themeError)
+                        .foregroundColor(Color.statusNotInterested)
                     Text("No email address available")
                         .font(.subheadline)
-                        .foregroundColor(Color.themeError)
+                        .foregroundColor(Color.statusNotInterested)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(Color.themeError.opacity(0.1))
+                .background(Color.statusNotInterested.opacity(0.1))
                 .cornerRadius(8)
             }
             
@@ -457,8 +457,8 @@ struct MessageSelectionView: View {
                 .padding(.vertical, 16)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(canSendMessage ? Color.themePrimary : Color.themeTextSecondary)
-                        .shadow(color: canSendMessage ? Color.themePrimary.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
+                        .fill(canSendMessage ? Color.electricViolet : Color.textSecondary)
+                        .shadow(color: canSendMessage ? Color.electricViolet.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
                 )
                 .foregroundColor(.white)
             }
@@ -500,7 +500,7 @@ struct CategoryButton: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(isSelected ? Color.themePrimary : Color.themeSurface)
+            .background(isSelected ? Color.electricViolet : Color.obsidianSurface)
             .foregroundColor(isSelected ? .white : .primary)
             .cornerRadius(16)
         }
@@ -547,7 +547,7 @@ struct TemplateCardView: View {
                         .foregroundColor(.white)
                         .frame(width: 80)
                         .frame(maxHeight: .infinity)
-                        .background(Color.themePrimary)
+                        .background(Color.electricViolet)
                     }
                     
                     Button(action: {
@@ -565,7 +565,7 @@ struct TemplateCardView: View {
                         .foregroundColor(.white)
                         .frame(width: 80)
                         .frame(maxHeight: .infinity)
-                        .background(Color.themeError)
+                        .background(Color.statusNotInterested)
                     }
                 }
                 .cornerRadius(12, corners: [.topRight, .bottomRight])
@@ -576,13 +576,13 @@ struct TemplateCardView: View {
                 HStack {
                     HStack(spacing: 8) {
                         Image(systemName: template.category.icon)
-                            .foregroundColor(template.category == .urgent ? Color.themeError : Color.themePrimary)
+                            .foregroundColor(template.category == .urgent ? Color.statusNotInterested : Color.electricViolet)
                             .font(.system(size: 16, weight: .medium))
                         
                         Text(template.title)
                             .font(.headline)
                             .fontWeight(.semibold)
-                            .foregroundColor(Color.themeTextPrimary)
+                            .foregroundColor(Color.textPrimary)
                     }
                     
                     Spacer()
@@ -594,20 +594,20 @@ struct TemplateCardView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.themePrimary)
+                            .background(Color.electricViolet)
                             .cornerRadius(6)
                     }
                     
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .font(.title3)
                     }
                 }
                 
                 Text(personalizedMessage)
                     .font(.body)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -615,11 +615,11 @@ struct TemplateCardView: View {
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.themePrimary.opacity(0.1) : Color.themeSurface)
+                    .fill(isSelected ? Color.electricViolet.opacity(0.1) : Color.obsidianSurface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.themePrimary : Color.clear, lineWidth: 2)
+                    .stroke(isSelected ? Color.electricViolet : Color.clear, lineWidth: 2)
             )
             .offset(x: offset, y: 0)
             .onTapGesture {

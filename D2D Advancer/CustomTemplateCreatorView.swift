@@ -62,7 +62,7 @@ struct CustomTemplateCreatorView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
@@ -90,14 +90,14 @@ struct CustomTemplateCreatorView: View {
                                 .fill(
                                     LinearGradient(
                                         gradient: Gradient(colors: [
-                                            !isValidTemplate ? Color.themeTextSecondary : Color.themePrimary,
-                                            !isValidTemplate ? Color.themeTextSecondary.opacity(0.8) : Color.themePrimary.opacity(0.8)
+                                            !isValidTemplate ? Color.textSecondary : Color.electricViolet,
+                                            !isValidTemplate ? Color.textSecondary.opacity(0.8) : Color.electricViolet.opacity(0.8)
                                         ]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: !isValidTemplate ? .clear : Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: !isValidTemplate ? .clear : Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                     .disabled(!isValidTemplate)
@@ -106,7 +106,7 @@ struct CustomTemplateCreatorView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color.themeBackground)
+                        .fill(Color.obsidianBlack)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -157,7 +157,7 @@ struct CustomTemplateCreatorView: View {
             // Header
             HStack {
                 Image(systemName: "doc.text.fill")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
 
                 Text("Template Details")
@@ -172,16 +172,16 @@ struct CustomTemplateCreatorView: View {
                 Text("Template Name")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
 
                 TextField("Enter template name", text: $title)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color.themeSurface)
+                    .background(Color.obsidianSurface)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                     )
             }
             
@@ -190,7 +190,7 @@ struct CustomTemplateCreatorView: View {
                 Text("Category")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
                 
                 Menu {
                     ForEach(MessageTemplate.MessageCategory.allCases, id: \.self) { category in
@@ -210,22 +210,22 @@ struct CustomTemplateCreatorView: View {
                 } label: {
                     HStack {
                         Image(systemName: selectedCategory.icon)
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 20)
                         Text(selectedCategory.rawValue)
-                            .foregroundColor(Color.themeTextPrimary)
+                            .foregroundColor(Color.textPrimary)
                         Spacer()
                         Image(systemName: "chevron.down")
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                             .font(.caption)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color.themeSurface)
+                    .background(Color.obsidianSurface)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                     )
                 }
             }
@@ -235,35 +235,35 @@ struct CustomTemplateCreatorView: View {
                 Text("Message Channels")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
 
                 VStack(spacing: 12) {
                     HStack {
                         Image(systemName: "message.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 20)
                         Text("SMS Messages")
                             .font(.body)
                         Spacer()
                         Toggle("", isOn: $isForSMS)
-                            .toggleStyle(SwitchToggleStyle(tint: Color.themePrimary))
+                            .toggleStyle(SwitchToggleStyle(tint: Color.electricViolet))
                     }
 
                     HStack {
                         Image(systemName: "envelope.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 20)
                         Text("Email Messages")
                             .font(.body)
                         Spacer()
                         Toggle("", isOn: $isForEmail)
-                            .toggleStyle(SwitchToggleStyle(tint: Color.themePrimary))
+                            .toggleStyle(SwitchToggleStyle(tint: Color.electricViolet))
                     }
                 }
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -273,7 +273,7 @@ struct CustomTemplateCreatorView: View {
             // Header
             HStack {
                 Image(systemName: "text.bubble.fill")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
 
                 Text("Message Content")
@@ -288,22 +288,22 @@ struct CustomTemplateCreatorView: View {
                 Text("Template Message")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
 
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $message)
                         .frame(minHeight: 120)
                         .padding(12)
-                        .background(Color.themeSurface)
+                        .background(Color.obsidianSurface)
                         .cornerRadius(10)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                         )
 
                     if message.isEmpty {
                         Text("Type your message here...")
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                             .padding(.horizontal, 16)
                             .padding(.top, 20)
                             .allowsHitTesting(false)
@@ -315,30 +315,30 @@ struct CustomTemplateCreatorView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Image(systemName: "tag.fill")
-                        .foregroundColor(Color.themePrimary)
+                        .foregroundColor(Color.electricViolet)
                         .font(.caption)
                     Text("Insert Placeholders")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(Color.themeTextPrimary)
+                        .foregroundColor(Color.textPrimary)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Tap to insert placeholder into your message")
                         .font(.caption)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
 
                     HStack(spacing: 4) {
                         Image(systemName: "info.circle.fill")
                             .font(.caption2)
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                         Text("Use math with price: {price + 50}, {price * 1.1}, {price - 100}, {price / 2}")
                             .font(.caption2)
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                     }
                     .padding(.vertical, 4)
                     .padding(.horizontal, 8)
-                    .background(Color.themePrimary.opacity(0.05))
+                    .background(Color.electricViolet.opacity(0.05))
                     .cornerRadius(6)
                 }
 
@@ -352,18 +352,18 @@ struct CustomTemplateCreatorView: View {
                                     Text(item.placeholder)
                                         .font(.caption)
                                         .fontWeight(.semibold)
-                                        .foregroundColor(Color.themePrimary)
+                                        .foregroundColor(Color.electricViolet)
                                     Text(item.description)
                                         .font(.caption2)
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(Color.themePrimary.opacity(0.1))
+                                .background(Color.electricViolet.opacity(0.1))
                                 .cornerRadius(8)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.themePrimary.opacity(0.3), lineWidth: 1)
+                                        .stroke(Color.electricViolet.opacity(0.3), lineWidth: 1)
                                 )
                             }
                         }
@@ -381,20 +381,20 @@ struct CustomTemplateCreatorView: View {
                         Text("Preview Message")
                     }
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .padding(.vertical, 12)
                     .padding(.horizontal, 20)
-                    .background(Color.themePrimary.opacity(0.1))
+                    .background(Color.electricViolet.opacity(0.1))
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.themePrimary.opacity(0.3), lineWidth: 1)
+                            .stroke(Color.electricViolet.opacity(0.3), lineWidth: 1)
                     )
                 }
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -440,7 +440,7 @@ struct PreviewTemplateView: View {
             // Header
             HStack {
                 Image(systemName: "doc.text.viewfinder")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
 
                 Text("Template Information")
@@ -454,7 +454,7 @@ struct PreviewTemplateView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Image(systemName: category.icon)
-                        .foregroundColor(category == .urgent ? Color.themeError : Color.themePrimary)
+                        .foregroundColor(category == .urgent ? Color.statusNotInterested : Color.electricViolet)
                         .font(.title2)
                         .frame(width: 24)
 
@@ -462,11 +462,11 @@ struct PreviewTemplateView: View {
                         Text(title)
                             .font(.headline)
                             .fontWeight(.semibold)
-                            .foregroundColor(Color.themeTextPrimary)
+                            .foregroundColor(Color.textPrimary)
 
                         Text(category.rawValue)
                             .font(.subheadline)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                     }
                     
                     Spacer()
@@ -475,7 +475,7 @@ struct PreviewTemplateView: View {
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -485,7 +485,7 @@ struct PreviewTemplateView: View {
             // Header
             HStack {
                 Image(systemName: "eye.fill")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
 
                 Text("Message Preview")
@@ -500,61 +500,61 @@ struct PreviewTemplateView: View {
                 Text("Preview with Sample Data")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: "person.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
                         Text("Customer: John Smith")
                             .font(.caption)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                     }
 
                     HStack {
                         Image(systemName: "location.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
                         Text("Address: 123 Main St, Toronto")
                             .font(.caption)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                     }
 
                     HStack {
                         Image(systemName: "dollarsign.circle.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
                         Text("Price: $2,500.00 CAD")
                             .font(.caption)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                     }
 
                     HStack {
                         Image(systemName: "tag.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
                         Text("Service: Window Cleaning")
                             .font(.caption)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                     }
 
                     HStack {
                         Image(systemName: "phone.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
                         Text("Phone: (416) 555-1234")
                             .font(.caption)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                     }
 
                     HStack {
                         Image(systemName: "envelope.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
                         Text("Email: john.smith@example.com")
                             .font(.caption)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                     }
                 }
             }
@@ -564,22 +564,22 @@ struct PreviewTemplateView: View {
                 Text("Personalized Message")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
 
                 Text(previewMessage)
                     .font(.body)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
                     .padding(16)
-                    .background(Color.themeSurface)
+                    .background(Color.obsidianSurface)
                     .cornerRadius(12)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                     )
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
