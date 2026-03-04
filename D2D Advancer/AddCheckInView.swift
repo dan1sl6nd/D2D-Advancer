@@ -30,7 +30,7 @@ struct AddCheckInView: View {
                                     if let address = lead.address {
                                         Text(address)
                                             .font(.subheadline)
-                                            .foregroundColor(Color.themeTextSecondary)
+                                            .foregroundColor(Color.textSecondary)
                                     }
                                 }
                                 
@@ -41,7 +41,7 @@ struct AddCheckInView: View {
                             
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(Color.themePrimary)
+                                    .foregroundColor(Color.electricViolet)
                                     .frame(width: 20)
                                 
                                 Text("Check-in #\(lead.checkInCount + 1)")
@@ -67,7 +67,7 @@ struct AddCheckInView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Image(systemName: "note.text")
-                                    .foregroundColor(Color.themePrimary)
+                                    .foregroundColor(Color.electricViolet)
                                     .frame(width: 20)
                                 
                                 Text("Check-in Notes")
@@ -79,15 +79,15 @@ struct AddCheckInView: View {
                                 .frame(minHeight: 100)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
-                                .background(Color.themeSurface)
+                                .background(Color.obsidianSurface)
                                 .cornerRadius(12)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                                 )
                                 .placeholder(when: notes.isEmpty) {
                                     Text("Add notes about this follow-up...")
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                         .padding(.horizontal, 20)
                                         .padding(.vertical, 20)
                                 }
@@ -123,7 +123,7 @@ struct AddCheckInView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
@@ -150,12 +150,12 @@ struct AddCheckInView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.themePrimary, Color.themePrimary.opacity(0.8)]),
+                                        gradient: Gradient(colors: [Color.electricViolet, Color.electricViolet.opacity(0.8)]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                 }
@@ -163,7 +163,7 @@ struct AddCheckInView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color.themeBackground)
+                        .fill(Color.obsidianElevated)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -195,7 +195,7 @@ struct AddCheckInView: View {
                                 Text("Cancel")
                                     .font(.headline)
                                     .fontWeight(.semibold)
-                                    .foregroundColor(Color.themeTextSecondary)
+                                    .foregroundColor(Color.textSecondary)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
                                     .background(
@@ -215,13 +215,13 @@ struct AddCheckInView: View {
                                     .padding(.vertical, 12)
                                     .background(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.themePrimary)
+                                            .fill(Color.electricViolet)
                                     )
                             }
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(Color.themeBackground)
+                        .background(Color.obsidianElevated)
                     }
                 }
                 .presentationDetents([.height(250)])
@@ -279,13 +279,13 @@ struct AddCheckInView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
 
                 Text(title)
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
 
                 Spacer()
             }
@@ -298,12 +298,12 @@ struct AddCheckInView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.themeBackground)
+                .fill(Color.obsidianElevated)
                 .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.themeBorder.opacity(0.2), lineWidth: 1)
+                .stroke(Color.obsidianBorder.opacity(0.2), lineWidth: 1)
         )
     }
     
@@ -312,7 +312,7 @@ struct AddCheckInView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .frame(width: 20)
 
                 Text(title)
@@ -330,19 +330,19 @@ struct AddCheckInView: View {
             } label: {
                 HStack {
                     Label(selection.wrappedValue.displayName, systemImage: selection.wrappedValue.icon)
-                        .foregroundColor(Color.themeTextPrimary)
+                        .foregroundColor(Color.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                         .font(.caption)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.themeSurface)
+                .background(Color.obsidianSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                 )
             }
         }
@@ -353,7 +353,7 @@ struct AddCheckInView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .frame(width: 20)
 
                 Text(title)
@@ -371,19 +371,19 @@ struct AddCheckInView: View {
             } label: {
                 HStack {
                     Text(selection.wrappedValue.displayName)
-                        .foregroundColor(Color.themeTextPrimary)
+                        .foregroundColor(Color.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                         .font(.caption)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.themeSurface)
+                .background(Color.obsidianSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                 )
             }
         }
@@ -394,7 +394,7 @@ struct AddCheckInView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .frame(width: 20)
 
                 Text(title)
@@ -406,7 +406,7 @@ struct AddCheckInView: View {
                 HStack {
                     if let selectedDate = date.wrappedValue {
                         Text(selectedDate.formatted(.dateTime.day().month().year().hour().minute()))
-                            .foregroundColor(Color.themeTextPrimary)
+                            .foregroundColor(Color.textPrimary)
 
                         Spacer()
 
@@ -414,25 +414,25 @@ struct AddCheckInView: View {
                             date.wrappedValue = nil
                         }) {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(Color.themeTextSecondary)
+                                .foregroundColor(Color.textSecondary)
                         }
                     } else {
                         Text("Set Date & Time")
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
 
                         Spacer()
 
                         Image(systemName: "calendar")
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.themeSurface)
+                .background(Color.obsidianSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                 )
             }
         }
