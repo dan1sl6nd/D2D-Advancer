@@ -18,6 +18,9 @@ struct MapView: View {
     @ObservedObject private var paywallManager = PaywallManager.shared
     @StateObject private var overlayManager = NeighborhoodOverlayManager()
     @State private var isHeatmapEnabled = false
+    @StateObject private var routeOptimizer = RouteOptimizer()
+    @State private var showingRoutePlanner = false
+    @State private var showingRouteSummary = false
     
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)],
@@ -50,6 +53,28 @@ struct MapView: View {
             }
             .sheet(isPresented: $showingAddLead) {
                 AddLeadView(coordinate: addLeadCoordinate ?? locationManager.region.center)
+            }
+            .sheet(isPresented: $showingRoutePlanner) {
+                RoutePlannerView(
+                    routeOptimizer: routeOptimizer,
+                    startCoordinate: locationManager.location?.coordinate ?? locationManager.region.center,
+                    allLeads: Array(leads),
+                    onRouteReady: { showingRouteSummary = true }
+                )
+            }
+            .sheet(isPresented: $showingRouteSummary) {
+                RouteSummaryView(
+                    routeOptimizer: routeOptimizer,
+                    onNavigate: { openAppleMapsRoute() },
+                    onSkip: { lead in skipRouteStop(lead) },
+                    onComplete: { lead in completeRouteStop(lead) },
+                    onEndRoute: {
+                        routeOptimizer.clearRoute()
+                        showingRouteSummary = false
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .confirmationDialog(
                 "Change Status for \(leadToChangeStatus?.displayName ?? "Lead")",
@@ -91,6 +116,7 @@ struct MapView: View {
             animateNextUpdate: $triggerMapAnimation,
             leads: Array(leads),
             heatmapOverlay: overlayManager.heatmapOverlay,
+            routePolyline: routeOptimizer.currentRoute?.polyline,
             onLeadTap: { lead in
                 selectedLead = lead
             },
@@ -344,6 +370,32 @@ struct MapView: View {
                                     .overlay(
                                         Circle()
                                             .stroke(Color.obsidianBorder, lineWidth: isHeatmapEnabled ? 0 : 1)
+                                    )
+                                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                                    .premiumLock()
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .transition(.scale.combined(with: .opacity))
+
+                            // Route Planner Button
+                            Button(action: {
+                                guard paywallManager.gateAction() else { return }
+                                showingRoutePlanner = true
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isMapMenuExpanded = false
+                                }
+                            }) {
+                                Circle()
+                                    .fill(routeOptimizer.currentRoute != nil ? Color.electricViolet : Color.obsidianSurface)
+                                    .frame(width: 44, height: 44)
+                                    .overlay(
+                                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath.fill")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(routeOptimizer.currentRoute != nil ? .white : Color.electricViolet)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.obsidianBorder, lineWidth: routeOptimizer.currentRoute != nil ? 0 : 1)
                                     )
                                     .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                                     .premiumLock()
@@ -787,8 +839,38 @@ struct MapView: View {
         let location2 = CLLocation(latitude: coord2.latitude, longitude: coord2.longitude)
         return location1.distance(from: location2)
     }
-    
-    
+
+    // MARK: - Route Helpers
+
+    private func openAppleMapsRoute() {
+        guard let route = routeOptimizer.currentRoute else { return }
+        let mapItems = route.stops.map { stop -> MKMapItem in
+            let placemark = MKPlacemark(coordinate: stop.lead.coordinate)
+            let item = MKMapItem(placemark: placemark)
+            item.name = stop.lead.displayName
+            return item
+        }
+        MKMapItem.openMaps(with: mapItems, launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+        ])
+    }
+
+    private func skipRouteStop(_ lead: Lead) {
+        Task {
+            let remaining = routeOptimizer.currentRoute?.stops
+                .filter { $0.lead.id != lead.id }
+                .map { $0.lead } ?? []
+            let start = locationManager.location?.coordinate ?? locationManager.region.center
+            await routeOptimizer.optimizeRoute(from: start, leads: remaining)
+        }
+    }
+
+    private func completeRouteStop(_ lead: Lead) {
+        lead.visitCount += 1
+        lead.lastContactDate = Date()
+        try? viewContext.save()
+        skipRouteStop(lead)
+    }
 }
 
 // MARK: - Extensions

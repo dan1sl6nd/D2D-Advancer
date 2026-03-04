@@ -13,6 +13,7 @@ struct AdvancedMapView: UIViewRepresentable {
 
     let leads: [Lead]
     var heatmapOverlay: HeatmapOverlay?
+    var routePolyline: MKPolyline?
     let onLeadTap: (Lead) -> Void
     let onLongPress: (CLLocationCoordinate2D?, Lead?) -> Void
     var onRegionChanged: ((MKCoordinateRegion) -> Void)?
@@ -173,6 +174,17 @@ struct AdvancedMapView: UIViewRepresentable {
         } else if !existingHeatmaps.isEmpty {
             mapView.removeOverlays(existingHeatmaps)
         }
+
+        // Update route polyline
+        let existingPolylines = mapView.overlays.compactMap { $0 as? MKPolyline }
+        if let polyline = routePolyline {
+            if existingPolylines.isEmpty || existingPolylines.first?.pointCount != polyline.pointCount {
+                mapView.removeOverlays(existingPolylines)
+                mapView.addOverlay(polyline, level: .aboveRoads)
+            }
+        } else if !existingPolylines.isEmpty {
+            mapView.removeOverlays(existingPolylines)
+        }
     }
     
     func makeCoordinator() -> Coordinator {
@@ -315,6 +327,12 @@ struct AdvancedMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if overlay is HeatmapOverlay {
                 return HeatmapOverlayRenderer(overlay: overlay)
+            }
+            if let polyline = overlay as? MKPolyline {
+                let renderer = MKPolylineRenderer(polyline: polyline)
+                renderer.strokeColor = UIColor(Color.electricViolet)
+                renderer.lineWidth = 3
+                return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
         }
