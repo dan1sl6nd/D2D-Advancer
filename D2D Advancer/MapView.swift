@@ -29,6 +29,7 @@ struct MapView: View {
         ZStack {
                 mapView
                 overlayControls
+                heatmapLegend
 
                 // Show location permission status
                 if locationManager.authorizationStatus == .notDetermined ||
@@ -381,8 +382,54 @@ struct MapView: View {
             }
         }
     }
-    
-    
+
+    @ViewBuilder
+    private var heatmapLegend: some View {
+        if isHeatmapEnabled {
+            VStack {
+                Spacer()
+                HStack {
+                    HStack(spacing: 8) {
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.0, green: 0.3, blue: 0.8),
+                                Color(red: 0.0, green: 0.7, blue: 0.8),
+                                Color(red: 0.1, green: 0.8, blue: 0.3),
+                                Color(red: 0.9, green: 0.8, blue: 0.0),
+                                Color(red: 0.9, green: 0.5, blue: 0.0),
+                                Color.electricViolet
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: 100, height: 8)
+                        .clipShape(Capsule())
+
+                        HStack(spacing: 0) {
+                            Text("Low")
+                                .foregroundColor(Color.textMuted)
+                            Spacer()
+                            Text("High")
+                                .foregroundColor(Color.textMuted)
+                        }
+                        .font(.system(size: 9))
+                        .frame(width: 100)
+                    }
+                    .padding(8)
+                    .background(Color.obsidianSurface.opacity(0.9))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.obsidianBorder, lineWidth: 1)
+                    )
+                    Spacer()
+                }
+                .padding(.leading, 16)
+                .padding(.bottom, 24)
+            }
+        }
+    }
+
     private var mapTypeLabel: String {
         switch mapType {
         case .standard:
