@@ -164,6 +164,34 @@ class TargetDemographicsPreferences: ObservableObject {
             }
         }
 
+        var recommendedWeights: (income: Double, density: Double, homeValue: Double, conversion: Double) {
+            switch self {
+            case .solarPanels:
+                return (0.35, 0.15, 0.35, 0.15)
+            case .roofing:
+                return (0.25, 0.20, 0.30, 0.25)
+            case .hvac:
+                return (0.30, 0.20, 0.25, 0.25)
+            case .windows:
+                return (0.25, 0.20, 0.30, 0.25)
+            case .landscaping:
+                return (0.25, 0.10, 0.40, 0.25)
+            case .remodeling:
+                return (0.30, 0.15, 0.35, 0.20)
+            case .security:
+                return (0.30, 0.25, 0.20, 0.25)
+            case .pools:
+                return (0.25, 0.10, 0.40, 0.25)
+            case .torontoGeneral:
+                return (0.30, 0.20, 0.25, 0.25)
+            case .torontoPremium:
+                return (0.25, 0.15, 0.40, 0.20)
+            case .custom:
+                let prefs = TargetDemographicsPreferences.shared
+                return (prefs.weightIncome, prefs.weightDensity, prefs.weightHomeValue, prefs.weightConversion)
+            }
+        }
+
         var description: String {
             switch self {
             case .solarPanels:
@@ -215,6 +243,13 @@ class TargetDemographicsPreferences: ObservableObject {
         targetIncomeMax = incomeRange.max
         targetHomeValueMin = homeValueRange.min
         targetHomeValueMax = homeValueRange.max
+
+        // Set scoring weights per profile
+        let weights = profile.recommendedWeights
+        weightIncome = weights.income
+        weightDensity = weights.density
+        weightHomeValue = weights.homeValue
+        weightConversion = weights.conversion
 
         print("✅ Applied profile: \(profile.rawValue)")
         print("   Income: $\(Int(targetIncomeMin/1000))k-$\(Int(targetIncomeMax/1000))k")

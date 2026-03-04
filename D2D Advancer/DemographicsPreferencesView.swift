@@ -153,6 +153,9 @@ struct DemographicsPreferencesView: View {
                             .padding(.horizontal, 20)
                     }
 
+                    // Scoring Weights
+                    ScoringWeightsView()
+
                     Spacer(minLength: 80)
                 }
             }
