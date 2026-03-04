@@ -170,7 +170,9 @@ class UserDataSyncManager: ObservableObject {
         stopSyncTimer() // Stop existing timer first
         
         syncTimer = Timer.scheduledTimer(withTimeInterval: syncInterval.timeInterval, repeats: true) { [weak self] _ in
-            self?.performScheduledSync()
+            Task { @MainActor in
+                self?.performScheduledSync()
+            }
         }
         print("⏰ Sync timer started: \(syncInterval.displayName)")
     }
@@ -619,7 +621,7 @@ class UserDataSyncManager: ObservableObject {
         case skipped
     }
 
-    private static func mergeLeadDocumentData(
+    nonisolated private static func mergeLeadDocumentData(
         _ data: [String: Any],
         documentId: String,
         in context: NSManagedObjectContext
@@ -879,13 +881,13 @@ class UserDataSyncManager: ObservableObject {
         return nil
     }
 
-    private static func optionalTrimmedString(_ value: String?) -> String? {
+    nonisolated private static func optionalTrimmedString(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func normalizedCheckInType(_ value: String?) -> String {
+    nonisolated private static func normalizedCheckInType(_ value: String?) -> String {
         let normalized = optionalTrimmedString(value)?.lowercased() ?? FollowUpCheckIn.CheckInType.doorKnock.rawValue
 
         switch normalized {
@@ -919,7 +921,7 @@ class UserDataSyncManager: ObservableObject {
     }()
 
     // Normalize remote status strings to current app values
-    private static func normalizeLeadStatus(_ status: String) -> String {
+    nonisolated private static func normalizeLeadStatus(_ status: String) -> String {
         let s = status.lowercased()
         switch s {
         case "sold", "closed", "close", "won":

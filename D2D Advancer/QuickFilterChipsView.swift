@@ -37,7 +37,7 @@ struct QuickFilterChipsView: View {
                         }
                         .font(.themeCaption)
                         .foregroundColor(Color.textSecondary)
-                        .obsidianChip()
+                        .glassChip()
                     }
 
                     // Presets menu
@@ -56,7 +56,7 @@ struct QuickFilterChipsView: View {
                         }
                         .font(.themeCaption)
                         .foregroundColor(Color.textSecondary)
-                        .obsidianChip()
+                        .glassChip()
                     }
                 }
                 .padding(.horizontal, 8)
