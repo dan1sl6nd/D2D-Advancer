@@ -107,6 +107,7 @@ class NeighborhoodOverlayManager: ObservableObject {
     @Published var isShowingOverlays = false
     @Published var visibleNeighborhoods: [Neighborhood] = []
     @Published var selectedNeighborhood: Neighborhood?
+    @Published var heatmapOverlay: HeatmapOverlay?
 
     private let dataService = NeighborhoodDataService.shared
     private let scoreEngine = NeighborhoodScoreEngine.shared
@@ -216,6 +217,36 @@ class NeighborhoodOverlayManager: ObservableObject {
         if count > 0 {
             print("✅ Populated \(count) neighborhoods from leads")
         }
+    }
+
+    /// Generates a heatmap overlay from currently visible neighborhoods.
+    func generateHeatmap(for region: MKCoordinateRegion) async {
+        // Ensure neighborhoods are loaded
+        if visibleNeighborhoods.isEmpty {
+            await loadNeighborhoods(for: region)
+        }
+
+        let points = visibleNeighborhoods.compactMap { neighborhood -> HeatPoint? in
+            guard neighborhood.centerLatitude != 0 || neighborhood.centerLongitude != 0 else { return nil }
+            return HeatPoint(
+                coordinate: CLLocationCoordinate2D(
+                    latitude: neighborhood.centerLatitude,
+                    longitude: neighborhood.centerLongitude
+                ),
+                intensity: neighborhood.score
+            )
+        }
+
+        guard !points.isEmpty else {
+            heatmapOverlay = nil
+            return
+        }
+
+        let overlay = HeatmapOverlay(heatPoints: points, region: region)
+        // Adjust radius based on zoom — tighter at street level, wider when zoomed out
+        let spanKm = region.span.latitudeDelta * 111 // rough km per degree
+        overlay.radiusInMeters = max(300, min(2000, spanKm * 50))
+        heatmapOverlay = overlay
     }
 }
 
