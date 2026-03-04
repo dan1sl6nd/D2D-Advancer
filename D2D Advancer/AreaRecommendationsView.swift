@@ -66,16 +66,7 @@ struct AreaRecommendationsView: View {
     private func headerSection(geometry: GeometryProxy) -> some View {
         VStack(spacing: 0) {
             Rectangle()
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.themeBackground,
-                            Color.themeBackground.opacity(0.98)
-                        ]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+                .fill(Color.obsidianBlack)
                 .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
 
             HStack {
@@ -86,7 +77,7 @@ struct AreaRecommendationsView: View {
 
                     Text("Recommended neighborhoods for door-to-door")
                         .font(.subheadline)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                 }
 
                 Spacer()
@@ -96,9 +87,9 @@ struct AreaRecommendationsView: View {
                 }) {
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(Color.themePrimary)
+                        .foregroundColor(Color.electricViolet)
                         .padding(10)
-                        .background(Color.themePrimary.opacity(0.1))
+                        .background(Color.electricViolet.opacity(0.1))
                         .clipShape(Circle())
                 }
             }
@@ -115,7 +106,7 @@ struct AreaRecommendationsView: View {
                 .scaleEffect(1.2)
             Text("Analyzing neighborhoods...")
                 .font(.subheadline)
-                .foregroundColor(Color.themeTextSecondary)
+                .foregroundColor(Color.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -123,12 +114,12 @@ struct AreaRecommendationsView: View {
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Circle()
-                .fill(Color.themePrimary.opacity(0.2))
+                .fill(Color.electricViolet.opacity(0.2))
                 .frame(width: 80, height: 80)
                 .overlay(
                     Image(systemName: "map.circle")
                         .font(.system(size: 32))
-                        .foregroundColor(Color.themePrimary)
+                        .foregroundColor(Color.electricViolet)
                 )
 
             VStack(spacing: 8) {
@@ -138,7 +129,7 @@ struct AreaRecommendationsView: View {
 
                 Text("Add some leads to start analyzing neighborhoods, or adjust your target demographics.")
                     .font(.body)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
@@ -150,7 +141,7 @@ struct AreaRecommendationsView: View {
             .foregroundColor(.white)
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
-            .background(Color.themePrimary)
+            .background(Color.electricViolet)
             .cornerRadius(12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -162,7 +153,7 @@ struct AreaRecommendationsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "target")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                 Text("Target Demographics")
                     .font(.headline)
                     .fontWeight(.semibold)
@@ -178,7 +169,7 @@ struct AreaRecommendationsView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.themeSurface)
+                .fill(Color.obsidianSurface)
                 .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
         )
         .padding(.horizontal, 16)
@@ -203,21 +194,15 @@ struct AreaRecommendationsView: View {
             .padding(.vertical, 16)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.themePrimary, Color.themePrimary.opacity(0.8)]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
+                    .fill(Color.electricViolet)
+                    .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
             )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(
             Rectangle()
-                .fill(Color.themeBackground)
+                .fill(Color.obsidianBlack)
                 .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
         )
     }
@@ -287,19 +272,19 @@ struct PreferenceRow: View {
     var body: some View {
         HStack {
             Image(systemName: icon)
-                .foregroundColor(Color.themePrimary)
+                .foregroundColor(Color.electricViolet)
                 .frame(width: 24)
 
             Text(label)
                 .font(.subheadline)
-                .foregroundColor(Color.themeTextSecondary)
+                .foregroundColor(Color.textSecondary)
 
             Spacer()
 
             Text(value)
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .foregroundColor(Color.themeTextPrimary)
+                .foregroundColor(Color.textPrimary)
         }
     }
 }
@@ -319,14 +304,14 @@ struct NeighborhoodRecommendationCard: View {
                         .frame(width: 48, height: 48)
 
                     Text("#\(rank)")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(neighborhood.name ?? "Unknown")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(Color.themeTextPrimary)
+                        .foregroundColor(Color.textPrimary)
                         .lineLimit(1)
 
                     HStack(spacing: 8) {
@@ -334,24 +319,24 @@ struct NeighborhoodRecommendationCard: View {
 
                         Text(neighborhood.formattedIncome)
                             .font(.caption)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                     }
 
                     Text("\(neighborhood.cityName ?? ""), \(neighborhood.state ?? "")")
                         .font(.caption)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .font(.system(size: 14, weight: .medium))
             }
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.themeSurface)
+                    .fill(Color.obsidianSurface)
                     .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
             )
         }
@@ -367,7 +352,7 @@ struct NeighborhoodRecommendationCard: View {
         case 3:
             return Color(red: 0.80, green: 0.50, blue: 0.20) // Bronze
         default:
-            return Color.themePrimary
+            return Color.electricViolet
         }
     }
 }
@@ -396,15 +381,15 @@ struct ScoreBadge: View {
     private var scoreColor: Color {
         switch score {
         case 90...100:
-            return .themeSuccess
+            return .statusInterested
         case 75..<90:
             return Color(red: 0.7, green: 0.9, blue: 0.4)
         case 60..<75:
             return .yellow
         case 45..<60:
-            return .themeWarning
+            return .statusNotHome
         default:
-            return .themeError
+            return .statusNotInterested
         }
     }
 }
