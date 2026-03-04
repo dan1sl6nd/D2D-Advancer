@@ -83,23 +83,27 @@ class RouteOptimizer: ObservableObject {
     }
 
     private func bestByDrivingTime(from: CLLocationCoordinate2D, candidates: [Lead]) async -> Lead {
-        // Request MKDirections for each candidate
-        var results: [(lead: Lead, eta: TimeInterval)] = []
+        // Extract coordinates up-front so Lead (NSManagedObject) doesn't cross isolation boundaries
+        let candidateData = candidates.map { (lead: $0, coord: $0.coordinate) }
+        var results: [(index: Int, eta: TimeInterval)] = []
 
-        await withTaskGroup(of: (Lead, TimeInterval?).self) { group in
-            for lead in candidates {
+        await withTaskGroup(of: (Int, TimeInterval?).self) { group in
+            for (index, item) in candidateData.enumerated() {
+                let coord = item.coord
                 group.addTask {
-                    let eta = await self.getDrivingETA(from: from, to: lead.coordinate)
-                    return (lead, eta)
+                    let eta = await self.getDrivingETA(from: from, to: coord)
+                    return (index, eta)
                 }
             }
             for await result in group {
-                let eta = result.1 ?? self.haversineDistance(from: from, to: result.0.coordinate) / 13.0 // ~47km/h fallback
+                let coord = candidateData[result.0].coord
+                let eta = result.1 ?? self.haversineDistance(from: from, to: coord) / 13.0 // ~47km/h fallback
                 results.append((result.0, eta))
             }
         }
 
-        return results.min(by: { $0.eta < $1.eta })?.lead ?? candidates[0]
+        let bestIndex = results.min(by: { $0.eta < $1.eta })?.index ?? 0
+        return candidates[bestIndex]
     }
 
     private nonisolated func getDrivingETA(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) async -> TimeInterval? {

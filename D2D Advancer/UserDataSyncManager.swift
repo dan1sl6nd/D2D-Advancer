@@ -908,13 +908,13 @@ class UserDataSyncManager: ObservableObject {
         }
     }
 
-    private static let iso8601DateFormatter: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let iso8601DateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
 
-    private static let iso8601DateFormatterNoFractional: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let iso8601DateFormatterNoFractional: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter

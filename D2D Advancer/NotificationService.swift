@@ -1,5 +1,5 @@
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 import CoreData
 
 @MainActor
@@ -309,7 +309,7 @@ class NotificationService: NSObject, ObservableObject {
         }
     }
 
-    static func isAuthorizationAllowed(_ status: UNAuthorizationStatus) -> Bool {
+    nonisolated static func isAuthorizationAllowed(_ status: UNAuthorizationStatus) -> Bool {
         switch status {
         case .authorized, .provisional, .ephemeral:
             return true
@@ -406,7 +406,9 @@ extension NotificationService: @preconcurrency UNUserNotificationCenterDelegate 
                     try context.save()
 
                     // Cancel the follow-up notification
-                    self.cancelFollowUpNotification(for: uuid)
+                    Task { @MainActor in
+                        self.cancelFollowUpNotification(for: uuid)
+                    }
                 }
             } catch {
                 print("Failed to mark lead as visited: \(error)")
@@ -431,7 +433,9 @@ extension NotificationService: @preconcurrency UNUserNotificationCenterDelegate 
                     try context.save()
 
                     // Reschedule notification
-                    self.scheduleFollowUpNotification(for: lead)
+                    Task { @MainActor in
+                        self.scheduleFollowUpNotification(for: lead)
+                    }
                 }
             } catch {
                 print("Failed to snooze follow-up: \(error)")
