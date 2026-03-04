@@ -72,7 +72,7 @@ struct FollowUpHistoryView: View {
                     if let address = lead.address {
                         Text(address)
                             .font(.caption)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                     }
                 }
                 
@@ -86,10 +86,10 @@ struct FollowUpHistoryView: View {
                     Text("\(lead.checkInCount)")
                         .font(.title2)
                         .fontWeight(.bold)
-                        .foregroundColor(Color.themePrimary)
+                        .foregroundColor(Color.electricViolet)
                     Text("Check-ins")
                         .font(.caption)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                 }
                 
                 Divider()
@@ -107,30 +107,30 @@ struct FollowUpHistoryView: View {
                     }
                     Text("Last Contact")
                         .font(.caption)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                 }
                 
                 Spacer()
             }
         }
         .padding()
-        .background(Color.themeSurface)
+        .background(Color.obsidianSurface)
     }
     
     private var emptyStateView: some View {
         VStack(spacing: 16) {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 60))
-                .foregroundColor(Color.themeTextSecondary)
+                .foregroundColor(Color.textSecondary)
             
             Text("No Follow-ups Recorded")
                 .font(.title2)
                 .fontWeight(.medium)
-                .foregroundColor(Color.themeTextPrimary)
+                .foregroundColor(Color.textPrimary)
             
             Text("Start tracking your interactions with this lead by recording your first follow-up.")
                 .font(.body)
-                .foregroundColor(Color.themeTextSecondary)
+                .foregroundColor(Color.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
@@ -142,7 +142,7 @@ struct FollowUpHistoryView: View {
                     Text("Record First Check-in")
                 }
                 .padding()
-                .background(Color.themePrimary)
+                .background(Color.electricViolet)
                 .foregroundColor(.white)
                 .cornerRadius(12)
             }
@@ -210,7 +210,7 @@ struct CheckInInteractiveRowView: View {
                         
                         Text(getCheckInType())
                             .font(.headline)
-                            .foregroundColor(Color.themeTextPrimary)
+                            .foregroundColor(Color.textPrimary)
                     }
                     
                     // Outcome - simple and always visible
@@ -232,10 +232,10 @@ struct CheckInInteractiveRowView: View {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(checkIn.checkInDate?.formatted(.dateTime.day().month()) ?? "")
                         .font(.caption)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                     Text(checkIn.checkInDate?.formatted(.dateTime.hour().minute()) ?? "")
                         .font(.caption2)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                 }
             }
             
@@ -243,7 +243,7 @@ struct CheckInInteractiveRowView: View {
             if let notes = checkIn.notes, !notes.isEmpty {
                 Text(notes)
                     .font(.body)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .padding(.top, 4)
                     .lineLimit(nil)
             }
@@ -252,19 +252,10 @@ struct CheckInInteractiveRowView: View {
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.themeSurface,
-                            Color.themeSurface.opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(Color.obsidianSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                 )
                 .shadow(color: Color.black.opacity(0.06), radius: 3, x: 0, y: 2)
         )
@@ -291,11 +282,11 @@ struct CheckInInteractiveRowView: View {
     
     private func getCheckInColor() -> Color {
         switch checkIn.checkInTypeEnum {
-        case .phoneCall: return Color.themePrimary
-        case .email: return Color.themePrimary
-        case .smsMessage: return Color.themeSuccess
-        case .inPersonMeeting: return Color.themeError
-        case .virtualMeeting: return Color.themeWarning
+        case .phoneCall: return Color.electricViolet
+        case .email: return Color.electricViolet
+        case .smsMessage: return Color.statusInterested
+        case .inPersonMeeting: return Color.statusNotInterested
+        case .virtualMeeting: return Color.statusNotHome
         case .doorKnock: return .brown
         }
     }
@@ -305,12 +296,12 @@ struct CheckInInteractiveRowView: View {
     }
 
     private func getOutcomeColor() -> Color {
-        guard let outcome = checkIn.outcomeEnum else { return Color.themeTextSecondary }
+        guard let outcome = checkIn.outcomeEnum else { return Color.textSecondary }
         switch outcome {
-        case .interested, .successful: return Color.themeSuccess
-        case .notInterested: return Color.themeError
-        case .callback, .reschedule, .noAnswer: return Color.themeWarning
-        case .converted: return Color.themePrimary
+        case .interested, .successful: return Color.statusInterested
+        case .notInterested: return Color.statusNotInterested
+        case .callback, .reschedule, .noAnswer: return Color.statusNotHome
+        case .converted: return Color.electricViolet
         }
     }
     
@@ -336,7 +327,7 @@ struct CheckInRowView: View {
                         
                         Text(getCheckInType())
                             .font(.headline)
-                            .foregroundColor(Color.themeTextPrimary)
+                            .foregroundColor(Color.textPrimary)
                     }
                     
                     // Outcome - simple and always visible
@@ -358,12 +349,12 @@ struct CheckInRowView: View {
                     // Date
                     Text(getFormattedDate())
                         .font(.caption)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                     
                     // Delete button
                     Button(action: onDelete) {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(Color.themeError)
+                            .foregroundColor(Color.statusNotInterested)
                             .font(.title3)
                     }
                     .buttonStyle(BorderlessButtonStyle())
@@ -374,7 +365,7 @@ struct CheckInRowView: View {
             if let notes = checkIn.notes, !notes.isEmpty {
                 Text(notes)
                     .font(.body)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .padding(.top, 4)
             }
         }
@@ -411,11 +402,11 @@ struct CheckInRowView: View {
     private func getCheckInColor() -> Color {
         let type = checkIn.checkInType ?? "door_knock"
         switch type {
-        case "phone_call": return Color.themePrimary
-        case "email": return Color.themePrimary
-        case "sms_message": return Color.themeSuccess
-        case "in_person_meeting": return Color.themeError
-        case "virtual_meeting": return Color.themeWarning
+        case "phone_call": return Color.electricViolet
+        case "email": return Color.electricViolet
+        case "sms_message": return Color.statusInterested
+        case "in_person_meeting": return Color.statusNotInterested
+        case "virtual_meeting": return Color.statusNotHome
         default: return .brown
         }
     }
@@ -444,11 +435,11 @@ struct CheckInRowView: View {
         let rawOutcome = checkIn.outcome ?? ""
 
         switch rawOutcome {
-        case "successful", "interested": return Color.themeSuccess
-        case "converted": return Color.themePrimary
-        case "no_answer", "reschedule", "callback": return Color.themeWarning
-        case "not_interested": return Color.themeError
-        default: return Color.themeTextSecondary
+        case "successful", "interested": return Color.statusInterested
+        case "converted": return Color.electricViolet
+        case "no_answer", "reschedule", "callback": return Color.statusNotHome
+        case "not_interested": return Color.statusNotInterested
+        default: return Color.textSecondary
         }
     }
     
@@ -518,7 +509,7 @@ struct SwipeToDeleteCheckInRow: View {
                     .foregroundColor(.white)
                     .frame(width: deleteButtonWidth)
                     .frame(maxHeight: .infinity)
-                    .background(Color.themeError)
+                    .background(Color.statusNotInterested)
                 }
                 .buttonStyle(PlainButtonStyle())
                 .transition(.move(edge: .trailing).combined(with: .opacity))

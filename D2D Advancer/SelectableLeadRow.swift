@@ -9,10 +9,10 @@ struct SelectableLeadRow: View {
         Button(action: onToggleSelection) {
             HStack(spacing: 12) {
                 Circle()
-                    .stroke(isSelected ? Color.themePrimary : Color.themeTextSecondary.opacity(0.5), lineWidth: 2)
+                    .stroke(isSelected ? Color.electricViolet : Color.obsidianBorder, lineWidth: 2)
                     .background(
                         Circle()
-                            .fill(isSelected ? Color.themePrimary : Color.clear)
+                            .fill(isSelected ? Color.electricViolet : Color.clear)
                     )
                     .frame(width: 24, height: 24)
                     .overlay(
@@ -27,7 +27,7 @@ struct SelectableLeadRow: View {
                     HStack {
                         Text(lead.displayName)
                             .font(.themeHeadline)
-                            .foregroundColor(Color.themeTextPrimary)
+                            .foregroundColor(Color.textPrimary)
                             .lineLimit(1)
 
                         Spacer()
@@ -38,12 +38,12 @@ struct SelectableLeadRow: View {
                     if let address = lead.address, !address.isEmpty {
                         HStack {
                             Image(systemName: "location.fill")
-                                .foregroundColor(Color.themeTextSecondary)
+                                .foregroundColor(Color.textSecondary)
                                 .font(.caption)
 
                             Text(address)
                                 .font(.subheadline)
-                                .foregroundColor(Color.themeTextSecondary)
+                                .foregroundColor(Color.textSecondary)
                                 .lineLimit(1)
                         }
                     }
@@ -52,24 +52,24 @@ struct SelectableLeadRow: View {
                         if let phone = lead.phone, !phone.isEmpty {
                             HStack(spacing: 4) {
                                 Image(systemName: "phone.fill")
-                                    .foregroundColor(Color.themePrimary)
+                                    .foregroundColor(Color.electricViolet)
                                     .font(.caption)
 
                                 Text(phone)
                                     .font(.caption)
-                                    .foregroundColor(Color.themePrimary)
+                                    .foregroundColor(Color.electricViolet)
                             }
                         }
 
                         if let email = lead.email, !email.isEmpty {
                             HStack(spacing: 4) {
                                 Image(systemName: "envelope.fill")
-                                    .foregroundColor(Color.themeSuccess)
+                                    .foregroundColor(Color.statusInterested)
                                     .font(.caption)
 
                                 Text(email)
                                     .font(.caption)
-                                    .foregroundColor(Color.themeSuccess)
+                                    .foregroundColor(Color.statusInterested)
                                     .lineLimit(1)
                             }
                         }
@@ -79,26 +79,26 @@ struct SelectableLeadRow: View {
                         if let followUpDate = lead.followUpDate {
                             HStack(spacing: 4) {
                                 Image(systemName: "clock.badge")
-                                    .foregroundColor(Color.themeWarning)
+                                    .foregroundColor(Color.statusNotHome)
                                     .font(.caption)
 
                                 Text(followUpDate, style: .date)
                                     .font(.caption)
-                                    .foregroundColor(Color.themeWarning)
+                                    .foregroundColor(Color.statusNotHome)
                             }
                         }
                     }
                 }
             }
-            .glassCard()
+            .surfaceCard()
             .overlay(
                 Group {
                     if isSelected {
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.themePrimary.opacity(0.1))
+                            .fill(Color.electricViolet.opacity(0.1))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.themePrimary, lineWidth: 2)
+                                    .stroke(Color.electricViolet, lineWidth: 2)
                             )
                             .allowsHitTesting(false)
                     }

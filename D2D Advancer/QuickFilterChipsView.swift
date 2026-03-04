@@ -36,8 +36,8 @@ struct QuickFilterChipsView: View {
                             Text("Clear")
                         }
                         .font(.themeCaption)
-                        .foregroundColor(Color.themeTextSecondary)
-                        .glassChip()
+                        .foregroundColor(Color.textSecondary)
+                        .obsidianChip()
                     }
 
                     // Presets menu
@@ -55,8 +55,8 @@ struct QuickFilterChipsView: View {
                             Text("Presets")
                         }
                         .font(.themeCaption)
-                        .foregroundColor(Color.themeTextSecondary)
-                        .glassChip()
+                        .foregroundColor(Color.textSecondary)
+                        .obsidianChip()
                     }
                 }
                 .padding(.horizontal, 8)
@@ -122,7 +122,7 @@ struct QuickFilterChipsView: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Color.themePrimary)
+                .background(Color.electricViolet)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 HStack(spacing: 6) {
@@ -130,8 +130,15 @@ struct QuickFilterChipsView: View {
                     Text(title)
                 }
                 .font(.themeCaption)
-                .foregroundColor(Color.themeTextSecondary)
-                .glassChip()
+                .foregroundColor(Color.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.obsidianSurface)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.obsidianBorder, lineWidth: 1)
+                )
             }
         }
         .buttonStyle(PlainButtonStyle())
