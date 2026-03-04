@@ -124,7 +124,7 @@ struct D2D_AdvancerApp: App {
                                 Text("⏰ Try again in: \(userAccountManager.formattedTimeRemaining)")
                                     .font(.caption)
                                     .fontWeight(.medium)
-                                    .foregroundColor(Color.themeWarning)
+                                    .foregroundColor(Color.statusNotHome)
                             }
                         }
                     } else {

@@ -39,12 +39,12 @@ struct Appointment: Identifiable, Equatable, Sendable {
         
         var color: Color {
             switch self {
-            case .consultation: return Color.themeSuccess
-            case .installation: return Color.themePrimary
-            case .inspection: return Color.themeWarning
-            case .maintenance: return Color.themeAccent
-            case .repair: return Color.themeError
-            case .followUp: return Color.themeTextSecondary
+            case .consultation: return Color.statusInterested
+            case .installation: return Color.electricViolet
+            case .inspection: return Color.statusNotHome
+            case .maintenance: return Color.electricViolet
+            case .repair: return Color.statusNotInterested
+            case .followUp: return Color.textSecondary
             }
         }
     }
@@ -58,11 +58,11 @@ struct Appointment: Identifiable, Equatable, Sendable {
         
         var color: Color {
             switch self {
-            case .scheduled: return Color.themePrimary
-            case .confirmed: return Color.themeSuccess
-            case .completed: return Color.themeSuccess
-            case .cancelled: return Color.themeError
-            case .rescheduled: return Color.themeWarning
+            case .scheduled: return Color.electricViolet
+            case .confirmed: return Color.statusInterested
+            case .completed: return Color.statusInterested
+            case .cancelled: return Color.statusNotInterested
+            case .rescheduled: return Color.statusNotHome
             }
         }
     }
