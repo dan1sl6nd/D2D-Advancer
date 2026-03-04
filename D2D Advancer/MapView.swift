@@ -179,18 +179,18 @@ struct MapView: View {
                         centerOnUserLocationWithAnimation()
                     }) {
                         Circle()
-                            .fill(.ultraThinMaterial)
+                            .fill(Color.obsidianSurface)
                             .frame(width: 44, height: 44)
                             .overlay(
                                 Image(systemName: "location.fill")
                                     .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(Color.themePrimary)
+                                    .foregroundColor(Color.textPrimary)
                             )
                             .overlay(
                                 Circle()
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                                    .stroke(Color.obsidianBorder, lineWidth: 1)
                             )
-                            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                     }
                     .padding(.trailing, 16)
                     .padding(.top, 60)
@@ -214,18 +214,18 @@ struct MapView: View {
                                 }
                             }) {
                                 Circle()
-                                    .fill(.ultraThinMaterial)
+                                    .fill(Color.obsidianSurface)
                                     .frame(width: 44, height: 44)
                                     .overlay(
                                         Image(systemName: mapTypeIcon)
                                             .font(.system(size: 18, weight: .semibold))
-                                            .foregroundColor(Color.themePrimary)
+                                            .foregroundColor(Color.electricViolet)
                                     )
                                     .overlay(
                                         Circle()
-                                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                                            .stroke(Color.obsidianBorder, lineWidth: 1)
                                     )
-                                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                             }
                             .transition(.scale.combined(with: .opacity))
 
@@ -238,7 +238,7 @@ struct MapView: View {
                                 }
                             }) {
                                 Circle()
-                                    .fill(.ultraThinMaterial)
+                                    .fill(Color.obsidianSurface)
                                     .frame(width: 44, height: 44)
                                     .overlay(
                                         Image(systemName: "hand.raised.fill")
@@ -247,9 +247,9 @@ struct MapView: View {
                                     )
                                     .overlay(
                                         Circle()
-                                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                                            .stroke(Color.obsidianBorder, lineWidth: 1)
                                     )
-                                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                                     .premiumLock()
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -264,7 +264,7 @@ struct MapView: View {
                                 }
                             }) {
                                 Circle()
-                                    .fill(.ultraThinMaterial)
+                                    .fill(Color.obsidianSurface)
                                     .frame(width: 44, height: 44)
                                     .overlay(
                                         Image(systemName: "house.slash.fill")
@@ -273,9 +273,9 @@ struct MapView: View {
                                     )
                                     .overlay(
                                         Circle()
-                                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                                            .stroke(Color.obsidianBorder, lineWidth: 1)
                                     )
-                                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                                     .premiumLock()
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -291,18 +291,18 @@ struct MapView: View {
                                 }
                             }) {
                                 Circle()
-                                    .fill(.ultraThinMaterial)
+                                    .fill(Color.obsidianSurface)
                                     .frame(width: 44, height: 44)
                                     .overlay(
                                         Image(systemName: "plus")
                                             .font(.system(size: 18, weight: .semibold))
-                                            .foregroundColor(Color.themePrimary)
+                                            .foregroundColor(Color.electricViolet)
                                     )
                                     .overlay(
                                         Circle()
-                                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                                            .stroke(Color.obsidianBorder, lineWidth: 1)
                                     )
-                                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                                     .premiumLock()
                             }
                             .transition(.scale.combined(with: .opacity))
@@ -317,7 +317,7 @@ struct MapView: View {
                             Circle()
                                 .fill(
                                     LinearGradient(
-                                        colors: [Color.themePrimary, Color.themeSecondary],
+                                        colors: [Color.electricViolet, Color.electricVioletDeep],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
@@ -329,7 +329,7 @@ struct MapView: View {
                                         .foregroundColor(.white)
                                         .rotationEffect(.degrees(isMapMenuExpanded ? 90 : 0))
                                 )
-                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 8, x: 0, y: 4)
+                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 8, x: 0, y: 4)
                         }
                     }
                     .padding(.trailing, 16)
@@ -372,196 +372,100 @@ struct MapView: View {
     }
     
     private var deniedLocationView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "location.slash")
-                    .foregroundColor(Color.themeError)
-                    .font(.title2)
+        VStack(spacing: 16) {
+            Image(systemName: "location.slash")
+                .font(.system(size: 32))
+                .foregroundColor(Color.statusNotInterested)
 
-                Text("Location Access")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
+            VStack(spacing: 8) {
+                Text("Location Access Denied")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(Color.textPrimary)
 
-                Spacer()
+                Text("Enable location access in Settings to use map features.")
+                    .font(.system(size: 15))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(Color.textSecondary)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
 
-            VStack(spacing: 20) {
-                // Status Display
-                VStack(spacing: 16) {
-                    Circle()
-                        .fill(Color.themeError.opacity(0.1))
-                        .frame(width: 80, height: 80)
-                        .overlay(
-                            Image(systemName: "location.slash")
-                                .font(.system(size: 32))
-                                .foregroundColor(Color.themeError)
-                        )
-
-                    VStack(spacing: 8) {
-                        Text("Location Access Denied")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-
-                        Text("To use map features and navigate to leads, please enable location access in Settings.")
-                            .font(.body)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
-                    }
+            Button("Open Settings") {
+                if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settingsUrl)
                 }
-
-                // Action Button
-                Button("Open Settings") {
-                    if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(settingsUrl)
-                    }
-                }
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Color.themeError)
-                .cornerRadius(12)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
+            .buttonStyle(ObsidianPrimaryButtonStyle())
         }
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
+        .padding(20)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.obsidianBorder, lineWidth: 1)
+        )
         .padding()
     }
     
     private var requestingLocationView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "location.badge.questionmark")
-                    .foregroundColor(Color.themePrimary)
-                    .font(.title2)
+        VStack(spacing: 16) {
+            Image(systemName: "location.badge.questionmark")
+                .font(.system(size: 32))
+                .foregroundColor(Color.electricViolet)
 
-                Text("Location Permission")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
+            VStack(spacing: 8) {
+                Text("Location Permission Required")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(Color.textPrimary)
 
-                Spacer()
+                Text("D2D Advancer needs location access to show your position on the map.")
+                    .font(.system(size: 15))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(Color.textSecondary)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
 
-            VStack(spacing: 20) {
-                // Status Display
-                VStack(spacing: 16) {
-                    Circle()
-                        .fill(Color.themePrimary.opacity(0.1))
-                        .frame(width: 80, height: 80)
-                        .overlay(
-                            Image(systemName: "location.badge.questionmark")
-                                .font(.system(size: 32))
-                                .foregroundColor(Color.themePrimary)
-                        )
-
-                    VStack(spacing: 8) {
-                        Text("Location Permission Required")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-
-                        Text("D2D Advancer needs location access to show your position on the map and help navigate to leads.")
-                            .font(.body)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
+            Button("Grant Location Access") {
+                locationManager.requestLocationPermission()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    if locationManager.authorizationStatus == .notDetermined {
+                        locationManager.requestLocationPermission()
                     }
                 }
-
-                // Action Button
-                Button("Grant Location Access") {
-                    print("Location permission button tapped")
-                    locationManager.requestLocationPermission()
-
-                    // Force immediate request if still not determined
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if locationManager.authorizationStatus == .notDetermined {
-                            locationManager.requestLocationPermission()
-                        }
-                    }
-                }
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Color.themePrimary)
-                .cornerRadius(12)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
+            .buttonStyle(ObsidianPrimaryButtonStyle())
         }
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
+        .padding(20)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.obsidianBorder, lineWidth: 1)
+        )
         .padding()
     }
-    
+
     private var activeLocationView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "location.fill")
-                    .foregroundColor(Color.themeSuccess)
-                    .font(.title2)
+        VStack(spacing: 16) {
+            Image(systemName: "location.fill")
+                .font(.system(size: 32))
+                .foregroundColor(Color.statusInterested)
 
-                Text("Location Active")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
+            VStack(spacing: 8) {
+                Text("Location Tracking Active")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(Color.statusInterested)
 
-                Spacer()
+                Text("Long press map to add lead at location")
+                    .font(.system(size: 15))
+                    .foregroundColor(Color.textSecondary)
+                    .multilineTextAlignment(.center)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-
-            VStack(spacing: 20) {
-                // Status Display
-                VStack(spacing: 16) {
-                    Circle()
-                        .fill(Color.themeSuccess.opacity(0.1))
-                        .frame(width: 80, height: 80)
-                        .overlay(
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(Color.themeSuccess)
-                        )
-
-                    VStack(spacing: 8) {
-                        Text("Location Tracking Active")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(Color.themeSuccess)
-
-                        VStack(spacing: 4) {
-                            Text("Long press map to add lead at specific location")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-
-                            Text("Use controls above for map view and navigation")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
         }
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
+        .padding(20)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.obsidianBorder, lineWidth: 1)
+        )
         .padding()
     }
     

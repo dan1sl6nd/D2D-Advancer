@@ -38,9 +38,9 @@ struct OnboardingProfile: Codable, Equatable {
 
         var accent: Color {
             switch self {
-            case .organizePipeline: return .themePrimary
-            case .bookMoreAppointments: return .themeWarning
-            case .territoryPlanning: return .themeSuccess
+            case .organizePipeline: return .electricViolet
+            case .bookMoreAppointments: return .statusNotHome
+            case .territoryPlanning: return .statusInterested
             }
         }
     }
@@ -78,9 +78,9 @@ struct OnboardingProfile: Codable, Equatable {
 
         var accent: Color {
             switch self {
-            case .territoryInsights: return .themeSuccess
-            case .automatedReminders: return .themeWarning
-            case .leadOrganization: return .themePrimary
+            case .territoryInsights: return .statusInterested
+            case .automatedReminders: return .statusNotHome
+            case .leadOrganization: return .electricViolet
             }
         }
     }
@@ -474,12 +474,12 @@ struct OnboardingView: View {
 
             VStack(spacing: 8) {
                 Text(onboardingManager.currentPage.title)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(size: 28, weight: .bold))
                     .foregroundColor(.white)
                     .multilineTextAlignment(.center)
 
                 Text(onboardingManager.currentPage.subtitle)
-                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .font(.system(size: 16, weight: .regular))
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
@@ -511,7 +511,7 @@ struct OnboardingView: View {
         case .focusAreas:
             VStack(alignment: .leading, spacing: 16) {
                 Text("Select at least one feature you want to use")
-                    .font(.system(size: 14, design: .rounded))
+                    .font(.system(size: 14))
                     .foregroundColor(.white.opacity(0.6))
 
                 VStack(spacing: 16) {
@@ -536,7 +536,7 @@ struct OnboardingView: View {
                         icon: style.icon,
                         title: style.title,
                         subtitle: style.subtitle,
-                        accent: .themePrimary,
+                        accent: .electricViolet,
                         isSelected: onboardingManager.profile.workflowStyle == style
                     ) {
                         onboardingManager.selectWorkflowStyle(style)
@@ -561,7 +561,7 @@ struct OnboardingView: View {
                 RoundedRectangle(cornerRadius: 24)
                     .fill(
                         LinearGradient(
-                            colors: [Color.themePrimary.opacity(0.18), Color.themePrimary.opacity(0.18)],
+                            colors: [Color.electricViolet.opacity(0.18), Color.electricViolet.opacity(0.18)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -571,7 +571,7 @@ struct OnboardingView: View {
                         Image(systemName: "sparkles")
                             .font(.system(size: 72))
                             .foregroundStyle(LinearGradient(
-                                colors: [Color.themePrimary, Color.themePrimary],
+                                colors: [Color.electricViolet, Color.electricViolet],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ))
@@ -606,7 +606,7 @@ struct OnboardingView: View {
                 RoundedRectangle(cornerRadius: 24)
                     .fill(
                         LinearGradient(
-                            colors: [Color.themeSuccess.opacity(0.18), Color.themePrimary.opacity(0.18)],
+                            colors: [Color.statusInterested.opacity(0.18), Color.electricViolet.opacity(0.18)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -616,7 +616,7 @@ struct OnboardingView: View {
                         Image(systemName: "location.circle.fill")
                             .font(.system(size: 72))
                             .foregroundStyle(LinearGradient(
-                                colors: [Color.themeSuccess, Color.themePrimary],
+                                colors: [Color.statusInterested, Color.electricViolet],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ))
@@ -644,7 +644,7 @@ struct OnboardingView: View {
             }
 
             Text("You can change this in Settings at any time.")
-                .font(.system(size: 13, design: .rounded))
+                .font(.system(size: 13))
                 .foregroundColor(.white.opacity(0.5))
                 .padding(.top, 8)
         }
@@ -656,7 +656,7 @@ struct OnboardingView: View {
                 RoundedRectangle(cornerRadius: 24)
                     .fill(
                         LinearGradient(
-                            colors: [Color.themePrimary.opacity(0.18), Color.pink.opacity(0.18)],
+                            colors: [Color.electricViolet.opacity(0.18), Color.pink.opacity(0.18)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -666,7 +666,7 @@ struct OnboardingView: View {
                         Image(systemName: "bell.badge.fill")
                             .font(.system(size: 72))
                             .foregroundStyle(LinearGradient(
-                                colors: [Color.themePrimary, Color.pink],
+                                colors: [Color.electricViolet, Color.pink],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ))
@@ -694,7 +694,7 @@ struct OnboardingView: View {
             }
 
             Text("You can customize notification preferences in Settings.")
-                .font(.system(size: 13, design: .rounded))
+                .font(.system(size: 13))
                 .foregroundColor(.white.opacity(0.5))
                 .padding(.top, 8)
         }
@@ -743,7 +743,7 @@ struct OnboardingView: View {
             }) {
                 HStack {
                     Text(buttonTitle)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: 18, weight: .semibold))
 
                     Image(systemName: buttonIcon)
                         .font(.system(size: 20, weight: .semibold))
@@ -772,7 +772,7 @@ struct OnboardingView: View {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 13, weight: .semibold))
                         Text("Back")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .font(.system(size: 15, weight: .semibold))
                     }
                     .foregroundColor(.white.opacity(0.9))
                     .frame(maxWidth: .infinity)
@@ -819,11 +819,11 @@ struct OnboardingView: View {
     private var buttonColor: (Color, Color) {
         switch onboardingManager.currentPage {
         case .locationPermission:
-            return (Color.themeSuccess, Color.themePrimary)
+            return (Color.statusInterested, Color.electricViolet)
         case .notificationPermission:
-            return (Color.themePrimary, Color.pink)
+            return (Color.electricViolet, Color.pink)
         default:
-            return (Color.themePrimary, Color.themePrimary)
+            return (Color.electricViolet, Color.electricViolet)
         }
     }
 
@@ -930,12 +930,12 @@ private struct OnboardingProgressIndicator: View {
                     .fill(
                         index <= currentIndex
                         ? LinearGradient(
-                            colors: [Color.themePrimary, Color.themePrimary],
+                            colors: [Color.electricViolet, Color.electricViolet],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                         : LinearGradient(
-                            colors: [Color.themeTextSecondary.opacity(0.25), Color.themeTextSecondary.opacity(0.18)],
+                            colors: [Color.textSecondary.opacity(0.25), Color.textSecondary.opacity(0.18)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
@@ -970,11 +970,11 @@ private struct SelectionCard: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
 
                     Text(subtitle)
-                        .font(.system(size: 14, design: .rounded))
+                        .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.7))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1050,11 +1050,11 @@ private struct MultiSelectionCard: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
 
                     Text(subtitle)
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.system(size: 13))
                         .foregroundColor(.white.opacity(0.7))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1086,20 +1086,20 @@ private struct FeatureHighlightRow: View {
         HStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(Color.themePrimary.opacity(0.2))
+                    .fill(Color.electricViolet.opacity(0.2))
                     .frame(width: 48, height: 48)
                 Image(systemName: icon)
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
             }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
 
                 Text(subtitle)
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.system(size: 13))
                     .foregroundColor(.white.opacity(0.7))
             }
 
@@ -1128,7 +1128,7 @@ private struct SummaryCard: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color.themePrimary.opacity(0.25), Color.themePrimary.opacity(0.2)],
+                            colors: [Color.electricViolet.opacity(0.25), Color.electricViolet.opacity(0.2)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -1138,18 +1138,18 @@ private struct SummaryCard: View {
                 Image(systemName: icon)
                     .font(.system(size: 40, weight: .semibold))
                     .foregroundStyle(LinearGradient(
-                        colors: [Color.themePrimary, Color.themePrimary],
+                        colors: [Color.electricViolet, Color.electricViolet],
                         startPoint: .top,
                         endPoint: .bottom
                     ))
             }
 
             Text(title)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.white)
 
             Text(subtitle)
-                .font(.system(size: 15, design: .rounded))
+                .font(.system(size: 15))
                 .foregroundColor(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
@@ -1181,7 +1181,7 @@ private struct SummarySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title)
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(.white.opacity(0.6))
 
             ForEach(items) { item in
@@ -1215,16 +1215,16 @@ private struct SummaryItemView: View {
         HStack(alignment: .top, spacing: 16) {
             Image(systemName: item.icon)
                 .font(.system(size: 22))
-                .foregroundColor(Color.themePrimary)
+                .foregroundColor(Color.electricViolet)
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.white)
 
                 Text(item.subtitle)
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.system(size: 13))
                     .foregroundColor(.white.opacity(0.7))
             }
 

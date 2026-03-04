@@ -60,7 +60,7 @@ struct SeasonalDatePickerView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
@@ -88,14 +88,14 @@ struct SeasonalDatePickerView: View {
                                 .fill(
                                     LinearGradient(
                                         gradient: Gradient(colors: [
-                                            hasSelection ? Color.themePrimary : Color.themeTextSecondary,
-                                            hasSelection ? Color.themePrimary.opacity(0.8) : Color.themeTextSecondary.opacity(0.8)
+                                            hasSelection ? Color.electricViolet : Color.textSecondary,
+                                            hasSelection ? Color.electricViolet.opacity(0.8) : Color.textSecondary.opacity(0.8)
                                         ]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: hasSelection ? Color.themePrimary.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
+                                .shadow(color: hasSelection ? Color.electricViolet.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
                         )
                     }
                     .disabled(!hasSelection)
@@ -104,7 +104,7 @@ struct SeasonalDatePickerView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color.themeBackground)
+                        .fill(Color.obsidianBlack)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -119,7 +119,7 @@ struct SeasonalDatePickerView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "calendar.badge.clock")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
 
                 Text("Choose Follow-Up Time")
@@ -132,21 +132,21 @@ struct SeasonalDatePickerView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Select a seasonal period for your follow-up, and we'll automatically choose a date that matches today's date.")
                     .font(.subheadline)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
 
                 HStack {
                     Image(systemName: "info.circle.fill")
-                        .foregroundColor(Color.themePrimary)
+                        .foregroundColor(Color.electricViolet)
                         .font(.caption)
 
                     Text("Dates are calculated to match \(formattedCurrentDay())")
                         .font(.caption)
-                        .foregroundColor(Color.themePrimary)
+                        .foregroundColor(Color.electricViolet)
                 }
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -155,7 +155,7 @@ struct SeasonalDatePickerView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "leaf.fill")
-                    .foregroundColor(Color.themeSuccess)
+                    .foregroundColor(Color.statusInterested)
                     .font(.title2)
 
                 Text("Seasonal Presets")
@@ -179,7 +179,7 @@ struct SeasonalDatePickerView: View {
             .clipped()
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -188,7 +188,7 @@ struct SeasonalDatePickerView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "calendar")
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
 
                 Text("Custom Date")
@@ -198,7 +198,7 @@ struct SeasonalDatePickerView: View {
                 Spacer()
 
                 Toggle("", isOn: $useCustomDate)
-                    .toggleStyle(SwitchToggleStyle(tint: Color.themePrimary))
+                    .toggleStyle(SwitchToggleStyle(tint: Color.electricViolet))
                     .onChange(of: useCustomDate) { _, newValue in
                         if newValue {
                             selectedPreset = nil
@@ -213,7 +213,7 @@ struct SeasonalDatePickerView: View {
             }
         }
         .padding(20)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -253,12 +253,12 @@ struct SeasonalPresetCard: View {
                     Text(preset.season.rawValue)
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundColor(isSelected ? .white : Color.themeTextPrimary)
+                        .foregroundColor(isSelected ? .white : Color.textPrimary)
                         .lineLimit(1)
 
                     Text("\(preset.year)")
                         .font(.caption)
-                        .foregroundColor(isSelected ? .white.opacity(0.8) : Color.themeTextSecondary)
+                        .foregroundColor(isSelected ? .white.opacity(0.8) : Color.textSecondary)
                 }
                 
                 // Calculated Date
@@ -266,12 +266,12 @@ struct SeasonalPresetCard: View {
                     Text(formattedDate(preset.calculatedDate))
                         .font(.caption2)
                         .fontWeight(.medium)
-                        .foregroundColor(isSelected ? .white.opacity(0.9) : Color.themeTextSecondary)
+                        .foregroundColor(isSelected ? .white.opacity(0.9) : Color.textSecondary)
                         .lineLimit(1)
 
                     Text(formattedTime(preset.calculatedDate))
                         .font(.caption2)
-                        .foregroundColor(isSelected ? .white.opacity(0.7) : Color.themeTextSecondary)
+                        .foregroundColor(isSelected ? .white.opacity(0.7) : Color.textSecondary)
                         .lineLimit(1)
                 }
             }
@@ -285,7 +285,7 @@ struct SeasonalPresetCard: View {
                     .fill(
                         isSelected ?
                         colorForSeason(preset.season) :
-                        Color.themeSurface
+                        Color.obsidianSurface
                     )
             )
             .overlay(
@@ -293,7 +293,7 @@ struct SeasonalPresetCard: View {
                     .stroke(
                         isSelected ?
                         colorForSeason(preset.season) :
-                        Color.themeBorder.opacity(0.3),
+                        Color.obsidianBorder.opacity(0.3),
                         lineWidth: isSelected ? 2 : 1
                     )
             )

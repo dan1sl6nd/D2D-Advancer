@@ -118,7 +118,7 @@ struct AppointmentFormView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
@@ -146,14 +146,14 @@ struct AppointmentFormView: View {
                                 .fill(
                                     LinearGradient(
                                         gradient: Gradient(colors: [
-                                            title.isEmpty || isProcessing ? Color.themeTextSecondary : Color.themePrimary,
-                                            title.isEmpty || isProcessing ? Color.themeTextSecondary.opacity(0.8) : Color.themePrimary.opacity(0.8)
+                                            title.isEmpty || isProcessing ? Color.textSecondary : Color.electricViolet,
+                                            title.isEmpty || isProcessing ? Color.textSecondary.opacity(0.8) : Color.electricViolet.opacity(0.8)
                                         ]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: title.isEmpty || isProcessing ? .clear : Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: title.isEmpty || isProcessing ? .clear : Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                     .disabled(title.isEmpty || isProcessing)
@@ -162,7 +162,7 @@ struct AppointmentFormView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color.themeBackground)
+                        .fill(Color.obsidianElevated)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }

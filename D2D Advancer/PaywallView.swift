@@ -12,17 +12,9 @@ struct PaywallView: View {
 
     var body: some View {
         ZStack {
-            // Modern gradient background
-            LinearGradient(
-                colors: [
-                    Color(red: 0.1, green: 0.1, blue: 0.2),
-                    Color(red: 0.15, green: 0.1, blue: 0.25),
-                    Color(red: 0.05, green: 0.05, blue: 0.1)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // Obsidian background
+            Color.obsidianBlack
+                .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 20) {
@@ -110,11 +102,11 @@ struct PaywallView: View {
 
             VStack(spacing: 6) {
                 Text("Welcome to D2D Advancer")
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .font(.system(size: 26, weight: .bold))
                     .foregroundColor(.white)
 
                 Text("Start Your Free Trial Today")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(
                         LinearGradient(
                             colors: [Color.orange.opacity(0.9), Color.yellow.opacity(0.9)],
@@ -174,7 +166,7 @@ struct PaywallView: View {
     private var benefitsSection: some View {
         VStack(spacing: 16) {
             Text("Everything You'll Get")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -227,16 +219,16 @@ struct PaywallView: View {
 
                 HStack(spacing: 8) {
                     Text("4.9")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundColor(.white)
 
                     Text("out of 5")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.white.opacity(0.6))
                 }
 
                 Text("average rating")
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.5))
             }
             .frame(maxWidth: .infinity)
@@ -258,7 +250,7 @@ struct PaywallView: View {
             )
 
             Text(tagline)
-                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .font(.system(size: 15, weight: .medium))
                 .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -272,7 +264,7 @@ struct PaywallView: View {
 
         return VStack(spacing: 16) {
             Text("Loved by Sales Professionals")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -295,7 +287,7 @@ struct PaywallView: View {
 
         return VStack(spacing: 16) {
             Text("Common Questions")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -329,16 +321,16 @@ struct PaywallView: View {
                             ProgressView()
                                 .tint(.white)
                             Text("Processing...")
-                                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                .font(.system(size: 17, weight: .semibold))
                         } else {
                             if selectedPlan == .weekly {
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 18, weight: .semibold))
                                 VStack(spacing: 2) {
                                     Text("Start Free Trial")
-                                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                                        .font(.system(size: 17, weight: .bold))
                                     Text("3 days free, then $9.99/week")
-                                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                                        .font(.system(size: 11, weight: .medium))
                                         .opacity(0.9)
                                 }
                             } else {
@@ -346,9 +338,9 @@ struct PaywallView: View {
                                     .font(.system(size: 18, weight: .semibold))
                                 VStack(spacing: 2) {
                                     Text("Get Started")
-                                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                                        .font(.system(size: 17, weight: .bold))
                                     Text("$36.99/year - Best Value")
-                                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                                        .font(.system(size: 11, weight: .medium))
                                         .opacity(0.9)
                                 }
                             }
@@ -375,7 +367,7 @@ struct PaywallView: View {
                 Button("Restore Purchases") {
                     restorePurchases()
                 }
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.white.opacity(0.7))
 
                 // Legal info
@@ -383,19 +375,19 @@ struct PaywallView: View {
                     if selectedPlan == .weekly {
                         VStack(spacing: 2) {
                             Text("No payment required now")
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(.white.opacity(0.8))
                             Text("Cancel anytime during your 3-day trial at no charge")
-                                .font(.system(size: 9, design: .rounded))
+                                .font(.system(size: 9))
                                 .foregroundColor(.white.opacity(0.6))
                         }
                     } else {
                         VStack(spacing: 2) {
                             Text("Get full access immediately")
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(.white.opacity(0.8))
                             Text("Save 93% compared to weekly • Cancel anytime")
-                                .font(.system(size: 9, design: .rounded))
+                                .font(.system(size: 9))
                                 .foregroundColor(.white.opacity(0.6))
                         }
                     }
@@ -403,13 +395,13 @@ struct PaywallView: View {
                     HStack(spacing: 8) {
                         Button(action: { openPrivacyPolicy() }) {
                             Text("Privacy")
-                                .font(.system(size: 9, design: .rounded))
+                                .font(.system(size: 9))
                                 .foregroundColor(.white.opacity(0.5))
                         }
                         Text("•").foregroundColor(.white.opacity(0.3)).font(.system(size: 8))
                         Button(action: { openTermsOfUse() }) {
                             Text("Terms")
-                                .font(.system(size: 9, design: .rounded))
+                                .font(.system(size: 9))
                                 .foregroundColor(.white.opacity(0.5))
                         }
                     }
@@ -418,16 +410,7 @@ struct PaywallView: View {
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 20)
-            .background(
-                Color(red: 0.08, green: 0.08, blue: 0.12)
-                    .overlay(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.03), Color.clear],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            )
+            .background(Color.obsidianBlack)
         }
     }
 
@@ -483,7 +466,7 @@ struct CompactPricingCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 // Badge
                 Text(badge)
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
@@ -499,17 +482,17 @@ struct CompactPricingCard: View {
                 // Price
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(price)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundColor(.white)
 
                     Text(period)
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.white.opacity(0.6))
                 }
 
                 // Subtitle
                 Text(subtitle)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white.opacity(0.85))
             }
 
@@ -580,7 +563,7 @@ struct ModernPricingCard: View {
             // Badge
             HStack {
                 Text(badge)
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -611,17 +594,17 @@ struct ModernPricingCard: View {
             // Price
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(price)
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .font(.system(size: 36, weight: .bold))
                     .foregroundColor(.white)
 
                 Text(period)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white.opacity(0.6))
             }
 
             // Subtitle
             Text(subtitle)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(.white.opacity(0.9))
 
             // Features
@@ -633,7 +616,7 @@ struct ModernPricingCard: View {
                             .foregroundColor(badgeGradient.first)
 
                         Text(feature)
-                            .font(.system(size: 13, design: .rounded))
+                            .font(.system(size: 13))
                             .foregroundColor(.white.opacity(0.75))
                     }
                 }
@@ -689,7 +672,7 @@ struct ModernBenefitRow: View {
             }
 
             Text(title)
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(.white)
 
             Spacer()
@@ -710,7 +693,7 @@ struct ModernTestimonialCard: View {
         VStack(alignment: .leading, spacing: 12) {
             // Quote
             Text("\"\(quote)\"")
-                .font(.system(size: 14, design: .rounded))
+                .font(.system(size: 14))
                 .foregroundColor(.white.opacity(0.85))
                 .lineSpacing(4)
 
@@ -720,7 +703,7 @@ struct ModernTestimonialCard: View {
                     .font(.system(size: 24))
 
                 Text(name)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white.opacity(0.7))
 
                 Spacer()
@@ -761,7 +744,7 @@ struct ModernFAQRow: View {
             }) {
                 HStack {
                     Text(question)
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
                         .multilineTextAlignment(.leading)
 
@@ -775,7 +758,7 @@ struct ModernFAQRow: View {
 
             if isExpanded {
                 Text(answer)
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.system(size: 13))
                     .foregroundColor(.white.opacity(0.7))
                     .lineSpacing(4)
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -832,7 +815,7 @@ struct SimplePricingCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text(badge)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -844,7 +827,7 @@ struct SimplePricingCard: View {
 
                 HStack(alignment: .firstTextBaseline) {
                     Text(title)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
 
                     Spacer()
@@ -852,19 +835,19 @@ struct SimplePricingCard: View {
                     VStack(alignment: .trailing, spacing: 4) {
                         if let originalPrice = originalPrice {
                             Text(originalPrice)
-                                .font(.system(size: 12, design: .rounded))
+                                .font(.system(size: 12))
                                 .foregroundColor(.white.opacity(0.5))
                                 .strikethrough()
                         }
 
                         Text(price)
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundColor(.white)
                     }
                 }
 
                 Text(subtitle)
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.7))
             }
         }
@@ -890,10 +873,10 @@ struct BenefitRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white)
                 Text(subtitle)
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.7))
             }
 
@@ -916,13 +899,13 @@ struct TestimonialCard: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(text)
-                    .font(.system(size: 14, design: .rounded))
+                    .font(.system(size: 14))
                     .foregroundColor(.white)
                     .italic()
 
                 HStack {
                     Text(name)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.white.opacity(0.8))
 
                     HStack(spacing: 2) {
@@ -937,7 +920,7 @@ struct TestimonialCard: View {
 
             Spacer()
         }
-        .glassCard(padding: 12)
+        .surfaceCard(padding: 12)
     }
 }
 
@@ -955,7 +938,7 @@ struct FAQRow: View {
             }) {
                 HStack {
                     Text(question)
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.white)
                         .multilineTextAlignment(.leading)
 
@@ -970,7 +953,7 @@ struct FAQRow: View {
 
             if isExpanded {
                 Text(answer)
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.8))
                     .padding(.horizontal)
                     .padding(.bottom)
@@ -978,21 +961,21 @@ struct FAQRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .glassCard(padding: 0)
+        .surfaceCard(padding: 0)
     }
 }
 
-// Glass Card Modifier
+// Surface Card Modifier
 extension View {
-    func glassCard(padding: CGFloat) -> some View {
+    func surfaceCard(padding: CGFloat) -> some View {
         self
             .padding(padding)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.white.opacity(0.08))
+                    .fill(Color.obsidianSurface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            .stroke(Color.obsidianBorder, lineWidth: 1)
                     )
             )
     }

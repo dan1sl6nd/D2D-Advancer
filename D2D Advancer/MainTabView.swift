@@ -24,26 +24,30 @@ struct MainTabView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            // Custom tab bar at the bottom
+            .animation(.easeInOut(duration: 0.2), value: router.selectedTab)
+
+            // Obsidian tab bar
             HStack(spacing: 0) {
                 TabBarButton(
                     title: "Map",
-                    icon: "map.fill",
+                    icon: "map",
+                    selectedIcon: "map.fill",
                     isSelected: router.selectedTab == 0,
                     action: { router.selectedTab = 0 }
                 )
 
                 TabBarButton(
                     title: "Leads",
-                    icon: "person.3.fill",
+                    icon: "person.2",
+                    selectedIcon: "person.2.fill",
                     isSelected: router.selectedTab == 1,
                     action: { router.selectedTab = 1 }
                 )
 
                 TabBarButton(
                     title: "Follow Up",
-                    icon: "calendar.badge.clock",
+                    icon: "bell",
+                    selectedIcon: "bell.fill",
                     isSelected: router.selectedTab == 2,
                     action: { router.selectedTab = 2 }
                 )
@@ -51,28 +55,29 @@ struct MainTabView: View {
                 TabBarButton(
                     title: "Appts",
                     icon: "calendar",
+                    selectedIcon: "calendar.fill" ,
                     isSelected: router.selectedTab == 3,
                     action: { router.selectedTab = 3 }
                 )
 
                 TabBarButton(
                     title: "More",
-                    icon: "gearshape.fill",
+                    icon: "ellipsis.circle",
+                    selectedIcon: "ellipsis.circle.fill",
                     isSelected: router.selectedTab == 4,
                     action: { router.selectedTab = 4 }
                 )
             }
-            .background(.ultraThinMaterial)
+            .padding(.top, 8)
+            .background(Color.obsidianBlack)
             .overlay(
-                LinearGradient(
-                    colors: [Color.themeBorder, Color.themeBorder.opacity(0)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(height: 0.5),
+                Rectangle()
+                    .fill(Color.obsidianBorder)
+                    .frame(height: 1),
                 alignment: .top
             )
         }
+        .background(Color.obsidianBlack)
         .navigationViewStyle(StackNavigationViewStyle())
         .customThemed()
         .accessibilityElement(children: .contain)
@@ -131,34 +136,31 @@ struct MainTabView: View {
 struct TabBarButton: View {
     let title: String
     let icon: String
+    let selectedIcon: String
     let isSelected: Bool
     let action: () -> Void
 
-    init(title: String, icon: String, isSelected: Bool, action: @escaping () -> Void) {
-        self.title = title
-        self.icon = icon
-        self.isSelected = isSelected
-        self.action = action
-    }
-
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            action()
+        }) {
             VStack(spacing: 4) {
-                Image(systemName: icon)
+                Image(systemName: isSelected ? selectedIcon : icon)
                     .font(.system(size: 20))
                 Text(title)
-                    .font(.themeSmall)
+                    .font(.system(size: 11, weight: .medium))
 
-                // Pill indicator under the selected tab
+                // Capsule underline for selected tab
                 Capsule()
-                    .fill(Color.themePrimary)
+                    .fill(Color.electricViolet)
                     .frame(width: 20, height: 2)
                     .opacity(isSelected ? 1 : 0)
             }
-            .foregroundColor(isSelected ? Color.themePrimary : Color.themeTextSecondary)
+            .foregroundColor(isSelected ? Color.electricViolet : Color.textMuted)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .animation(.spring(response: 0.3), value: isSelected)
+            .padding(.vertical, 4)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
         }
         .buttonStyle(PlainButtonStyle())
     }

@@ -84,13 +84,13 @@ struct LeadDetailView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.themeSurface)
-                                .shadow(color: Color.themeShadow, radius: 2, x: 0, y: 1)
+                                .fill(Color.obsidianSurface)
+                                .shadow(color: Color.black, radius: 2, x: 0, y: 1)
                         )
                     }
                     
@@ -111,12 +111,12 @@ struct LeadDetailView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.themePrimary, Color.themeSecondary]),
+                                        gradient: Gradient(colors: [Color.electricViolet, Color.electricVioletDeep]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                 }
@@ -124,8 +124,8 @@ struct LeadDetailView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color.themeBackground)
-                        .shadow(color: Color.themeShadow, radius: 8, x: 0, y: -2)
+                        .fill(Color.obsidianBlack)
+                        .shadow(color: Color.black, radius: 8, x: 0, y: -2)
                 )
             } else {
                 // Show Edit and Delete buttons when not editing
@@ -148,12 +148,12 @@ struct LeadDetailView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.themeError, Color.themeError.opacity(0.8)]),
+                                        gradient: Gradient(colors: [Color.statusNotInterested, Color.statusNotInterested.opacity(0.8)]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: Color.themeError.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.statusNotInterested.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                     
@@ -174,12 +174,12 @@ struct LeadDetailView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.themePrimary, Color.themeSecondary]),
+                                        gradient: Gradient(colors: [Color.electricViolet, Color.electricVioletDeep]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                 }
@@ -187,8 +187,8 @@ struct LeadDetailView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color.themeBackground)
-                        .shadow(color: Color.themeShadow, radius: 8, x: 0, y: -2)
+                        .fill(Color.obsidianBlack)
+                        .shadow(color: Color.black, radius: 8, x: 0, y: -2)
                 )
             }
         }
@@ -209,17 +209,17 @@ struct LeadDetailView: View {
             
                         Text(lead.displayName)
                 .font(.themeLargeTitle)
-                .foregroundColor(Color.themeTextPrimary)
+                .foregroundColor(Color.textPrimary)
 
             HStack {
                 Text("Created: \(lead.createdDate?.formatted(.dateTime.day().month().year().hour().minute()) ?? "Unknown")")
                 Spacer()
             }
             .font(.themeCaption)
-            .foregroundColor(Color.themeTextSecondary)
+            .foregroundColor(Color.textSecondary)
         }
         .padding()
-        .glassCard()
+        .surfaceCard()
     }
     
     private var detailView: some View {
@@ -231,14 +231,14 @@ struct LeadDetailView: View {
                         title: "Name",
                         value: lead.name ?? "Not provided",
                         icon: "person.fill",
-                        iconColor: Color.themePrimary
+                        iconColor: Color.electricViolet
                     )
 
                     modernDetailCell(
                         title: "Phone",
                         value: lead.phone ?? "Not provided",
                         icon: "phone.fill",
-                        iconColor: Color.themeSuccess,
+                        iconColor: Color.statusInterested,
                         isCallable: lead.phone != nil
                     )
 
@@ -246,7 +246,7 @@ struct LeadDetailView: View {
                         title: "Email",
                         value: lead.email ?? "Not provided",
                         icon: "envelope.fill",
-                        iconColor: Color.themeWarning,
+                        iconColor: Color.statusNotHome,
                         isEmailable: lead.email != nil
                     )
                 }
@@ -259,7 +259,7 @@ struct LeadDetailView: View {
                         title: "Address",
                         value: lead.address ?? "Not provided",
                         icon: "location.fill",
-                        iconColor: Color.themeError,
+                        iconColor: Color.statusNotInterested,
                         hasAddress: lead.address != nil
                     )
 
@@ -267,7 +267,7 @@ struct LeadDetailView: View {
                         title: "Deal Value",
                         value: String(format: "$%.2f CAD", lead.price),
                         icon: "dollarsign.circle.fill",
-                        iconColor: Color.themePrimary
+                        iconColor: Color.electricViolet
                     )
                 }
             }
@@ -279,7 +279,7 @@ struct LeadDetailView: View {
                         title: "Lead Status",
                         status: lead.leadStatus,
                         icon: "checkmark.circle.fill",
-                        iconColor: Color.themePrimary
+                        iconColor: Color.electricViolet
                     )
                     
                 }
@@ -294,7 +294,7 @@ struct LeadDetailView: View {
                                 title: "Follow Up Date",
                                 value: followUpDate.formatted(.dateTime.day().month().year().hour().minute()),
                                 icon: "clock.fill",
-                                iconColor: Color.themePrimary
+                                iconColor: Color.electricViolet
                             )
                         }
 
@@ -303,7 +303,7 @@ struct LeadDetailView: View {
                                 title: "Notes",
                                 value: notes,
                                 icon: "note.text",
-                                iconColor: Color.themePrimary
+                                iconColor: Color.electricViolet
                             )
                         }
                     }
@@ -339,7 +339,7 @@ struct LeadDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Image(systemName: "location.fill")
-                                .foregroundColor(Color.themePrimary)
+                                .foregroundColor(Color.electricViolet)
                                 .frame(width: 20)
 
                             Text("Address")
@@ -369,7 +369,7 @@ struct LeadDetailView: View {
                                 .padding(.vertical, 6)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.themePrimary)
+                                        .fill(Color.electricViolet)
                                 )
                             }
                             .disabled(isUpdatingAddress)
@@ -378,11 +378,11 @@ struct LeadDetailView: View {
                         TextField("Address", text: $editedAddress)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .background(Color.themeSurface)
+                            .background(Color.obsidianSurface)
                             .cornerRadius(8)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
+                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
                             )
 
                         // Update status indicator
@@ -392,7 +392,7 @@ struct LeadDetailView: View {
                                     .scaleEffect(0.8)
                                 Text("Updating address from current location...")
                                     .font(.caption)
-                                    .foregroundColor(Color.themeTextSecondary)
+                                    .foregroundColor(Color.textSecondary)
                             }
                             .padding(.leading, 8)
                         }
@@ -411,7 +411,7 @@ struct LeadDetailView: View {
                 VStack(spacing: 16) {
                     HStack {
                         Image(systemName: "tag.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 20)
 
                         Text("Service Type")
@@ -425,7 +425,7 @@ struct LeadDetailView: View {
                         } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(Color.themePrimary)
+                                .foregroundColor(Color.electricViolet)
                         }
                         .accessibilityLabel("Add new service category")
                     }
@@ -434,21 +434,21 @@ struct LeadDetailView: View {
                         VStack(spacing: 12) {
                             Image(systemName: "tag")
                                 .font(.system(size: 24))
-                                .foregroundColor(Color.themeTextSecondary)
+                                .foregroundColor(Color.textSecondary)
 
                             Text("No service categories available")
                                 .font(.subheadline)
-                                .foregroundColor(Color.themeTextSecondary)
+                                .foregroundColor(Color.textSecondary)
 
                             Button("Add Service Category") {
                                 showingServiceCategoryCreator = true
                             }
                             .font(.caption)
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 20)
-                        .background(Color.themeSurface)
+                        .background(Color.obsidianSurface)
                         .cornerRadius(8)
                     } else {
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -482,7 +482,7 @@ struct LeadDetailView: View {
                 VStack(spacing: 16) {
                     HStack {
                         Image(systemName: "flag.fill")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 20)
                         Text("Status")
                             .font(.headline)
@@ -509,7 +509,7 @@ struct LeadDetailView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "clock.fill")
-                                .foregroundColor(Color.themeWarning)
+                                .foregroundColor(Color.statusNotHome)
                                 .frame(width: 20)
                             Text("Follow Up Date")
                                 .font(.headline)
@@ -522,10 +522,10 @@ struct LeadDetailView: View {
                                     editedFollowUpDate = nil
                                 }
                                 .font(.caption)
-                                .foregroundColor(Color.themeError)
+                                .foregroundColor(Color.statusNotInterested)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
-                                .background(Color.themeError.opacity(0.1))
+                                .background(Color.statusNotInterested.opacity(0.1))
                                 .cornerRadius(16)
                             }
                         }
@@ -535,24 +535,24 @@ struct LeadDetailView: View {
                         }) {
                             HStack {
                                 Image(systemName: editedFollowUpDate != nil ? "calendar.badge.clock" : "calendar.badge.plus")
-                                    .foregroundColor(editedFollowUpDate != nil ? Color.themePrimary : Color.themeTextSecondary)
+                                    .foregroundColor(editedFollowUpDate != nil ? Color.electricViolet : Color.textSecondary)
 
                                 Text(editedFollowUpDate?.formatted(.dateTime.day().month().year().hour().minute()) ?? "Set follow up date & time")
-                                    .foregroundColor(editedFollowUpDate != nil ? Color.themeTextPrimary : Color.themeTextSecondary)
+                                    .foregroundColor(editedFollowUpDate != nil ? Color.textPrimary : Color.textSecondary)
 
                                 Spacer()
 
                                 Image(systemName: "chevron.right")
-                                    .foregroundColor(Color.themeTextSecondary)
+                                    .foregroundColor(Color.textSecondary)
                                     .font(.caption)
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .background(Color.themeSurface)
+                            .background(Color.obsidianSurface)
                             .cornerRadius(12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
+                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
                             )
                         }
                     }
@@ -560,7 +560,7 @@ struct LeadDetailView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "note.text")
-                                .foregroundColor(Color.themePrimary)
+                                .foregroundColor(Color.electricViolet)
                                 .frame(width: 20)
                             Text("Notes")
                                 .font(.headline)
@@ -570,11 +570,11 @@ struct LeadDetailView: View {
                         TextEditor(text: $editedNotes)
                             .frame(minHeight: 100)
                             .padding(12)
-                            .background(Color.themeSurface)
+                            .background(Color.obsidianSurface)
                             .cornerRadius(12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                                    .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                             )
                     }
                 }
@@ -624,7 +624,7 @@ struct LeadDetailView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.themePrimary)
+                    .background(Color.electricViolet)
                     .cornerRadius(16)
                 }
             }
@@ -633,30 +633,30 @@ struct LeadDetailView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.title2)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
 
                     Text("No follow-ups recorded yet")
                         .font(.body)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
 
                     Text("Start tracking your interactions with this lead")
                         .font(.caption)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
-                .background(Color.themeSurface)
+                .background(Color.obsidianSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
                 )
             } else {
                 VStack(spacing: 8) {
                     HStack {
                         Text("\(checkIns.count) check-ins recorded")
                             .font(.subheadline)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
 
                         Spacer()
 
@@ -665,7 +665,7 @@ struct LeadDetailView: View {
                                 showingFullHistory = true
                             }
                             .font(.caption)
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                         }
                     }
 
@@ -676,11 +676,11 @@ struct LeadDetailView: View {
                         }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(Color.themeSurface)
+                            .background(Color.obsidianSurface)
                             .cornerRadius(8)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
+                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
                             )
                     }
                 }
@@ -747,9 +747,9 @@ struct LeadDetailView: View {
                         .padding(.horizontal, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.themePrimary.gradient)
+                                .fill(Color.electricViolet.gradient)
                         )
-                        .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
                 
@@ -777,9 +777,9 @@ struct LeadDetailView: View {
                         .padding(.horizontal, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.themeSuccess.gradient)
+                                .fill(Color.statusInterested.gradient)
                         )
-                        .shadow(color: Color.themeSuccess.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.statusInterested.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
                 
@@ -807,9 +807,9 @@ struct LeadDetailView: View {
                         .padding(.horizontal, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.themePrimary.gradient)
+                                .fill(Color.electricViolet.gradient)
                         )
-                        .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
                 
@@ -837,9 +837,9 @@ struct LeadDetailView: View {
                         .padding(.horizontal, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.themeInfo.gradient)
+                                .fill(Color.dataCyan.gradient)
                         )
-                        .shadow(color: Color.themeInfo.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.dataCyan.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
             }
@@ -849,7 +849,7 @@ struct LeadDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: "calendar.badge.checkmark")
-                            .foregroundColor(Color.themePrimary)
+                            .foregroundColor(Color.electricViolet)
                         Text("Upcoming Appointments")
                             .font(.headline)
                             .fontWeight(.semibold)
@@ -865,15 +865,15 @@ struct LeadDetailView: View {
                             // Navigate to appointments view filtered for this lead
                         }
                         .font(.caption)
-                        .foregroundColor(Color.themePrimary)
+                        .foregroundColor(Color.electricViolet)
                     }
                 }
                 .padding(16)
-                .background(Color.themeSurface)
+                .background(Color.obsidianSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.themeBorder.opacity(0.5), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
                 )
             }
         }
@@ -898,12 +898,12 @@ struct LeadDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
 
                 Text(title)
                     .font(.themeTitle)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
 
                 Spacer()
             }
@@ -914,13 +914,13 @@ struct LeadDetailView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
         }
-        .background(.ultraThinMaterial)
+        .background(Color.obsidianSurface)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.themeBorder, lineWidth: 0.5)
+                .stroke(Color.obsidianBorder, lineWidth: 0.5)
         )
-        .shadow(color: Color.themeShadow, radius: 8, x: 0, y: 2)
+        .shadow(color: Color.black, radius: 8, x: 0, y: 2)
     }
     
     @ViewBuilder
@@ -928,7 +928,7 @@ struct LeadDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(Color.themePrimary)
+                    .foregroundColor(Color.electricViolet)
                     .frame(width: 20)
 
                 Text(title)
@@ -939,11 +939,11 @@ struct LeadDetailView: View {
             TextField(title, text: text)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.themeSurface)
+                .background(Color.obsidianSurface)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.themeBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                 )
         }
     }
@@ -1236,13 +1236,13 @@ struct LeadDetailView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.themeCaption)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .textCase(.uppercase)
 
                 Text(value)
                     .font(.themeBody)
                     .fontWeight(.medium)
-                    .foregroundColor(value == "Not provided" ? Color.themeTextSecondary : Color.themeTextPrimary)
+                    .foregroundColor(value == "Not provided" ? Color.textSecondary : Color.textPrimary)
             }
 
             Spacer()
@@ -1252,7 +1252,7 @@ struct LeadDetailView: View {
                     Utilities.makePhoneCall(to: value)
                 }) {
                     Image(systemName: "phone.circle.fill")
-                        .foregroundColor(Color.themeSuccess)
+                        .foregroundColor(Color.statusInterested)
                         .font(.title2)
                 }
             } else if isEmailable && value != "Not provided" {
@@ -1260,18 +1260,18 @@ struct LeadDetailView: View {
                     Utilities.sendEmail(to: value)
                 }) {
                     Image(systemName: "envelope.circle.fill")
-                        .foregroundColor(Color.themeWarning)
+                        .foregroundColor(Color.statusNotHome)
                         .font(.title2)
                 }
             }
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(Color.themeSurface)
+        .background(Color.obsidianSurface)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 0.5)
+                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
         )
     }
     
@@ -1286,13 +1286,13 @@ struct LeadDetailView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.themeCaption)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .textCase(.uppercase)
 
                 Text(value)
                     .font(.themeBody)
                     .fontWeight(.medium)
-                    .foregroundColor(value == "Not provided" ? Color.themeTextSecondary : Color.themeTextPrimary)
+                    .foregroundColor(value == "Not provided" ? Color.textSecondary : Color.textPrimary)
                     .lineLimit(2)
             }
 
@@ -1311,18 +1311,18 @@ struct LeadDetailView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.themePrimary)
+                    .background(Color.electricViolet)
                     .cornerRadius(16)
                 }
             }
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(Color.themeSurface)
+        .background(Color.obsidianSurface)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 0.5)
+                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
         )
     }
     
@@ -1337,13 +1337,13 @@ struct LeadDetailView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.themeCaption)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .textCase(.uppercase)
 
                 Text(status.displayName)
                     .font(.themeBody)
                     .fontWeight(.medium)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
             }
 
             Spacer()
@@ -1352,11 +1352,11 @@ struct LeadDetailView: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(Color.themeSurface)
+        .background(Color.obsidianSurface)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 0.5)
+                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
         )
     }
     
@@ -1372,7 +1372,7 @@ struct LeadDetailView: View {
 
                 Text(title)
                     .font(.themeCaption)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .textCase(.uppercase)
 
                 Spacer()
@@ -1381,17 +1381,17 @@ struct LeadDetailView: View {
             Text(value)
                 .font(.themeBody)
                 .fontWeight(.medium)
-                .foregroundColor(Color.themeTextPrimary)
+                .foregroundColor(Color.textPrimary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(nil)
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(Color.themeSurface)
+        .background(Color.obsidianSurface)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.themeBorder.opacity(0.3), lineWidth: 0.5)
+                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
         )
     }
 
@@ -1407,7 +1407,7 @@ struct DetailRow: View {
                 .font(.themeHeadline)
             Text(value)
                 .font(.themeBody)
-                .foregroundColor(value == "Not provided" ? Color.themeTextSecondary : Color.themeTextPrimary)
+                .foregroundColor(value == "Not provided" ? Color.textSecondary : Color.textPrimary)
         }
     }
 }
@@ -1430,7 +1430,7 @@ struct AppointmentSummaryRow: View {
 
                     Text(appointment.startDate.formatted(.dateTime.day().month().hour().minute()))
                         .font(.themeCaption)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                 }
             }
 
@@ -1442,7 +1442,7 @@ struct AppointmentSummaryRow: View {
                 if !appointment.location.isEmpty {
                     Text(appointment.location)
                         .font(.caption2)
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                         .lineLimit(1)
                         .multilineTextAlignment(.trailing)
                 }
@@ -1450,7 +1450,7 @@ struct AppointmentSummaryRow: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
-        .background(Color.themeBackground)
+        .background(Color.obsidianBlack)
         .cornerRadius(8)
     }
 }
@@ -1488,7 +1488,7 @@ struct ModernStatusCard: View {
                 Text(status.displayName)
                     .font(.themeCaption)
                     .fontWeight(.semibold)
-                    .foregroundColor(isSelected ? .white : Color.themeTextPrimary)
+                    .foregroundColor(isSelected ? .white : Color.textPrimary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
@@ -1497,7 +1497,7 @@ struct ModernStatusCard: View {
             .padding(.horizontal, 8)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? AnyShapeStyle(status.uiColor.gradient) : AnyShapeStyle(Color.themeSurface))
+                    .fill(isSelected ? AnyShapeStyle(status.uiColor.gradient) : AnyShapeStyle(Color.obsidianSurface))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(status.uiColor.opacity(isSelected ? 0 : 0.3), lineWidth: isSelected ? 0 : 1.5)

@@ -22,16 +22,7 @@ struct FollowUpView: View {
                 VStack(spacing: 0) {
                     // Dynamic safe area spacer that adapts to device
                     Rectangle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color.themeBackground,
-                                    Color.themeBackground.opacity(0.98)
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+                        .fill(Color.obsidianBlack)
                         .frame(height: max((geometry.safeAreaInsets.top.isNaN ? 0 : geometry.safeAreaInsets.top) + 10, 60))
 
                     if followUpLeads.isEmpty {
@@ -39,49 +30,27 @@ struct FollowUpView: View {
                     } else {
                         ScrollView {
                             LazyVStack(spacing: 8) {
-                                ForEach(followUpLeads, id: \.id) { lead in
-                                    FollowUpInteractiveRowView(
-                                        lead: lead,
-                                        onTap: {
-                                            selectedLead = lead
-                                        },
-                                        onMessageTap: {
-                                            guard paywallManager.gateAction() else { return }
-                                            leadForMessaging = lead
-                                        },
-                                        onCheckInTap: {
-                                            guard paywallManager.gateAction() else { return }
-                                            leadForCheckIn = lead
-                                        },
-                                        onDelete: {
-                                            guard paywallManager.gateAction() else { return }
-                                            // Remove follow-up date instead of deleting lead
-                                            lead.setFollowUpDate(nil)
-                                            UserDataSyncManager.shared.syncWithServer()
-                                        }
-                                    )
-                                    .onLongPressGesture {
-                                        guard paywallManager.gateAction() else { return }
-                                        // Haptic feedback
-                                        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-                                        impactFeedback.impactOccurred()
+                                // OVERDUE section
+                                if !overdueLeads.isEmpty {
+                                    followUpSectionHeader("OVERDUE", color: Color.statusNotInterested)
+                                    ForEach(overdueLeads, id: \.id) { lead in
+                                        followUpRow(for: lead)
+                                    }
+                                }
 
-                                        // Show delete confirmation
-                                        let alert = UIAlertController(
-                                            title: "Remove Follow-up",
-                                            message: "Remove follow-up reminder for \(lead.displayName)?",
-                                            preferredStyle: .alert
-                                        )
-                                        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-                                        alert.addAction(UIAlertAction(title: "Remove", style: .destructive) { _ in
-                                            lead.setFollowUpDate(nil)
-                                            UserDataSyncManager.shared.syncWithServer()
-                                        })
+                                // TODAY section
+                                if !todayLeads.isEmpty {
+                                    followUpSectionHeader("TODAY", color: Color.electricViolet)
+                                    ForEach(todayLeads, id: \.id) { lead in
+                                        followUpRow(for: lead)
+                                    }
+                                }
 
-                                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                                           let window = windowScene.windows.first {
-                                            window.rootViewController?.present(alert, animated: true)
-                                        }
+                                // UPCOMING section
+                                if !upcomingLeads.isEmpty {
+                                    followUpSectionHeader("UPCOMING", color: Color.textSecondary)
+                                    ForEach(upcomingLeads, id: \.id) { lead in
+                                        followUpRow(for: lead)
                                     }
                                 }
                             }
@@ -92,7 +61,7 @@ struct FollowUpView: View {
                 .ignoresSafeArea(.all, edges: .top)
             }
             .navigationBarHidden(true)
-            .background(Color.themeBackground)
+            .background(Color.obsidianBlack)
             .sheet(item: $selectedLead) { lead in
                 FollowUpDetailView(lead: lead)
             }
@@ -121,28 +90,109 @@ struct FollowUpView: View {
         }
     }
 
+    // MARK: - Urgency Grouping
+
+    private var overdueLeads: [Lead] {
+        followUpLeads.filter { lead in
+            guard let date = lead.followUpDate else { return false }
+            return date < Date() && !Calendar.current.isDateInToday(date)
+        }
+    }
+
+    private var todayLeads: [Lead] {
+        followUpLeads.filter { lead in
+            guard let date = lead.followUpDate else { return false }
+            return Calendar.current.isDateInToday(date)
+        }
+    }
+
+    private var upcomingLeads: [Lead] {
+        followUpLeads.filter { lead in
+            guard let date = lead.followUpDate else { return false }
+            return date > Date() && !Calendar.current.isDateInToday(date)
+        }
+    }
+
+    private func followUpSectionHeader(_ title: String, color: Color) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .medium))
+            .textCase(.uppercase)
+            .tracking(0.5)
+            .foregroundColor(color)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+    }
+
+    @ViewBuilder
+    private func followUpRow(for lead: Lead) -> some View {
+        FollowUpInteractiveRowView(
+            lead: lead,
+            onTap: {
+                selectedLead = lead
+            },
+            onMessageTap: {
+                guard paywallManager.gateAction() else { return }
+                leadForMessaging = lead
+            },
+            onCheckInTap: {
+                guard paywallManager.gateAction() else { return }
+                leadForCheckIn = lead
+            },
+            onDelete: {
+                guard paywallManager.gateAction() else { return }
+                // Remove follow-up date instead of deleting lead
+                lead.setFollowUpDate(nil)
+                UserDataSyncManager.shared.syncWithServer()
+            }
+        )
+        .onLongPressGesture {
+            guard paywallManager.gateAction() else { return }
+            // Haptic feedback
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+
+            // Show delete confirmation
+            let alert = UIAlertController(
+                title: "Remove Follow-up",
+                message: "Remove follow-up reminder for \(lead.displayName)?",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            alert.addAction(UIAlertAction(title: "Remove", style: .destructive) { _ in
+                lead.setFollowUpDate(nil)
+                UserDataSyncManager.shared.syncWithServer()
+            })
+
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first {
+                window.rootViewController?.present(alert, animated: true)
+            }
+        }
+    }
+
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Spacer()
 
             Circle()
-                .fill(Color.themePrimary.opacity(0.15))
+                .fill(Color.electricViolet.opacity(0.15))
                 .frame(width: 80, height: 80)
                 .overlay(
                     Image(systemName: "calendar.badge.clock")
                         .font(.system(size: 28))
-                        .foregroundColor(Color.themePrimary)
+                        .foregroundColor(Color.electricViolet)
                 )
 
             VStack(spacing: 8) {
                 Text("No Follow Ups Scheduled")
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(Color.themeTextPrimary)
+                    .foregroundColor(Color.textPrimary)
 
                 Text("When you set follow-up dates for leads, they'll appear here sorted by date.")
                     .font(.body)
-                    .foregroundColor(Color.themeTextSecondary)
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
@@ -161,7 +211,7 @@ struct FeatureBullet: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Color.themeSuccess)
+                .foregroundColor(Color.statusInterested)
                 .font(.title3)
 
             Text(text)
@@ -183,11 +233,11 @@ struct FollowUpInteractiveRowView: View {
         HStack(spacing: 16) {
             // Lead initial circle
             Circle()
-                .fill(LinearGradient(colors: [Color.themePrimary, Color.themeSecondary], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(LinearGradient(colors: [Color.electricViolet, Color.electricVioletDeep], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .frame(width: 48, height: 48)
                 .overlay(
                     Text(leadInitial)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: 18, weight: .semibold))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                         .foregroundColor(.white)
                 )
@@ -196,9 +246,9 @@ struct FollowUpInteractiveRowView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(lead.displayName)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.system(size: 17, weight: .semibold))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(Color.themeTextPrimary)
+                        .foregroundColor(Color.textPrimary)
                         .accessibilityAddTraits(.isHeader)
 
                     Spacer()
@@ -210,7 +260,7 @@ struct FollowUpInteractiveRowView: View {
                                 .foregroundColor(timeColor(for: followUpDate))
                                 .accessibilityHidden(true)
                             Text(timeStatus(for: followUpDate))
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .font(.system(size: 12, weight: .medium))
                                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                                 .foregroundColor(timeColor(for: followUpDate))
                         }
@@ -230,12 +280,12 @@ struct FollowUpInteractiveRowView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "location.fill")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                             .accessibilityHidden(true)
                         Text(address)
-                            .font(.system(size: 14, weight: .regular, design: .rounded))
+                            .font(.system(size: 14, weight: .regular))
                             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                             .lineLimit(1)
                     }
                     .accessibilityElement(children: .ignore)
@@ -256,7 +306,7 @@ struct FollowUpInteractiveRowView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(hasContactInfo ? Color.themePrimary : Color.themeTextSecondary)
+                        .background(hasContactInfo ? Color.electricViolet : Color.textSecondary)
                         .cornerRadius(16)
                     }
                     .disabled(!hasContactInfo)
@@ -273,7 +323,7 @@ struct FollowUpInteractiveRowView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color.themeSuccess)
+                        .background(Color.statusInterested)
                         .cornerRadius(16)
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -283,7 +333,7 @@ struct FollowUpInteractiveRowView: View {
                 .padding(.top, 8)
             }
         }
-        .glassCard()
+        .surfaceCard()
         .padding(.horizontal, 16)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -342,11 +392,11 @@ struct FollowUpInteractiveRowView: View {
     private func timeColor(for date: Date) -> Color {
         let now = Date()
         if date < now {
-            return Color.themeError
+            return Color.statusNotInterested
         } else if Calendar.current.isDateInToday(date) {
-            return Color.themeWarning
+            return Color.statusNotHome
         } else {
-            return Color.themePrimary
+            return Color.electricViolet
         }
     }
 
@@ -374,11 +424,11 @@ struct FollowUpRowView: View {
         HStack(spacing: 16) {
             // Lead initial circle
             Circle()
-                .fill(LinearGradient(colors: [Color.themePrimary, Color.themeSecondary], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(LinearGradient(colors: [Color.electricViolet, Color.electricVioletDeep], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .frame(width: 48, height: 48)
                 .overlay(
                     Text(leadInitial)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: 18, weight: .semibold))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                         .foregroundColor(.white)
                 )
@@ -387,9 +437,9 @@ struct FollowUpRowView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(lead.displayName)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.system(size: 17, weight: .semibold))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(Color.themeTextPrimary)
+                        .foregroundColor(Color.textPrimary)
                         .accessibilityAddTraits(.isHeader)
 
                     Spacer()
@@ -401,7 +451,7 @@ struct FollowUpRowView: View {
                                 .foregroundColor(timeColor(for: followUpDate))
                                 .accessibilityHidden(true)
                             Text(timeStatus(for: followUpDate))
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .font(.system(size: 12, weight: .medium))
                                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                                 .foregroundColor(timeColor(for: followUpDate))
                         }
@@ -421,12 +471,12 @@ struct FollowUpRowView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "location.fill")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                             .accessibilityHidden(true)
                         Text(address)
-                            .font(.system(size: 14, weight: .regular, design: .rounded))
+                            .font(.system(size: 14, weight: .regular))
                             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
                             .lineLimit(1)
                     }
                     .accessibilityElement(children: .ignore)
@@ -447,7 +497,7 @@ struct FollowUpRowView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(hasContactInfo ? Color.themePrimary : Color.themeTextSecondary)
+                        .background(hasContactInfo ? Color.electricViolet : Color.textSecondary)
                         .cornerRadius(16)
                     }
                     .disabled(!hasContactInfo)
@@ -464,7 +514,7 @@ struct FollowUpRowView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color.themeSuccess)
+                        .background(Color.statusInterested)
                         .cornerRadius(16)
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -474,7 +524,7 @@ struct FollowUpRowView: View {
                 .padding(.top, 8)
             }
         }
-        .glassCard()
+        .surfaceCard()
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
@@ -502,11 +552,11 @@ struct FollowUpRowView: View {
     private func timeColor(for date: Date) -> Color {
         let now = Date()
         if date < now {
-            return Color.themeError
+            return Color.statusNotInterested
         } else if Calendar.current.isDateInToday(date) {
-            return Color.themeWarning
+            return Color.statusNotHome
         } else {
-            return Color.themePrimary
+            return Color.electricViolet
         }
     }
 
@@ -541,11 +591,11 @@ struct FollowUpDetailView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
                             Circle()
-                                .fill(LinearGradient(colors: [Color.themePrimary, Color.themeSecondary], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .fill(LinearGradient(colors: [Color.electricViolet, Color.electricVioletDeep], startPoint: .topLeading, endPoint: .bottomTrailing))
                                 .frame(width: 60, height: 60)
                                 .overlay(
                                     Text(leadInitial)
-                                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                                        .font(.system(size: 24, weight: .bold))
                                         .foregroundColor(.white)
                                 )
 
@@ -553,12 +603,12 @@ struct FollowUpDetailView: View {
                                 Text(lead.displayName)
                                     .font(.title2)
                                     .fontWeight(.bold)
-                                    .foregroundColor(Color.themeTextPrimary)
+                                    .foregroundColor(Color.textPrimary)
 
                                 if let address = lead.address, !address.isEmpty {
                                     Text(address)
                                         .font(.subheadline)
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                         .lineLimit(2)
                                 }
                             }
@@ -566,19 +616,19 @@ struct FollowUpDetailView: View {
                             Spacer()
                         }
                     }
-                    .glassCard()
+                    .surfaceCard()
 
                     // Follow-Up Information Card
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
                             Image(systemName: "calendar.badge.clock")
-                                .foregroundColor(Color.themeWarning)
+                                .foregroundColor(Color.statusNotHome)
                                 .font(.title2)
 
                             Text("Follow-Up Details")
                                 .font(.headline)
                                 .fontWeight(.semibold)
-                                .foregroundColor(Color.themeTextPrimary)
+                                .foregroundColor(Color.textPrimary)
 
                             Spacer()
                         }
@@ -589,7 +639,7 @@ struct FollowUpDetailView: View {
                                 HStack {
                                     Text("Status:")
                                         .font(.subheadline)
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
 
                                     HStack(spacing: 4) {
                                         Image(systemName: timeIcon(for: followUpDate))
@@ -612,17 +662,17 @@ struct FollowUpDetailView: View {
                                 HStack {
                                     Text("Scheduled:")
                                         .font(.subheadline)
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(followUpDate.formatted(.dateTime.day().month().year().weekday(.wide)))
                                             .font(.body)
                                             .fontWeight(.medium)
-                                            .foregroundColor(Color.themeTextPrimary)
+                                            .foregroundColor(Color.textPrimary)
 
                                         Text(followUpDate.formatted(.dateTime.hour().minute()))
                                             .font(.subheadline)
-                                            .foregroundColor(Color.themeTextSecondary)
+                                            .foregroundColor(Color.textSecondary)
                                     }
 
                                     Spacer()
@@ -635,30 +685,30 @@ struct FollowUpDetailView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Notes:")
                                     .font(.subheadline)
-                                    .foregroundColor(Color.themeTextSecondary)
+                                    .foregroundColor(Color.textSecondary)
 
                                 Text(notes)
                                     .font(.body)
-                                    .foregroundColor(Color.themeTextPrimary)
+                                    .foregroundColor(Color.textPrimary)
                                     .padding(12)
-                                    .background(Color.themeSurface)
+                                    .background(Color.obsidianSurface)
                                     .cornerRadius(8)
                             }
                         }
                     }
-                    .glassCard()
+                    .surfaceCard()
 
                     // Quick Actions Card
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
                             Image(systemName: "bolt.fill")
-                                .foregroundColor(Color.themePrimary)
+                                .foregroundColor(Color.electricViolet)
                                 .font(.title2)
 
                             Text("Quick Actions")
                                 .font(.headline)
                                 .fontWeight(.semibold)
-                                .foregroundColor(Color.themeTextPrimary)
+                                .foregroundColor(Color.textPrimary)
 
                             Spacer()
                         }
@@ -680,7 +730,7 @@ struct FollowUpDetailView: View {
                                 }
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
-                                .background(hasContactInfo ? Color.themePrimary : Color.themeTextSecondary)
+                                .background(hasContactInfo ? Color.electricViolet : Color.textSecondary)
                                 .cornerRadius(12)
                             }
                             .disabled(!hasContactInfo)
@@ -701,7 +751,7 @@ struct FollowUpDetailView: View {
                                 }
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
-                                .background(Color.themeSuccess)
+                                .background(Color.statusInterested)
                                 .cornerRadius(12)
                             }
 
@@ -722,7 +772,7 @@ struct FollowUpDetailView: View {
                                     }
                                     .padding(.horizontal, 20)
                                     .padding(.vertical, 12)
-                                    .background(Color.themeWarning)
+                                    .background(Color.statusNotHome)
                                     .cornerRadius(12)
                                 }
                             }
@@ -733,27 +783,27 @@ struct FollowUpDetailView: View {
                             }) {
                                 HStack {
                                     Image(systemName: "person.fill")
-                                        .foregroundColor(Color.themeTextPrimary)
+                                        .foregroundColor(Color.textPrimary)
                                     Text("View Full Lead Details")
                                         .fontWeight(.medium)
-                                        .foregroundColor(Color.themeTextPrimary)
+                                        .foregroundColor(Color.textPrimary)
                                     Spacer()
                                     Image(systemName: "arrow.right")
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                 }
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
-                                .background(Color.themeSurface)
+                                .background(Color.obsidianSurface)
                                 .cornerRadius(12)
                             }
                         }
                     }
-                    .glassCard()
+                    .surfaceCard()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 20)
             }
-            .background(Color.themeBackground)
+            .background(Color.obsidianBlack)
             .navigationTitle("Follow-Up")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
@@ -777,12 +827,12 @@ struct FollowUpDetailView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.themePrimary, Color.themePrimary.opacity(0.8)]),
+                                        gradient: Gradient(colors: [Color.electricViolet, Color.electricViolet.opacity(0.8)]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: Color.themePrimary.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
 
@@ -808,13 +858,13 @@ struct FollowUpDetailView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(Color.themeTextSecondary)
+                        .foregroundColor(Color.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.themeSurface)
-                                .shadow(color: Color.themeShadow.opacity(0.1), radius: 2, x: 0, y: 1)
+                                .fill(Color.obsidianSurface)
+                                .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
                         )
                     }
                 }
@@ -822,8 +872,8 @@ struct FollowUpDetailView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color.themeBackground)
-                        .shadow(color: Color.themeShadow.opacity(0.1), radius: 8, x: 0, y: -2)
+                        .fill(Color.obsidianBlack)
+                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
             .sheet(item: $leadForMessaging) { lead in
@@ -863,11 +913,11 @@ struct FollowUpDetailView: View {
     private func timeColor(for date: Date) -> Color {
         let now = Date()
         if date < now {
-            return Color.themeError
+            return Color.statusNotInterested
         } else if Calendar.current.isDateInToday(date) {
-            return Color.themeWarning
+            return Color.statusNotHome
         } else {
-            return Color.themePrimary
+            return Color.electricViolet
         }
     }
 
@@ -911,11 +961,11 @@ struct RescheduleFollowUpView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
                             Circle()
-                                .fill(LinearGradient(colors: [Color.themePrimary, Color.themeSecondary], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .fill(LinearGradient(colors: [Color.electricViolet, Color.electricVioletDeep], startPoint: .topLeading, endPoint: .bottomTrailing))
                                 .frame(width: 50, height: 50)
                                 .overlay(
                                     Text(leadInitial)
-                                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                                        .font(.system(size: 18, weight: .bold))
                                         .foregroundColor(.white)
                                 )
 
@@ -923,11 +973,11 @@ struct RescheduleFollowUpView: View {
                                 Text(lead.displayName)
                                     .font(.title3)
                                     .fontWeight(.semibold)
-                                    .foregroundColor(Color.themeTextPrimary)
+                                    .foregroundColor(Color.textPrimary)
 
                                 Text("Reschedule Follow-up")
                                     .font(.subheadline)
-                                    .foregroundColor(Color.themeTextSecondary)
+                                    .foregroundColor(Color.textSecondary)
                             }
 
                             Spacer()
@@ -939,19 +989,19 @@ struct RescheduleFollowUpView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("Current")
                                         .font(.caption)
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                         .textCase(.uppercase)
 
                                     Text(currentDate.formatted(.dateTime.day().month().year().hour().minute()))
                                         .font(.body)
-                                        .foregroundColor(Color.themeError)
+                                        .foregroundColor(Color.statusNotInterested)
                                         .strikethrough()
                                 }
 
                                 Spacer()
 
                                 Image(systemName: "arrow.right")
-                                    .foregroundColor(Color.themePrimary)
+                                    .foregroundColor(Color.electricViolet)
                                     .font(.title2)
 
                                 Spacer()
@@ -959,19 +1009,19 @@ struct RescheduleFollowUpView: View {
                                 VStack(alignment: .trailing, spacing: 4) {
                                     Text("New")
                                         .font(.caption)
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                         .textCase(.uppercase)
 
                                     Text(newDate.formatted(.dateTime.day().month().year().hour().minute()))
                                         .font(.body)
                                         .fontWeight(.medium)
-                                        .foregroundColor(Color.themeSuccess)
+                                        .foregroundColor(Color.statusInterested)
                                 }
                             }
                             .padding(16)
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.themeSurface)
+                                    .fill(Color.obsidianSurface)
                             )
                         }
                     }
@@ -982,13 +1032,13 @@ struct RescheduleFollowUpView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
                             Image(systemName: "calendar")
-                                .foregroundColor(Color.themePrimary)
+                                .foregroundColor(Color.electricViolet)
                                 .font(.title2)
 
                             Text("Select New Date & Time")
                                 .font(.headline)
                                 .fontWeight(.semibold)
-                                .foregroundColor(Color.themeTextPrimary)
+                                .foregroundColor(Color.textPrimary)
 
                             Spacer()
                         }
@@ -1003,7 +1053,7 @@ struct RescheduleFollowUpView: View {
                             Text("Quick Suggestions")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
-                                .foregroundColor(Color.themeTextSecondary)
+                                .foregroundColor(Color.textSecondary)
 
                             LazyVGrid(columns: [
                                 GridItem(.flexible(), spacing: 8),
@@ -1019,19 +1069,19 @@ struct RescheduleFollowUpView: View {
                             }
                         }
                     }
-                    .glassCard()
+                    .surfaceCard()
                     .padding(.horizontal, 16)
 
                     // Summary Card
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "info.circle")
-                                .foregroundColor(Color.themePrimary)
+                                .foregroundColor(Color.electricViolet)
 
                             Text("Summary")
                                 .font(.headline)
                                 .fontWeight(.semibold)
-                                .foregroundColor(Color.themeTextPrimary)
+                                .foregroundColor(Color.textPrimary)
 
                             Spacer()
                         }
@@ -1039,41 +1089,41 @@ struct RescheduleFollowUpView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Text("Lead:")
-                                    .foregroundColor(Color.themeTextSecondary)
+                                    .foregroundColor(Color.textSecondary)
                                 Text(lead.displayName)
                                     .fontWeight(.medium)
-                                    .foregroundColor(Color.themeTextPrimary)
+                                    .foregroundColor(Color.textPrimary)
                                 Spacer()
                             }
 
                             HStack {
                                 Text("New Follow-up:")
-                                    .foregroundColor(Color.themeTextSecondary)
+                                    .foregroundColor(Color.textSecondary)
                                 Text(newDate.formatted(.dateTime.day().month().year().weekday(.abbreviated).hour().minute()))
                                     .fontWeight(.medium)
-                                    .foregroundColor(Color.themeSuccess)
+                                    .foregroundColor(Color.statusInterested)
                                 Spacer()
                             }
 
                             if let timeUntil = timeUntilFollowUp {
                                 HStack {
                                     Text("Time until:")
-                                        .foregroundColor(Color.themeTextSecondary)
+                                        .foregroundColor(Color.textSecondary)
                                     Text(timeUntil)
                                         .fontWeight(.medium)
-                                        .foregroundColor(Color.themePrimary)
+                                        .foregroundColor(Color.electricViolet)
                                     Spacer()
                                 }
                             }
                         }
                     }
-                    .glassCard()
+                    .surfaceCard()
                     .padding(.horizontal, 16)
 
                     Spacer(minLength: 100)
                 }
             }
-            .background(Color.themeBackground)
+            .background(Color.obsidianBlack)
             .navigationTitle("Reschedule")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1089,7 +1139,7 @@ struct RescheduleFollowUpView: View {
                             .multilineTextAlignment(.center)
                     }
                     .frame(width: 80, height: 36)
-                    .background(Color.themeTextSecondary)
+                    .background(Color.textSecondary)
                     .cornerRadius(20)
                 }
 
@@ -1106,7 +1156,7 @@ struct RescheduleFollowUpView: View {
                             .multilineTextAlignment(.center)
                     }
                     .frame(width: 70, height: 36)
-                    .background(newDate <= Date() ? Color.themeTextSecondary.opacity(0.6) : Color.themePrimary)
+                    .background(newDate <= Date() ? Color.textSecondary.opacity(0.6) : Color.electricViolet)
                     .cornerRadius(20)
                     .disabled(newDate <= Date())
                 }
@@ -1148,15 +1198,15 @@ struct QuickTimeButton: View {
             Text(title)
                 .font(.caption)
                 .fontWeight(.medium)
-                .foregroundColor(Color.themePrimary)
+                .foregroundColor(Color.electricViolet)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.themePrimary.opacity(0.1))
+                        .fill(Color.electricViolet.opacity(0.1))
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.themePrimary.opacity(0.3), lineWidth: 1)
+                                .stroke(Color.electricViolet.opacity(0.3), lineWidth: 1)
                         )
                 )
         }
