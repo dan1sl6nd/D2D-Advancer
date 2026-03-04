@@ -95,10 +95,10 @@ class FirebaseUserAccountManager: ObservableObject {
                     // Only show email verification prompt if email is not already verified
                     if let user = self.firebaseService.currentUser, !user.isEmailVerified {
                         self.shouldShowEmailVerification = true
-                        print("📧 Email verification prompt shown for: \(email)")
+                        print("📧 Email verification prompt shown for: \(Utilities.redactedEmail(email))")
                     }
                     
-                    print("✅ Account created successfully for: \(email)")
+                    print("✅ Account created successfully for: \(Utilities.redactedEmail(email))")
                     if let displayName = displayName {
                         print("✅ Display name set to: \(displayName)")
                     }
@@ -142,7 +142,7 @@ class FirebaseUserAccountManager: ObservableObject {
                     let hasCredentialsSaved = self.keychainService.hasCredentialsSaved(for: email)
                     let userDeclined = self.keychainService.hasUserDeclinedSaving(for: email)
                     
-                    print("🔍 Keychain check for \(email):")
+                    print("🔍 Keychain check for \(Utilities.redactedEmail(email)):")
                     print("   - Has credentials saved: \(hasCredentialsSaved)")
                     print("   - User previously declined: \(userDeclined)")
                     
@@ -156,7 +156,7 @@ class FirebaseUserAccountManager: ObservableObject {
                         print("   - Will NOT show keychain prompt")
                     }
                     
-                    print("✅ Signed in successfully: \(email)")
+                    print("✅ Signed in successfully: \(Utilities.redactedEmail(email))")
                 }
                 
                 // Start comprehensive sync immediately after successful sign-in
@@ -176,20 +176,18 @@ class FirebaseUserAccountManager: ObservableObject {
             do {
                 print("🚪 Starting sign-out process...")
                 print("🗓️ Current appointments before sign-out: \(AppointmentManager.shared.appointments.count)")
-                
-                // Stop appointment Firebase listener first to prevent any conflicts
+
+                // Ensure local appointment changes are uploaded before clearing local data.
+                await syncAppointmentsBeforeSignOut()
+
+                // Stop listener and clear appointments locally after the sign-out sync.
                 AppointmentManager.shared.stopFirebaseListener()
-                print("🗓️ Firebase listener stopped")
-                
-                // Clear appointments locally immediately (preserving Firebase data by not syncing after)
                 await MainActor.run {
-                    print("🗓️ About to call clearAppointmentsLocalOnly...")
                     AppointmentManager.shared.clearAppointmentsLocalOnly()
-                    print("🗓️ clearAppointmentsLocalOnly completed")
                     print("🗓️ Appointments after clearing: \(AppointmentManager.shared.appointments.count)")
                 }
-                
-                // Then sync all other data to Firebase to prevent data loss
+
+                // Then sync all other non-appointment data to Firebase/CloudKit.
                 await performPreSignOutSync()
                 
                 // Clear all remaining local app data after sync is complete
@@ -248,9 +246,11 @@ class FirebaseUserAccountManager: ObservableObject {
         // Start our pre-sign-out sync with timeout handling (exclude appointments to preserve Firebase data)
         syncManager.syncBeforeSignOut()
         
-        // Poll for sync completion with shorter timeout to prevent hanging
+        // Poll for sync completion with shorter timeout to prevent hanging.
+        // Important: startSync launches async work, so initial status can remain idle briefly.
         var attempts = 0
         let maxAttempts = 20 // 10 seconds timeout (reduced from 30)
+        var hasObservedSyncing = false
         
         while attempts < maxAttempts {
             // Check if user is still authenticated during sync
@@ -272,12 +272,19 @@ class FirebaseUserAccountManager: ObservableObject {
                 // Don't retry on failure - just proceed with sign out
                 return
             case .syncing:
+                hasObservedSyncing = true
                 try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                 attempts += 1
             case .idle:
-                // If it went back to idle, don't retry during sign-out
-                print("ℹ️ Sync completed or stopped, proceeding with sign-out")
-                return
+                if hasObservedSyncing {
+                    // If it went back to idle after syncing, proceed with sign-out.
+                    print("ℹ️ Sync completed or stopped, proceeding with sign-out")
+                    return
+                }
+
+                // Sync task may not have started yet; wait briefly before deciding.
+                try? await Task.sleep(nanoseconds: 250_000_000) // 0.25 seconds
+                attempts += 1
             }
         }
         
@@ -334,7 +341,7 @@ class FirebaseUserAccountManager: ObservableObject {
                 
                 await MainActor.run {
                     self.authStatus = .success
-                    print("📧 Password reset email sent to: \(email)")
+                    print("📧 Password reset email sent to: \(Utilities.redactedEmail(email))")
                 }
                 
             } catch {
@@ -423,7 +430,7 @@ class FirebaseUserAccountManager: ObservableObject {
         pendingEmail = nil
         pendingPassword = nil
         
-        print("✅ Password saved to keychain for: \(email)")
+        print("✅ Password saved to keychain for: \(Utilities.redactedEmail(email))")
     }
     
     func declinePasswordSave() {
@@ -436,7 +443,7 @@ class FirebaseUserAccountManager: ObservableObject {
         pendingEmail = nil
         pendingPassword = nil
         
-        print("⏭️ Password save declined permanently for: \(email)")
+        print("⏭️ Password save declined permanently for: \(Utilities.redactedEmail(email))")
         print("   User will not be prompted again for this account")
     }
     
@@ -471,7 +478,7 @@ class FirebaseUserAccountManager: ObservableObject {
     
     func clearKeychainPreference(for email: String) {
         keychainService.clearUserPreference(for: email)
-        print("🔄 Keychain preference cleared for: \(email)")
+        print("🔄 Keychain preference cleared for: \(Utilities.redactedEmail(email))")
     }
     
     func debugKeychainPreferences() {
@@ -528,7 +535,7 @@ class FirebaseUserAccountManager: ObservableObject {
             try await firebaseService.signUp(email: email, password: password, displayName: displayName)
 
             await MainActor.run {
-                print("✅ Account created from guest mode for: \(email)")
+                print("✅ Account created from guest mode for: \(Utilities.redactedEmail(email))")
             }
 
             // Migrate all local data to Firebase
@@ -543,10 +550,10 @@ class FirebaseUserAccountManager: ObservableObject {
                 // Show email verification prompt if email is not verified
                 if let user = self.firebaseService.currentUser, !user.isEmailVerified {
                     self.shouldShowEmailVerification = true
-                    print("📧 Email verification prompt shown for: \(email)")
+                    print("📧 Email verification prompt shown for: \(Utilities.redactedEmail(email))")
                 }
 
-                print("✅ Guest data migrated successfully to account: \(email)")
+                print("✅ Guest data migrated successfully to account: \(Utilities.redactedEmail(email))")
             }
 
             // Start comprehensive sync after conversion
@@ -570,6 +577,7 @@ class FirebaseUserAccountManager: ObservableObject {
         // Wait for sync to complete
         var attempts = 0
         let maxAttempts = 60 // 30 seconds timeout
+        var hasObservedSyncing = false
 
         while attempts < maxAttempts {
             let status = syncManager.syncStatus
@@ -582,11 +590,18 @@ class FirebaseUserAccountManager: ObservableObject {
                 print("⚠️ Guest data migration sync failed: \(error)")
                 return
             case .syncing:
+                hasObservedSyncing = true
                 try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                 attempts += 1
             case .idle:
-                print("ℹ️ Sync completed or stopped")
-                return
+                if hasObservedSyncing {
+                    print("ℹ️ Sync completed or stopped")
+                    return
+                }
+
+                // Sync task may not have started yet; wait briefly.
+                try? await Task.sleep(nanoseconds: 250_000_000) // 0.25 seconds
+                attempts += 1
             }
         }
 
@@ -835,41 +850,47 @@ class FirebaseUserAccountManager: ObservableObject {
     
     private func clearCoreData() {
         print("🗄️ Clearing Core Data...")
-        
-        let context = PersistenceController.shared.container.viewContext
-        
-        // Delete all leads
-        let leadFetchRequest: NSFetchRequest<NSFetchRequestResult> = Lead.fetchRequest()
-        let leadDeleteRequest = NSBatchDeleteRequest(fetchRequest: leadFetchRequest)
-        
-        do {
-            try context.execute(leadDeleteRequest)
-            print("✅ All leads deleted from Core Data")
-        } catch {
-            print("❌ Failed to delete leads: \(error)")
+
+        let persistence = PersistenceController.shared
+        guard persistence.hasPersistentStore else {
+            print("⚠️ Skipping Core Data clear: persistent store is not loaded")
+            return
         }
-        
-        // Delete all follow-up check-ins
-        let checkInFetchRequest: NSFetchRequest<NSFetchRequestResult> = FollowUpCheckIn.fetchRequest()
-        let checkInDeleteRequest = NSBatchDeleteRequest(fetchRequest: checkInFetchRequest)
-        
-        do {
-            try context.execute(checkInDeleteRequest)
-            print("✅ All follow-up check-ins deleted from Core Data")
-        } catch {
-            print("❌ Failed to delete follow-up check-ins: \(error)")
+
+        let viewContext = persistence.container.viewContext
+        let backgroundContext = persistence.container.newBackgroundContext()
+
+        backgroundContext.performAndWait {
+            deleteEntity(Lead.self, label: "leads", in: backgroundContext, mergeInto: viewContext)
+            deleteEntity(FollowUpCheckIn.self, label: "follow-up check-ins", in: backgroundContext, mergeInto: viewContext)
+            deleteEntity(Neighborhood.self, label: "neighborhoods", in: backgroundContext, mergeInto: viewContext)
+            backgroundContext.reset()
         }
-        
-        // Save context to persist deletions
+
+        viewContext.reset()
+        print("✅ Core Data cleanup completed safely")
+    }
+
+    nonisolated private func deleteEntity<T: NSManagedObject>(
+        _ entityType: T.Type,
+        label: String,
+        in context: NSManagedObjectContext,
+        mergeInto viewContext: NSManagedObjectContext
+    ) {
+        let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: String(describing: entityType))
+        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        deleteRequest.resultType = .resultTypeObjectIDs
+
         do {
-            try context.save()
-            print("✅ Core Data context saved after cleanup")
+            let result = try context.execute(deleteRequest) as? NSBatchDeleteResult
+            if let objectIDs = result?.result as? [NSManagedObjectID], !objectIDs.isEmpty {
+                let changes: [AnyHashable: Any] = [NSDeletedObjectsKey: objectIDs]
+                NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [viewContext])
+            }
+            print("✅ All \(label) deleted from Core Data")
         } catch {
-            print("❌ Failed to save Core Data context after cleanup: \(error)")
+            print("❌ Failed to delete \(label): \(error)")
         }
-        
-        // Reset Core Data context
-        context.reset()
     }
     
     private func clearUserDefaults() {
@@ -975,6 +996,11 @@ class FirebaseUserAccountManager: ObservableObject {
     
     private func performPostSignInSync() async {
         print("🔄 Starting comprehensive sync after sign-in...")
+
+        // Restore account-level flags/preferences (onboarding/premium/profile) from cloud.
+        await firebaseService.restoreAccountProfileFromClouds()
+        // Then re-publish current local state to keep both clouds converged.
+        await firebaseService.syncCurrentAccountProfileToClouds()
         
         // Start appointment Firebase sync first
         AppointmentManager.shared.restartFirebaseSync()

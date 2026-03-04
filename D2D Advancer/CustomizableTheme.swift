@@ -3,52 +3,52 @@ import SwiftUI
 // MARK: - Customizable Theme System
 struct CustomizableTheme {
     // Primary Colors
-    var primaryColor: Color = Color(red: 0.13, green: 0.31, blue: 0.54)
-    var secondaryColor: Color = Color(red: 0.44, green: 0.50, blue: 0.57)
-    var accentColor: Color = Color(red: 0.00, green: 0.48, blue: 0.80)
-    
+    var primaryColor: Color = Color(red: 0.545, green: 0.361, blue: 0.965)
+    var secondaryColor: Color = Color(red: 0.427, green: 0.157, blue: 0.851)
+    var accentColor: Color = Color(red: 0.655, green: 0.545, blue: 0.980)
+
     // Status Colors
-    var successColor: Color = Color(red: 0.18, green: 0.54, blue: 0.34)
-    var warningColor: Color = Color(red: 0.85, green: 0.65, blue: 0.13)
-    var errorColor: Color = Color(red: 0.78, green: 0.20, blue: 0.15)
-    var infoColor: Color = Color(red: 0.12, green: 0.56, blue: 0.84)
-    
+    var successColor: Color = Color(red: 0.133, green: 0.773, blue: 0.369)
+    var warningColor: Color = Color(red: 0.961, green: 0.620, blue: 0.043)
+    var errorColor: Color = Color(red: 0.937, green: 0.267, blue: 0.267)
+    var infoColor: Color = Color(red: 0.231, green: 0.510, blue: 0.965)
+
     // Background Colors
     var backgroundColor: Color = Color(red: 0.98, green: 0.98, blue: 0.99)
     var surfaceColor: Color = Color.white
-    
+
     // Text Colors
     var textPrimaryColor: Color = Color(red: 0.13, green: 0.16, blue: 0.20)
     var textSecondaryColor: Color = Color(red: 0.39, green: 0.45, blue: 0.52)
-    
+
     // Border and Shadow
     var borderColor: Color = Color(red: 0.86, green: 0.89, blue: 0.92)
     var shadowColor: Color = Color.black.opacity(0.08)
-    
+
     // Style Properties
-    var cornerRadius: CGFloat = 8
-    var shadowRadius: CGFloat = 4
+    var cornerRadius: CGFloat = 16
+    var shadowRadius: CGFloat = 8
     var buttonPadding: CGFloat = 12
 }
 
 // MARK: - Theme Presets for Quick Setup
 extension CustomizableTheme {
     static let professional = CustomizableTheme(
-        primaryColor: Color(red: 0.13, green: 0.31, blue: 0.54),
-        secondaryColor: Color(red: 0.44, green: 0.50, blue: 0.57),
-        accentColor: Color(red: 0.00, green: 0.48, blue: 0.80),
-        successColor: Color(red: 0.18, green: 0.54, blue: 0.34),
-        warningColor: Color(red: 0.85, green: 0.65, blue: 0.13),
-        errorColor: Color(red: 0.78, green: 0.20, blue: 0.15),
-        infoColor: Color(red: 0.12, green: 0.56, blue: 0.84),
+        primaryColor: Color(red: 0.545, green: 0.361, blue: 0.965),
+        secondaryColor: Color(red: 0.427, green: 0.157, blue: 0.851),
+        accentColor: Color(red: 0.655, green: 0.545, blue: 0.980),
+        successColor: Color(red: 0.133, green: 0.773, blue: 0.369),
+        warningColor: Color(red: 0.961, green: 0.620, blue: 0.043),
+        errorColor: Color(red: 0.937, green: 0.267, blue: 0.267),
+        infoColor: Color(red: 0.231, green: 0.510, blue: 0.965),
         backgroundColor: Color(red: 0.98, green: 0.98, blue: 0.99),
         surfaceColor: Color.white,
         textPrimaryColor: Color(red: 0.13, green: 0.16, blue: 0.20),
         textSecondaryColor: Color(red: 0.39, green: 0.45, blue: 0.52),
         borderColor: Color(red: 0.86, green: 0.89, blue: 0.92),
         shadowColor: Color.black.opacity(0.08),
-        cornerRadius: 8,
-        shadowRadius: 4,
+        cornerRadius: 16,
+        shadowRadius: 8,
         buttonPadding: 12
     )
     

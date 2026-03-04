@@ -15,6 +15,7 @@ struct D2D_AdvancerApp: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var userAccountManager = FirebaseUserAccountManager.shared
     @StateObject private var firebaseService = FirebaseService.shared
+    @AppStorage("isDarkMode") private var isDarkMode = false
     init() {
         FirebaseApp.configure()
         print("🚀 D2D Advancer App Starting...")
@@ -62,7 +63,7 @@ struct D2D_AdvancerApp: App {
         WindowGroup {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
-            .preferredColorScheme(nil)
+            .preferredColorScheme(isDarkMode ? .dark : .light)
             .customThemed()
             .alert("Save Password to Keychain", isPresented: $userAccountManager.shouldShowPasswordSavePrompt) {
                 Button("Save to Keychain") {

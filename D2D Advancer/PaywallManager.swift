@@ -329,6 +329,15 @@ class PaywallManager: ObservableObject {
         return false
     }
 
+    /// Gate an action behind the paywall. Returns true if the user is premium and the action can proceed.
+    /// Shows the paywall if the user is not premium.
+    @discardableResult
+    func gateAction() -> Bool {
+        if isPremium { return true }
+        shouldShowPaywall = true
+        return false
+    }
+
     // MARK: - Premium Status
 
     private func loadPremiumStatus() {
@@ -342,7 +351,7 @@ class PaywallManager: ObservableObject {
     }
 
     func setPremiumStatus(_ premium: Bool) {
-        let wasPremiouslyPremium = isPremium
+        let wasPreviouslyPremium = isPremium
         isPremium = premium
         userDefaults.set(premium, forKey: premiumKey)
         userDefaults.synchronize()
@@ -360,7 +369,7 @@ class PaywallManager: ObservableObject {
 
             // If user was previously premium and now is not, show paywall
             // This handles subscription expiration/cancellation
-            if wasPremiouslyPremium && !premium && onboardingCompleted {
+            if wasPreviouslyPremium && !premium && onboardingCompleted {
                 print("⚠️ Subscription expired or cancelled - showing paywall")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     self.shouldShowPaywall = true

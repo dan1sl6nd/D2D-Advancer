@@ -33,28 +33,28 @@ struct MainTabView: View {
                     isSelected: router.selectedTab == 0,
                     action: { router.selectedTab = 0 }
                 )
-                
+
                 TabBarButton(
                     title: "Leads",
                     icon: "person.3.fill",
                     isSelected: router.selectedTab == 1,
                     action: { router.selectedTab = 1 }
                 )
-                
+
                 TabBarButton(
                     title: "Follow Up",
                     icon: "calendar.badge.clock",
                     isSelected: router.selectedTab == 2,
                     action: { router.selectedTab = 2 }
                 )
-                
+
                 TabBarButton(
                     title: "Appts",
                     icon: "calendar",
                     isSelected: router.selectedTab == 3,
                     action: { router.selectedTab = 3 }
                 )
-                
+
                 TabBarButton(
                     title: "More",
                     icon: "gearshape.fill",
@@ -62,11 +62,14 @@ struct MainTabView: View {
                     action: { router.selectedTab = 4 }
                 )
             }
-            .background(Color(UIColor.systemBackground))
+            .background(.ultraThinMaterial)
             .overlay(
-                Rectangle()
-                    .frame(height: 0.5)
-                    .foregroundColor(Color(UIColor.separator)),
+                LinearGradient(
+                    colors: [Color.themeBorder, Color.themeBorder.opacity(0)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(height: 0.5),
                 alignment: .top
             )
         }
@@ -130,25 +133,32 @@ struct TabBarButton: View {
     let icon: String
     let isSelected: Bool
     let action: () -> Void
-    
+
     init(title: String, icon: String, isSelected: Bool, action: @escaping () -> Void) {
         self.title = title
         self.icon = icon
         self.isSelected = isSelected
         self.action = action
     }
-    
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 20))
                 Text(title)
-                    .font(.caption)
+                    .font(.themeSmall)
+
+                // Pill indicator under the selected tab
+                Capsule()
+                    .fill(Color.themePrimary)
+                    .frame(width: 20, height: 2)
+                    .opacity(isSelected ? 1 : 0)
             }
-            .foregroundColor(isSelected ? .accentColor : .secondary)
+            .foregroundColor(isSelected ? Color.themePrimary : Color.themeTextSecondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
+            .animation(.spring(response: 0.3), value: isSelected)
         }
         .buttonStyle(PlainButtonStyle())
     }
