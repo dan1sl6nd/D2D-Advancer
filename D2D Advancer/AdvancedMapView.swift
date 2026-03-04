@@ -12,8 +12,10 @@ struct AdvancedMapView: UIViewRepresentable {
     @State private var hasInitialRegionSet = false
 
     let leads: [Lead]
+    var heatmapOverlay: HeatmapOverlay?
     let onLeadTap: (Lead) -> Void
-    let onLongPress: (CLLocationCoordinate2D?, Lead?) -> Void // Modified to accept optional Lead
+    let onLongPress: (CLLocationCoordinate2D?, Lead?) -> Void
+    var onRegionChanged: ((MKCoordinateRegion) -> Void)?
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -158,6 +160,19 @@ struct AdvancedMapView: UIViewRepresentable {
         if coordinator.shouldUpdateAnnotations(leads: leads) {
             coordinator.updateAnnotations(mapView: mapView, leads: leads)
         }
+
+        // Update heatmap overlay
+        let existingHeatmaps = mapView.overlays.compactMap { $0 as? HeatmapOverlay }
+        if let overlay = heatmapOverlay {
+            if existingHeatmaps.isEmpty {
+                mapView.addOverlay(overlay, level: .aboveRoads)
+            } else if existingHeatmaps.first !== overlay {
+                mapView.removeOverlays(existingHeatmaps)
+                mapView.addOverlay(overlay, level: .aboveRoads)
+            }
+        } else if !existingHeatmaps.isEmpty {
+            mapView.removeOverlays(existingHeatmaps)
+        }
     }
     
     func makeCoordinator() -> Coordinator {
@@ -297,6 +312,13 @@ struct AdvancedMapView: UIViewRepresentable {
             parent.onLeadTap(leadAnnotation.lead)
         }
         
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if overlay is HeatmapOverlay {
+                return HeatmapOverlayRenderer(overlay: overlay)
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
             isUserInteracting = true
             updateTimer?.invalidate()
@@ -348,6 +370,8 @@ struct AdvancedMapView: UIViewRepresentable {
                             self.parent.pitch = currentCamera.pitch
                         }
                     }
+
+                    self.parent.onRegionChanged?(currentRegion)
                 }
             }
         }

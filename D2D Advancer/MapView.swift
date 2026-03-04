@@ -16,6 +16,8 @@ struct MapView: View {
     @State private var triggerMapAnimation = false
     @State private var isMapMenuExpanded = false
     @ObservedObject private var paywallManager = PaywallManager.shared
+    @StateObject private var overlayManager = NeighborhoodOverlayManager()
+    @State private var isHeatmapEnabled = false
     
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)],
@@ -87,11 +89,19 @@ struct MapView: View {
             pitch: $mapPitch,
             animateNextUpdate: $triggerMapAnimation,
             leads: Array(leads),
+            heatmapOverlay: overlayManager.heatmapOverlay,
             onLeadTap: { lead in
                 selectedLead = lead
             },
-            onLongPress: { coordinate, lead in // Updated closure signature
+            onLongPress: { coordinate, lead in
                 handleLongPress(coordinate: coordinate, lead: lead)
+            },
+            onRegionChanged: { newRegion in
+                if isHeatmapEnabled {
+                    Task {
+                        await overlayManager.generateHeatmap(for: newRegion)
+                    }
+                }
             }
         )
         .onAppear {
@@ -305,6 +315,39 @@ struct MapView: View {
                                     .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                                     .premiumLock()
                             }
+                            .transition(.scale.combined(with: .opacity))
+
+                            // Heatmap Toggle Button
+                            Button(action: {
+                                guard paywallManager.gateAction() else { return }
+                                isHeatmapEnabled.toggle()
+                                if isHeatmapEnabled {
+                                    Task {
+                                        await overlayManager.generateHeatmap(for: locationManager.region)
+                                    }
+                                } else {
+                                    overlayManager.heatmapOverlay = nil
+                                }
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isMapMenuExpanded = false
+                                }
+                            }) {
+                                Circle()
+                                    .fill(isHeatmapEnabled ? Color.electricViolet : Color.obsidianSurface)
+                                    .frame(width: 44, height: 44)
+                                    .overlay(
+                                        Image(systemName: "flame.fill")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(isHeatmapEnabled ? .white : Color.electricViolet)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.obsidianBorder, lineWidth: isHeatmapEnabled ? 0 : 1)
+                                    )
+                                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                                    .premiumLock()
+                            }
+                            .buttonStyle(PlainButtonStyle())
                             .transition(.scale.combined(with: .opacity))
                         }
 
