@@ -70,10 +70,10 @@ struct ThemeSettingsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(previewTitle)
                             .font(.headline)
-                            .foregroundColor(Color.themeTextPrimary)
+                            .foregroundColor(Color.textPrimary)
                         Text(previewSubtitle)
                             .font(.caption)
-                            .foregroundColor(Color.themeTextSecondary)
+                            .foregroundColor(Color.textSecondary)
 
                         HStack(spacing: 12) {
                             Button("Primary") {}
@@ -98,10 +98,10 @@ struct ThemeSettingsView: View {
                 .font(.subheadline)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.themeSurface)
+                .background(Color.obsidianSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.themeBorder, lineWidth: 1)
+                        .stroke(Color.obsidianBorder, lineWidth: 1)
                 )
                 .cornerRadius(10)
         }
