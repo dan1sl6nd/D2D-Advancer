@@ -659,7 +659,7 @@ class UserDataSyncManager: ObservableObject {
         return .inserted
     }
 
-    private static func applyLeadDocumentData(_ data: [String: Any], to lead: Lead) {
+    nonisolated private static func applyLeadDocumentData(_ data: [String: Any], to lead: Lead) {
         lead.name = UserDataSyncManager.optionalStringValue(data["name"])
         lead.address = UserDataSyncManager.optionalStringValue(data["address"])
         lead.phone = UserDataSyncManager.optionalStringValue(data["phone"])
@@ -716,7 +716,7 @@ class UserDataSyncManager: ObservableObject {
         }
     }
 
-    private static func applyCheckInData(_ value: Any?, to lead: Lead) {
+    nonisolated private static func applyCheckInData(_ value: Any?, to lead: Lead) {
         guard let normalizedCheckIns = parseCheckInArray(value) else {
             return
         }
@@ -753,7 +753,7 @@ class UserDataSyncManager: ObservableObject {
         }
     }
 
-    private static func parseCheckInArray(_ value: Any?) -> [LeadCheckInSyncPayload]? {
+    nonisolated private static func parseCheckInArray(_ value: Any?) -> [LeadCheckInSyncPayload]? {
         guard let value else { return nil }
 
         if let checkInMaps = value as? [[String: Any]] {
@@ -778,7 +778,7 @@ class UserDataSyncManager: ObservableObject {
         return nil
     }
 
-    private static func parseCheckInDictionary(_ dictionary: [String: Any]) -> LeadCheckInSyncPayload? {
+    nonisolated private static func parseCheckInDictionary(_ dictionary: [String: Any]) -> LeadCheckInSyncPayload? {
         guard let rawId = optionalStringValue(dictionary["id"]) ?? optionalStringValue(dictionary["checkInId"]),
               let checkInId = UUID(uuidString: rawId) else {
             return nil
@@ -800,7 +800,7 @@ class UserDataSyncManager: ObservableObject {
         )
     }
 
-    private static func parseDateValue(_ value: Any?) -> Date? {
+    nonisolated private static func parseDateValue(_ value: Any?) -> Date? {
         if let date = value as? Date {
             return date
         }
@@ -827,7 +827,7 @@ class UserDataSyncManager: ObservableObject {
         return nil
     }
 
-    private static func parseDoubleValue(_ value: Any?) -> Double? {
+    nonisolated private static func parseDoubleValue(_ value: Any?) -> Double? {
         if let double = value as? Double {
             return double
         }
@@ -849,7 +849,7 @@ class UserDataSyncManager: ObservableObject {
         return nil
     }
 
-    private static func parseInt16Value(_ value: Any?) -> Int16? {
+    nonisolated private static func parseInt16Value(_ value: Any?) -> Int16? {
         if let int16 = value as? Int16 {
             return int16
         }
@@ -871,7 +871,7 @@ class UserDataSyncManager: ObservableObject {
         return nil
     }
 
-    private static func optionalStringValue(_ value: Any?) -> String? {
+    nonisolated private static func optionalStringValue(_ value: Any?) -> String? {
         if let string = value as? String {
             return optionalTrimmedString(string)
         }
