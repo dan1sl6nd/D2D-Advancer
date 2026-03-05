@@ -32,7 +32,7 @@ struct FollowUpView: View {
                             LazyVStack(spacing: 8) {
                                 // OVERDUE section
                                 if !overdueLeads.isEmpty {
-                                    followUpSectionHeader("OVERDUE", color: Color.statusNotInterested)
+                                    followUpSectionHeader("OVERDUE", color: Color.statusNotInterested, count: overdueLeads.count)
                                     ForEach(overdueLeads, id: \.id) { lead in
                                         followUpRow(for: lead)
                                     }
@@ -40,7 +40,7 @@ struct FollowUpView: View {
 
                                 // TODAY section
                                 if !todayLeads.isEmpty {
-                                    followUpSectionHeader("TODAY", color: Color.electricViolet)
+                                    followUpSectionHeader("TODAY", color: Color.electricViolet, count: todayLeads.count)
                                     ForEach(todayLeads, id: \.id) { lead in
                                         followUpRow(for: lead)
                                     }
@@ -48,7 +48,7 @@ struct FollowUpView: View {
 
                                 // UPCOMING section
                                 if !upcomingLeads.isEmpty {
-                                    followUpSectionHeader("UPCOMING", color: Color.textSecondary)
+                                    followUpSectionHeader("UPCOMING", color: Color.textSecondary, count: upcomingLeads.count)
                                     ForEach(upcomingLeads, id: \.id) { lead in
                                         followUpRow(for: lead)
                                     }
@@ -113,15 +113,24 @@ struct FollowUpView: View {
         }
     }
 
-    private func followUpSectionHeader(_ title: String, color: Color) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .medium))
-            .textCase(.uppercase)
-            .tracking(0.5)
-            .foregroundColor(color)
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 4)
+    private func followUpSectionHeader(_ title: String, color: Color, count: Int) -> some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(color)
+                .frame(width: 3, height: 14)
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .textCase(.uppercase)
+                .tracking(0.8)
+                .foregroundColor(color)
+            Text("\(count)")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(color.opacity(0.7))
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 4)
     }
 
     @ViewBuilder
@@ -339,6 +348,28 @@ struct FollowUpInteractiveRowView: View {
         .onTapGesture {
             onTap()
         }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                rescheduleTo(days: 7)
+            } label: {
+                Label("+1 Week", systemImage: "calendar.badge.plus")
+            }
+            .tint(Color.electricViolet)
+
+            Button {
+                rescheduleTo(days: 1)
+            } label: {
+                Label("Tomorrow", systemImage: "sunrise")
+            }
+            .tint(Color.statusInterested)
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Remove", systemImage: "bell.slash")
+            }
+        }
         .contextMenu {
             Button {
                 onTap()
@@ -376,6 +407,22 @@ struct FollowUpInteractiveRowView: View {
 
     private var leadInitial: String {
         String(lead.displayName.prefix(1)).uppercased()
+    }
+
+    private func rescheduleTo(days: Int) {
+        let calendar = Calendar.current
+        let baseDate: Date
+        if days == 1 {
+            let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date())!
+            baseDate = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow)!
+        } else {
+            let from = lead.followUpDate ?? Date()
+            baseDate = calendar.date(byAdding: .day, value: days, to: from)!
+        }
+        lead.setFollowUpDate(baseDate)
+        NotificationService.shared.scheduleFollowUpNotification(for: lead)
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
     }
 
     private func timeIcon(for date: Date) -> String {
