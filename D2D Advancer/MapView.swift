@@ -14,19 +14,38 @@ struct MapView: View {
     @State private var mapPitch: Double = 0.0
     @State private var leadToChangeStatus: Lead? // New state variable
     @State private var triggerMapAnimation = false
-    @State private var isMapMenuExpanded = false
     @ObservedObject private var paywallManager = PaywallManager.shared
-    
+    @State private var toastLead: Lead?
+    @State private var toastMessage: String = ""
+    @State private var showToast = false
+
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)],
         animation: .default
     )
     private var leads: FetchedResults<Lead>
-    
+
+    private var interestedCount: Int {
+        leads.filter { $0.status == "interested" }.count
+    }
+
+    private var notHomeCount: Int {
+        leads.filter { $0.status == "not_home" }.count
+    }
+
+    private var notInterestedCount: Int {
+        leads.filter { $0.status == "not_interested" }.count
+    }
+
+    private var soldCount: Int {
+        leads.filter { $0.status == "converted" }.count
+    }
+
     var body: some View {
         ZStack {
                 mapView
                 overlayControls
+                toastOverlay
 
                 // Show location permission status
                 if locationManager.authorizationStatus == .notDetermined ||
@@ -160,181 +179,31 @@ struct MapView: View {
     
     private var overlayControls: some View {
         ZStack {
-            // Dismiss overlay when menu is expanded (tap anywhere to close)
-            if isMapMenuExpanded {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            isMapMenuExpanded = false
-                        }
-                    }
+            // Top-left: stat chips
+            VStack {
+                statChipsRow
+                    .padding(.top, 62)
+                    .padding(.trailing, 70)
+                Spacer()
             }
 
-            // Location button - top right
+            // Top-right: map controls
             VStack {
                 HStack {
                     Spacer()
-                    Button(action: {
-                        centerOnUserLocationWithAnimation()
-                    }) {
-                        Circle()
-                            .fill(Color.obsidianSurface)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: "location.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(Color.textPrimary)
-                            )
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.obsidianBorder, lineWidth: 1)
-                            )
-                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                    }
-                    .padding(.trailing, 16)
-                    .padding(.top, 60)
+                    mapControlsGroup
+                        .fixedSize()
+                        .padding(.trailing, 16)
+                        .padding(.top, 58)
                 }
                 Spacer()
             }
 
-            // FAB and expanded menu - bottom right
+            // Bottom: floating action bar
             VStack {
                 Spacer()
-                HStack {
-                    Spacer()
-                    VStack(spacing: 12) {
-                        // Expanded menu items
-                        if isMapMenuExpanded {
-                            // Map Type Button (no paywall gate)
-                            Button(action: {
-                                cycleMapType()
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    isMapMenuExpanded = false
-                                }
-                            }) {
-                                Circle()
-                                    .fill(Color.obsidianSurface)
-                                    .frame(width: 44, height: 44)
-                                    .overlay(
-                                        Image(systemName: mapTypeIcon)
-                                            .font(.system(size: 18, weight: .semibold))
-                                            .foregroundColor(Color.electricViolet)
-                                    )
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.obsidianBorder, lineWidth: 1)
-                                    )
-                                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                            }
-                            .transition(.scale.combined(with: .opacity))
-
-                            // Not Interested Button
-                            Button(action: {
-                                guard paywallManager.gateAction() else { return }
-                                createQuickLead(status: .notInterested)
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    isMapMenuExpanded = false
-                                }
-                            }) {
-                                Circle()
-                                    .fill(Color.obsidianSurface)
-                                    .frame(width: 44, height: 44)
-                                    .overlay(
-                                        Image(systemName: "hand.raised.fill")
-                                            .font(.system(size: 18, weight: .semibold))
-                                            .foregroundColor(Color.statusNotInterested)
-                                    )
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.obsidianBorder, lineWidth: 1)
-                                    )
-                                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                                    .premiumLock()
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .transition(.scale.combined(with: .opacity))
-
-                            // Not Home Button
-                            Button(action: {
-                                guard paywallManager.gateAction() else { return }
-                                createQuickLead(status: .notHome)
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    isMapMenuExpanded = false
-                                }
-                            }) {
-                                Circle()
-                                    .fill(Color.obsidianSurface)
-                                    .frame(width: 44, height: 44)
-                                    .overlay(
-                                        Image(systemName: "house.slash.fill")
-                                            .font(.system(size: 18, weight: .semibold))
-                                            .foregroundColor(Color.statusNotHome)
-                                    )
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.obsidianBorder, lineWidth: 1)
-                                    )
-                                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                                    .premiumLock()
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .transition(.scale.combined(with: .opacity))
-
-                            // Add Lead Button
-                            Button(action: {
-                                guard paywallManager.gateAction() else { return }
-                                showingAddLead = true
-                                addLeadCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    isMapMenuExpanded = false
-                                }
-                            }) {
-                                Circle()
-                                    .fill(Color.obsidianSurface)
-                                    .frame(width: 44, height: 44)
-                                    .overlay(
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 18, weight: .semibold))
-                                            .foregroundColor(Color.electricViolet)
-                                    )
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.obsidianBorder, lineWidth: 1)
-                                    )
-                                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                                    .premiumLock()
-                            }
-                            .transition(.scale.combined(with: .opacity))
-                        }
-
-                        // Main FAB button
-                        Button(action: {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                isMapMenuExpanded.toggle()
-                            }
-                        }) {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.electricViolet, Color.electricVioletDeep],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 56, height: 56)
-                                .overlay(
-                                    Image(systemName: isMapMenuExpanded ? "xmark" : "plus")
-                                        .font(.system(size: 22, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .rotationEffect(.degrees(isMapMenuExpanded ? 90 : 0))
-                                )
-                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 8, x: 0, y: 4)
-                        }
-                    }
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 24)
-                }
+                floatingActionBar
+                    .padding(.bottom, 30)
             }
         }
     }
@@ -565,6 +434,184 @@ struct MapView: View {
         }
     }
     
+    // MARK: - HUD Components
+
+    private var mapControlsGroup: some View {
+        VStack(spacing: 0) {
+            Button {
+                centerOnUserLocationWithAnimation()
+            } label: {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(Color.textPrimary)
+                    .frame(width: 44, height: 44)
+            }
+
+            Divider()
+                .background(.white.opacity(0.1))
+
+            Button {
+                cycleMapType()
+            } label: {
+                Image(systemName: mapTypeIcon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(Color.electricViolet)
+                    .frame(width: 44, height: 44)
+            }
+        }
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
+    }
+
+    private var floatingActionBar: some View {
+        HStack(spacing: 0) {
+            // Not Home
+            Button {
+                guard paywallManager.gateAction() else { return }
+                createQuickLead(status: .notHome)
+            } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "house.slash.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(Color.statusNotHome)
+                    Text("NOT HOME")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color.statusNotHome)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
+
+            // No Interest
+            Button {
+                guard paywallManager.gateAction() else { return }
+                createQuickLead(status: .notInterested)
+            } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "hand.raised.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(Color.statusNotInterested)
+                    Text("NO INTEREST")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color.statusNotInterested)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
+
+            // Add Lead
+            Button {
+                guard paywallManager.gateAction() else { return }
+                showingAddLead = true
+                addLeadCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
+            } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(Color.electricViolet)
+                    Text("ADD LEAD")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color.electricViolet)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
+        }
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 2)
+        .padding(.horizontal, 16)
+    }
+
+    private var statChipsRow: some View {
+        HStack(spacing: 6) {
+            statChip(color: Color.statusInterested, count: interestedCount)
+            statChip(color: Color.statusNotHome, count: notHomeCount)
+            statChip(color: Color.statusNotInterested, count: notInterestedCount)
+            statChip(color: Color.statusConverted, count: soldCount)
+            Spacer()
+            Text("\(leads.count) total")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(.regularMaterial)
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, 14)
+    }
+
+    @ViewBuilder
+    private func statChip(color: Color, count: Int) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text("\(count)")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.primary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.regularMaterial)
+        .clipShape(Capsule())
+    }
+
+    private var toastOverlay: some View {
+        VStack {
+            Spacer()
+            if showToast {
+                HStack(spacing: 12) {
+                    Text(toastMessage)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    Button("Undo") {
+                        undoQuickLead()
+                    }
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(Color.electricViolet)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.black.opacity(0.85))
+                .clipShape(Capsule())
+                .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 2)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .padding(.horizontal, 20)
+                .padding(.bottom, 100)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showToast)
+    }
+
+    private func showQuickLeadToast(status: Lead.Status, address: String, lead: Lead) {
+        toastLead = lead
+        toastMessage = "\(status.displayName) — \(address)"
+        withAnimation {
+            showToast = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            withAnimation {
+                showToast = false
+            }
+            toastLead = nil
+        }
+    }
+
+    private func undoQuickLead() {
+        if let lead = toastLead {
+            viewContext.delete(lead)
+            try? viewContext.save()
+        }
+        withAnimation {
+            showToast = false
+        }
+        toastLead = nil
+    }
+
     private func cycleMapType() {
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
@@ -645,7 +692,7 @@ struct MapView: View {
                 do {
                     try viewContext.save()
                     print("✅ Quick lead created: \(status.displayName) at \(Utilities.redactedText(addressString))")
-                    
+                    showQuickLeadToast(status: status, address: addressString, lead: newLead)
                 } catch {
                     print("❌ Error creating quick lead: \(error.localizedDescription)")
                     ErrorHandler.shared.handle(error, context: "Create Quick Lead")
