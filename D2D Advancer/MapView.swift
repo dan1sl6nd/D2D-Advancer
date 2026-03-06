@@ -41,6 +41,11 @@ struct MapView: View {
         leads.filter { $0.status == "converted" }.count
     }
 
+    private var todayCount: Int {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        return leads.filter { ($0.createdDate ?? .distantPast) >= startOfDay }.count
+    }
+
     var body: some View {
         ZStack {
                 mapView
@@ -531,6 +536,20 @@ struct MapView: View {
             statChip(color: Color.statusNotInterested, count: notInterestedCount)
             statChip(color: Color.statusConverted, count: soldCount)
             Spacer()
+            if todayCount > 0 {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color.statusInterested)
+                        .frame(width: 6, height: 6)
+                    Text("\(todayCount) today")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Color.statusInterested)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(.regularMaterial)
+                .clipShape(Capsule())
+            }
             Text("\(leads.count) total")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.secondary)
