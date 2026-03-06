@@ -257,6 +257,15 @@ struct AdvancedMapView: UIViewRepresentable {
         }
         
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if let cluster = annotation as? MKClusterAnnotation {
+                let clusterID = "LeadCluster"
+                let clusterView = mapView.dequeueReusableAnnotationView(withIdentifier: clusterID) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(annotation: cluster, reuseIdentifier: clusterID)
+                clusterView.annotation = cluster
+                clusterView.markerTintColor = .systemPurple
+                clusterView.glyphText = "\(cluster.memberAnnotations.count)"
+                return clusterView
+            }
+
             guard let leadAnnotation = annotation as? LeadMapAnnotation else {
                 return nil
             }
@@ -266,6 +275,7 @@ struct AdvancedMapView: UIViewRepresentable {
             
             annotationView.annotation = annotation
             annotationView.canShowCallout = true
+            annotationView.clusteringIdentifier = "LeadCluster"
             
             // Customize based on lead status
             let lead = leadAnnotation.lead
