@@ -1,7 +1,7 @@
  import SwiftUI
 import CoreData
 import MapKit
-import UserNotifications
+@preconcurrency import UserNotifications
 
 struct LeadDetailView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -156,7 +156,7 @@ struct LeadDetailView: View {
                                 .shadow(color: Color.statusNotInterested.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
-                    
+
                     Button(action: {
                         startEditing()
                     }) {
@@ -996,8 +996,8 @@ struct LeadDetailView: View {
             try viewContext.save()
             print("LeadDetailView: Successfully saved lead with status: \(lead.leadStatus.displayName)")
 
-            // Individual lead sync removed - data will sync manually, hourly, or before sign-out
-            print("📝 Lead updated locally - will sync on next manual/hourly/sign-out sync")
+            // Sync to Firebase after save
+            UserDataSyncManager.shared.syncWithServer()
 
             // Force the managed object context to refresh to ensure UI updates
             viewContext.refreshAllObjects()

@@ -1,7 +1,7 @@
 import SwiftUI
 import CoreData
 import CoreLocation
-import UserNotifications
+@preconcurrency import UserNotifications
 import Contacts
 import ContactsUI
 
@@ -580,8 +580,8 @@ struct AddLeadView: View {
             // Increment lead count for paywall tracking
             paywallManager.incrementLeadCount()
 
-            // Individual lead sync removed - data will sync manually, hourly, or before sign-out
-            print("📝 New lead saved locally - will sync on next manual/hourly/sign-out sync")
+            // Sync to Firebase after save
+            UserDataSyncManager.shared.syncWithServer()
 
             // Schedule notification if follow-up date is set
             if let followUpDate = followUpDate {

@@ -16,7 +16,7 @@ class UserDataSyncManager: ObservableObject {
     
     @Published var syncStatus: SyncStatus = .idle
     @Published var lastSyncDate: Date?
-    @Published var isAutoSyncEnabled = false  // Disabled by default
+    @Published var isAutoSyncEnabled = true  // Enabled by default
     @Published var syncInterval: SyncInterval = .oneHour  // Default to 1 hour
     
     private let db = Firestore.firestore()
@@ -129,8 +129,12 @@ class UserDataSyncManager: ObservableObject {
             syncInterval = interval
         }
         
-        // Load auto-sync enabled state
-        isAutoSyncEnabled = UserDefaults.standard.bool(forKey: "auto_sync_enabled")
+        // Load auto-sync enabled state (default to true for new users)
+        if UserDefaults.standard.object(forKey: "auto_sync_enabled") != nil {
+            isAutoSyncEnabled = UserDefaults.standard.bool(forKey: "auto_sync_enabled")
+        } else {
+            isAutoSyncEnabled = true
+        }
     }
     
     private func saveSyncSettings() {
@@ -495,7 +499,7 @@ class UserDataSyncManager: ObservableObject {
         DispatchQueue.main.async {
             self.syncStatus = .idle
             self.lastSyncDate = nil
-            self.isAutoSyncEnabled = false  // Keep auto-sync disabled
+            // Preserve user's auto-sync preference
         }
         
         print("✅ Sync manager state cleared")
@@ -659,7 +663,7 @@ class UserDataSyncManager: ObservableObject {
         return .inserted
     }
 
-    private static func applyLeadDocumentData(_ data: [String: Any], to lead: Lead) {
+    nonisolated private static func applyLeadDocumentData(_ data: [String: Any], to lead: Lead) {
         lead.name = UserDataSyncManager.optionalStringValue(data["name"])
         lead.address = UserDataSyncManager.optionalStringValue(data["address"])
         lead.phone = UserDataSyncManager.optionalStringValue(data["phone"])
@@ -716,7 +720,7 @@ class UserDataSyncManager: ObservableObject {
         }
     }
 
-    private static func applyCheckInData(_ value: Any?, to lead: Lead) {
+    nonisolated private static func applyCheckInData(_ value: Any?, to lead: Lead) {
         guard let normalizedCheckIns = parseCheckInArray(value) else {
             return
         }
@@ -753,7 +757,7 @@ class UserDataSyncManager: ObservableObject {
         }
     }
 
-    private static func parseCheckInArray(_ value: Any?) -> [LeadCheckInSyncPayload]? {
+    nonisolated private static func parseCheckInArray(_ value: Any?) -> [LeadCheckInSyncPayload]? {
         guard let value else { return nil }
 
         if let checkInMaps = value as? [[String: Any]] {
@@ -778,7 +782,7 @@ class UserDataSyncManager: ObservableObject {
         return nil
     }
 
-    private static func parseCheckInDictionary(_ dictionary: [String: Any]) -> LeadCheckInSyncPayload? {
+    nonisolated private static func parseCheckInDictionary(_ dictionary: [String: Any]) -> LeadCheckInSyncPayload? {
         guard let rawId = optionalStringValue(dictionary["id"]) ?? optionalStringValue(dictionary["checkInId"]),
               let checkInId = UUID(uuidString: rawId) else {
             return nil
@@ -800,7 +804,7 @@ class UserDataSyncManager: ObservableObject {
         )
     }
 
-    private static func parseDateValue(_ value: Any?) -> Date? {
+    nonisolated private static func parseDateValue(_ value: Any?) -> Date? {
         if let date = value as? Date {
             return date
         }
@@ -827,7 +831,7 @@ class UserDataSyncManager: ObservableObject {
         return nil
     }
 
-    private static func parseDoubleValue(_ value: Any?) -> Double? {
+    nonisolated private static func parseDoubleValue(_ value: Any?) -> Double? {
         if let double = value as? Double {
             return double
         }
@@ -849,7 +853,7 @@ class UserDataSyncManager: ObservableObject {
         return nil
     }
 
-    private static func parseInt16Value(_ value: Any?) -> Int16? {
+    nonisolated private static func parseInt16Value(_ value: Any?) -> Int16? {
         if let int16 = value as? Int16 {
             return int16
         }
@@ -871,7 +875,7 @@ class UserDataSyncManager: ObservableObject {
         return nil
     }
 
-    private static func optionalStringValue(_ value: Any?) -> String? {
+    nonisolated private static func optionalStringValue(_ value: Any?) -> String? {
         if let string = value as? String {
             return optionalTrimmedString(string)
         }
@@ -908,13 +912,13 @@ class UserDataSyncManager: ObservableObject {
         }
     }
 
-    private static let iso8601DateFormatter: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let iso8601DateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
 
-    private static let iso8601DateFormatterNoFractional: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let iso8601DateFormatterNoFractional: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter

@@ -421,6 +421,7 @@ struct FollowUpInteractiveRowView: View {
         }
         lead.setFollowUpDate(baseDate)
         NotificationService.shared.scheduleFollowUpNotification(for: lead)
+        UserDataSyncManager.shared.syncWithServer()
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
     }

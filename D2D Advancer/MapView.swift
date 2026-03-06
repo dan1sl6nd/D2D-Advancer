@@ -84,8 +84,8 @@ struct MapView: View {
                             do {
                                 try viewContext.save()
                                 
-                                // Individual sync removed - will sync manually, hourly, or before sign-out
-                                print("📝 Lead status updated locally - will sync on next manual/hourly/sign-out sync")
+                                // Sync to Firebase after status change
+                                UserDataSyncManager.shared.syncWithServer()
                                 
                             } catch {
                                 let nsError = error as NSError
@@ -711,6 +711,7 @@ struct MapView: View {
                 do {
                     try viewContext.save()
                     print("✅ Quick lead created: \(status.displayName) at \(Utilities.redactedText(addressString))")
+                    UserDataSyncManager.shared.syncWithServer()
                     showQuickLeadToast(status: status, address: addressString, lead: newLead)
                 } catch {
                     print("❌ Error creating quick lead: \(error.localizedDescription)")
