@@ -10,7 +10,14 @@ struct MoreView: View {
     @State private var showingSettings = false
     @State private var showingSyncSettings = false
     @State private var showingAuthentication = false
+    @State private var showingExportSheet = false
+    @State private var exportFileURL: URL?
     @AppStorage("isDarkMode") private var darkModeEnabled = false
+
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: false)],
+        animation: .default
+    ) private var allLeads: FetchedResults<Lead>
     
     var body: some View {
         NavigationView {
@@ -35,45 +42,57 @@ struct MoreView: View {
                             }
                             .buttonStyle(PlainButtonStyle())
 
+                            // Export Leads Card
+                            Button(action: {
+                                exportLeadsToCSV()
+                            }) {
+                                MoreCardView(
+                                    icon: "square.and.arrow.up",
+                                    iconColor: Color.electricViolet,
+                                    title: "Export Leads",
+                                    subtitle: "\(allLeads.count) leads",
+                                    showChevron: false
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .disabled(allLeads.isEmpty)
+
                             // Data Management Card (only for logged-in users)
                             if userAccountManager.isLoggedIn {
-                                MoreCardView(
-                                    icon: syncStatusIcon,
-                                    iconColor: syncStatusColor,
-                                    title: "Sync Data",
-                                    subtitle: syncStatusText,
-                                    trailingContent: {
-                                        HStack(spacing: 8) {
-                                            Button(action: {
-                                                showingSyncSettings = true
-                                            }) {
-                                                Image(systemName: "gear")
-                                                    .font(.system(size: 14))
-                                                    .foregroundColor(Color.electricViolet)
-                                                    .padding(8)
-                                                    .background(Color.electricViolet.opacity(0.1))
-                                                    .clipShape(Circle())
-                                            }
-
-                                            if syncManager.syncStatus == .syncing {
-                                                ProgressView()
-                                                    .scaleEffect(0.8)
-                                            } else {
-                                                Button("Sync") {
-                                                    syncManager.syncWithServer()
+                                Button(action: {
+                                    if syncManager.syncStatus != .syncing {
+                                        syncManager.syncWithServer()
+                                    }
+                                }) {
+                                    MoreCardView(
+                                        icon: syncStatusIcon,
+                                        iconColor: syncStatusColor,
+                                        title: "Sync Data",
+                                        subtitle: syncStatusText,
+                                        trailingContent: {
+                                            HStack(spacing: 8) {
+                                                if syncManager.syncStatus == .syncing {
+                                                    ProgressView()
+                                                        .scaleEffect(0.8)
+                                                } else {
+                                                    Image(systemName: "arrow.clockwise")
+                                                        .font(.system(size: 14, weight: .semibold))
+                                                        .foregroundColor(Color.electricViolet)
                                                 }
-                                                .font(.footnote)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.white)
-                                                .frame(minWidth: 45)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 6)
-                                                .background(Color.electricViolet)
-                                                .cornerRadius(14)
+
+                                                Button(action: {
+                                                    showingSyncSettings = true
+                                                }) {
+                                                    Image(systemName: "gear")
+                                                        .font(.system(size: 14))
+                                                        .foregroundColor(Color.textSecondary)
+                                                }
+                                                .buttonStyle(PlainButtonStyle())
                                             }
                                         }
-                                    }
-                                )
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
                                 .disabled(syncManager.syncStatus == .syncing)
                             }
                             
@@ -137,7 +156,11 @@ struct MoreView: View {
                 .sheet(isPresented: $showingAuthentication) {
                     AuthenticationSheetWrapper(isPresented: $showingAuthentication)
                 }
-                // Import Leads sheet and alerts removed
+                .sheet(isPresented: $showingExportSheet) {
+                    if let url = exportFileURL {
+                        ShareSheet(activityItems: [url])
+                    }
+                }
             }
         }
     }
@@ -185,8 +208,51 @@ struct MoreView: View {
         }
     }
 
-    // MARK: - Pro Plan Helpers
-    // Removed plan helpers; monetization disabled
+    // MARK: - CSV Export
+
+    private func csvEscape(_ value: String?) -> String {
+        guard let value = value, !value.isEmpty else { return "" }
+        if value.contains(",") || value.contains("\"") || value.contains("\n") {
+            return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        }
+        return value
+    }
+
+    private func exportLeadsToCSV() {
+        let header = "Name,Address,Phone,Email,Status,Notes,Latitude,Longitude,Created,Follow Up Date\n"
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .short
+
+        var csv = header
+        for lead in allLeads {
+            let row = [
+                csvEscape(lead.name),
+                csvEscape(lead.address),
+                csvEscape(lead.phone),
+                csvEscape(lead.email),
+                lead.leadStatus.displayName,
+                csvEscape(lead.notes),
+                String(lead.latitude),
+                String(lead.longitude),
+                lead.createdDate.map { dateFormatter.string(from: $0) } ?? "",
+                lead.followUpDate.map { dateFormatter.string(from: $0) } ?? ""
+            ].joined(separator: ",")
+            csv += row + "\n"
+        }
+
+        let fileName = "leads_export_\(DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .none).replacingOccurrences(of: "/", with: "-")).csv"
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+
+        do {
+            try csv.write(to: tempURL, atomically: true, encoding: .utf8)
+            exportFileURL = tempURL
+            showingExportSheet = true
+        } catch {
+            print("Failed to write CSV: \(error)")
+        }
+    }
 }
 
 // Helper type for alert(item:)
@@ -981,6 +1047,18 @@ struct AuthenticationSheetWrapper: View {
                 }
             }
     }
+}
+
+// MARK: - Share Sheet
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 #Preview {
