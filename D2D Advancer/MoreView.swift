@@ -6,6 +6,7 @@ struct MoreView: View {
     @ObservedObject private var preferences = AppPreferences.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var syncManager = UserDataSyncManager.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
     @State private var showingStatistics = false
     @State private var showingSettings = false
     @State private var showingSyncSettings = false
@@ -18,6 +19,19 @@ struct MoreView: View {
         sortDescriptors: [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: false)],
         animation: .default
     ) private var allLeads: FetchedResults<Lead>
+
+    private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.make(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            dutyLocationPoints: teamService.dutyLocationPoints,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
     
     var body: some View {
         NavigationView {
@@ -56,6 +70,39 @@ struct MoreView: View {
                             }
                             .buttonStyle(PlainButtonStyle())
                             .disabled(allLeads.isEmpty)
+
+                            NavigationLink(destination: TeamWorkspaceView()) {
+                                MoreCardView(
+                                    icon: "person.3.fill",
+                                    iconColor: Color.electricViolet,
+                                    title: "Team Workspace",
+                                    subtitle: teamWorkspaceSubtitle,
+                                    showChevron: false,
+                                    trailingContent: {
+                                        HStack(spacing: 8) {
+                                            if let badgeCount = teamWorkspaceBadgeCount {
+                                                Text("\(badgeCount)")
+                                                    .font(.caption2)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundColor(.white)
+                                                    .padding(.horizontal, 7)
+                                                    .padding(.vertical, 4)
+                                                    .background(Color.statusNotInterested)
+                                                    .clipShape(Capsule())
+                                            }
+
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 14, weight: .medium))
+                                                .foregroundColor(Color.textSecondary)
+                                        }
+                                    }
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("teamWorkspaceCard")
+                            .accessibilityLabel("Team Workspace")
+                            .accessibilityHint("Opens Team Workspace")
 
                             // Data Management Card (only for logged-in users)
                             if userAccountManager.isLoggedIn {
@@ -140,7 +187,7 @@ struct MoreView: View {
                             )
 
                             // Sign Out Card (only for logged-in users)
-                            if userAccountManager.isLoggedIn {
+                            if userAccountManager.hasActiveSession {
                                 SignOutCardView(userAccountManager: userAccountManager)
                             }
                         }
@@ -161,8 +208,31 @@ struct MoreView: View {
                         ShareSheet(activityItems: [url])
                     }
                 }
+                .task {
+                    await loadTeamWorkspaceIfNeeded()
+                }
             }
         }
+    }
+
+    private var teamWorkspaceSubtitle: String {
+        guard let summary = teamSurfaceSummary else {
+            return "Create or manage your team workspace"
+        }
+        return "\(summary.headline) • \(summary.detailLine)"
+    }
+
+    private var teamWorkspaceBadgeCount: Int? {
+        guard let count = teamSurfaceSummary?.badgeCount, count > 0 else { return nil }
+        return min(count, 99)
+    }
+
+    private func loadTeamWorkspaceIfNeeded() async {
+        guard userAccountManager.isLoggedIn || FirebaseEmulatorConfiguration.isEnabled else { return }
+        await teamService.loadCurrentTeam(
+            displayName: userAccountManager.currentUserDisplayName,
+            email: userAccountManager.currentUserEmail
+        )
     }
     
     private var syncStatusIcon: String {
@@ -678,6 +748,8 @@ struct SignOutCardView: View {
             .padding(.vertical, 4)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("signOutButton")
+        .accessibilityLabel("Sign Out")
         .alert("Sign Out", isPresented: $showingSignOutAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Sign Out", role: .destructive) {

@@ -6,6 +6,8 @@ struct LeadsListView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var preferences = AppPreferences.shared
     @ObservedObject private var router = AppRouter.shared
+    @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
     @StateObject private var searchFilterManager = SearchFilterManager()
     @State private var selectedTab: LeadTab = .active
     @State private var showingFilters = false
@@ -18,6 +20,8 @@ struct LeadsListView: View {
     @State private var filterUpdateTask: Task<Void, Never>? = nil
     @State private var selectedLead: Lead?
     @State private var messageLead: Lead?
+    @State private var showingTeamFieldMap = false
+    @State private var selectedTeamRepUserId: String?
     @ObservedObject private var paywallManager = PaywallManager.shared
     
     private let pageSize = 50
@@ -44,6 +48,19 @@ struct LeadsListView: View {
     }
     
     @State private var paginatedLeads: [Lead] = []
+
+    private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.make(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            dutyLocationPoints: teamService.dutyLocationPoints,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
     
     var body: some View {
         NavigationView {
@@ -64,8 +81,17 @@ struct LeadsListView: View {
             .sheet(item: $messageLead) { lead in
                 MessageSelectionView(lead: lead)
             }
+            .sheet(isPresented: $showingTeamFieldMap) {
+                if let summary = teamSurfaceSummary {
+                    TeamFieldMapSheet(
+                        summary: summary,
+                        selectedRepUserId: $selectedTeamRepUserId
+                    )
+                }
+            }
             .task {
                 loadInitialLeads()
+                await loadTeamWorkspaceIfNeeded()
             }
             .onChange(of: selectedTab) {
                 resetAndLoadLeads()
@@ -171,7 +197,7 @@ struct LeadsListView: View {
     
     private var leadsContentSection: some View {
         Group {
-            if paginatedLeads.isEmpty && !isLoadingMore {
+            if paginatedLeads.isEmpty && !isLoadingMore && teamSurfaceSummary == nil {
                 emptyStateView
             } else {
                 leadsScrollView
@@ -219,6 +245,16 @@ struct LeadsListView: View {
     private var leadsScrollView: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
+                if let summary = teamSurfaceSummary {
+                    TeamWorkInlineSection(
+                        summary: summary,
+                        selectedRepUserId: $selectedTeamRepUserId,
+                        onOpenMap: { showingTeamFieldMap = true }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 4)
+                }
+
                 ForEach(paginatedLeads, id: \.id) { lead in
                     LeadRowView(
                         lead: lead,
@@ -257,6 +293,15 @@ struct LeadsListView: View {
                             }
                         }
                 }
+
+                if paginatedLeads.isEmpty && !isLoadingMore && teamSurfaceSummary != nil {
+                    Text("No personal leads match this filter.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(Color.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                }
                 
                 // Loading indicator at bottom
                 if isLoadingMore && hasMoreData {
@@ -276,6 +321,14 @@ struct LeadsListView: View {
     }
     
     // MARK: - Helper Functions
+
+    private func loadTeamWorkspaceIfNeeded() async {
+        guard userAccountManager.isLoggedIn || FirebaseEmulatorConfiguration.isEnabled else { return }
+        await teamService.loadCurrentTeam(
+            displayName: userAccountManager.currentUserDisplayName,
+            email: userAccountManager.currentUserEmail
+        )
+    }
     
     private func handleLongPressDelete(_ lead: Lead) {
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)

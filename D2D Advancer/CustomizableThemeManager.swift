@@ -600,6 +600,11 @@ extension Font {
     static let obsidianBody: Font = .system(size: 15, weight: .regular, design: .default)
     static let obsidianCaption: Font = .system(size: 13, weight: .medium, design: .default)
     static let micro: Font = .system(size: 11, weight: .medium, design: .default)
+    static let obsidianAction: Font = .system(size: 18, weight: .semibold, design: .default)
+    static let obsidianCallout: Font = .system(size: 16, weight: .semibold, design: .default)
+    static let obsidianFootnote: Font = .system(size: 13, weight: .medium, design: .default)
+    static let obsidianSmall: Font = .system(size: 12, weight: .medium, design: .default)
+    static let nano: Font = .system(size: 10, weight: .medium, design: .default)
 
     // Migration aliases
     static let themeLargeTitle: Font = .displayMedium

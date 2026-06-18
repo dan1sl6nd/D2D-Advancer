@@ -1,27 +1,187 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can read and write their own data
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function teamPath(teamId) {
+      return /databases/$(database)/documents/teams/$(teamId);
+    }
+
+    function teamMemberPath(teamId, userId) {
+      return /databases/$(database)/documents/teams/$(teamId)/members/$(userId);
+    }
+
+    function invitePath(inviteId) {
+      return /databases/$(database)/documents/teamInvites/$(inviteId);
+    }
+
+    function isTeamMember(teamId) {
+      return signedIn()
+        && exists(teamMemberPath(teamId, request.auth.uid))
+        && get(teamMemberPath(teamId, request.auth.uid)).data.status == "active";
+    }
+
+    function willBeTeamMember(teamId) {
+      return signedIn()
+        && existsAfter(teamMemberPath(teamId, request.auth.uid))
+        && getAfter(teamMemberPath(teamId, request.auth.uid)).data.status == "active";
+    }
+
+    function isTeamOwner(teamId) {
+      return isTeamMember(teamId)
+        && get(teamMemberPath(teamId, request.auth.uid)).data.role == "owner";
+    }
+
+    function pendingInviteAllowsJoin(teamId, inviteId) {
+      return signedIn()
+        && inviteId is string
+        && exists(invitePath(inviteId))
+        && get(invitePath(inviteId)).data.teamId == teamId
+        && get(invitePath(inviteId)).data.status == "pending"
+        && get(invitePath(inviteId)).data.expiresAt > request.time;
+    }
+
+    function isAssignedToSelf(data) {
+      return signedIn() && data.assignedToUserId == request.auth.uid;
+    }
+
+    function isRepSessionOwner(data) {
+      return signedIn() && data.repUserId == request.auth.uid;
+    }
+
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      
-      // Allow users to access their leads subcollection
+      allow read, write: if isSelf(userId);
+
+      match /teamProfile/{profileId} {
+        allow read, write: if isSelf(userId);
+      }
+
       match /leads/{leadId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isSelf(userId);
       }
-      
-      // Allow users to access their check-ins subcollection  
+
       match /checkIns/{checkInId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isSelf(userId);
       }
-      
-      // Allow users to access their appointments subcollection
+
       match /appointments/{appointmentId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isSelf(userId);
       }
     }
-    
-    // Default rule: deny all other access
+
+    match /teamInvites/{inviteId} {
+      allow create: if signedIn()
+        && request.resource.data.createdByUserId == request.auth.uid
+        && isTeamOwner(request.resource.data.teamId);
+      allow read: if signedIn();
+      allow update: if isTeamOwner(resource.data.teamId)
+        || (
+          signedIn()
+          && resource.data.status == "pending"
+          && request.resource.data.status == "accepted"
+          && request.resource.data.acceptedByUserId == request.auth.uid
+          && request.resource.data.teamId == resource.data.teamId
+        );
+      allow delete: if isTeamOwner(resource.data.teamId);
+    }
+
+    match /teams/{teamId} {
+      allow create: if signedIn()
+        && request.resource.data.ownerUserId == request.auth.uid;
+      allow read: if isTeamMember(teamId);
+      allow update: if isTeamOwner(teamId);
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow create: if signedIn()
+          && request.resource.data.teamId == teamId
+          && (
+            (
+              request.resource.data.role == "owner"
+              && request.resource.data.userId == request.auth.uid
+              && getAfter(teamPath(teamId)).data.ownerUserId == request.auth.uid
+            )
+            || (
+              request.resource.data.role == "member"
+              && request.resource.data.userId == request.auth.uid
+              && pendingInviteAllowsJoin(teamId, request.resource.data.acceptedInviteId)
+            )
+            || isTeamOwner(teamId)
+          );
+        allow read: if isTeamOwner(teamId)
+          || (isTeamMember(teamId) && memberId == request.auth.uid);
+        allow update: if isTeamOwner(teamId)
+          || (isTeamMember(teamId) && memberId == request.auth.uid);
+        allow delete: if isTeamOwner(teamId)
+          || (
+            signedIn()
+            && resource.data.userId == "pending-rep-" + resource.data.acceptedInviteId
+            && pendingInviteAllowsJoin(teamId, resource.data.acceptedInviteId)
+          );
+      }
+
+      match /leads/{leadId} {
+        allow read: if isTeamOwner(teamId)
+          || (isTeamMember(teamId) && isAssignedToSelf(resource.data));
+        allow create, update: if isTeamOwner(teamId)
+          || (isTeamMember(teamId) && isAssignedToSelf(request.resource.data));
+        allow delete: if isTeamOwner(teamId);
+      }
+
+      match /bookings/{bookingId} {
+        allow read: if isTeamOwner(teamId)
+          || (isTeamMember(teamId) && isAssignedToSelf(resource.data));
+        allow create, update: if isTeamOwner(teamId)
+          || (isTeamMember(teamId) && isAssignedToSelf(request.resource.data));
+        allow delete: if isTeamOwner(teamId);
+      }
+
+      match /ownerNotifications/{notificationId} {
+        allow read, update, delete: if isTeamOwner(teamId);
+        allow create: if isTeamMember(teamId)
+          && request.resource.data.teamId == teamId
+          && request.resource.data.createdByUserId == request.auth.uid;
+      }
+
+      match /activityLog/{entryId} {
+        allow read: if isTeamOwner(teamId)
+          || (
+            isTeamMember(teamId)
+            && (
+              resource.data.actorUserId == request.auth.uid
+              || resource.data.targetUserId == request.auth.uid
+            )
+          );
+        allow create: if signedIn()
+          && request.resource.data.teamId == teamId
+          && request.resource.data.actorUserId == request.auth.uid
+          && (isTeamMember(teamId) || willBeTeamMember(teamId));
+        allow update, delete: if false;
+      }
+
+      match /dutySessions/{sessionId} {
+        allow read: if isTeamOwner(teamId)
+          || (isTeamMember(teamId) && isRepSessionOwner(resource.data));
+        allow create, update: if isTeamMember(teamId)
+          && isRepSessionOwner(request.resource.data);
+        allow delete: if isTeamOwner(teamId);
+      }
+
+      match /dutyLocationPoints/{pointId} {
+        allow read: if isTeamOwner(teamId)
+          || (isTeamMember(teamId) && isRepSessionOwner(resource.data));
+        allow create, update: if isTeamMember(teamId)
+          && isRepSessionOwner(request.resource.data);
+        allow delete: if isTeamOwner(teamId);
+      }
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

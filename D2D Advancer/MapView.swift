@@ -6,6 +6,8 @@ struct MapView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var locationManager = LocationManager.shared
     @ObservedObject private var preferences = AppPreferences.shared
+    @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
     @State private var selectedLead: Lead?
     @State private var showingAddLead = false
     @State private var addLeadCoordinate: CLLocationCoordinate2D?
@@ -18,6 +20,8 @@ struct MapView: View {
     @State private var toastLead: Lead?
     @State private var toastMessage: String = ""
     @State private var showToast = false
+    @State private var showingTeamFieldMap = false
+    @State private var selectedTeamRepUserId: String?
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)],
@@ -46,6 +50,19 @@ struct MapView: View {
         return leads.filter { ($0.createdDate ?? .distantPast) >= startOfDay }.count
     }
 
+    private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.make(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            dutyLocationPoints: teamService.dutyLocationPoints,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
+
     var body: some View {
         ZStack {
                 mapView
@@ -71,6 +88,17 @@ struct MapView: View {
             }
             .sheet(isPresented: $showingAddLead) {
                 AddLeadView(coordinate: addLeadCoordinate ?? locationManager.region.center)
+            }
+            .sheet(isPresented: $showingTeamFieldMap) {
+                if let summary = teamSurfaceSummary {
+                    TeamFieldMapSheet(
+                        summary: summary,
+                        selectedRepUserId: $selectedTeamRepUserId
+                    )
+                }
+            }
+            .task {
+                await loadTeamWorkspaceIfNeeded()
             }
             .confirmationDialog(
                 "Change Status for \(leadToChangeStatus?.displayName ?? "Lead")",
@@ -189,6 +217,17 @@ struct MapView: View {
                 statChipsRow
                     .padding(.top, 62)
                     .padding(.trailing, 70)
+                if let summary = teamSurfaceSummary {
+                    HStack {
+                        TeamMapShortcutPill(summary: summary) {
+                            showingTeamFieldMap = true
+                        }
+                        Spacer()
+                    }
+                    .padding(.top, 8)
+                    .padding(.leading, 16)
+                    .padding(.trailing, 80)
+                }
                 Spacer()
             }
 
@@ -441,6 +480,14 @@ struct MapView: View {
     
     // MARK: - HUD Components
 
+    private func loadTeamWorkspaceIfNeeded() async {
+        guard userAccountManager.isLoggedIn || FirebaseEmulatorConfiguration.isEnabled else { return }
+        await teamService.loadCurrentTeam(
+            displayName: userAccountManager.currentUserDisplayName,
+            email: userAccountManager.currentUserEmail
+        )
+    }
+
     private var mapControlsGroup: some View {
         VStack(spacing: 0) {
             Button {
@@ -522,6 +569,7 @@ struct MapView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
             }
+            .accessibilityIdentifier("addLeadButton")
         }
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 18))

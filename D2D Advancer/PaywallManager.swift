@@ -236,6 +236,10 @@ class PaywallManager: ObservableObject {
     private var updateListenerTask: Task<Void, Error>?
     private var cancellables = Set<AnyCancellable>()
 
+    private var isUnlockedForUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-unlockPremiumForUITests")
+    }
+
     private init() {
         experience = PaywallExperience(profile: OnboardingManager.shared.profile)
         loadPremiumStatus()
@@ -341,6 +345,14 @@ class PaywallManager: ObservableObject {
     // MARK: - Premium Status
 
     private func loadPremiumStatus() {
+        if isUnlockedForUITests {
+            isPremium = true
+            shouldShowPaywall = false
+            userDefaults.set(true, forKey: premiumKey)
+            print("💎 Premium status: Active (UI test unlock)")
+            return
+        }
+
         isPremium = userDefaults.bool(forKey: premiumKey)
         print("💎 Premium status: \(isPremium ? "Active" : "Inactive")")
     }
@@ -489,6 +501,11 @@ class PaywallManager: ObservableObject {
 
     @MainActor
     func checkSubscriptionStatus() async {
+        if isUnlockedForUITests {
+            setPremiumStatus(true)
+            return
+        }
+
         print("🔍 Checking subscription status...")
         var isActive = false
         var hasActiveSubscription = false

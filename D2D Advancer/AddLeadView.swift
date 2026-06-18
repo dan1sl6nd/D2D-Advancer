@@ -45,9 +45,19 @@ struct AddLeadView: View {
                 // Contact Information Section
                 modernSectionCard(title: "Contact Information", icon: "person.crop.circle.fill") {
                     VStack(spacing: 16) {
-                        modernTextField(title: "Name", text: $name, icon: "person.fill")
+                        modernTextField(
+                            title: "Name",
+                            text: $name,
+                            icon: "person.fill",
+                            accessibilityIdentifier: "addLeadNameField"
+                        )
                         
-                        modernTextField(title: "Phone", text: $phone, icon: "phone.fill")
+                        modernTextField(
+                            title: "Phone",
+                            text: $phone,
+                            icon: "phone.fill",
+                            accessibilityIdentifier: "addLeadPhoneField"
+                        )
                             .keyboardType(.phonePad)
                             .onChange(of: phone) { oldValue, newValue in
                                 DispatchQueue.main.async {
@@ -55,7 +65,12 @@ struct AddLeadView: View {
                                 }
                             }
                         
-                        modernTextField(title: "Email", text: $email, icon: "envelope.fill")
+                        modernTextField(
+                            title: "Email",
+                            text: $email,
+                            icon: "envelope.fill",
+                            accessibilityIdentifier: "addLeadEmailField"
+                        )
                             .keyboardType(.emailAddress)
                             .autocapitalization(.none)
                     }
@@ -108,6 +123,7 @@ struct AddLeadView: View {
                                 .padding(.vertical, 12)
                                 .background(Color.obsidianSurface)
                                 .cornerRadius(8)
+                                .accessibilityIdentifier("addLeadAddressField")
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
                                         .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
@@ -155,7 +171,12 @@ struct AddLeadView: View {
                             }
                         }
                         
-                        modernTextField(title: "Price", text: $priceText, icon: "dollarsign.circle.fill")
+                        modernTextField(
+                            title: "Price",
+                            text: $priceText,
+                            icon: "dollarsign.circle.fill",
+                            accessibilityIdentifier: "addLeadPriceField"
+                        )
                             .keyboardType(.decimalPad)
                             .onChange(of: priceText) { oldValue, newValue in
                                 DispatchQueue.main.async {
@@ -203,6 +224,7 @@ struct AddLeadView: View {
                                 .background(Color.obsidianSurface)
                                 .cornerRadius(8)
                             }
+                            .accessibilityIdentifier("addLeadStatusMenu")
                         }
                         
                         // Follow Up Date Field
@@ -332,6 +354,7 @@ struct AddLeadView: View {
                             .shadow(color: address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .clear : Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                     )
                 }
+                .accessibilityIdentifier("addLeadSaveButton")
                 .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(.horizontal, 16)
@@ -444,7 +467,12 @@ struct AddLeadView: View {
         .shadow(color: Color.black, radius: 8, x: 0, y: 4)
     }
     
-    private func modernTextField(title: String, text: Binding<String>, icon: String) -> some View {
+    private func modernTextField(
+        title: String,
+        text: Binding<String>,
+        icon: String,
+        accessibilityIdentifier: String? = nil
+    ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
@@ -461,6 +489,7 @@ struct AddLeadView: View {
                 .padding(.vertical, 12)
                 .background(Color.obsidianSurface)
                 .cornerRadius(8)
+                .accessibilityIdentifier(accessibilityIdentifier ?? "addLead\(title.replacingOccurrences(of: " ", with: ""))Field")
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
@@ -577,6 +606,18 @@ struct AddLeadView: View {
         do {
             try viewContext.save()
 
+            syncLeadToTeamIfNeeded(
+                name: newLead.displayName,
+                address: newLead.address ?? address,
+                phone: newLead.phone,
+                email: newLead.email,
+                coordinate: finalCoordinate,
+                status: status,
+                notes: newLead.notes ?? "",
+                serviceCategory: newLead.serviceCategory,
+                price: newLead.price
+            )
+
             // Increment lead count for paywall tracking
             paywallManager.incrementLeadCount()
 
@@ -603,6 +644,71 @@ struct AddLeadView: View {
 
         } catch {
             ErrorHandler.shared.handle(error, context: "Add Lead")
+        }
+    }
+
+    private func syncLeadToTeamIfNeeded(
+        name: String,
+        address: String,
+        phone: String?,
+        email: String?,
+        coordinate: CLLocationCoordinate2D,
+        status: Lead.Status,
+        notes: String,
+        serviceCategory: String?,
+        price: Double
+    ) {
+        guard shouldShareLeadWithTeam(status: status, price: price) else { return }
+
+        let teamService = TeamFirebaseService.shared
+        let teamStatus = teamLeadStatus(for: status)
+
+        Task {
+            do {
+                if teamService.activeTeam == nil || teamService.currentMember == nil {
+                    await teamService.loadCurrentTeam()
+                }
+                guard teamService.activeTeam != nil,
+                      teamService.currentMember?.role == .member else {
+                    return
+                }
+
+                try await teamService.createRepLead(
+                    name: name,
+                    address: address,
+                    phone: phone,
+                    email: email,
+                    coordinate: TeamCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                    status: teamStatus,
+                    notes: notes,
+                    serviceCategory: serviceCategory,
+                    price: price,
+                    estimatedValue: price,
+                    isHighPriority: price >= 1_000,
+                    highPriorityReason: price >= 1_000 ? "High value" : nil
+                )
+            } catch {
+                print("⚠️ Team lead sync failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func shouldShareLeadWithTeam(status: Lead.Status, price: Double) -> Bool {
+        status == .interested || status == .converted || price >= 1_000
+    }
+
+    private func teamLeadStatus(for status: Lead.Status) -> TeamLeadStatus {
+        switch status {
+        case .notContacted:
+            return .notContacted
+        case .notHome:
+            return .notHome
+        case .interested:
+            return .interested
+        case .converted:
+            return .converted
+        case .notInterested:
+            return .notInterested
         }
     }
     

@@ -1,0 +1,17 @@
+{
+  "scripts": {
+    "test:firestore-rules": "node --test tests/firestore.team.rules.test.mjs",
+    "test:team-emulator-e2e": "node --test tests/team.firebase-emulator.e2e.mjs",
+    "test:team-ui": "bash scripts/run_team_ui_emulator_test.sh",
+    "emulators:test:firestore-rules": "env JAVA_HOME=/opt/homebrew/opt/openjdk /Users/dan1sland/.npm-global/bin/firebase emulators:exec --only firestore --project d2d-advancer \"npm run test:firestore-rules\"",
+    "emulators:test:team-e2e": "env JAVA_HOME=/opt/homebrew/opt/openjdk /Users/dan1sland/.npm-global/bin/firebase emulators:exec --only auth,firestore --project d2d-advancer \"npm run test:team-emulator-e2e\"",
+    "emulators:test:team-ui": "env JAVA_HOME=/opt/homebrew/opt/openjdk /Users/dan1sland/.npm-global/bin/firebase emulators:exec --only auth,firestore --project d2d-advancer \"npm run test:team-ui\""
+  },
+  "dependencies": {
+    "firebase-admin": "^13.8.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "firebase": "^12.14.0"
+  }
+}

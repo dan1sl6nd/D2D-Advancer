@@ -17,6 +17,9 @@ class FirebaseUserAccountManager: ObservableObject {
     @Published var securityBlockTimeRemaining: Int = 0
     @Published var isSecurityBlocked = false
     @Published var isGuestMode: Bool = UserDefaults.standard.bool(forKey: "isGuestMode")
+    @Published var appleUserIdentifier: String?
+    @Published var appleUserEmail: String?
+    @Published var appleUserFullName: String?
     
     private var lastRefreshTime: Date?
     private let refreshCooldownSeconds: TimeInterval = 30 // Only refresh every 30 seconds
@@ -93,7 +96,9 @@ class FirebaseUserAccountManager: ObservableObject {
                 await MainActor.run {
                     self.authStatus = .success
                     // Only show email verification prompt if email is not already verified
-                    if let user = self.firebaseService.currentUser, !user.isEmailVerified {
+                    if let user = self.firebaseService.currentUser,
+                       !user.isEmailVerified,
+                       !FirebaseEmulatorConfiguration.isEnabled {
                         self.shouldShowEmailVerification = true
                         print("📧 Email verification prompt shown for: \(Utilities.redactedEmail(email))")
                     }
@@ -197,6 +202,7 @@ class FirebaseUserAccountManager: ObservableObject {
                 try firebaseService.signOut()
                 
                 await MainActor.run {
+                    AppleSignInManager.shared.signOut()
                     self.authStatus = .idle
                     self.shouldShowPasswordSavePrompt = false
                     self.shouldShowEmailVerification = false
@@ -548,7 +554,9 @@ class FirebaseUserAccountManager: ObservableObject {
                 self.authStatus = .success
 
                 // Show email verification prompt if email is not verified
-                if let user = self.firebaseService.currentUser, !user.isEmailVerified {
+                if let user = self.firebaseService.currentUser,
+                   !user.isEmailVerified,
+                   !FirebaseEmulatorConfiguration.isEnabled {
                     self.shouldShowEmailVerification = true
                     print("📧 Email verification prompt shown for: \(Utilities.redactedEmail(email))")
                 }
@@ -613,6 +621,36 @@ class FirebaseUserAccountManager: ObservableObject {
         UserDefaults.standard.set(false, forKey: "isGuestMode")
         authStatus = .idle
         print("❌ Guest mode cancelled - returning to login screen")
+    }
+
+    // MARK: - Sign in with Apple Bridge
+
+    var isAppleAuthed: Bool {
+        appleUserIdentifier != nil
+    }
+
+    var hasActiveSession: Bool {
+        isLoggedIn || isAppleAuthed
+    }
+
+    func bridgeAppleSignIn(userIdentifier: String, email: String?, fullName: String?) {
+        appleUserIdentifier = userIdentifier
+        appleUserEmail = email
+        appleUserFullName = fullName
+
+        if isGuestMode {
+            isGuestMode = false
+            UserDefaults.standard.set(false, forKey: "isGuestMode")
+            print("🍎 Exited guest mode via Apple Sign In")
+        }
+        authStatus = .success
+        print("🍎 Apple Sign In bridged into account manager")
+    }
+
+    func clearAppleBridge() {
+        appleUserIdentifier = nil
+        appleUserEmail = nil
+        appleUserFullName = nil
     }
 
     // MARK: - Helper Methods

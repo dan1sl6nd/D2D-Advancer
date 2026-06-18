@@ -7,17 +7,46 @@
 
 import SwiftUI
 import UserNotifications
+import FirebaseAuth
 import FirebaseCore
 import CoreData
+import UIKit
 
 @main
 struct D2D_AdvancerApp: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var userAccountManager = FirebaseUserAccountManager.shared
     @StateObject private var firebaseService = FirebaseService.shared
+    @StateObject private var appleSignInManager = AppleSignInManager.shared
     @AppStorage("isDarkMode") private var isDarkMode = false
     init() {
-        FirebaseApp.configure()
+        let launchArguments = ProcessInfo.processInfo.arguments
+        if FirebaseApp.app() == nil {
+            FirebaseApp.configure()
+        }
+        FirebaseEmulatorConfiguration.applyIfNeeded()
+        let isRunningUITests = launchArguments.contains("-skipOnboardingForUITests")
+        if launchArguments.contains("-resetFirebaseAuthForUITests") {
+            try? Auth.auth().signOut()
+            UserDefaults.standard.removeObject(forKey: "isGuestMode")
+            print("🧪 Firebase auth reset for UI tests")
+        }
+        if isRunningUITests {
+            UserDefaults.standard.set(true, forKey: "onboarding_completed")
+        }
+        if launchArguments.contains("-unlockPremiumForUITests") {
+            UserDefaults.standard.set(true, forKey: "isPremiumUser")
+        }
+        if isRunningUITests {
+            UIView.setAnimationsEnabled(false)
+            if launchArguments.contains("-openMoreTabForUITests") {
+                AppRouter.shared.selectedTab = 4
+            } else if launchArguments.contains("-openLeadsTabForUITests") {
+                AppRouter.shared.selectedTab = 1
+            } else if launchArguments.contains("-openMapTabForUITests") {
+                AppRouter.shared.selectedTab = 0
+            }
+        }
         print("🚀 D2D Advancer App Starting...")
 
         // Check for Apple Search Ads attribution
@@ -25,7 +54,7 @@ struct D2D_AdvancerApp: App {
 
         // Only request notification authorization if onboarding is completed
         let onboardingCompleted = UserDefaults.standard.bool(forKey: "onboarding_completed")
-        if onboardingCompleted {
+        if onboardingCompleted && !isRunningUITests {
             print("📱 Onboarding completed - setting up notifications")
             requestNotificationAuthorization()
         } else {
@@ -35,25 +64,33 @@ struct D2D_AdvancerApp: App {
         }
 
         // Start monitoring connectivity to auto-recover listeners/sync
-        NetworkMonitor.shared.start()
-
-        // Clean up duplicates on a background context once Core Data is ready.
-        let persistence = persistenceController
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            guard persistence.hasPersistentStore else {
-                print("⏭️ Skipping duplicate cleanup: Core Data store not ready yet")
-                return
-            }
-
-            let cleanupContext = persistence.container.newBackgroundContext()
-            cleanupContext.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
-            Utilities.removeDuplicateLeads(from: cleanupContext)
+        if !isRunningUITests {
+            NetworkMonitor.shared.start()
         }
 
-        // Auto-enable guest mode on first launch if not logged in
-        Task { @MainActor in
-            if !FirebaseUserAccountManager.shared.isLoggedIn && !FirebaseUserAccountManager.shared.isGuestMode {
-                FirebaseUserAccountManager.shared.startGuestMode()
+        // Clean up duplicates on a background context once Core Data is ready.
+        if !isRunningUITests {
+            let persistence = persistenceController
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                guard persistence.hasPersistentStore else {
+                    print("⏭️ Skipping duplicate cleanup: Core Data store not ready yet")
+                    return
+                }
+
+                let cleanupContext = persistence.container.newBackgroundContext()
+                cleanupContext.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
+                Utilities.removeDuplicateLeads(from: cleanupContext)
+            }
+        }
+
+        Task<Void, Never> { @MainActor in
+            if !isRunningUITests {
+                AppleSignInManager.shared.verifyCredentialState()
+            }
+
+            let account = FirebaseUserAccountManager.shared
+            if !account.hasActiveSession && !account.isGuestMode {
+                account.startGuestMode()
                 print("👤 Auto-started guest mode for new user")
             }
         }

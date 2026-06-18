@@ -80,7 +80,6 @@ struct MainTabView: View {
         .background(Color.obsidianBlack)
         .navigationViewStyle(StackNavigationViewStyle())
         .customThemed()
-        .accessibilityElement(children: .contain)
         .onAppear {
             // Initialize location services immediately when app launches
             print("📱 MainTabView: App launched, initializing location services")
@@ -141,28 +140,31 @@ struct TabBarButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: {
+        VStack(spacing: 4) {
+            Image(systemName: isSelected ? selectedIcon : icon)
+                .font(.system(size: 20))
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+
+            // Capsule underline for selected tab
+            Capsule()
+                .fill(Color.electricViolet)
+                .frame(width: 20, height: 2)
+                .opacity(isSelected ? 1 : 0)
+        }
+        .foregroundColor(isSelected ? Color.electricViolet : Color.textMuted)
+        .frame(maxWidth: .infinity, minHeight: 64)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             action()
-        }) {
-            VStack(spacing: 4) {
-                Image(systemName: isSelected ? selectedIcon : icon)
-                    .font(.system(size: 20))
-                Text(title)
-                    .font(.system(size: 11, weight: .medium))
-
-                // Capsule underline for selected tab
-                Capsule()
-                    .fill(Color.electricViolet)
-                    .frame(width: 20, height: 2)
-                    .opacity(isSelected ? 1 : 0)
-            }
-            .foregroundColor(isSelected ? Color.electricViolet : Color.textMuted)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
         }
-        .buttonStyle(PlainButtonStyle())
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("tab_\(title.replacingOccurrences(of: " ", with: ""))")
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 

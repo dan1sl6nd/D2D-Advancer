@@ -259,4 +259,118 @@ class KeychainService {
             defaults.removeObject(forKey: legacyDeclinedKey)
         }
     }
+
+    // MARK: - Sign in with Apple Storage
+
+    private let appleUserIdentifierAccount = "apple_user_identifier"
+
+    func saveAppleUserIdentifier(_ userIdentifier: String, email: String?, fullName: String?) -> Bool {
+        guard let userIDData = userIdentifier.data(using: .utf8) else {
+            print("❌ Failed to encode Apple userIdentifier")
+            return false
+        }
+
+        let saved = upsertKeychainString(account: appleUserIdentifierAccount, data: userIDData)
+
+        if let email = email, let emailData = email.data(using: .utf8) {
+            _ = upsertKeychainString(account: appleEmailAccount(for: userIdentifier), data: emailData)
+        }
+
+        if let fullName = fullName, let nameData = fullName.data(using: .utf8) {
+            _ = upsertKeychainString(account: appleFullNameAccount(for: userIdentifier), data: nameData)
+        }
+
+        if saved {
+            print("🍎 Stored Apple user identifier in Keychain")
+        }
+        return saved
+    }
+
+    func getAppleUserIdentifier() -> String? {
+        readKeychainString(account: appleUserIdentifierAccount)
+    }
+
+    func getAppleEmail(for userIdentifier: String) -> String? {
+        readKeychainString(account: appleEmailAccount(for: userIdentifier))
+    }
+
+    func getAppleFullName(for userIdentifier: String) -> String? {
+        readKeychainString(account: appleFullNameAccount(for: userIdentifier))
+    }
+
+    func clearAppleUserIdentifier() {
+        if let userID = getAppleUserIdentifier() {
+            deleteKeychainItem(account: appleEmailAccount(for: userID))
+            deleteKeychainItem(account: appleFullNameAccount(for: userID))
+        }
+        deleteKeychainItem(account: appleUserIdentifierAccount)
+        print("🧹 Cleared Apple Sign In state from Keychain")
+    }
+
+    private func appleEmailAccount(for userIdentifier: String) -> String {
+        "apple_email_\(userIdentifier)"
+    }
+
+    private func appleFullNameAccount(for userIdentifier: String) -> String {
+        "apple_name_\(userIdentifier)"
+    }
+
+    // MARK: - Generic Keychain Helpers
+
+    private func upsertKeychainString(account: String, data: Data) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        let attributes: [String: Any] = [
+            kSecValueData as String: data
+        ]
+
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return true
+        }
+
+        if updateStatus == errSecItemNotFound {
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            if addStatus != errSecSuccess {
+                print("❌ Keychain add failed for \(account): \(addStatus)")
+            }
+            return addStatus == errSecSuccess
+        }
+
+        print("❌ Keychain update failed for \(account): \(updateStatus)")
+        return false
+    }
+
+    private func readKeychainString(account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var dataRef: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &dataRef)
+        guard status == errSecSuccess,
+              let data = dataRef as? Data,
+              let string = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return string
+    }
+
+    private func deleteKeychainItem(account: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
 }

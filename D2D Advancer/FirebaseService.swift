@@ -56,6 +56,7 @@ class FirebaseService: ObservableObject {
         if FirebaseApp.app() == nil {
             FirebaseApp.configure()
         }
+        FirebaseEmulatorConfiguration.applyIfNeeded(auth: auth, firestore: db)
         
         // Listen for auth changes
         authStateListenerHandle = auth.addStateDidChangeListener { [weak self] _, user in
@@ -79,21 +80,26 @@ class FirebaseService: ObservableObject {
             print("✅ Display name set to: \(displayName)")
         }
         
-        // Send email verification
-        try await result.user.sendEmailVerification()
+        if FirebaseEmulatorConfiguration.isEnabled {
+            print("🧪 Email verification skipped for Firebase emulator account")
+        } else {
+            try await result.user.sendEmailVerification()
+        }
 
         // Mirror account metadata to both Firestore and CloudKit.
         await syncCurrentAccountProfileToClouds()
         
         print("✅ User created successfully: \(result.user.uid)")
-        print("📧 Verification email sent to: \(Utilities.redactedEmail(email))")
+        if !FirebaseEmulatorConfiguration.isEnabled {
+            print("📧 Verification email sent to: \(Utilities.redactedEmail(email))")
+        }
     }
     
     func signIn(email: String, password: String) async throws {
         let result = try await auth.signIn(withEmail: email, password: password)
         
         // Check if email is verified
-        if !result.user.isEmailVerified {
+        if !FirebaseEmulatorConfiguration.isEnabled && !result.user.isEmailVerified {
             throw FirebaseError.emailNotVerified
         }
 
@@ -101,6 +107,33 @@ class FirebaseService: ObservableObject {
         await syncCurrentAccountProfileToClouds()
         
         print("✅ User signed in successfully: \(result.user.uid)")
+    }
+
+    func signInWithApple(idToken: String, rawNonce: String, fullName: PersonNameComponents?) async throws {
+        let credential = OAuthProvider.appleCredential(
+            withIDToken: idToken,
+            rawNonce: rawNonce,
+            fullName: fullName
+        )
+        let result = try await auth.signIn(with: credential)
+
+        let displayName = fullName.flatMap { components -> String? in
+            let formatted = PersonNameComponentsFormatter()
+                .string(from: components)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return formatted.isEmpty ? nil : formatted
+        }
+
+        if let displayName,
+           result.user.displayName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            let changeRequest = result.user.createProfileChangeRequest()
+            changeRequest.displayName = displayName
+            try await changeRequest.commitChanges()
+        }
+
+        await syncCurrentAccountProfileToClouds()
+
+        print("✅ User signed in with Apple through Firebase Auth: \(result.user.uid)")
     }
     
     func signOut() throws {
