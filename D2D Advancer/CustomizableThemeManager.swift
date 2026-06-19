@@ -596,6 +596,7 @@ extension Font {
 
     // Content -- SF Pro Text for readable body content
     static let obsidianHeadline: Font = .system(size: 20, weight: .semibold, design: .default)
+    static let obsidianSubheadline: Font = .system(size: 20, weight: .bold, design: .rounded)
     static let obsidianTitle: Font = .system(size: 17, weight: .semibold, design: .default)
     static let obsidianBody: Font = .system(size: 15, weight: .regular, design: .default)
     static let obsidianCaption: Font = .system(size: 13, weight: .medium, design: .default)

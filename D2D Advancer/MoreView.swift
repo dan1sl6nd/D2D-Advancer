@@ -37,10 +37,21 @@ struct MoreView: View {
         NavigationView {
             GeometryReader { geometry in
                 VStack(spacing: 0) {
-                    // Dynamic safe area spacer that adapts to device
                     Rectangle()
                         .fill(Color.obsidianBlack)
-                        .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
+                        .frame(height: geometry.safeAreaInsets.top)
+
+                    HStack {
+                        Text("More")
+                            .font(.displayMedium)
+                            .foregroundColor(Color.textPrimary)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+                    .background(Color.obsidianBlack)
 
                     ScrollView {
                         LazyVStack(spacing: 12) {
@@ -82,8 +93,7 @@ struct MoreView: View {
                                         HStack(spacing: 8) {
                                             if let badgeCount = teamWorkspaceBadgeCount {
                                                 Text("\(badgeCount)")
-                                                    .font(.caption2)
-                                                    .fontWeight(.semibold)
+                                                    .font(.micro)
                                                     .foregroundColor(.white)
                                                     .padding(.horizontal, 7)
                                                     .padding(.vertical, 4)
@@ -92,7 +102,7 @@ struct MoreView: View {
                                             }
 
                                             Image(systemName: "chevron.right")
-                                                .font(.system(size: 14, weight: .medium))
+                                                .font(.obsidianFootnote)
                                                 .foregroundColor(Color.textSecondary)
                                         }
                                     }

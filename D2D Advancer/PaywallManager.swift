@@ -151,9 +151,9 @@ struct PaywallExperience {
             ]
         case .territoryPlanning:
             return [
-                Testimonial(avatar: "🗺️", name: "Chris • Territory Strategist", quote: "The neighborhood scores show me where to knock next. Planning my day now takes minutes."),
-                Testimonial(avatar: "🚪", name: "Lee • Closer", quote: "I cover fewer doors and get better results because I start with the highest scoring blocks."),
-                Testimonial(avatar: "📈", name: "Dana • Field Rep", quote: "Heatmaps and filters make it obvious which streets are worth revisiting.")
+                Testimonial(avatar: "🗺️", name: "Chris • Territory Strategist", quote: "Knowing which areas to focus on saves me hours every week."),
+                Testimonial(avatar: "🚪", name: "Lee • Closer", quote: "I cover fewer doors and get better results because I plan my routes in advance."),
+                Testimonial(avatar: "📈", name: "Dana • Field Rep", quote: "Map filters make it obvious which streets are worth revisiting.")
             ]
         }
     }
@@ -221,13 +221,20 @@ class PaywallManager: ObservableObject {
     @Published var leadCount: Int = 0
     @Published var shouldShowPaywall: Bool = false
     @Published var isPurchasing: Bool = false
+    @Published var isLoadingProducts: Bool = false
     @Published var products: [Product] = []
+    @Published var purchaseStatusMessage: String?
+    @Published var purchaseStatusIsError: Bool = false
+    @Published private(set) var hasAttemptedProductLoad: Bool = false
     @Published private(set) var experience: PaywallExperience
 
     private let userDefaults = UserDefaults.standard
     private let premiumKey = "isPremiumUser"
     private let leadCountKey = "totalLeadCount"
     private let freeLeadLimit = 0 // Subscription required (3-day trial available)
+    private var isPremiumUnlockedForUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-unlockPremiumForUITests")
+    }
 
     // Product IDs - UPDATE THESE to match your App Store Connect IDs
     private let weeklyProductID = "com.d2dadvancer.weekly"
@@ -235,10 +242,6 @@ class PaywallManager: ObservableObject {
 
     private var updateListenerTask: Task<Void, Error>?
     private var cancellables = Set<AnyCancellable>()
-
-    private var isUnlockedForUITests: Bool {
-        ProcessInfo.processInfo.arguments.contains("-unlockPremiumForUITests")
-    }
 
     private init() {
         experience = PaywallExperience(profile: OnboardingManager.shared.profile)
@@ -279,73 +282,92 @@ class PaywallManager: ObservableObject {
         NotificationCenter.default.removeObserver(self)
     }
 
-    // MARK: - Lead Tracking
+    // MARK: - Action Gating
 
     func incrementLeadCount() {
         leadCount += 1
         userDefaults.set(leadCount, forKey: leadCountKey)
         userDefaults.synchronize()
 
-        print("📊 Lead count: \(leadCount)/\(freeLeadLimit)")
-
-        // Apple Guideline 5.6: Only show paywall when user genuinely hits the limit
-        // Don't show during onboarding or if already showing
-        if !isPremium && leadCount >= freeLeadLimit {
-            // Check if onboarding is complete before showing paywall
+        if !isPremium && !isPremiumUnlockedForUITests && leadCount >= freeLeadLimit {
             let onboardingCompleted = userDefaults.bool(forKey: "onboarding_completed")
             if onboardingCompleted && !shouldShowPaywall {
                 shouldShowPaywall = true
-                print("💳 Paywall triggered at \(leadCount) leads")
-            } else {
-                print("⏸️ Paywall deferred - onboarding: \(onboardingCompleted), already showing: \(shouldShowPaywall)")
             }
         }
     }
 
     func canAddLead() -> Bool {
-        if isPremium {
+        if isPremium || isPremiumUnlockedForUITests {
             return true
         }
         return leadCount < freeLeadLimit
     }
 
     func remainingFreeLeads() -> Int {
-        if isPremium {
+        if isPremium || isPremiumUnlockedForUITests {
             return Int.max
         }
         return max(0, freeLeadLimit - leadCount)
-    }
-
-    /// Check if user can access premium features, show paywall if not
-    func requirePremiumAccess() -> Bool {
-        if isPremium {
-            return true
-        }
-
-        // Apple Guideline 5.6: Don't show paywall during onboarding
-        let onboardingCompleted = userDefaults.bool(forKey: "onboarding_completed")
-        if onboardingCompleted && !shouldShowPaywall {
-            print("⚠️ Premium access required - showing paywall")
-            shouldShowPaywall = true
-        } else {
-            print("⏸️ Premium access denied but paywall deferred (onboarding: \(onboardingCompleted))")
-        }
-        return false
     }
 
     /// Gate an action behind the paywall. Returns true if the user is premium and the action can proceed.
     /// Shows the paywall if the user is not premium.
     @discardableResult
     func gateAction() -> Bool {
-        if isPremium { return true }
+        if isPremium || isPremiumUnlockedForUITests { return true }
+        purchaseStatusMessage = nil
+        purchaseStatusIsError = false
         shouldShowPaywall = true
         return false
+    }
+
+    func product(for plan: SubscriptionPlan) -> Product? {
+        let productID = productID(for: plan)
+        return products.first { $0.id == productID }
+    }
+
+    func displayPrice(for plan: SubscriptionPlan) -> String {
+        guard let product = product(for: plan) else {
+            return isLoadingProducts || !hasAttemptedProductLoad ? "Loading" : "Unavailable"
+        }
+
+        return product.displayPrice
+    }
+
+    func purchaseCaption(for plan: SubscriptionPlan) -> String {
+        switch plan {
+        case .weekly:
+            guard let price = product(for: .weekly)?.displayPrice else {
+                return isLoadingProducts || !hasAttemptedProductLoad ? "Loading weekly price" : "Weekly plan unavailable"
+            }
+
+            return "3 days free, then \(price)/week"
+        case .yearly:
+            guard let price = product(for: .yearly)?.displayPrice else {
+                return isLoadingProducts || !hasAttemptedProductLoad ? "Loading yearly price" : "Yearly plan unavailable"
+            }
+
+            return "\(price)/year - best value"
+        }
+    }
+
+    private func productID(for plan: SubscriptionPlan) -> String {
+        switch plan {
+        case .weekly: return weeklyProductID
+        case .yearly: return yearlyProductID
+        }
+    }
+
+    private func setPurchaseStatus(_ message: String?, isError: Bool = false) {
+        purchaseStatusMessage = message
+        purchaseStatusIsError = isError
     }
 
     // MARK: - Premium Status
 
     private func loadPremiumStatus() {
-        if isUnlockedForUITests {
+        if isPremiumUnlockedForUITests {
             isPremium = true
             shouldShowPaywall = false
             userDefaults.set(true, forKey: premiumKey)
@@ -376,25 +398,9 @@ class PaywallManager: ObservableObject {
             // User is not premium
             print("💎 Premium status updated: Inactive")
 
-            // Apple Guideline 5.6: Only show paywall after onboarding is complete
-            let onboardingCompleted = userDefaults.bool(forKey: "onboarding_completed")
-
-            // If user was previously premium and now is not, show paywall
-            // This handles subscription expiration/cancellation
-            if wasPreviouslyPremium && !premium && onboardingCompleted {
-                print("⚠️ Subscription expired or cancelled - showing paywall")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.shouldShowPaywall = true
-                }
-            }
-
-            // Also show paywall if user tries to add leads without premium
-            // But only after onboarding is complete
-            if leadCount >= freeLeadLimit && onboardingCompleted && !shouldShowPaywall {
-                print("⚠️ User at free lead limit without premium - showing paywall")
-                shouldShowPaywall = true
-            } else if !onboardingCompleted {
-                print("⏸️ Paywall deferred - onboarding not complete")
+            // If subscription expired, don't auto-show paywall — it will show on next action via gateAction()
+            if wasPreviouslyPremium && !premium {
+                print("⚠️ Subscription expired or cancelled — paywall will show on next action")
             }
         }
 
@@ -409,31 +415,69 @@ class PaywallManager: ObservableObject {
 
     @MainActor
     func loadProducts() async {
+        guard !isLoadingProducts else { return }
+
+        isLoadingProducts = true
+        purchaseStatusMessage = nil
+        purchaseStatusIsError = false
+
+        defer {
+            isLoadingProducts = false
+            hasAttemptedProductLoad = true
+        }
+
         do {
-            products = try await Product.products(for: [weeklyProductID, yearlyProductID])
-            print("✅ Loaded \(products.count) products")
+            let loadedProducts = try await Product.products(for: [weeklyProductID, yearlyProductID])
+            products = loadedProducts.sorted { lhs, rhs in
+                productSortOrder(lhs.id) < productSortOrder(rhs.id)
+            }
+
+            let loadedProductIDs = Set(loadedProducts.map(\.id))
+            let missingProductIDs = Set([weeklyProductID, yearlyProductID]).subtracting(loadedProductIDs)
+
+            if missingProductIDs.isEmpty {
+                print("✅ Loaded \(products.count) products")
+            } else {
+                print("⚠️ Missing StoreKit products: \(missingProductIDs.sorted().joined(separator: ", "))")
+                setPurchaseStatus("Subscription options are still loading. Please try again in a moment.", isError: true)
+            }
         } catch {
             print("❌ Failed to load products: \(error)")
+            products = []
+            setPurchaseStatus("We couldn't load subscription options. Check your connection and try again.", isError: true)
+        }
+    }
+
+    private func productSortOrder(_ productID: String) -> Int {
+        switch productID {
+        case yearlyProductID: return 0
+        case weeklyProductID: return 1
+        default: return 2
         }
     }
 
     // MARK: - Purchase Flow
 
+    @MainActor
     func purchase(plan: SubscriptionPlan) async {
-        await MainActor.run {
-            isPurchasing = true
+        guard !isPurchasing else { return }
+
+        isPurchasing = true
+        setPurchaseStatus(nil)
+
+        defer {
+            isPurchasing = false
         }
 
-        guard !products.isEmpty else {
+        if product(for: plan) == nil {
             print("⚠️ Products not loaded yet")
-            await MainActor.run { isPurchasing = false }
-            return
+            await loadProducts()
         }
 
-        let productID = plan == .weekly ? weeklyProductID : yearlyProductID
-        guard let product = products.first(where: { $0.id == productID }) else {
+        let productID = productID(for: plan)
+        guard let product = product(for: plan) else {
             print("❌ Product not found: \(productID)")
-            await MainActor.run { isPurchasing = false }
+            setPurchaseStatus("This subscription option is unavailable right now. Please try again in a moment.", isError: true)
             return
         }
 
@@ -446,54 +490,52 @@ class PaywallManager: ObservableObject {
                 await transaction.finish()
 
                 await checkSubscriptionStatus()
-                await MainActor.run {
-                    isPurchasing = false
-                    print("✅ Purchase successful: \(product.displayName)")
-                }
+                setPurchaseStatus("Purchase complete. Pro access is active.")
+                print("✅ Purchase successful: \(product.displayName)")
 
             case .userCancelled:
-                await MainActor.run {
-                    isPurchasing = false
-                    print("ℹ️ User cancelled purchase")
-                }
+                setPurchaseStatus(nil)
+                print("ℹ️ User cancelled purchase")
 
             case .pending:
-                await MainActor.run {
-                    isPurchasing = false
-                    print("⏳ Purchase pending approval")
-                }
+                setPurchaseStatus("Purchase is pending approval. Pro unlocks automatically once Apple approves it.")
+                print("⏳ Purchase pending approval")
 
             @unknown default:
-                await MainActor.run {
-                    isPurchasing = false
-                    print("❌ Unknown purchase result")
-                }
+                setPurchaseStatus("We couldn't complete the purchase. Please try again.", isError: true)
+                print("❌ Unknown purchase result")
             }
         } catch {
-            await MainActor.run {
-                isPurchasing = false
-                print("❌ Purchase failed: \(error)")
-            }
+            setPurchaseStatus("Purchase failed: \(error.localizedDescription)", isError: true)
+            print("❌ Purchase failed: \(error)")
         }
     }
 
+    @MainActor
     func restorePurchases() async {
-        await MainActor.run {
-            isPurchasing = true
+        guard !isPurchasing else { return }
+
+        isPurchasing = true
+        setPurchaseStatus(nil)
+
+        defer {
+            isPurchasing = false
         }
 
         do {
             try await AppStore.sync()
             await checkSubscriptionStatus()
-            await MainActor.run {
-                isPurchasing = false
+
+            if isPremium {
+                setPurchaseStatus("Purchases restored. Pro access is active.")
                 print("✅ Purchases restored")
+            } else {
+                setPurchaseStatus("No active subscription was found for this Apple ID.", isError: true)
+                print("ℹ️ Restore completed with no active subscription")
             }
         } catch {
-            await MainActor.run {
-                isPurchasing = false
-                print("❌ Restore failed: \(error)")
-            }
+            setPurchaseStatus("Restore failed: \(error.localizedDescription)", isError: true)
+            print("❌ Restore failed: \(error)")
         }
     }
 
@@ -501,11 +543,6 @@ class PaywallManager: ObservableObject {
 
     @MainActor
     func checkSubscriptionStatus() async {
-        if isUnlockedForUITests {
-            setPremiumStatus(true)
-            return
-        }
-
         print("🔍 Checking subscription status...")
         var isActive = false
         var hasActiveSubscription = false
@@ -581,20 +618,12 @@ class PaywallManager: ObservableObject {
 
     // MARK: - Testing & Debug
 
-    func resetLeadCount() {
-        leadCount = 0
-        userDefaults.set(0, forKey: leadCountKey)
-        userDefaults.synchronize()
-        print("🔄 Lead count reset to 0")
-    }
-
     func resetPremiumStatus() {
         setPremiumStatus(false)
         print("🔄 Premium status reset")
     }
 
     func resetAll() {
-        resetLeadCount()
         resetPremiumStatus()
         shouldShowPaywall = false
         print("🔄 All paywall data reset")

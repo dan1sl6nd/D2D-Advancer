@@ -6,412 +6,408 @@ struct PaywallView: View {
     @StateObject private var paywallManager = PaywallManager.shared
     @State private var selectedPlan: PaywallManager.SubscriptionPlan = PaywallManager.shared.experience.recommendedPlan
 
-    var isAtLimit: Bool {
-        paywallManager.remainingFreeLeads() == 0 && !paywallManager.isPremium
-    }
-
     var body: some View {
         ZStack {
-            // Obsidian background
             Color.obsidianBlack
                 .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 20) {
-                    // Header
+                VStack(alignment: .leading, spacing: 26) {
+                    topBar
                     headerSection
-                        .padding(.top, 40)
+                    planSection
+                    includedSection
 
-                    // Pricing Section (Priority - Always visible)
-                    pricingSection
-
-                    // Benefits
-                    benefitsSection
-
-                    // Social Proof
-                    socialProofSection
-
-                    // Testimonials
-                    testimonialsSection
-
-                    // FAQ
-                    faqSection
-
-                    Spacer(minLength: 120)
+                    Spacer(minLength: 150)
                 }
-                .padding(.horizontal, 24)
-            }
-
-            // Close button overlay
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.7))
-                            .frame(width: 32, height: 32)
-                            .background(Color.white.opacity(0.15))
-                            .clipShape(Circle())
-                    }
-                    .padding(.trailing, 20)
-                    .padding(.top, 12)
-                }
-                Spacer()
+                .padding(.horizontal, 22)
+                .padding(.top, 14)
             }
         }
         .safeAreaInset(edge: .bottom) {
-            floatingPurchaseButton
+            purchaseBar
         }
         .onChangeCompat(of: paywallManager.experience.recommendedPlan) { newPlan in
             selectedPlan = newPlan
         }
+        .onAppear {
+            if paywallManager.products.isEmpty {
+                Task {
+                    await paywallManager.loadProducts()
+                }
+            }
+        }
     }
 
-    // MARK: - Header Section
+    // MARK: - Main Layout
+
+    private var topBar: some View {
+        HStack {
+            Capsule()
+                .fill(Color.obsidianBorder.opacity(0.75))
+                .frame(width: 42, height: 5)
+                .frame(maxWidth: .infinity)
+                .accessibilityHidden(true)
+
+            Button(action: { dismiss() }) {
+                Image(systemName: "xmark")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(.textSecondary)
+                    .frame(width: 34, height: 34)
+                    .background(Color.obsidianSurface)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(Color.obsidianBorder.opacity(0.7), lineWidth: 0.5)
+                    )
+            }
+            .accessibilityLabel("Close paywall")
+        }
+    }
 
     private var headerSection: some View {
-        VStack(spacing: 12) {
-            // Compact Modern Icon
+        let experience = paywallManager.experience
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: "crown.fill")
+                    .font(.obsidianSmall)
+                    .foregroundColor(.electricViolet)
+                    .frame(width: 30, height: 30)
+                    .background(Color.electricViolet.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+                Text("D2D Advancer Pro")
+                    .font(.obsidianSmall)
+                    .foregroundColor(.textSecondary)
+                    .textCase(.uppercase)
+
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(cleanHeroTitle(for: experience))
+                    .font(.displayLarge)
+                    .foregroundColor(.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Unlimited leads, iCloud backup, reminders, and field tools in one focused workspace.")
+                    .font(.obsidianBody)
+                    .foregroundColor(.textSecondary)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var selectedPlanCaption: String {
+        paywallManager.purchaseCaption(for: selectedPlan)
+    }
+
+    private var planSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose a plan")
+                .font(.obsidianSubheadline)
+                .foregroundColor(.textPrimary)
+
+            VStack(spacing: 10) {
+                ForEach(orderedPlans, id: \.self) { plan in
+                    planButton(for: plan)
+                }
+            }
+        }
+    }
+
+    private var orderedPlans: [PaywallManager.SubscriptionPlan] {
+        if paywallManager.experience.recommendedPlan == .weekly {
+            return [.weekly, .yearly]
+        }
+        return [.yearly, .weekly]
+    }
+
+    private func planButton(for plan: PaywallManager.SubscriptionPlan) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.3)) {
+                selectedPlan = plan
+            }
+        } label: {
+            planRow(for: plan)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    private func planRow(for plan: PaywallManager.SubscriptionPlan) -> some View {
+        let isSelected = selectedPlan == plan
+        let isWeekly = plan == .weekly
+        let hasLoadedProduct = paywallManager.product(for: plan) != nil
+
+        return HStack(spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
-                    .blur(radius: 15)
+                    .stroke(isSelected ? Color.textPrimary : Color.obsidianBorder, lineWidth: 1.6)
+                    .frame(width: 24, height: 24)
 
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.blue, Color.purple],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 60, height: 60)
-
-                Image(systemName: "house.fill")
-                    .font(.system(size: 30, weight: .medium))
-                    .foregroundColor(.white)
-            }
-
-            VStack(spacing: 6) {
-                Text("Welcome to D2D Advancer")
-                    .font(.system(size: 26, weight: .bold))
-                    .foregroundColor(.white)
-
-                Text("Start Your Free Trial Today")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.orange.opacity(0.9), Color.yellow.opacity(0.9)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-            }
-        }
-        .padding(.vertical, 8)
-    }
-
-    // MARK: - Pricing Section
-
-    private var pricingSection: some View {
-        VStack(spacing: 12) {
-            // Weekly Plan (Featured with Trial)
-            CompactPricingCard(
-                badge: "3-DAY FREE TRIAL",
-                badgeGradient: [Color.orange, Color.red],
-                title: "Weekly",
-                price: "$9.99",
-                period: "per week",
-                subtitle: "Try free for 3 days",
-                features: ["Cancel anytime during trial", "Then $9.99/week"],
-                isSelected: selectedPlan == .weekly,
-                isPopular: true
-            )
-            .onTapGesture {
-                withAnimation(.spring(response: 0.3)) {
-                    selectedPlan = .weekly
+                if isSelected {
+                    Circle()
+                        .fill(Color.textPrimary)
+                        .frame(width: 14, height: 14)
                 }
             }
+            .accessibilityHidden(true)
 
-            // Yearly Plan
-            CompactPricingCard(
-                badge: "BEST VALUE",
-                badgeGradient: [Color.green, Color.blue],
-                title: "Yearly",
-                price: "$36.99",
-                period: "per year",
-                subtitle: "Only $3.08/month",
-                features: ["Save 93% vs weekly", "Best value option"],
-                isSelected: selectedPlan == .yearly,
-                isPopular: false
-            )
-            .onTapGesture {
-                withAnimation(.spring(response: 0.3)) {
-                    selectedPlan = .yearly
-                }
-            }
-        }
-    }
-
-    // MARK: - Benefits Section
-
-    private var benefitsSection: some View {
-        VStack(spacing: 16) {
-            Text("Everything You'll Get")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(spacing: 12) {
-                ModernBenefitRow(icon: "infinity.circle.fill", title: "Unlimited Lead Management", color: .blue)
-                ModernBenefitRow(icon: "map.circle.fill", title: "Smart Territory Mapping", color: .green)
-                ModernBenefitRow(icon: "bell.badge.fill", title: "Automated Follow-ups", color: .orange)
-                ModernBenefitRow(icon: "crown.fill", title: "Priority Support", color: .purple)
-            }
-            .padding(20)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.white.opacity(0.05))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    )
-            )
-        }
-    }
-
-    // MARK: - Social Proof Section
-
-    private var socialProofSection: some View {
-        let tagline = paywallManager.experience.socialProofTagline
-
-        return VStack(spacing: 16) {
-            // Rating display
-            VStack(spacing: 10) {
-                HStack(spacing: 4) {
-                    ForEach(0..<5, id: \.self) { _ in
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [Color.yellow, Color.orange],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
-                }
-
+            VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 8) {
-                    Text("4.9")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(.white)
+                    Text(isWeekly ? "Weekly" : "Yearly")
+                        .font(.obsidianTitle)
+                        .foregroundColor(.textPrimary)
 
-                    Text("out of 5")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.6))
+                    Text(isWeekly ? "3-day trial" : "Best value")
+                        .font(.nano)
+                        .foregroundColor(isSelected ? .obsidianBlack : .textSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(isSelected ? Color.textPrimary : Color.obsidianElevated)
+                        )
                 }
 
-                Text("average rating")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.5))
+                Text(isWeekly ? "Try the full app first." : "Lowest cost for daily field work.")
+                    .font(.obsidianCaption)
+                    .foregroundColor(.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.white.opacity(0.05))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [Color.yellow.opacity(0.2), Color.orange.opacity(0.1)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    )
-            )
 
-            Text(tagline)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(.white.opacity(0.8))
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
+            Spacer(minLength: 10)
+
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(paywallManager.displayPrice(for: plan))
+                    .font(.obsidianHeadline)
+                    .foregroundColor(.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Text(hasLoadedProduct ? (isWeekly ? "/ week" : "/ year") : "from App Store")
+                    .font(.obsidianSmall)
+                    .foregroundColor(.textSecondary)
+            }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.obsidianSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(isSelected ? Color.textPrimary.opacity(0.85) : Color.obsidianBorder.opacity(0.75), lineWidth: isSelected ? 1.4 : 0.5)
+                )
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
     }
 
-    // MARK: - Testimonials Section
-
-    private var testimonialsSection: some View {
-        let testimonials = paywallManager.experience.testimonials
-
-        return VStack(spacing: 16) {
-            Text("Loved by Sales Professionals")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    private var includedSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Included")
+                .font(.obsidianSubheadline)
+                .foregroundColor(.textPrimary)
 
             VStack(spacing: 12) {
-                ForEach(testimonials) { testimonial in
-                    ModernTestimonialCard(
-                        avatar: testimonial.avatar,
-                        name: testimonial.name,
-                        quote: testimonial.quote
+                ForEach(Array(cleanBenefits.enumerated()), id: \.offset) { _, benefit in
+                    benefitRow(
+                        icon: benefit.icon,
+                        title: benefit.title,
+                        subtitle: benefit.subtitle,
+                        color: benefit.color
                     )
                 }
             }
         }
     }
 
-    // MARK: - FAQ Section
+    private var cleanBenefits: [(icon: String, title: String, subtitle: String, color: Color)] {
+        [
+            ("person.text.rectangle.fill", "Unlimited leads", "Keep every door, note, status, and follow-up.", .statusConverted),
+            ("icloud.fill", "iCloud backup", "Sync through the Apple ID already on the device.", .statusInterested),
+            ("bell.badge.fill", "Smart reminders", "Stay on top of callbacks and appointments.", .statusNotHome),
+            ("map.fill", "Field tools", "Plan routes, search areas, and work from the map.", .electricViolet)
+        ]
+    }
 
-    private var faqSection: some View {
-        let items = paywallManager.experience.faqItems
+    private func benefitRow(icon: String, title: String, subtitle: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.obsidianFootnote)
+                .foregroundColor(color)
+                .frame(width: 30, height: 30)
+                .background(color.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-        return VStack(spacing: 16) {
-            Text("Common Questions")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.obsidianCallout)
+                    .foregroundColor(.textPrimary)
 
-            VStack(spacing: 12) {
-                ForEach(items) { faq in
-                    ModernFAQRow(question: faq.question, answer: faq.answer)
-                }
+                Text(subtitle)
+                    .font(.obsidianCaption)
+                    .foregroundColor(.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.obsidianSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+                )
+        )
+    }
+
+    private func cleanHeroTitle(for experience: PaywallExperience) -> String {
+        switch experience.recommendedPlan {
+        case .weekly:
+            return "Try Pro in the field."
+        case .yearly:
+            return "Upgrade your field workflow."
         }
     }
 
-    // MARK: - Floating Purchase Button
+    // MARK: - Purchase Bar
 
-    private var floatingPurchaseButton: some View {
+    private var purchaseBar: some View {
         VStack(spacing: 0) {
-            // Subtle top divider
-            LinearGradient(
-                colors: [Color.white.opacity(0.1), Color.white.opacity(0.05), Color.clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 1)
+            Color.obsidianBorder.opacity(0.45)
+                .frame(height: 0.5)
 
-            VStack(spacing: 14) {
-                // CTA Button
+            VStack(spacing: 11) {
+                purchaseStatusBanner
+
                 Button(action: {
                     subscribe()
                 }) {
                     HStack(spacing: 10) {
-                        if paywallManager.isPurchasing {
+                        if paywallManager.isPurchasing || paywallManager.isLoadingProducts {
                             ProgressView()
-                                .tint(.white)
-                            Text("Processing...")
-                                .font(.system(size: 17, weight: .semibold))
+                                .tint(.obsidianBlack)
+                            Text(paywallManager.isLoadingProducts ? "Loading plans..." : "Processing...")
+                                .font(.obsidianTitle)
                         } else {
-                            if selectedPlan == .weekly {
-                                Image(systemName: "sparkles")
-                                    .font(.system(size: 18, weight: .semibold))
-                                VStack(spacing: 2) {
-                                    Text("Start Free Trial")
-                                        .font(.system(size: 17, weight: .bold))
-                                    Text("3 days free, then $9.99/week")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .opacity(0.9)
-                                }
-                            } else {
-                                Image(systemName: "crown.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                VStack(spacing: 2) {
-                                    Text("Get Started")
-                                        .font(.system(size: 17, weight: .bold))
-                                    Text("$36.99/year - Best Value")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .opacity(0.9)
-                                }
+                            Image(systemName: purchaseButtonIcon)
+                                .font(.obsidianAction)
+
+                            VStack(spacing: 2) {
+                                Text(purchaseButtonTitle)
+                                    .font(.obsidianTitle)
+
+                                Text(purchaseButtonSubtitle)
+                                    .font(.micro)
+                                    .opacity(0.85)
                             }
                         }
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Color.obsidianBlack)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(
-                        LinearGradient(
-                            colors: selectedPlan == .weekly
-                                ? [Color.orange, Color.red]
-                                : [Color.green, Color.blue],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(16)
-                    .shadow(color: (selectedPlan == .weekly ? Color.orange : Color.green).opacity(0.3), radius: 10, x: 0, y: 5)
+                    .frame(height: 54)
+                    .background(Color.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .disabled(paywallManager.isPurchasing)
+                .disabled(paywallManager.isPurchasing || paywallManager.isLoadingProducts)
 
-                // Restore button
-                Button("Restore Purchases") {
-                    restorePurchases()
-                }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
+                HStack(spacing: 14) {
+                    Button("Restore Purchases") {
+                        restorePurchases()
+                    }
+                    .font(.obsidianCaption)
+                    .foregroundColor(.textSecondary)
+                    .disabled(paywallManager.isPurchasing)
 
-                // Legal info
-                VStack(spacing: 6) {
-                    if selectedPlan == .weekly {
-                        VStack(spacing: 2) {
-                            Text("No payment required now")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.8))
-                            Text("Cancel anytime during your 3-day trial at no charge")
-                                .font(.system(size: 9))
-                                .foregroundColor(.white.opacity(0.6))
-                        }
-                    } else {
-                        VStack(spacing: 2) {
-                            Text("Get full access immediately")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.8))
-                            Text("Save 93% compared to weekly • Cancel anytime")
-                                .font(.system(size: 9))
-                                .foregroundColor(.white.opacity(0.6))
-                        }
+                    Text("•")
+                        .font(.nano)
+                        .foregroundColor(.textMuted)
+
+                    Button(action: { openPrivacyPolicy() }) {
+                        Text("Privacy")
+                            .font(.obsidianCaption)
+                            .foregroundColor(.textSecondary)
                     }
 
-                    HStack(spacing: 8) {
-                        Button(action: { openPrivacyPolicy() }) {
-                            Text("Privacy")
-                                .font(.system(size: 9))
-                                .foregroundColor(.white.opacity(0.5))
-                        }
-                        Text("•").foregroundColor(.white.opacity(0.3)).font(.system(size: 8))
-                        Button(action: { openTermsOfUse() }) {
-                            Text("Terms")
-                                .font(.system(size: 9))
-                                .foregroundColor(.white.opacity(0.5))
-                        }
+                    Button(action: { openTermsOfUse() }) {
+                        Text("Terms")
+                            .font(.obsidianCaption)
+                            .foregroundColor(.textSecondary)
                     }
-                    .padding(.top, 2)
                 }
+
+                Text(selectedPlan == .weekly ? "No payment required now. Cancel during trial at no charge." : "Full access immediately. Cancel anytime from device settings.")
+                    .font(.micro)
+                    .foregroundColor(.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
-            .background(Color.obsidianBlack)
+            .padding(.horizontal, 22)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+            .background(.ultraThinMaterial)
+            .background(Color.obsidianBlack.opacity(0.96))
         }
+    }
+
+    @ViewBuilder
+    private var purchaseStatusBanner: some View {
+        if let message = paywallManager.purchaseStatusMessage {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: paywallManager.purchaseStatusIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(paywallManager.purchaseStatusIsError ? .statusNotHome : .statusInterested)
+
+                Text(message)
+                    .font(.obsidianCaption)
+                    .foregroundColor(.textPrimary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.obsidianSurface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(
+                                (paywallManager.purchaseStatusIsError ? Color.statusNotHome : Color.statusInterested).opacity(0.35),
+                                lineWidth: 0.75
+                            )
+                    )
+            )
+        }
+    }
+
+    private var purchaseButtonTitle: String {
+        if paywallManager.product(for: selectedPlan) == nil {
+            return "Retry Loading Plans"
+        }
+        return selectedPlan == .weekly ? "Start Free Trial" : "Continue with Pro"
+    }
+
+    private var purchaseButtonSubtitle: String {
+        if paywallManager.product(for: selectedPlan) == nil {
+            return "We'll reconnect to the App Store"
+        }
+        return selectedPlanCaption
+    }
+
+    private var purchaseButtonIcon: String {
+        if paywallManager.product(for: selectedPlan) == nil {
+            return "arrow.clockwise"
+        }
+        return selectedPlan == .weekly ? "sparkles" : "crown.fill"
     }
 
     // MARK: - Actions
@@ -449,6 +445,142 @@ struct PaywallView: View {
 
 // MARK: - Modern Supporting Components
 
+struct PaywallBrandMark: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.electricViolet.opacity(0.14))
+                .frame(width: 44, height: 44)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.electricViolet.opacity(0.32), lineWidth: 0.5)
+                )
+
+            Image(systemName: "crown.fill")
+                .font(.obsidianSubheadline)
+                .foregroundColor(.electricViolet)
+        }
+    }
+}
+
+struct PaywallMetricPill: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.obsidianCallout)
+                .foregroundColor(.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(label)
+                .font(.micro)
+                .foregroundColor(.textSecondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.electricViolet.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+struct PaywallSectionHeader: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.obsidianSubheadline)
+                .foregroundColor(.textPrimary)
+
+            Text(subtitle)
+                .font(.obsidianCaption)
+                .foregroundColor(.textSecondary)
+                .lineSpacing(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct PaywallBenefitRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let color: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.obsidianSubheadline)
+                .foregroundColor(color)
+                .frame(width: 44, height: 44)
+                .background(color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.obsidianCallout)
+                    .foregroundColor(.textPrimary)
+
+                Text(subtitle)
+                    .font(.obsidianCaption)
+                    .foregroundColor(.textSecondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.obsidianSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.65), lineWidth: 0.5)
+                )
+        )
+    }
+}
+
+struct PaywallProofTile: View {
+    let value: String
+    let label: String
+    let icon: String
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.obsidianFootnote)
+                .foregroundColor(.electricViolet)
+
+            Text(value)
+                .font(.obsidianCallout)
+                .foregroundColor(.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(label)
+                .font(.micro)
+                .foregroundColor(.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.65), lineWidth: 0.5)
+        )
+    }
+}
+
 struct CompactPricingCard: View {
     let badge: String
     let badgeGradient: [Color]
@@ -461,15 +593,13 @@ struct CompactPricingCard: View {
     let isPopular: Bool
 
     var body: some View {
-        HStack(spacing: 16) {
-            // Left side - Main info
+        HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                // Badge
                 Text(badge)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.nano)
+                    .foregroundColor(.obsidianBlack)
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 5)
                     .background(
                         LinearGradient(
                             colors: badgeGradient,
@@ -477,51 +607,55 @@ struct CompactPricingCard: View {
                             endPoint: .trailing
                         )
                     )
-                    .cornerRadius(6)
+                    .clipShape(Capsule())
 
-                // Price
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(price)
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(.white)
+                        .font(.displayMedium)
+                        .foregroundColor(.textPrimary)
 
                     Text(period)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.6))
+                        .font(.micro)
+                        .foregroundColor(.textSecondary)
                 }
 
-                // Subtitle
-                Text(subtitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.85))
+                HStack(spacing: 7) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.obsidianSmall)
+                        .foregroundColor(badgeGradient.first ?? .electricViolet)
+
+                    Text(features.first ?? subtitle)
+                        .font(.obsidianCaption)
+                        .foregroundColor(.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
             }
 
             Spacer()
 
-            // Right side - Selection indicator
-            if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: badgeGradient,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            } else {
-                Image(systemName: "circle")
-                    .font(.system(size: 32))
-                    .foregroundColor(.white.opacity(0.2))
+            ZStack {
+                Circle()
+                    .stroke(isSelected ? (badgeGradient.first ?? .electricViolet) : Color.obsidianBorder, lineWidth: 1.5)
+                    .frame(width: 30, height: 30)
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.obsidianBlack)
+                        .frame(width: 22, height: 22)
+                        .background(badgeGradient.first ?? .electricViolet)
+                        .clipShape(Circle())
+                }
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(isSelected ? 0.1 : 0.05))
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(isSelected ? Color.obsidianElevated : Color.obsidianSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(
                             isSelected
                                 ? LinearGradient(
@@ -530,7 +664,7 @@ struct CompactPricingCard: View {
                                     endPoint: .bottomTrailing
                                 )
                                 : LinearGradient(
-                                    colors: [Color.white.opacity(0.15), Color.white.opacity(0.05)],
+                                    colors: [Color.obsidianElevated, Color.obsidianSurface],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
@@ -538,7 +672,7 @@ struct CompactPricingCard: View {
                         )
                 )
                 .shadow(
-                    color: isSelected ? badgeGradient.first!.opacity(0.25) : Color.clear,
+                    color: isSelected ? (badgeGradient.first ?? .electricViolet).opacity(0.25) : Color.clear,
                     radius: 12,
                     x: 0,
                     y: 6
@@ -563,8 +697,8 @@ struct ModernPricingCard: View {
             // Badge
             HStack {
                 Text(badge)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.nano)
+                    .foregroundColor(.textPrimary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(
@@ -574,13 +708,13 @@ struct ModernPricingCard: View {
                             endPoint: .trailing
                         )
                     )
-                    .cornerRadius(8)
+                    .cornerRadius(16)
 
                 Spacer()
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 24))
+                        .font(.obsidianHeadline)
                         .foregroundStyle(
                             LinearGradient(
                                 colors: badgeGradient,
@@ -594,30 +728,30 @@ struct ModernPricingCard: View {
             // Price
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(price)
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.displayLarge)
+                    .foregroundColor(.textPrimary)
 
                 Text(period)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
+                    .font(.obsidianFootnote)
+                    .foregroundColor(.textSecondary)
             }
 
             // Subtitle
             Text(subtitle)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(.white.opacity(0.9))
+                .font(.obsidianBody)
+                .foregroundColor(.textPrimary)
 
             // Features
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(features, id: \.self) { feature in
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 14))
+                            .font(.obsidianFootnote)
                             .foregroundColor(badgeGradient.first)
 
                         Text(feature)
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.75))
+                            .font(.obsidianCaption)
+                            .foregroundColor(.textPrimary)
                     }
                 }
             }
@@ -626,7 +760,7 @@ struct ModernPricingCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(isSelected ? 0.1 : 0.05))
+                .fill(isSelected ? Color.obsidianElevated : Color.obsidianSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20)
                         .stroke(
@@ -637,7 +771,7 @@ struct ModernPricingCard: View {
                                     endPoint: .bottomTrailing
                                 )
                                 : LinearGradient(
-                                    colors: [Color.white.opacity(0.15), Color.white.opacity(0.05)],
+                                    colors: [Color.obsidianElevated, Color.obsidianSurface],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
@@ -645,7 +779,7 @@ struct ModernPricingCard: View {
                         )
                 )
                 .shadow(
-                    color: isSelected ? badgeGradient.first!.opacity(0.3) : Color.clear,
+                    color: isSelected ? (badgeGradient.first ?? .electricViolet).opacity(0.3) : Color.clear,
                     radius: 15,
                     x: 0,
                     y: 8
@@ -667,18 +801,18 @@ struct ModernBenefitRow: View {
                     .frame(width: 44, height: 44)
 
                 Image(systemName: icon)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.obsidianSubheadline)
                     .foregroundColor(color)
             }
 
             Text(title)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
+                .font(.obsidianCallout)
+                .foregroundColor(.textPrimary)
 
             Spacer()
 
             Image(systemName: "checkmark")
-                .font(.system(size: 14, weight: .bold))
+                .font(.obsidianFootnote)
                 .foregroundColor(color)
         }
     }
@@ -693,18 +827,18 @@ struct ModernTestimonialCard: View {
         VStack(alignment: .leading, spacing: 12) {
             // Quote
             Text("\"\(quote)\"")
-                .font(.system(size: 14))
-                .foregroundColor(.white.opacity(0.85))
+                .font(.obsidianFootnote)
+                .foregroundColor(.textPrimary)
                 .lineSpacing(4)
 
             // Author
             HStack(spacing: 10) {
                 Text(avatar)
-                    .font(.system(size: 24))
+                    .font(.obsidianHeadline)
 
                 Text(name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.obsidianCaption)
+                    .foregroundColor(.textSecondary)
 
                 Spacer()
 
@@ -712,7 +846,7 @@ struct ModernTestimonialCard: View {
                 HStack(spacing: 2) {
                     ForEach(0..<5, id: \.self) { _ in
                         Image(systemName: "star.fill")
-                            .font(.system(size: 10))
+                            .font(.nano)
                             .foregroundColor(.yellow)
                     }
                 }
@@ -721,10 +855,10 @@ struct ModernTestimonialCard: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.05))
+                .fill(Color.obsidianSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        .stroke(Color.obsidianBorder, lineWidth: 0.5)
                 )
         )
     }
@@ -744,22 +878,22 @@ struct ModernFAQRow: View {
             }) {
                 HStack {
                     Text(question)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.obsidianBody)
+                        .foregroundColor(.textPrimary)
                         .multilineTextAlignment(.leading)
 
                     Spacer()
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white.opacity(0.6))
+                        .font(.obsidianSmall)
+                        .foregroundColor(.textSecondary)
                 }
             }
 
             if isExpanded {
                 Text(answer)
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.obsidianCaption)
+                    .foregroundColor(.textSecondary)
                     .lineSpacing(4)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -767,18 +901,18 @@ struct ModernFAQRow: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(isExpanded ? 0.08 : 0.05))
+                .fill(isExpanded ? Color.obsidianElevated : Color.obsidianSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(
                             isExpanded
                                 ? LinearGradient(
-                                    colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2)],
+                                    colors: [Color.electricViolet.opacity(0.3), Color.electricVioletDeep.opacity(0.2)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                                 : LinearGradient(
-                                    colors: [Color.white.opacity(0.08), Color.white.opacity(0.05)],
+                                    colors: [Color.obsidianBorder, Color.obsidianSurface],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
@@ -802,8 +936,8 @@ struct SimplePricingCard: View {
     var body: some View {
         HStack(spacing: 16) {
             Circle()
-                .fill(isSelected ? Color.orange : Color.clear)
-                .stroke(isSelected ? Color.orange : Color.white.opacity(0.3), lineWidth: 2)
+                .fill(isSelected ? Color.electricViolet : Color.clear)
+                .stroke(isSelected ? Color.electricViolet : Color.obsidianMuted, lineWidth: 2)
                 .frame(width: 20, height: 20)
                 .overlay(
                     Circle()
@@ -815,47 +949,47 @@ struct SimplePricingCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text(badge)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white)
+                        .font(.nano)
+                        .foregroundColor(.textPrimary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(badgeColor)
-                        .cornerRadius(4)
+                        .cornerRadius(8)
 
                     Spacer()
                 }
 
                 HStack(alignment: .firstTextBaseline) {
                     Text(title)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.obsidianAction)
+                        .foregroundColor(.textPrimary)
 
                     Spacer()
 
                     VStack(alignment: .trailing, spacing: 4) {
                         if let originalPrice = originalPrice {
                             Text(originalPrice)
-                                .font(.system(size: 12))
-                                .foregroundColor(.white.opacity(0.5))
+                                .font(.obsidianSmall)
+                                .foregroundColor(.textSecondary)
                                 .strikethrough()
                         }
 
                         Text(price)
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
+                            .font(.obsidianCallout)
+                            .foregroundColor(.textPrimary)
                     }
                 }
 
                 Text(subtitle)
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.obsidianSmall)
+                    .foregroundColor(.textSecondary)
             }
         }
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(isSelected ? 0.15 : 0.08))
-                .stroke(isSelected ? Color.orange : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+                .fill(isSelected ? Color.obsidianElevated : Color.obsidianSurface)
+                .stroke(isSelected ? Color.electricViolet : Color.obsidianBorder, lineWidth: isSelected ? 1.5 : 0.5)
         )
     }
 }
@@ -869,15 +1003,15 @@ struct BenefitRow: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .foregroundColor(.green)
-                .font(.system(size: 20))
+                .font(.obsidianSubheadline)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(.textPrimary)
                 Text(subtitle)
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.obsidianSmall)
+                    .foregroundColor(.textSecondary)
             }
 
             Spacer()
@@ -894,25 +1028,25 @@ struct TestimonialCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Text(avatar)
-                .font(.system(size: 32))
+                .font(.displayLarge)
                 .frame(width: 40, height: 40)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(text)
-                    .font(.system(size: 14))
-                    .foregroundColor(.white)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(.textPrimary)
                     .italic()
 
                 HStack {
                     Text(name)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.8))
+                        .font(.obsidianSmall)
+                        .foregroundColor(.textPrimary)
 
                     HStack(spacing: 2) {
                         ForEach(0..<rating, id: \.self) { _ in
                             Image(systemName: "star.fill")
                                 .foregroundColor(.yellow)
-                                .font(.system(size: 10))
+                                .font(.nano)
                         }
                     }
                 }
@@ -938,23 +1072,23 @@ struct FAQRow: View {
             }) {
                 HStack {
                     Text(question)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.textPrimary)
                         .multilineTextAlignment(.leading)
 
                     Spacer()
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundColor(.white.opacity(0.7))
-                        .font(.system(size: 12))
+                        .foregroundColor(.textSecondary)
+                        .font(.obsidianSmall)
                 }
                 .padding()
             }
 
             if isExpanded {
                 Text(answer)
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.8))
+                    .font(.obsidianSmall)
+                    .foregroundColor(.textPrimary)
                     .padding(.horizontal)
                     .padding(.bottom)
                     .multilineTextAlignment(.leading)
@@ -975,7 +1109,7 @@ extension View {
                     .fill(Color.obsidianSurface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.obsidianBorder, lineWidth: 1)
+                            .stroke(Color.obsidianBorder, lineWidth: 0.5)
                     )
             )
     }
@@ -990,10 +1124,10 @@ struct PremiumLockOverlay: ViewModifier {
         content.overlay(alignment: .bottomTrailing) {
             if !paywallManager.isPremium {
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.nano)
+                    .foregroundColor(.textPrimary)
                     .padding(4)
-                    .background(Color.orange)
+                    .background(Color.electricViolet)
                     .clipShape(Circle())
                     .offset(x: 4, y: 4)
             }
