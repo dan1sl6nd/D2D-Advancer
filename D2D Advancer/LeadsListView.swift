@@ -49,6 +49,14 @@ struct LeadsListView: View {
     
     @State private var paginatedLeads: [Lead] = []
 
+    private var isRunningUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
+    }
+
+    private var shouldLoadTeamWorkspace: Bool {
+        !isRunningUITests || FirebaseEmulatorConfiguration.isEnabled
+    }
+
     private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
         TeamWorkspaceSurfaceSummary.make(
             team: teamService.activeTeam,
@@ -66,7 +74,45 @@ struct LeadsListView: View {
         NavigationView {
             GeometryReader { geometry in
                 VStack(spacing: 0) {
-                    safeAreaSpacer(geometry: geometry)
+                    Rectangle()
+                        .fill(Color.obsidianBlack)
+                        .frame(height: geometry.safeAreaInsets.top)
+                    ObsidianHeaderView("Leads") {
+                        HStack(spacing: 6) {
+                            Menu {
+                                ForEach(SortOption.allCases, id: \.self) { option in
+                                    Button {
+                                        sortBy = option
+                                    } label: {
+                                        Label(option.rawValue, systemImage: sortBy == option ? "checkmark" : "")
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "arrow.up.arrow.down")
+                                        .font(.nano)
+                                    Text(sortBy.rawValue)
+                                        .font(.obsidianSmall)
+                                }
+                                .foregroundColor(.electricViolet)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.electricViolet.opacity(0.1))
+                                .clipShape(Capsule())
+                            }
+
+                            Button {
+                                sortAscending.toggle()
+                            } label: {
+                                Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                                    .font(.nano)
+                                    .foregroundColor(.textSecondary)
+                                    .frame(width: 28, height: 28)
+                                    .background(Color.obsidianBorder.opacity(0.2))
+                                    .clipShape(Circle())
+                            }
+                        }
+                    }
                     tabSelectionSection
                     searchAndFiltersSection
                     leadsContentSection
@@ -128,24 +174,17 @@ struct LeadsListView: View {
     private func tabLabel(_ tab: LeadTab) -> some View {
         let isSelected = selectedTab == tab
         Text(tab.rawValue)
-            .font(.system(size: 14, weight: .semibold))
+            .font(.obsidianFootnote)
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .foregroundColor(isSelected ? .white : Color.textSecondary)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? Color.electricViolet : Color.obsidianSurface)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? Color.electricViolet : Color.clear)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(
-                        isSelected ? Color.clear : Color.obsidianBorder,
-                        lineWidth: 1
-                    )
-            )
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private func safeAreaSpacer(geometry: GeometryProxy) -> some View {
@@ -155,7 +194,7 @@ struct LeadsListView: View {
     }
     
     private var tabSelectionSection: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 4) {
             ForEach(LeadTab.allCases, id: \.self) { tab in
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -171,6 +210,15 @@ struct LeadsListView: View {
                 .accessibilityRemoveTraits(.isImage)
             }
         }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.obsidianSurface.opacity(0.88))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 1)
+        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Lead filter tabs")
         .padding(.horizontal, 16)
@@ -183,15 +231,8 @@ struct LeadsListView: View {
             SearchBar(text: $searchFilterManager.currentFilter.text)
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Search leads")
-            
+
             QuickFilterChipsView(searchFilterManager: searchFilterManager)
-                .padding(.horizontal)
-            
-            FilterBar(
-                sortBy: $sortBy,
-                sortAscending: $sortAscending,
-                showingFilters: $showingFilters
-            )
         }
     }
     
@@ -205,31 +246,45 @@ struct LeadsListView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Leads list")
-        .refreshable {
-            await refreshLeads()
-        }
     }
     
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 24) {
             Spacer()
 
-            Image(systemName: "person.2")
-                .font(.system(size: 48))
-                .foregroundColor(Color.textMuted)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.electricViolet.opacity(0.12))
+                .frame(width: 88, height: 88)
+                .overlay(
+                    Image(systemName: selectedTab == .active ? "person.2" : "tray")
+                        .font(.displayLarge)
+                        .foregroundColor(Color.electricViolet)
+                )
 
-            VStack(spacing: 8) {
-                Text("No Leads Found")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(Color.textSecondary)
+            VStack(spacing: 10) {
+                Text(selectedTab == .active ? "No Leads Yet" : "No Inactive Leads")
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
 
                 Text(selectedTab == .active ?
-                    "Start adding leads to build your customer database and track your progress." :
-                    "Inactive leads will appear here when you mark them as not interested or not home.")
-                    .font(.system(size: 15))
-                    .foregroundColor(Color.textMuted)
+                    "Add leads from the Map tab to start building your pipeline." :
+                    "Leads marked as Not Home or Not Interested will appear here.")
+                    .font(.obsidianBody)
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
+            }
+
+            if selectedTab == .active {
+                Button {
+                    AppRouter.shared.selectedTab = 0
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "map.fill")
+                        Text("Open Map")
+                    }
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
             }
 
             Spacer()
@@ -237,93 +292,99 @@ struct LeadsListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("No leads found")
-        .accessibilityValue(selectedTab == .active ?
-            "Start adding leads to build your customer database" :
-            "Inactive leads will appear here when marked as not interested or not home")
     }
     
     private var leadsScrollView: some View {
-        ScrollView {
-            LazyVStack(spacing: 8) {
-                if let summary = teamSurfaceSummary {
-                    TeamWorkInlineSection(
-                        summary: summary,
-                        selectedRepUserId: $selectedTeamRepUserId,
-                        onOpenMap: { showingTeamFieldMap = true }
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 4)
-                }
+        List {
+            if let summary = teamSurfaceSummary {
+                TeamWorkInlineSection(
+                    summary: summary,
+                    selectedRepUserId: $selectedTeamRepUserId,
+                    onOpenMap: { showingTeamFieldMap = true }
+                )
+                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.obsidianBlack)
+                .listRowSeparator(.hidden)
+            }
 
-                ForEach(paginatedLeads, id: \.id) { lead in
-                    LeadRowView(
-                        lead: lead,
-                        onTap: { selectedLead = lead },
-                        onDelete: {
-                            guard paywallManager.gateAction() else { return }
-                            handleLongPressDelete(lead)
-                        },
-                        onCall: {
-                            guard paywallManager.gateAction() else { return }
-                            if let phone = lead.phone, !phone.isEmpty {
-                                Utilities.makePhoneCall(to: phone)
-                            }
-                        },
-                        onMessage: {
-                            guard paywallManager.gateAction() else { return }
-                            messageLead = lead
-                        },
-                        onFollowUp: {
-                            guard paywallManager.gateAction() else { return }
-                            quickSetFollowUp(for: lead)
-                        }
-                    )
-                    .onLongPressGesture {
+            ForEach(paginatedLeads, id: \.id) { lead in
+                LeadRowView(
+                    lead: lead,
+                    onTap: { selectedLead = lead },
+                    onDelete: {
                         guard paywallManager.gateAction() else { return }
                         handleLongPressDelete(lead)
-                    }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Lead: \(lead.displayName)")
-                        .accessibilityHint("Double tap to view lead details, long press to delete")
-                        .accessibilityValue(leadAccessibilityValue(for: lead))
-                        .onAppear {
-                            // Load more when approaching the end
-                            if lead == paginatedLeads.last {
-                                loadMoreLeadsIfNeeded()
-                            }
+                    },
+                    onCall: {
+                        guard paywallManager.gateAction() else { return }
+                        if let phone = lead.phone, !phone.isEmpty {
+                            Utilities.makePhoneCall(to: phone)
                         }
-                }
-
-                if paginatedLeads.isEmpty && !isLoadingMore && teamSurfaceSummary != nil {
-                    Text("No personal leads match this filter.")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(Color.textMuted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                }
-                
-                // Loading indicator at bottom
-                if isLoadingMore && hasMoreData {
-                    HStack {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                        Text("Loading more leads...")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color.textSecondary)
+                    },
+                    onMessage: {
+                        guard paywallManager.gateAction() else { return }
+                        messageLead = lead
+                    },
+                    onFollowUp: {
+                        guard paywallManager.gateAction() else { return }
+                        quickSetFollowUp(for: lead)
                     }
-                    .padding()
-                    .accessibilityLabel("Loading more leads")
+                )
+                .onLongPressGesture {
+                    guard paywallManager.gateAction() else { return }
+                    handleLongPressDelete(lead)
+                }
+                .listRowBackground(Color.obsidianBlack)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Lead: \(lead.displayName)")
+                .accessibilityHint("Double tap to view lead details, long press to delete")
+                .accessibilityValue(leadAccessibilityValue(for: lead))
+                .onAppear {
+                    if lead == paginatedLeads.last {
+                        loadMoreLeadsIfNeeded()
+                    }
                 }
             }
-            .padding(.vertical, 8)
+
+            if paginatedLeads.isEmpty && !isLoadingMore && teamSurfaceSummary != nil {
+                Text("No personal leads match this filter.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .listRowBackground(Color.obsidianBlack)
+                    .listRowSeparator(.hidden)
+            }
+
+            // Loading indicator at bottom
+            if isLoadingMore && hasMoreData {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Loading more leads...")
+                        .font(.obsidianCaption)
+                        .foregroundColor(Color.textSecondary)
+                }
+                .padding()
+                .listRowBackground(Color.obsidianBlack)
+                .accessibilityLabel("Loading more leads")
+            }
+        }
+        .listStyle(.plain)
+        .listRowSeparator(.hidden)
+        .scrollContentBackground(.hidden)
+        .background(Color.obsidianBlack)
+        .refreshable {
+            resetAndLoadLeads()
+            UserDataSyncManager.shared.syncWithServer()
+            await loadTeamWorkspaceIfNeeded()
         }
     }
-    
-    // MARK: - Helper Functions
 
+    // MARK: - Helper Functions
     private func loadTeamWorkspaceIfNeeded() async {
-        guard userAccountManager.isLoggedIn || FirebaseEmulatorConfiguration.isEnabled else { return }
+        guard shouldLoadTeamWorkspace else { return }
         await teamService.loadCurrentTeam(
             displayName: userAccountManager.currentUserDisplayName,
             email: userAccountManager.currentUserEmail
@@ -351,6 +412,8 @@ struct LeadsListView: View {
     }
     
     private func deleteLead(_ lead: Lead) {
+        let firebaseLeadId = lead.id?.uuidString
+
         withAnimation(.easeInOut(duration: 0.3)) {
             // Remove from paginated leads immediately for UI feedback
             paginatedLeads.removeAll { $0.id == lead.id }
@@ -361,9 +424,20 @@ struct LeadsListView: View {
         
         do {
             try viewContext.save()
-            
-            // Sync with server
-            UserDataSyncManager.shared.syncWithServer()
+
+            if let firebaseLeadId,
+               UserDataSyncManager.shouldDeleteLeadFromFirebase(
+                provider: CloudSyncProvider.current,
+                isAuthenticated: FirebaseService.shared.isAuthenticated
+               ) {
+                Task {
+                    do {
+                        try await UserDataSyncManager.shared.deleteLeadFromFirebase(leadId: firebaseLeadId)
+                    } catch {
+                        print("❌ Failed to delete lead \(firebaseLeadId) from Firebase: \(error)")
+                    }
+                }
+            }
             
             print("✅ Lead deleted successfully: \(lead.displayName)")
         } catch {
@@ -623,11 +697,11 @@ struct SearchBar: View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(Color.electricViolet)
-                .font(.system(size: 16, weight: .medium))
+                .font(.obsidianCallout)
 
             TextField("Search leads...", text: $text)
                 .focused($isSearchFocused)
-                .font(.system(size: 15, weight: .regular))
+                .font(.obsidianBody)
                 .foregroundColor(Color.textPrimary)
                 .textFieldStyle(PlainTextFieldStyle())
                 .accessibilityLabel("Search leads")
@@ -640,7 +714,7 @@ struct SearchBar: View {
                 }) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(Color.textSecondary)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.obsidianCallout)
                 }
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel("Clear search")
@@ -648,14 +722,12 @@ struct SearchBar: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.obsidianSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(isSearchFocused ? Color.electricViolet : Color.obsidianBorder, lineWidth: 1)
-                )
+        .padding(.vertical, 11)
+        .background(Color.obsidianSurface)
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(isSearchFocused ? Color.electricViolet : Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -669,49 +741,61 @@ struct FilterBar: View {
     @Binding var showingFilters: Bool
 
     var body: some View {
-        if showingFilters {
-            VStack(spacing: 8) {
-                HStack {
-                    Text("Sort by:")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(Color.textSecondary)
-
-                    Picker("Sort by", selection: $sortBy) {
-                        ForEach(LeadsListView.SortOption.allCases, id: \.self) { option in
-                            Text(option.rawValue).tag(option)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-
-                    Spacer()
-
-                    Button(action: {
-                        sortAscending.toggle()
-                    }) {
-                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                            .foregroundColor(Color.electricViolet)
+        HStack(spacing: 8) {
+            Menu {
+                ForEach(LeadsListView.SortOption.allCases, id: \.self) { option in
+                    Button {
+                        sortBy = option
+                    } label: {
+                        Label(option.rawValue, systemImage: sortBy == option ? "checkmark" : "")
                     }
                 }
-
-                Rectangle()
-                    .fill(Color.obsidianBorder)
-                    .frame(height: 1)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.micro)
+                    Text(sortBy.rawValue)
+                        .font(.obsidianSmall)
+                }
+                .foregroundColor(Color.electricViolet)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(Color.electricViolet.opacity(0.12))
+                )
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            .background(Color.obsidianBlack)
+
+            Button(action: {
+                sortAscending.toggle()
+            }) {
+                Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                    .font(.micro)
+                    .foregroundColor(Color.textSecondary)
+                    .padding(8)
+                    .background(Color.obsidianSurface)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle().stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
+                    )
+            }
+
+            Spacer()
         }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 }
 
 struct LeadRowView: View {
+    @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject var lead: Lead
     let onTap: (() -> Void)?
     let onDelete: (() -> Void)?
     let onCall: (() -> Void)?
     let onMessage: (() -> Void)?
     let onFollowUp: (() -> Void)?
-    
+
     init(lead: Lead, onTap: (() -> Void)? = nil, onDelete: (() -> Void)? = nil, onCall: (() -> Void)? = nil, onMessage: (() -> Void)? = nil, onFollowUp: (() -> Void)? = nil) {
         self.lead = lead
         self.onTap = onTap
@@ -723,19 +807,19 @@ struct LeadRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Lead initial circle with violet-to-cyan gradient
-            Circle()
+            // Lead initial
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [Color.electricViolet, Color.dataCyan],
+                        colors: [Color.electricViolet, Color.electricVioletDeep],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
-                .frame(width: 40, height: 40)
+                .frame(width: 42, height: 42)
                 .overlay(
                     Text(leadInitial)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.obsidianCallout)
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                         .foregroundColor(.white)
                 )
@@ -744,7 +828,7 @@ struct LeadRowView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(lead.displayName)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.obsidianTitle)
                         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                         .foregroundColor(Color.textPrimary)
                         .accessibilityAddTraits(.isHeader)
@@ -754,11 +838,11 @@ struct LeadRowView: View {
                     if let followUpDate = lead.followUpDate {
                         HStack(spacing: 4) {
                             Image(systemName: "calendar.badge.clock")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.micro)
                                 .foregroundColor(Color.statusNotHome)
                                 .accessibilityHidden(true)
                             Text(followUpDate, format: .dateTime.day().month())
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.micro)
                                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                                 .foregroundColor(Color.statusNotHome)
                         }
@@ -776,7 +860,7 @@ struct LeadRowView: View {
 
                 if let address = lead.address, !address.isEmpty {
                     Text(address)
-                        .font(.system(size: 13, weight: .regular))
+                        .font(.obsidianCaption)
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                         .foregroundColor(Color.textSecondary)
                         .lineLimit(1)
@@ -837,6 +921,37 @@ struct LeadRowView: View {
                 .tint(Color.statusInterested)
             }
         }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button {
+                lead.leadStatus = .interested
+                lead.updatedDate = Date()
+                try? viewContext.save()
+                UserDataSyncManager.shared.syncWithServer()
+            } label: {
+                Label("Interested", systemImage: "star.fill")
+            }
+            .tint(.statusInterested)
+
+            Button {
+                lead.leadStatus = .converted
+                lead.updatedDate = Date()
+                try? viewContext.save()
+                UserDataSyncManager.shared.syncWithServer()
+            } label: {
+                Label("Sold", systemImage: "checkmark.circle.fill")
+            }
+            .tint(.statusConverted)
+
+            Button {
+                lead.leadStatus = .notInterested
+                lead.updatedDate = Date()
+                try? viewContext.save()
+                UserDataSyncManager.shared.syncWithServer()
+            } label: {
+                Label("No Interest", systemImage: "hand.raised.fill")
+            }
+            .tint(.statusNotInterested)
+        }
         .accessibilityElement(children: .combine)
     }
     
@@ -857,7 +972,7 @@ struct ModernStatusBadge: View {
                 .accessibilityHidden(true)
 
             Text(status.displayName)
-                .font(.system(size: 11, weight: .medium))
+                .font(.micro)
                 .textCase(.uppercase)
                 .tracking(0.5)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)

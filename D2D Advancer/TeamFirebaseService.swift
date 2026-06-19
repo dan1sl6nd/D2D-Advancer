@@ -21,11 +21,15 @@ final class TeamFirebaseService: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var lastErrorMessage: String?
 
+    private static let cachedMembershipKey = "teamFirebase.cachedMembership.v1"
+    private static let cachedMembershipMaxAge: TimeInterval = 14 * 24 * 60 * 60
+
     private let db = Firestore.firestore()
     private var teamListenerRegistrations: [ListenerRegistration] = []
 
     private init() {
         FirebaseEmulatorConfiguration.applyIfNeeded(firestore: db)
+        restoreCachedMembershipIfAvailable()
     }
 
     func loadCurrentTeam(displayName: String? = nil, email: String? = nil) async {
@@ -40,7 +44,7 @@ final class TeamFirebaseService: ObservableObject {
             let profile = try await teamProfileRef(userId: user.uid).getDocument()
             guard let teamId = profile.data()?[TeamFirebaseSchema.Field.teamId] as? String,
                   !teamId.isEmpty else {
-                clearLocalTeam()
+                clearLocalTeam(removeCachedMembership: true)
                 return
             }
 
@@ -62,9 +66,10 @@ final class TeamFirebaseService: ObservableObject {
             ownerNotifications = member.role == .owner ? try await loadOwnerNotifications(team: team) : []
             activityLog = try await loadActivityLog(team: team, member: member)
             activeDutySession = dutySessions.first { $0.repUserId == member.userId && $0.status == .active }
+            cacheMembership(team: team, member: member)
             startTeamRealtimeListeners(team: team, member: member)
         } catch TeamFirebaseServiceError.notAuthenticated {
-            clearLocalTeam()
+            restoreCachedMembershipIfAvailable()
         } catch {
             lastErrorMessage = error.localizedDescription
         }
@@ -121,6 +126,7 @@ final class TeamFirebaseService: ObservableObject {
         activityLog = []
         activeDutySession = nil
         syncWriteState = .idle
+        cacheMembership(team: team, member: owner)
     }
 
     func createInvite() async throws -> TeamInvite {
@@ -837,6 +843,39 @@ private extension TeamFirebaseService {
         return trimmed?.isEmpty == false ? trimmed : nil
     }
 
+    private struct CachedMembership: Codable {
+        var team: TeamWorkspace
+        var member: TeamMember
+        var savedAt: Date
+    }
+
+    private func cacheMembership(team: TeamWorkspace, member: TeamMember) {
+        let cached = CachedMembership(team: team, member: member, savedAt: Date())
+        guard let data = try? JSONEncoder().encode(cached) else { return }
+        UserDefaults.standard.set(data, forKey: Self.cachedMembershipKey)
+        UserDefaults.standard.synchronize()
+    }
+
+    private func restoreCachedMembershipIfAvailable() {
+        guard activeTeam == nil || currentMember == nil else { return }
+        guard let data = UserDefaults.standard.data(forKey: Self.cachedMembershipKey),
+              let cached = try? JSONDecoder().decode(CachedMembership.self, from: data),
+              Date().timeIntervalSince(cached.savedAt) <= Self.cachedMembershipMaxAge else {
+            return
+        }
+
+        activeTeam = cached.team
+        currentMember = cached.member
+        teamMembers = cached.member.role == .owner ? [cached.member] : [cached.member]
+        teamLeads = []
+        teamBookings = []
+        dutySessions = []
+        dutyLocationPoints = []
+        ownerNotifications = []
+        activityLog = []
+        activeDutySession = nil
+    }
+
     func requireFirebaseUser() throws -> User {
         guard let user = Auth.auth().currentUser else {
             throw TeamFirebaseServiceError.notAuthenticated
@@ -844,7 +883,7 @@ private extension TeamFirebaseService {
         return user
     }
 
-    func clearLocalTeam() {
+    func clearLocalTeam(removeCachedMembership: Bool = false) {
         stopTeamRealtimeListeners()
         activeTeam = nil
         currentMember = nil
@@ -854,6 +893,10 @@ private extension TeamFirebaseService {
         dutySessions = []
         ownerNotifications = []
         activeDutySession = nil
+        if removeCachedMembership {
+            UserDefaults.standard.removeObject(forKey: Self.cachedMembershipKey)
+            UserDefaults.standard.synchronize()
+        }
     }
 
     func stopTeamRealtimeListeners() {
@@ -1655,6 +1698,12 @@ private extension TeamFirebaseService {
             return Date(timeIntervalSince1970: interval)
         }
         return nil
+    }
+}
+
+extension TeamFirebaseService {
+    func clearTeamSessionForSignOut() {
+        clearLocalTeam(removeCachedMembership: true)
     }
 }
 

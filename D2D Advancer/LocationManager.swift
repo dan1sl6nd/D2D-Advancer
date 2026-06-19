@@ -15,6 +15,36 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
     )
     @Published var shouldUseUserLocation = false // Flag to indicate we should center on user location
+
+    static func shouldShowPermissionPrompt(for status: CLAuthorizationStatus) -> Bool {
+        shouldShowPermissionPrompt(for: status, hasKnownLocation: false)
+    }
+
+    static func shouldShowPermissionPrompt(for status: CLAuthorizationStatus, hasKnownLocation: Bool) -> Bool {
+        switch status {
+        case .notDetermined:
+            return !hasKnownLocation
+        case .denied, .restricted:
+            return true
+        case .authorizedAlways, .authorizedWhenInUse:
+            return false
+        @unknown default:
+            return !hasKnownLocation
+        }
+    }
+
+    static func shouldShowPermissionPrompt(
+        for status: CLAuthorizationStatus,
+        hasKnownLocation: Bool,
+        isOnboardingPresented: Bool
+    ) -> Bool {
+        guard !isOnboardingPresented else { return false }
+        return shouldShowPermissionPrompt(for: status, hasKnownLocation: hasKnownLocation)
+    }
+
+    static func isAuthorized(_ status: CLAuthorizationStatus) -> Bool {
+        status == .authorizedWhenInUse || status == .authorizedAlways
+    }
     
     // Geocoding status indicators
     @Published var isReverseGeocoding = false
@@ -46,6 +76,14 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             requestImmediateLocation()
         } else if authorizationStatus == .notDetermined {
             print("LocationManager: Permission not determined - will be requested by onboarding or MainTabView after onboarding completes")
+        }
+    }
+
+    func refreshAuthorizationStatusFromSystem() {
+        authorizationStatus = locationManager.authorizationStatus
+        if Self.isAuthorized(authorizationStatus) {
+            startLocationUpdates()
+            requestImmediateLocation()
         }
     }
     

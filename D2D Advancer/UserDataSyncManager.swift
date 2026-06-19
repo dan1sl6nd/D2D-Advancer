@@ -70,8 +70,50 @@ class UserDataSyncManager: ObservableObject {
     enum SyncStatus: Equatable {
         case idle
         case syncing
+        case uploading(Int, Int)
+        case downloading
         case completed
         case failed(String)
+
+        var isBusy: Bool {
+            switch self {
+            case .syncing, .uploading, .downloading:
+                return true
+            case .idle, .completed, .failed:
+                return false
+            }
+        }
+
+        var displayText: String {
+            switch self {
+            case .idle:
+                return ""
+            case .syncing:
+                return "Preparing sync..."
+            case .uploading(let current, let total):
+                return "Uploading \(current)/\(total) leads..."
+            case .downloading:
+                return "Downloading..."
+            case .completed:
+                return "Sync complete"
+            case .failed(let message):
+                return "Sync failed: \(message)"
+            }
+        }
+    }
+
+    nonisolated static func shouldUseFirebaseLeadSync(
+        provider: CloudSyncProvider,
+        isAuthenticated: Bool
+    ) -> Bool {
+        provider == .firebase && isAuthenticated
+    }
+
+    nonisolated static func shouldDeleteLeadFromFirebase(
+        provider: CloudSyncProvider,
+        isAuthenticated: Bool
+    ) -> Bool {
+        shouldUseFirebaseLeadSync(provider: provider, isAuthenticated: isAuthenticated)
     }
     
     func startSync(includeAppointments: Bool = true) {

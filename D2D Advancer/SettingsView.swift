@@ -9,49 +9,68 @@ struct SettingsView: View {
     @ObservedObject private var syncManager = UserDataSyncManager.shared
     @AppStorage("isDarkMode") private var darkModeEnabled = false
     @State private var showingOnboarding = false
-    @State private var showingResetThemeConfirm = false
-    
+    @State private var selectedSyncProvider = CloudSyncProvider.current
+    @State private var showingSyncProviderRestart = false
+    @State private var showRestartNeeded = false
+    @State private var isMigrating = false
+
+    private var leadsCount: Int {
+        let request = Lead.fetchRequest()
+        return (try? viewContext.count(for: request)) ?? 0
+    }
+
+    private func performProviderSwitch() {
+        let oldProvider = CloudSyncProvider.current
+        let newProvider = selectedSyncProvider
+
+        // If switching FROM Firebase, do a final sync first
+        if oldProvider == .firebase && userAccountManager.isLoggedIn {
+            isMigrating = true
+            syncManager.startSync()
+
+            // Wait for sync to finish, then notify user
+            Task {
+                // Poll sync status
+                for _ in 0..<60 { // max 30 seconds
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    if !syncManager.syncStatus.isBusy { break }
+                }
+
+                await MainActor.run {
+                    isMigrating = false
+                    CloudSyncProvider.current = newProvider
+                    showRestartNeeded = true
+                }
+            }
+        } else {
+            CloudSyncProvider.current = newProvider
+            showRestartNeeded = true
+        }
+    }
+
     private var syncStatusIcon: String {
         switch syncManager.syncStatus {
-        case .idle:
-            return "icloud.and.arrow.up"
-        case .syncing:
-            return "arrow.clockwise"
-        case .completed:
-            return "checkmark.icloud"
-        case .failed(_):
-            return "exclamationmark.icloud"
+        case .idle: return "icloud.and.arrow.up"
+        case .syncing, .downloading: return "arrow.clockwise"
+        case .uploading: return "icloud.and.arrow.up.fill"
+        case .completed: return "checkmark.icloud"
+        case .failed: return "exclamationmark.icloud"
         }
     }
-    
+
     private var syncStatusColor: Color {
         switch syncManager.syncStatus {
-        case .idle:
-            return Color.electricViolet
-        case .syncing:
-            return Color.electricViolet
-        case .completed:
-            return Color.statusInterested
-        case .failed(_):
-            return Color.statusNotInterested
+        case .idle: return Color.electricViolet
+        case .syncing, .uploading, .downloading: return Color.electricViolet
+        case .completed: return Color.statusInterested
+        case .failed: return Color.statusNotInterested
         }
     }
-    
+
     private var syncStatusText: String {
-        switch syncManager.syncStatus {
-        case .idle:
-            if let lastSync = syncManager.lastSyncDate {
-                return "Last synced: \(DateFormatter.localizedString(from: lastSync, dateStyle: .none, timeStyle: .short))"
-            } else {
-                return "Ready to sync"
-            }
-        case .syncing:
-            return "Syncing..."
-        case .completed:
-            return "Sync completed"
-        case .failed(let error):
-            return "Sync failed: \(error)"
-        }
+        syncManager.syncStatus.displayText.isEmpty
+            ? (syncManager.lastSyncDate.map { "Last synced: \(DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short))" } ?? "Ready to sync")
+            : syncManager.syncStatus.displayText
     }
     
     var body: some View {
@@ -59,21 +78,7 @@ struct SettingsView: View {
             List {
                 // User Info Section
                 Section("Account") {
-                    if userAccountManager.isGuestMode {
-                        GuestInfoRowView()
-
-                        NavigationLink(destination: CreateAccountFromGuestView(userAccountManager: userAccountManager)) {
-                            HStack {
-                                Image(systemName: "person.crop.circle.badge.plus")
-                                    .foregroundColor(Color.statusInterested)
-                                    .frame(width: 20)
-                                Text("Create Account")
-                                    .foregroundColor(Color.statusInterested)
-                                    .fontWeight(.semibold)
-                                Spacer()
-                            }
-                        }
-                    } else {
+                    if userAccountManager.isLoggedIn {
                         UserInfoRowView(userAccountManager: userAccountManager)
 
                         NavigationLink(destination: AccountManagementView(userAccountManager: userAccountManager)) {
@@ -85,12 +90,94 @@ struct SettingsView: View {
                                 Spacer()
                             }
                         }
+                    } else if userAccountManager.isAppleAuthed {
+                        UserInfoRowView(userAccountManager: userAccountManager)
+                    } else {
+                        GuestInfoRowView()
+
+                        if CloudSyncProvider.current == .firebase {
+                            NavigationLink(destination: AuthenticationView()) {
+                                HStack {
+                                    Image(systemName: "person.crop.circle.badge.plus")
+                                        .foregroundColor(Color.statusInterested)
+                                        .frame(width: 20)
+                                    Text("Sign In or Create Account")
+                                        .foregroundColor(Color.statusInterested)
+                                        .fontWeight(.semibold)
+                                    Spacer()
+                                }
+                            }
+                        }
+
+                    }
+                }
+
+                // Cloud Storage Provider
+                Section {
+                    Picker(selection: $selectedSyncProvider) {
+                        ForEach(CloudSyncProvider.allCases, id: \.self) { provider in
+                            Label(provider.displayName, systemImage: provider.icon)
+                                .tag(provider)
+                        }
+                    } label: {
+                        Label("Cloud Storage", systemImage: "cloud.fill")
+                    }
+                    .onChange(of: selectedSyncProvider) { _, newValue in
+                        if newValue != CloudSyncProvider.current {
+                            showingSyncProviderRestart = true
+                        }
+                    }
+                } header: {
+                    Text("Cloud Sync")
+                } footer: {
+                    switch selectedSyncProvider {
+                    case .off:
+                        Text("Data is stored locally only. No cloud backup.")
+                    case .firebase:
+                        Text("Syncs via Firebase. Requires account sign-in. Works across devices.")
+                    case .icloud:
+                        Text("Syncs automatically via iCloud. Uses your Apple ID. No sign-in needed.")
+                    }
+                }
+                .alert("Switch to \(selectedSyncProvider.displayName)?", isPresented: $showingSyncProviderRestart) {
+                    Button("Switch") {
+                        performProviderSwitch()
+                    }
+                    Button("Cancel", role: .cancel) {
+                        selectedSyncProvider = CloudSyncProvider.current
+                    }
+                } message: {
+                    if CloudSyncProvider.current == .firebase && selectedSyncProvider == .icloud {
+                        Text("A final Firebase sync will run first to ensure all your data is up to date. All \(leadsCount) leads will be uploaded to iCloud automatically.")
+                    } else if selectedSyncProvider == .icloud {
+                        Text("Your local data (\(leadsCount) leads) will be automatically uploaded to iCloud.")
+                    } else {
+                        Text("Your local data will be preserved with the new sync provider.")
+                    }
+                }
+                .alert("Restart Required", isPresented: $showRestartNeeded) {
+                    Button("OK") { }
+                } message: {
+                    Text("Please close and reopen the app for the sync provider change to take full effect.")
+                }
+                .overlay {
+                    if isMigrating {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .controlSize(.large)
+                                .tint(.electricViolet)
+                            Text("Syncing from Firebase before switching...")
+                                .font(.obsidianFootnote)
+                                .foregroundColor(.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.obsidianBlack.opacity(0.9))
                     }
                 }
 
                 // Data Sync Section (only for logged-in users)
-                if userAccountManager.isLoggedIn {
-                    Section("Data Sync") {
+                if userAccountManager.isLoggedIn && selectedSyncProvider == .firebase {
+                    Section("Firebase Sync") {
                     HStack {
                         if syncManager.syncStatus == .syncing {
                             ProgressView()
@@ -160,15 +247,6 @@ struct SettingsView: View {
                             Spacer()
                         }
                     }
-                    NavigationLink(destination: ThemeSettingsView()) {
-                        HStack {
-                            Image(systemName: "paintbrush")
-                                .foregroundColor(Color.electricViolet)
-                                .frame(width: 20)
-                            Text("Theme")
-                            Spacer()
-                        }
-                    }
                     NavigationLink(destination: CalendarSettingsView()) {
                         HStack {
                             Image(systemName: "calendar")
@@ -198,18 +276,6 @@ struct SettingsView: View {
                         }
                     }
 
-                    Button(action: {
-                        showingResetThemeConfirm = true
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.counterclockwise.circle")
-                                .foregroundColor(Color.statusNotInterested)
-                                .frame(width: 20)
-                            Text("Reset Theme")
-                                .foregroundColor(Color.statusNotInterested)
-                            Spacer()
-                        }
-                    }
                 }
                 
                 // Help & Tutorial Section
@@ -250,7 +316,7 @@ struct SettingsView: View {
                 }
                 
                 // Sign Out Section (only for logged-in users)
-                if userAccountManager.isLoggedIn {
+                if userAccountManager.hasActiveSession {
                     Section {
                         SignOutRowView(userAccountManager: userAccountManager)
                     }
@@ -262,29 +328,57 @@ struct SettingsView: View {
                     .interactiveDismissDisabled()
             }
         }
-            .alert("Reset Theme", isPresented: $showingResetThemeConfirm) {
-                Button("Cancel", role: .cancel) {}
-                Button("Reset", role: .destructive) {
-                    CustomizableThemeManager.shared.resetToDefault()
-                }
-            } message: {
-                Text("This will restore all theme colors and styles to the default Professional preset.")
-            }
     }
 }
 
 struct GuestInfoRowView: View {
+    private var provider: CloudSyncProvider {
+        CloudSyncProvider.current
+    }
+
+    private var icon: String {
+        switch provider {
+        case .icloud: return "icloud.fill"
+        case .firebase: return "person.crop.circle.badge.questionmark"
+        case .off: return "iphone"
+        }
+    }
+
+    private var color: Color {
+        switch provider {
+        case .icloud: return Color.statusConverted
+        case .firebase: return Color.statusInterested
+        case .off: return Color.textSecondary
+        }
+    }
+
+    private var title: String {
+        switch provider {
+        case .icloud: return "iCloud Sync"
+        case .firebase: return "Guest Account"
+        case .off: return "Local Data"
+        }
+    }
+
+    private var subtitle: String {
+        switch provider {
+        case .icloud: return "Uses your device Apple ID automatically"
+        case .firebase: return "Sign in to use Firebase sync"
+        case .off: return "Stored on this device"
+        }
+    }
+
     var body: some View {
         HStack {
-            Image(systemName: "person.crop.circle.badge.questionmark")
-                .foregroundColor(Color.statusInterested)
+            Image(systemName: icon)
+                .foregroundColor(color)
                 .frame(width: 24, height: 24)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Guest Account")
+                Text(title)
                     .font(.headline)
-                    .foregroundColor(Color.statusInterested)
-                Text("Data stored locally on this device")
+                    .foregroundColor(color)
+                Text(subtitle)
                     .font(.caption)
                     .foregroundColor(Color.textSecondary)
             }
@@ -298,20 +392,42 @@ struct GuestInfoRowView: View {
 struct UserInfoRowView: View {
     @ObservedObject var userAccountManager: FirebaseUserAccountManager
 
+    private var displayName: String {
+        if let firebaseUser = userAccountManager.currentUser {
+            return userAccountManager.currentUserDisplayName ?? firebaseUser.displayName ?? "User"
+        }
+        if let appleName = userAccountManager.appleUserFullName, !appleName.isEmpty {
+            return appleName
+        }
+        return "Signed in with Apple"
+    }
+
+    private var subtitle: String {
+        if let firebaseEmail = userAccountManager.currentUser?.email, !firebaseEmail.isEmpty {
+            return firebaseEmail
+        }
+        if let appleEmail = userAccountManager.appleUserEmail, !appleEmail.isEmpty {
+            return appleEmail
+        }
+        return "Apple ID connected"
+    }
+
+    private var icon: String {
+        userAccountManager.isAppleAuthed && !userAccountManager.isLoggedIn ? "applelogo" : "person.circle.fill"
+    }
+
     var body: some View {
         HStack {
-            Image(systemName: "person.circle.fill")
+            Image(systemName: icon)
                 .foregroundColor(Color.electricViolet)
                 .frame(width: 24, height: 24)
 
             VStack(alignment: .leading, spacing: 2) {
-                if let user = userAccountManager.currentUser {
-                    Text(userAccountManager.currentUserDisplayName ?? user.displayName ?? "User")
-                        .font(.headline)
-                    Text(user.email ?? "Unknown")
-                        .font(.caption)
-                        .foregroundColor(Color.textSecondary)
-                }
+                Text(displayName)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(Color.textSecondary)
             }
 
             Spacer()
@@ -372,7 +488,7 @@ struct CreateAccountFromGuestView: View {
                     LazyVStack(spacing: 16) {
                         // Header
                         VStack(spacing: 12) {
-                            Circle()
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
                                 .fill(Color.statusInterested.opacity(0.1))
                                 .frame(width: 80, height: 80)
                                 .overlay(
@@ -594,10 +710,10 @@ struct CreateAccountFromGuestView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(Color.obsidianBlack)
-            .cornerRadius(8)
+            .cornerRadius(16)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
+                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
             )
         }
     }
@@ -699,22 +815,22 @@ struct AccountManagementView: View {
                             if editingName {
                                 VStack(alignment: .leading, spacing: 16) {
                                     HStack(spacing: 16) {
-                                        Circle()
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                                             .fill(Color.electricViolet)
                                             .frame(width: 48, height: 48)
                                             .overlay(
                                                 Image(systemName: "person.fill")
-                                                    .font(.system(size: 18, weight: .semibold))
+                                                    .font(.obsidianAction)
                                                     .foregroundColor(.white)
                                             )
 
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text("Edit Name")
-                                                .font(.system(size: 17, weight: .semibold))
+                                                .font(.obsidianTitle)
                                                 .foregroundColor(Color.textPrimary)
 
                                             Text("Update your display name")
-                                                .font(.system(size: 14))
+                                                .font(.obsidianFootnote)
                                                 .foregroundColor(Color.textSecondary)
                                         }
                                         
@@ -727,10 +843,10 @@ struct AccountManagementView: View {
                                             .padding(.horizontal, 16)
                                             .padding(.vertical, 12)
                                             .background(Color.obsidianSurface)
-                                            .cornerRadius(12)
+                                            .cornerRadius(16)
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
+                                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                                             )
                                             .textContentType(.name)
                                             .autocapitalization(.words)
@@ -746,7 +862,7 @@ struct AccountManagementView: View {
                                             .frame(maxWidth: .infinity)
                                             .frame(height: 50)
                                             .background(Color.obsidianSurface)
-                                            .cornerRadius(12)
+                                            .cornerRadius(16)
 
                                             Button("Save") {
                                                 userAccountManager.updateUserName(newName: newName)
@@ -758,7 +874,7 @@ struct AccountManagementView: View {
                                             .frame(maxWidth: .infinity)
                                             .frame(height: 50)
                                             .background(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.textSecondary : Color.electricViolet)
-                                            .cornerRadius(12)
+                                            .cornerRadius(16)
                                             .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                                         }
                                     }
@@ -779,7 +895,7 @@ struct AccountManagementView: View {
                                     )
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 16)
-                                                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                                                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
                                         )
                                         .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
                                 )
@@ -857,7 +973,7 @@ struct AccountManagementView: View {
                                     .padding(.vertical, 12)
                                     .background(Color.statusInterested)
                                     .foregroundColor(.white)
-                                    .cornerRadius(12)
+                                    .cornerRadius(16)
                                     .fontWeight(.semibold)
                                     
                                     if case .failed(_) = userAccountManager.authStatus {
@@ -868,7 +984,7 @@ struct AccountManagementView: View {
                                         .padding(.vertical, 12)
                                         .background(Color.electricViolet)
                                         .foregroundColor(.white)
-                                        .cornerRadius(12)
+                                        .cornerRadius(16)
                                         .fontWeight(.semibold)
                                         .disabled(userAccountManager.authStatus == .loading)
                                     }
@@ -894,7 +1010,7 @@ struct AccountManagementView: View {
                                     )
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 16)
-                                                .stroke(Color.statusNotHome.opacity(0.3), lineWidth: 1)
+                                                .stroke(Color.statusNotHome.opacity(0.3), lineWidth: 0.5)
                                         )
                                         .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
                                 )
@@ -1008,22 +1124,22 @@ struct AccountManagementView: View {
         case let .failed(error):
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Circle()
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? Color.statusNotHome : Color.statusNotInterested)
                         .frame(width: 48, height: 48)
                         .overlay(
                             Image(systemName: error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? "shield.checkerboard" : "exclamationmark.triangle.fill")
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.obsidianAction)
                                 .foregroundColor(.white)
                         )
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Error")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.obsidianTitle)
                             .foregroundColor(Color.textPrimary)
 
                         Text(error)
-                            .font(.system(size: 14, weight: .regular))
+                            .font(.obsidianFootnote)
                             .foregroundColor(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? Color.statusNotHome : Color.statusNotInterested)
                             .lineLimit(nil)
                     }
@@ -1113,7 +1229,7 @@ struct PasswordChangeView: View {
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 50)
                                 .background(Color.obsidianSurface)
-                                .cornerRadius(12)
+                                .cornerRadius(16)
                             } else {
                                 Button("Change Password") {
                                     guard newPassword == confirmPassword else {
@@ -1121,7 +1237,7 @@ struct PasswordChangeView: View {
                                         return
                                     }
                                     
-                                    userAccountManager.changePassword(
+                                    userAccountManager.updatePassword(
                                         currentPassword: currentPassword,
                                         newPassword: newPassword
                                     )
@@ -1132,7 +1248,7 @@ struct PasswordChangeView: View {
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 50)
                                 .background(isFormValid ? Color.electricViolet : Color.obsidianBorder.opacity(0.3))
-                                .cornerRadius(12)
+                                .cornerRadius(16)
                                 .disabled(!isFormValid || userAccountManager.authStatus == .loading)
                             }
                         }
@@ -1185,7 +1301,7 @@ struct PasswordChangeView: View {
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 12)
                                         .background(Color.statusNotHome.opacity(0.1))
-                                        .cornerRadius(8)
+                                        .cornerRadius(16)
                                     }
                                 }
                             }
@@ -1224,7 +1340,7 @@ struct PasswordChangeView: View {
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 50)
                                 .background(Color.statusInterested)
-                                .cornerRadius(12)
+                                .cornerRadius(16)
                             }
                         }
                     }
@@ -1330,20 +1446,20 @@ struct PasswordChangeView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(Color.obsidianSurface)
-                    .cornerRadius(8)
+                    .cornerRadius(16)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
+                            .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                     )
             } else {
                 TextField(title, text: text)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(Color.obsidianSurface)
-                    .cornerRadius(8)
+                    .cornerRadius(16)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
+                            .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                     )
             }
         }
@@ -1531,7 +1647,7 @@ struct DeleteAccountView: View {
                     .padding()
                     .background(isPasswordValid ? Color.statusNotInterested : Color.textSecondary)
                     .foregroundColor(.white)
-                    .cornerRadius(10)
+                    .cornerRadius(14)
                     .disabled(!isPasswordValid || userAccountManager.authStatus == .loading)
                     .padding(.horizontal)
                 }
@@ -1604,7 +1720,7 @@ struct DeleteAccountView: View {
                         .padding()
                         .background(Color.statusInterested)
                         .foregroundColor(.white)
-                        .cornerRadius(10)
+                        .cornerRadius(14)
                         .padding(.horizontal)
                     }
                 }
@@ -1679,23 +1795,23 @@ struct AccountCardView<TrailingContent: View>: View {
     var body: some View {
         HStack(spacing: 16) {
             // Icon
-            Circle()
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(iconColor)
                 .frame(width: 48, height: 48)
                 .overlay(
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.obsidianAction)
                         .foregroundColor(.white)
                 )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.obsidianTitle)
                     .foregroundColor(titleColor)
 
                 if let subtitle = subtitle {
                     Text(subtitle)
-                        .font(.system(size: 14, weight: .regular))
+                        .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
                         .lineLimit(2)
                 }
@@ -1708,7 +1824,7 @@ struct AccountCardView<TrailingContent: View>: View {
             } else if showChevron {
                 Image(systemName: "chevron.right")
                     .foregroundColor(Color.textSecondary)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.obsidianFootnote)
             }
         }
         .padding(.horizontal, 16)
@@ -1727,7 +1843,7 @@ struct AccountCardView<TrailingContent: View>: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
         )
@@ -1760,23 +1876,23 @@ struct PreferenceCardView<TrailingContent: View>: View {
     var body: some View {
         HStack(spacing: 16) {
             // Icon
-            Circle()
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(iconColor)
                 .frame(width: 48, height: 48)
                 .overlay(
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.obsidianAction)
                         .foregroundColor(.white)
                 )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.obsidianTitle)
                     .foregroundColor(Color.textPrimary)
 
                 if let subtitle = subtitle {
                     Text(subtitle)
-                        .font(.system(size: 14, weight: .regular))
+                        .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
                         .lineLimit(2)
                 }
@@ -1802,7 +1918,7 @@ struct PreferenceCardView<TrailingContent: View>: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
         )

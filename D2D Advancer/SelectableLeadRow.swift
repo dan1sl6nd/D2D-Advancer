@@ -112,15 +112,26 @@ struct SelectableLeadRow: View {
 }
 
 struct StatusBadge: View {
-    let status: LeadStatus
+    private let displayName: String
+    private let color: Color
+
+    init(status: LeadStatus) {
+        self.displayName = status.displayName
+        self.color = status.color
+    }
+
+    init(status: Lead.Status) {
+        self.displayName = status.displayName
+        self.color = status.swiftUIColor
+    }
     
     var body: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(status.color)
+                .fill(color)
                 .frame(width: 8, height: 8)
             
-            Text(status.displayName)
+            Text(displayName)
                 .font(.caption)
                 .fontWeight(.medium)
         }
@@ -128,8 +139,8 @@ struct StatusBadge: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(status.color.opacity(0.1))
+                .fill(color.opacity(0.1))
         )
-        .foregroundColor(status.color)
+        .foregroundColor(color)
     }
 }

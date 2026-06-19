@@ -277,7 +277,7 @@ class FirebaseUserAccountManager: ObservableObject {
                 print("⚠️ Pre-sign-out sync failed: \(error)")
                 // Don't retry on failure - just proceed with sign out
                 return
-            case .syncing:
+            case .syncing, .uploading, .downloading:
                 hasObservedSyncing = true
                 try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                 attempts += 1
@@ -597,7 +597,7 @@ class FirebaseUserAccountManager: ObservableObject {
             case .failed(let error):
                 print("⚠️ Guest data migration sync failed: \(error)")
                 return
-            case .syncing:
+            case .syncing, .uploading, .downloading:
                 hasObservedSyncing = true
                 try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                 attempts += 1
@@ -873,7 +873,10 @@ class FirebaseUserAccountManager: ObservableObject {
         
         // Clear Keychain
         clearKeychain()
-        
+
+        // Clear team workspace session state
+        TeamFirebaseService.shared.clearTeamSessionForSignOut()
+
         // Clear any cache directories
         clearCacheDirectories()
         

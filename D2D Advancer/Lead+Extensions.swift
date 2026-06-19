@@ -1,10 +1,11 @@
 import Foundation
 import CoreData
 import CoreLocation
+import SwiftUI
 import FirebaseFirestore
 
 extension Lead {
-    enum Status: String, CaseIterable, Sendable {
+    enum Status: String, CaseIterable, Sendable, Codable, Hashable {
         case notContacted = "not_contacted"
         case notHome = "not_home"
         case interested = "interested"
@@ -38,6 +39,26 @@ extension Lead {
                 return "green"
             case .notInterested:
                 return "red"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .notContacted: return "plus.circle"
+            case .notHome: return "house"
+            case .interested: return "heart"
+            case .converted: return "checkmark.seal"
+            case .notInterested: return "xmark.circle"
+            }
+        }
+
+        var swiftUIColor: Color {
+            switch self {
+            case .notContacted: return .statusNotContacted
+            case .notHome: return .statusNotHome
+            case .interested: return .statusInterested
+            case .converted: return .statusConverted
+            case .notInterested: return .statusNotInterested
             }
         }
     }
@@ -93,6 +114,58 @@ extension Lead {
     }
     
     
+    // MARK: - Follow-up Cadence
+
+    enum FollowUpCadence: String, CaseIterable {
+        case none = "none"
+        case everyThreeDays = "3days"
+        case weekly = "weekly"
+        case biweekly = "biweekly"
+        case monthly = "monthly"
+
+        var displayName: String {
+            switch self {
+            case .none: return "One-time"
+            case .everyThreeDays: return "Every 3 days"
+            case .weekly: return "Weekly"
+            case .biweekly: return "Every 2 weeks"
+            case .monthly: return "Monthly"
+            }
+        }
+
+        var days: Int {
+            switch self {
+            case .none: return 0
+            case .everyThreeDays: return 3
+            case .weekly: return 7
+            case .biweekly: return 14
+            case .monthly: return 30
+            }
+        }
+    }
+
+    var followUpCadence: FollowUpCadence {
+        get {
+            guard let raw = tags, raw.hasPrefix("cadence:") else { return .none }
+            let value = String(raw.dropFirst("cadence:".count))
+            return FollowUpCadence(rawValue: value) ?? .none
+        }
+        set {
+            tags = newValue == .none ? nil : "cadence:\(newValue.rawValue)"
+        }
+    }
+
+    /// Advance the follow-up date by the cadence interval. Returns the new date or nil if no cadence.
+    func advanceFollowUpByCadence() -> Date? {
+        let cadence = followUpCadence
+        guard cadence != .none else { return nil }
+        let base = followUpDate ?? Date()
+        let calendar = Calendar.current
+        guard let next = calendar.date(byAdding: .day, value: cadence.days, to: base),
+              let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: next) else { return nil }
+        return morning
+    }
+
     var coordinate: CLLocationCoordinate2D {
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }

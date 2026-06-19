@@ -354,6 +354,61 @@ struct CustomThemedButtonStyle: ButtonStyle {
     }
 }
 
+struct ObsidianEditorSurfaceModifier: ViewModifier {
+    var cornerRadius: CGFloat = 16
+
+    func body(content: Content) -> some View {
+        content
+            .scrollContentBackground(.hidden)
+            .padding(12)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
+            )
+            .foregroundColor(.textPrimary)
+    }
+}
+
+extension View {
+    func obsidianEditorSurface(cornerRadius: CGFloat = 16) -> some View {
+        modifier(ObsidianEditorSurfaceModifier(cornerRadius: cornerRadius))
+    }
+}
+
+// MARK: - Obsidian Header View
+
+struct ObsidianHeaderView: View {
+    let title: String
+    var trailing: AnyView? = nil
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    init(_ title: String, @ViewBuilder trailing: () -> some View) {
+        self.title = title
+        self.trailing = AnyView(trailing())
+    }
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.displayMedium)
+                .foregroundColor(.textPrimary)
+            Spacer()
+            if let trailing {
+                trailing
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 14)
+        .background(Color.obsidianBlack)
+    }
+}
+
 // MARK: - Obsidian Card Modifiers
 
 struct SurfaceCardModifier: ViewModifier {
@@ -591,6 +646,7 @@ struct ObsidianTextFieldStyle: TextFieldStyle {
 
 extension Font {
     // Display -- SF Pro Display for hero text and big numbers
+    static let displayHero: Font = .system(size: 42, weight: .bold, design: .rounded)
     static let displayLarge: Font = .system(size: 34, weight: .bold, design: .default)
     static let displayMedium: Font = .system(size: 28, weight: .bold, design: .default)
 

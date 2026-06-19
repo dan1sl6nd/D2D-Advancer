@@ -1,6 +1,7 @@
- import SwiftUI
+import SwiftUI
 import CoreData
 import MapKit
+import UIKit
 @preconcurrency import UserNotifications
 
 struct LeadDetailView: View {
@@ -27,7 +28,15 @@ struct LeadDetailView: View {
     @State private var showingDeleteAlert = false
     @State private var showingScheduleAppointment = false
     @State private var showingServiceCategoryCreator = false
+    @State private var showingLookAround = false
+    @State private var lookAroundCoordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0)
     @State private var isUpdatingAddress = false
+    @State private var isCreatingContact = false
+    @State private var showingContactCreationAlert = false
+    @State private var contactCreationAlertTitle = ""
+    @State private var contactCreationAlertMessage = ""
+    @State private var copiedFieldName: String?
+    @State private var copyToastDismissTask: Task<Void, Never>?
 
     @ObservedObject private var categoryManager = ServiceCategoryManager.shared
     @ObservedObject private var paywallManager = PaywallManager.shared
@@ -59,9 +68,15 @@ struct LeadDetailView: View {
                 } else {
                     detailView
                 }
-                
+
+                LeadPhotoSection(lead: lead)
+                    .padding(.horizontal, 4)
+
+                LeadVoiceNoteSection(lead: lead)
+                    .padding(.horizontal, 4)
+
                 mapSection
-                
+
                 followUpHistorySection
             }
             .padding()
@@ -69,6 +84,10 @@ struct LeadDetailView: View {
         .navigationTitle(isEditing ? "Edit Lead" : "Lead Details")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(false)
+        .overlay(alignment: .bottom) {
+            copyToastOverlay
+                .padding(.bottom, 96)
+        }
         .safeAreaInset(edge: .bottom) {
             // Card-based button design
             if isEditing {
@@ -196,23 +215,37 @@ struct LeadDetailView: View {
             loadLeadData()
             migrateCheckInOutcomes()
         }
+        .onDisappear {
+            copyToastDismissTask?.cancel()
+            copyToastDismissTask = nil
+        }
     }
     
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                StatusBadge(status: LeadStatus.from(leadStatus: lead.leadStatus))
+                StatusBadge(status: lead.leadStatus)
                 
                 Spacer()
                 
             }
             
-                        Text(lead.displayName)
+            Text(lead.displayName)
                 .font(.themeLargeTitle)
                 .foregroundColor(Color.textPrimary)
+                .textSelection(.enabled)
+                .contextMenu {
+                    copyMenuButton(title: "Name", value: lead.displayName)
+                }
+                .accessibilityHint("Long press to copy name")
 
             HStack {
-                Text("Created: \(lead.createdDate?.formatted(.dateTime.day().month().year().hour().minute()) ?? "Unknown")")
+                let createdText = lead.createdDate?.formatted(.dateTime.day().month().year().hour().minute()) ?? "Unknown"
+                Text("Created: \(createdText)")
+                    .contextMenu {
+                        copyMenuButton(title: "Created Date", value: createdText)
+                    }
+                    .accessibilityHint("Long press to copy created date")
                 Spacer()
             }
             .font(.themeCaption)
@@ -358,7 +391,7 @@ struct LeadDetailView: View {
                                             .scaleEffect(0.7)
                                     } else {
                                         Image(systemName: "arrow.clockwise")
-                                            .font(.system(size: 12, weight: .semibold))
+                                            .font(.obsidianSmall)
                                     }
                                     Text("Update")
                                         .font(.caption)
@@ -379,10 +412,10 @@ struct LeadDetailView: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .background(Color.obsidianSurface)
-                            .cornerRadius(8)
+                            .cornerRadius(16)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                             )
 
                         // Update status indicator
@@ -424,7 +457,7 @@ struct LeadDetailView: View {
                             showingServiceCategoryCreator = true
                         } label: {
                             Image(systemName: "plus")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.obsidianFootnote)
                                 .foregroundColor(Color.electricViolet)
                         }
                         .accessibilityLabel("Add new service category")
@@ -449,7 +482,7 @@ struct LeadDetailView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 20)
                         .background(Color.obsidianSurface)
-                        .cornerRadius(8)
+                        .cornerRadius(16)
                     } else {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
@@ -530,6 +563,12 @@ struct LeadDetailView: View {
                             }
                         }
 
+                        HStack(spacing: 8) {
+                            quickFollowUpButton("Tomorrow", days: 1)
+                            quickFollowUpButton("+3 Days", days: 3)
+                            quickFollowUpButton("+1 Week", days: 7)
+                        }
+
                         Button(action: {
                             showingDatePicker = true
                         }) {
@@ -549,11 +588,40 @@ struct LeadDetailView: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .background(Color.obsidianSurface)
-                            .cornerRadius(12)
+                            .cornerRadius(16)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
+                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                             )
+                        }
+                    }
+
+                    // Cadence picker
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "repeat")
+                                .foregroundColor(Color.electricViolet)
+                                .frame(width: 20)
+                            Text("Follow-up Cadence")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                        }
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(Lead.FollowUpCadence.allCases, id: \.self) { cadence in
+                                    Button {
+                                        lead.followUpCadence = cadence
+                                    } label: {
+                                        Text(cadence.displayName)
+                                            .font(.micro)
+                                            .foregroundColor(lead.followUpCadence == cadence ? .white : .textSecondary)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(lead.followUpCadence == cadence ? Color.electricViolet : Color.obsidianSurface)
+                                            .cornerRadius(8)
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -569,19 +637,18 @@ struct LeadDetailView: View {
 
                         TextEditor(text: $editedNotes)
                             .frame(minHeight: 100)
-                            .padding(12)
-                            .background(Color.obsidianSurface)
-                            .cornerRadius(12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
-                            )
+                            .obsidianEditorSurface()
                     }
                 }
             }
         }
         .sheet(isPresented: $showingDatePicker) {
-            SeasonalDatePickerView(selectedDate: $editedFollowUpDate)
+            DatePicker("Follow-Up Date", selection: Binding(
+                get: { editedFollowUpDate ?? Date() },
+                set: { editedFollowUpDate = $0 }
+            ), displayedComponents: [.date, .hourAndMinute])
+            .datePickerStyle(.graphical)
+            .presentationDetents([.medium])
         }
     }
     
@@ -589,17 +656,44 @@ struct LeadDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Location")
                 .font(.themeHeadline)
-            
-            Map(initialPosition: .region(MKCoordinateRegion(
-                center: lead.coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-            ))) {
-                Annotation(lead.displayName, coordinate: lead.coordinate) {
-                    LeadAnnotationView(lead: lead)
+
+            ZStack(alignment: .bottomTrailing) {
+                Map(initialPosition: .region(MKCoordinateRegion(
+                    center: lead.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                ))) {
+                    Annotation(lead.displayName, coordinate: lead.coordinate) {
+                        LeadAnnotationView(lead: lead)
+                    }
                 }
+                .frame(height: 200)
+                .cornerRadius(16)
+
+                Button {
+                    lookAroundCoordinate = lead.coordinate
+                    showingLookAround = true
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "binoculars.fill")
+                            .font(.obsidianSmall)
+                        Text("Street View")
+                            .font(.obsidianSmall)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(.ultraThinMaterial.opacity(0.8))
+                    .background(Color.black.opacity(0.4))
+                    .clipShape(Capsule())
+                }
+                .padding(10)
             }
-            .frame(height: 200)
-            .cornerRadius(12)
+            .sheet(isPresented: $showingLookAround) {
+                LookAroundSheet(
+                    coordinate: $lookAroundCoordinate,
+                    title: lead.address ?? lead.displayName
+                )
+            }
         }
     }
     
@@ -646,10 +740,10 @@ struct LeadDetailView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
                 .background(Color.obsidianSurface)
-                .cornerRadius(12)
+                .cornerRadius(16)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                 )
             } else {
                 VStack(spacing: 8) {
@@ -677,10 +771,10 @@ struct LeadDetailView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(Color.obsidianSurface)
-                            .cornerRadius(8)
+                            .cornerRadius(16)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
+                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                             )
                     }
                 }
@@ -705,6 +799,11 @@ struct LeadDetailView: View {
             }
         } message: {
             Text("Are you sure you want to delete this lead? This action cannot be undone.")
+        }
+        .alert(contactCreationAlertTitle, isPresented: $showingContactCreationAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(contactCreationAlertMessage)
         }
         .errorAlert(onRetry: {
             if let errorContext = ErrorHandler.shared.currentError {
@@ -812,6 +911,41 @@ struct LeadDetailView: View {
                         .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
+
+                if LeadContactService.canCreateContactFromLeadDetail(lead) {
+                    Button(action: {
+                        createContactForLead()
+                    }) {
+                        VStack(spacing: 8) {
+                            if isCreatingContact {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "person.crop.circle.badge.plus")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                            }
+
+                            VStack(spacing: 4) {
+                                Text("Create")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                Text("Contact")
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.white)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 80)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.statusConverted.gradient)
+                        )
+                        .shadow(color: Color.statusConverted.opacity(0.3), radius: 4, x: 0, y: 2)
+                    }
+                    .disabled(isCreatingContact)
+                }
                 
                 // Email Button (if email exists)
                 if let email = lead.email, !email.isEmpty {
@@ -870,10 +1004,10 @@ struct LeadDetailView: View {
                 }
                 .padding(16)
                 .background(Color.obsidianSurface)
-                .cornerRadius(12)
+                .cornerRadius(16)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                 )
             }
         }
@@ -881,14 +1015,76 @@ struct LeadDetailView: View {
     }
     
     private var shouldShowScheduleButton: Bool {
-        let status = LeadStatus.from(leadStatus: lead.leadStatus)
-        return status == .interested || status == .closed
+        lead.leadStatus == .interested || lead.leadStatus == .converted
     }
     
     private var leadAppointments: [Appointment] {
         AppointmentManager.shared.getAppointments(for: lead)
             .filter { $0.status != .cancelled && $0.status != .completed }
             .sorted { $0.startDate < $1.startDate }
+    }
+
+    @ViewBuilder
+    private var copyToastOverlay: some View {
+        if let copiedFieldName {
+            Text("\(copiedFieldName) copied")
+                .font(.obsidianFootnote)
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.obsidianSurface.opacity(0.96))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
+                )
+                .shadow(color: Color.black.opacity(0.28), radius: 10, x: 0, y: 4)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .accessibilityLabel("\(copiedFieldName) copied")
+        }
+    }
+
+    @ViewBuilder
+    private func copyMenuButton(title: String, value: String) -> some View {
+        if let copyValue = copyableLeadValue(value) {
+            Button {
+                copyLeadField(title: title, value: copyValue)
+            } label: {
+                Label(copyMenuTitle(for: title), systemImage: "doc.on.doc")
+            }
+        }
+    }
+
+    private func copyableLeadValue(_ value: String) -> String? {
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedValue.isEmpty, trimmedValue != "Not provided", trimmedValue != "Unknown" else { return nil }
+        return trimmedValue
+    }
+
+    private func copyMenuTitle(for fieldTitle: String) -> String {
+        fieldTitle.lowercased().hasPrefix("copy ") ? fieldTitle : "Copy \(fieldTitle)"
+    }
+
+    private func copyLeadField(title: String, value: String) {
+        UIPasteboard.general.string = value
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        UIAccessibility.post(notification: .announcement, argument: "\(title) copied")
+
+        copyToastDismissTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.18)) {
+            copiedFieldName = title
+        }
+
+        copyToastDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    copiedFieldName = nil
+                }
+            }
+        }
     }
     
     // MARK: - Modern UI Helper Functions
@@ -940,10 +1136,10 @@ struct LeadDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(Color.obsidianSurface)
-                .cornerRadius(12)
+                .cornerRadius(16)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
                 )
         }
     }
@@ -962,6 +1158,34 @@ struct LeadDetailView: View {
         editedServiceCategory = lead.serviceCategoryObject
     }
     
+    private func quickFollowUpButton(_ label: String, days: Int) -> some View {
+        let calendar = Calendar.current
+        let targetDate: Date? = {
+            guard let date = calendar.date(byAdding: .day, value: days, to: Date()),
+                  let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: date) else { return nil }
+            return morning
+        }()
+        let isSelected: Bool = {
+            guard let target = targetDate, let current = editedFollowUpDate else { return false }
+            return calendar.isDate(current, inSameDayAs: target)
+        }()
+
+        return Button {
+            if let date = targetDate {
+                editedFollowUpDate = date
+            }
+        } label: {
+            Text(label)
+                .font(.obsidianSmall)
+                .foregroundColor(isSelected ? .white : .electricViolet)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(isSelected ? Color.electricViolet : Color.obsidianSurface)
+                .cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.obsidianBorder, lineWidth: 0.5))
+        }
+    }
+
     private func startEditing() {
         guard paywallManager.gateAction() else { return }
         isEditing = true
@@ -1010,6 +1234,25 @@ struct LeadDetailView: View {
             }
         } catch {
             ErrorHandler.shared.handle(error, context: "Save Lead")
+        }
+    }
+
+    private func createContactForLead() {
+        guard LeadContactService.canCreateContactFromLeadDetail(lead), !isCreatingContact else { return }
+
+        isCreatingContact = true
+
+        LeadContactService.createContact(for: lead) { result in
+            isCreatingContact = false
+            contactCreationAlertTitle = result.title
+            contactCreationAlertMessage = result.message
+            showingContactCreationAlert = true
+
+            if result == .saved {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } else {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
         }
     }
 
@@ -1268,11 +1511,16 @@ struct LeadDetailView: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
         .background(Color.obsidianSurface)
-        .cornerRadius(12)
+        .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 16))
+        .contextMenu {
+            copyMenuButton(title: title, value: value)
+        }
+        .accessibilityHint(copyableLeadValue(value) == nil ? "" : "Long press to copy \(title.lowercased())")
     }
     
     @ViewBuilder
@@ -1319,11 +1567,16 @@ struct LeadDetailView: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
         .background(Color.obsidianSurface)
-        .cornerRadius(12)
+        .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 16))
+        .contextMenu {
+            copyMenuButton(title: title, value: value)
+        }
+        .accessibilityHint(copyableLeadValue(value) == nil ? "" : "Long press to copy \(title.lowercased())")
     }
     
     @ViewBuilder
@@ -1348,16 +1601,21 @@ struct LeadDetailView: View {
 
             Spacer()
 
-            StatusBadge(status: LeadStatus.from(leadStatus: status))
+            StatusBadge(status: status)
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
         .background(Color.obsidianSurface)
-        .cornerRadius(12)
+        .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 16))
+        .contextMenu {
+            copyMenuButton(title: title, value: status.displayName)
+        }
+        .accessibilityHint("Long press to copy \(title.lowercased())")
     }
     
     
@@ -1388,11 +1646,16 @@ struct LeadDetailView: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
         .background(Color.obsidianSurface)
-        .cornerRadius(12)
+        .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 16))
+        .contextMenu {
+            copyMenuButton(title: title, value: value)
+        }
+        .accessibilityHint("Long press to copy \(title.lowercased())")
     }
 
 }
@@ -1451,7 +1714,7 @@ struct AppointmentSummaryRow: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .background(Color.obsidianBlack)
-        .cornerRadius(8)
+        .cornerRadius(16)
     }
 }
 
@@ -1466,7 +1729,7 @@ struct AppointmentStatusBadge: View {
             .padding(.vertical, 2)
             .background(status.color.opacity(0.2))
             .foregroundColor(status.color)
-            .cornerRadius(6)
+            .cornerRadius(10)
     }
 }
 

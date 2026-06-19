@@ -158,6 +158,7 @@ struct MainTabView: View {
     // MARK: - Location Services Initialization
     private func loadTeamWorkspaceIfNeeded() async {
         guard shouldLoadTeamWorkspace else { return }
+        guard userAccountManager.isLoggedIn else { return }
         await teamService.loadCurrentTeam(
             displayName: userAccountManager.currentUserDisplayName,
             email: userAccountManager.currentUserEmail

@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import UniformTypeIdentifiers
 
 struct MoreView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -11,14 +12,25 @@ struct MoreView: View {
     @State private var showingSettings = false
     @State private var showingSyncSettings = false
     @State private var showingAuthentication = false
-    @State private var showingExportSheet = false
-    @State private var exportFileURL: URL?
+    @State private var exportFile: LeadExportFile?
+    @State private var showingImportPicker = false
+    @State private var importResult: LeadImportResult?
+    @State private var importFailure: LeadImportFailure?
     @AppStorage("isDarkMode") private var darkModeEnabled = false
+    @State private var showingCloudProviderSheet = false
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: false)],
         animation: .default
     ) private var allLeads: FetchedResults<Lead>
+
+    private var isRunningUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
+    }
+
+    private var shouldLoadTeamWorkspace: Bool {
+        !isRunningUITests || FirebaseEmulatorConfiguration.isEnabled
+    }
 
     private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
         TeamWorkspaceSurfaceSummary.make(
@@ -40,22 +52,14 @@ struct MoreView: View {
                     Rectangle()
                         .fill(Color.obsidianBlack)
                         .frame(height: geometry.safeAreaInsets.top)
-
-                    HStack {
-                        Text("More")
-                            .font(.displayMedium)
-                            .foregroundColor(Color.textPrimary)
-
-                        Spacer()
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
-                    .background(Color.obsidianBlack)
+                    ObsidianHeaderView("More")
 
                     ScrollView {
                         LazyVStack(spacing: 12) {
-                            // Overview Card (monetization disabled)
+                            // Daily Activity Summary
+                            todayActivityCard
+
+                            // Overview Card
                             NavigationLink(destination: OverviewContentView()) {
                                 MoreCardView(
                                     icon: "chart.bar.fill",
@@ -82,6 +86,33 @@ struct MoreView: View {
                             .buttonStyle(PlainButtonStyle())
                             .disabled(allLeads.isEmpty)
 
+                            // Import Leads Card
+                            Button(action: {
+                                showingImportPicker = true
+                            }) {
+                                MoreCardView(
+                                    icon: "square.and.arrow.down",
+                                    iconColor: Color.electricViolet,
+                                    title: "Import Leads",
+                                    subtitle: "Load leads from a CSV file",
+                                    showChevron: false
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+
+                            // Message Templates Card
+                            NavigationLink(destination: MessageTemplatesManagerView()) {
+                                MoreCardView(
+                                    icon: "text.bubble.fill",
+                                    iconColor: Color.electricViolet,
+                                    title: "Message Templates",
+                                    subtitle: "Create and edit first-contact messages",
+                                    showChevron: true
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+
+                            // Team Workspace Card
                             NavigationLink(destination: TeamWorkspaceView()) {
                                 MoreCardView(
                                     icon: "person.3.fill",
@@ -109,15 +140,32 @@ struct MoreView: View {
                                 )
                             }
                             .buttonStyle(PlainButtonStyle())
-                            .accessibilityElement(children: .combine)
                             .accessibilityIdentifier("teamWorkspaceCard")
-                            .accessibilityLabel("Team Workspace")
-                            .accessibilityHint("Opens Team Workspace")
 
-                            // Data Management Card (only for logged-in users)
-                            if userAccountManager.isLoggedIn {
+                            // Cloud Storage Card
+                            Button {
+                                showingCloudProviderSheet = true
+                            } label: {
+                                MoreCardView(
+                                    icon: CloudSyncProvider.current.icon,
+                                    iconColor: CloudSyncProvider.current == .icloud ? Color.statusConverted : Color.electricViolet,
+                                    title: "Cloud Storage",
+                                    subtitle: CloudSyncProvider.current == .off ? "Off — local only" : CloudSyncProvider.current.displayName,
+                                    trailingContent: {
+                                        Image(systemName: "chevron.right")
+                                            .font(.obsidianSmall)
+                                            .foregroundColor(Color.textMuted)
+                                    }
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+
+                            // Data Management Card — visible for any active session (Firebase or Apple).
+                            // In iCloud mode the action runs `performICloudSync`, which flushes
+                            // pending Core Data saves and nudges NSUbiquitousKeyValueStore.
+                            if userAccountManager.hasActiveSession || CloudSyncProvider.current == .icloud {
                                 Button(action: {
-                                    if syncManager.syncStatus != .syncing {
+                                    if !syncManager.syncStatus.isBusy {
                                         syncManager.syncWithServer()
                                     }
                                 }) {
@@ -128,12 +176,12 @@ struct MoreView: View {
                                         subtitle: syncStatusText,
                                         trailingContent: {
                                             HStack(spacing: 8) {
-                                                if syncManager.syncStatus == .syncing {
+                                                if syncManager.syncStatus.isBusy {
                                                     ProgressView()
                                                         .scaleEffect(0.8)
                                                 } else {
                                                     Image(systemName: "arrow.clockwise")
-                                                        .font(.system(size: 14, weight: .semibold))
+                                                        .font(.obsidianFootnote)
                                                         .foregroundColor(Color.electricViolet)
                                                 }
 
@@ -141,7 +189,7 @@ struct MoreView: View {
                                                     showingSyncSettings = true
                                                 }) {
                                                     Image(systemName: "gear")
-                                                        .font(.system(size: 14))
+                                                        .font(.obsidianFootnote)
                                                         .foregroundColor(Color.textSecondary)
                                                 }
                                                 .buttonStyle(PlainButtonStyle())
@@ -150,7 +198,7 @@ struct MoreView: View {
                                     )
                                 }
                                 .buttonStyle(PlainButtonStyle())
-                                .disabled(syncManager.syncStatus == .syncing)
+                                .disabled(syncManager.syncStatus.isBusy)
                             }
                             
                             // Account Info Card - tappable to manage account or login
@@ -159,17 +207,19 @@ struct MoreView: View {
                                     UserInfoCardView(userAccountManager: userAccountManager, showChevron: true)
                                 }
                                 .buttonStyle(PlainButtonStyle())
-                            } else {
+                            } else if userAccountManager.isAppleAuthed {
+                                UserInfoCardView(userAccountManager: userAccountManager, showChevron: false)
+                            } else if CloudSyncProvider.current == .firebase {
                                 Button(action: {
                                     showingAuthentication = true
                                 }) {
                                     UserInfoCardView(userAccountManager: userAccountManager, showChevron: true)
                                 }
                                 .buttonStyle(PlainButtonStyle())
+                            } else {
+                                UserInfoCardView(userAccountManager: userAccountManager, showChevron: false)
                             }
 
-                            
-                            
                             // Dark Mode Card
                             MoreCardView(
                                 icon: "moon.fill",
@@ -181,7 +231,6 @@ struct MoreView: View {
                                 }
                             )
 
-                            // Import Leads removed per request
                             
                             // Version Card
                             MoreCardView(
@@ -196,7 +245,7 @@ struct MoreView: View {
                                 }
                             )
 
-                            // Sign Out Card (only for logged-in users)
+                            // Sign Out Card (shown when signed in via any provider)
                             if userAccountManager.hasActiveSession {
                                 SignOutCardView(userAccountManager: userAccountManager)
                             }
@@ -210,13 +259,39 @@ struct MoreView: View {
                 .sheet(isPresented: $showingSyncSettings) {
                     SyncSettingsView()
                 }
+                .sheet(isPresented: $showingCloudProviderSheet) {
+                    CloudProviderSheet()
+                        .presentationDetents([.medium])
+                }
                 .sheet(isPresented: $showingAuthentication) {
                     AuthenticationSheetWrapper(isPresented: $showingAuthentication)
                 }
-                .sheet(isPresented: $showingExportSheet) {
-                    if let url = exportFileURL {
-                        ShareSheet(activityItems: [url])
-                    }
+                .sheet(item: $exportFile) { file in
+                    ShareSheet(activityItems: [file.url])
+                }
+                .fileImporter(
+                    isPresented: $showingImportPicker,
+                    allowedContentTypes: [UTType.commaSeparatedText, UTType.plainText, UTType.text],
+                    allowsMultipleSelection: false
+                ) { result in
+                    handleImportResult(result)
+                }
+                .alert(item: $importResult) { result in
+                    let detail = result.errors.isEmpty
+                        ? result.summary
+                        : result.summary + "\n\n\(result.errors.count) issue(s). First: \(result.errors.first ?? "")"
+                    return Alert(
+                        title: Text("Import Complete"),
+                        message: Text(detail),
+                        dismissButton: .default(Text("OK"))
+                    )
+                }
+                .alert(item: $importFailure) { failure in
+                    Alert(
+                        title: Text("Import Failed"),
+                        message: Text(failure.message),
+                        dismissButton: .default(Text("OK"))
+                    )
                 }
                 .task {
                     await loadTeamWorkspaceIfNeeded()
@@ -238,35 +313,123 @@ struct MoreView: View {
     }
 
     private func loadTeamWorkspaceIfNeeded() async {
-        guard userAccountManager.isLoggedIn || FirebaseEmulatorConfiguration.isEnabled else { return }
+        guard shouldLoadTeamWorkspace else { return }
         await teamService.loadCurrentTeam(
             displayName: userAccountManager.currentUserDisplayName,
             email: userAccountManager.currentUserEmail
         )
     }
+
+    // MARK: - Import Handling
+
+    private func handleImportResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            do {
+                self.importResult = try LeadCSVService.importLeads(from: url, into: viewContext)
+            } catch {
+                self.importFailure = LeadImportFailure(message: error.localizedDescription)
+            }
+        case .failure(let error):
+            self.importFailure = LeadImportFailure(message: error.localizedDescription)
+        }
+    }
     
+    // MARK: - Daily Activity
+
+    private var todayActivityCard: some View {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let todayLeads = allLeads.filter { ($0.createdDate ?? .distantPast) >= startOfDay }
+        let doorsKnocked = todayLeads.count
+        let interested = todayLeads.filter { $0.status == "interested" }.count
+        let notHome = todayLeads.filter { $0.status == "not_home" }.count
+        let sold = todayLeads.filter { $0.status == "converted" }.count
+
+        return VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "flame.fill")
+                    .foregroundColor(.electricViolet)
+                Text("Today's Activity")
+                    .font(.obsidianCallout)
+                    .foregroundColor(.textPrimary)
+                Spacer()
+                Text(Date().formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                    .font(.obsidianSmall)
+                    .foregroundColor(.textMuted)
+            }
+
+            HStack(spacing: 0) {
+                activityStat(value: doorsKnocked, label: "Doors", color: .electricViolet)
+                activityStat(value: interested, label: "Interested", color: .statusInterested)
+                activityStat(value: notHome, label: "Not Home", color: .statusNotHome)
+                activityStat(value: sold, label: "Sold", color: .statusConverted)
+            }
+
+            // Follow-up stats
+            let followUpsDue = allLeads.filter { $0.followUpDate != nil && ($0.followUpDate ?? .distantFuture) <= Date() }.count
+            let followUpsTotal = allLeads.filter { $0.followUpDate != nil }.count
+            if followUpsTotal > 0 {
+                Divider().padding(.vertical, 4)
+                HStack {
+                    Image(systemName: "bell.badge")
+                        .font(.obsidianSmall)
+                        .foregroundColor(.statusNotHome)
+                    Text("\(followUpsDue) overdue")
+                        .font(.obsidianSmall)
+                        .foregroundColor(.statusNotHome)
+                    Spacer()
+                    Text("\(followUpsTotal) total follow-ups")
+                        .font(.obsidianSmall)
+                        .foregroundColor(.textMuted)
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.obsidianSurface)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.obsidianBorder, lineWidth: 0.5)
+        )
+    }
+
+    private func activityStat(value: Int, label: String, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text("\(value)")
+                .font(.obsidianHeadline)
+                .foregroundColor(color)
+            Text(label)
+                .font(.micro)
+                .foregroundColor(.textMuted)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private var syncStatusIcon: String {
         switch syncManager.syncStatus {
         case .idle:
             return "icloud.and.arrow.up"
-        case .syncing:
+        case .syncing, .downloading:
             return "arrow.clockwise"
+        case .uploading:
+            return "icloud.and.arrow.up.fill"
         case .completed:
             return "checkmark.icloud"
-        case .failed(_):
+        case .failed:
             return "exclamationmark.icloud"
         }
     }
-    
+
     private var syncStatusColor: Color {
         switch syncManager.syncStatus {
         case .idle:
             return Color.electricViolet
-        case .syncing:
+        case .syncing, .uploading, .downloading:
             return Color.electricViolet
         case .completed:
             return Color.statusInterested
-        case .failed(_):
+        case .failed:
             return Color.statusNotInterested
         }
     }
@@ -280,57 +443,26 @@ struct MoreView: View {
                 return "Manual"
             }
         case .syncing:
-            return "Syncing"
+            return "Preparing..."
+        case .uploading(let current, let total):
+            return "Uploading \(current)/\(total)"
+        case .downloading:
+            return "Downloading..."
         case .completed:
             return "Done"
-        case .failed(_):
+        case .failed:
             return "Failed"
         }
     }
 
     // MARK: - CSV Export
 
-    private func csvEscape(_ value: String?) -> String {
-        guard let value = value, !value.isEmpty else { return "" }
-        if value.contains(",") || value.contains("\"") || value.contains("\n") {
-            return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-        }
-        return value
-    }
-
     private func exportLeadsToCSV() {
-        let header = "Name,Address,Phone,Email,Status,Notes,Latitude,Longitude,Created,Follow Up Date\n"
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateStyle = .short
-        dateFormatter.timeStyle = .short
-
-        var csv = header
-        for lead in allLeads {
-            let row = [
-                csvEscape(lead.name),
-                csvEscape(lead.address),
-                csvEscape(lead.phone),
-                csvEscape(lead.email),
-                lead.leadStatus.displayName,
-                csvEscape(lead.notes),
-                String(lead.latitude),
-                String(lead.longitude),
-                lead.createdDate.map { dateFormatter.string(from: $0) } ?? "",
-                lead.followUpDate.map { dateFormatter.string(from: $0) } ?? ""
-            ].joined(separator: ",")
-            csv += row + "\n"
-        }
-
-        let fileName = "leads_export_\(DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .none).replacingOccurrences(of: "/", with: "-")).csv"
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
-
         do {
-            try csv.write(to: tempURL, atomically: true, encoding: .utf8)
-            exportFileURL = tempURL
-            showingExportSheet = true
+            let url = try LeadCSVService.exportAllLeads(from: viewContext)
+            exportFile = LeadExportFile(url: url)
         } catch {
-            print("Failed to write CSV: \(error)")
+            importFailure = LeadImportFailure(message: "Export failed: \(error.localizedDescription)")
         }
     }
 }
@@ -609,26 +741,27 @@ struct MoreCardView<TrailingContent: View>: View {
     var body: some View {
         HStack(spacing: 16) {
             // Icon
-            Circle()
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(iconColor)
                 .frame(width: 40, height: 40)
                 .overlay(
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.obsidianAction)
                         .foregroundColor(.white)
                 )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.obsidianCallout)
                     .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
 
                 if let subtitle = subtitle {
                     Text(subtitle)
-                        .font(.system(size: 14, weight: .regular))
+                        .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -639,7 +772,7 @@ struct MoreCardView<TrailingContent: View>: View {
             } else if showChevron {
                 Image(systemName: "chevron.right")
                     .foregroundColor(Color.textSecondary)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.obsidianFootnote)
             }
         }
         .padding(.horizontal, 16)
@@ -649,7 +782,7 @@ struct MoreCardView<TrailingContent: View>: View {
                 .fill(Color.obsidianSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
         )
@@ -668,29 +801,96 @@ struct UserInfoCardView: View {
     }
 
     private var isGuest: Bool {
-        !userAccountManager.isLoggedIn
+        !userAccountManager.hasActiveSession
+    }
+
+    private var isAppleOnly: Bool {
+        userAccountManager.isAppleAuthed && !userAccountManager.isLoggedIn
+    }
+
+    private var isICloudGuest: Bool {
+        isGuest && CloudSyncProvider.current == .icloud
+    }
+
+    private var isLocalOnlyGuest: Bool {
+        isGuest && CloudSyncProvider.current == .off
+    }
+
+    private var displayName: String {
+        if isICloudGuest {
+            return "iCloud Sync"
+        }
+        if isLocalOnlyGuest {
+            return "Local Data"
+        }
+        if let firebaseName = userAccountManager.currentUser?.displayName, !firebaseName.isEmpty {
+            return firebaseName
+        }
+        if let appleName = userAccountManager.appleUserFullName, !appleName.isEmpty {
+            return appleName
+        }
+        return isGuest ? "Guest Account" : "Signed in"
+    }
+
+    private var secondaryText: String {
+        if isICloudGuest {
+            return "Uses your device Apple ID automatically"
+        }
+        if isLocalOnlyGuest {
+            return "Stored on this device"
+        }
+        if let firebaseEmail = userAccountManager.currentUser?.email, !firebaseEmail.isEmpty {
+            return firebaseEmail
+        }
+        if let appleEmail = userAccountManager.appleUserEmail, !appleEmail.isEmpty {
+            return appleEmail
+        }
+        if isAppleOnly {
+            return "Signed in with Apple"
+        }
+        return isGuest ? "Tap to sign in or create account" : "No email"
+    }
+
+    private var avatarIcon: String {
+        if isICloudGuest {
+            return "icloud.fill"
+        }
+        if isLocalOnlyGuest {
+            return "iphone"
+        }
+        return isGuest ? "person.crop.circle.badge.questionmark" : (isAppleOnly ? "applelogo" : "person.fill")
+    }
+
+    private var avatarColor: Color {
+        if isICloudGuest {
+            return Color.statusConverted
+        }
+        if isLocalOnlyGuest {
+            return Color.textSecondary
+        }
+        return isGuest ? Color.statusInterested : Color.electricViolet
     }
 
     var body: some View {
         HStack(spacing: 16) {
             // User Avatar
-            Circle()
-                .fill(isGuest ? Color.statusInterested : Color.electricViolet)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(avatarColor)
                 .frame(width: 40, height: 40)
                 .overlay(
-                    Image(systemName: isGuest ? "person.crop.circle.badge.questionmark" : "person.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                    Image(systemName: avatarIcon)
+                        .font(.obsidianAction)
                         .foregroundColor(.white)
                 )
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(userAccountManager.currentUser?.displayName ?? "Anonymous User")
-                    .font(.system(size: 17, weight: .semibold))
+                Text(displayName)
+                    .font(.obsidianTitle)
                     .foregroundColor(Color.textPrimary)
 
-                Text(userAccountManager.currentUser?.email ?? (isGuest ? "Tap to sign in or create account" : "No email"))
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(isGuest ? Color.statusInterested : Color.textSecondary)
+                Text(secondaryText)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(isGuest ? avatarColor : Color.textSecondary)
                     .lineLimit(1)
             }
 
@@ -699,7 +899,7 @@ struct UserInfoCardView: View {
             if showChevron {
                 Image(systemName: "chevron.right")
                     .foregroundColor(Color.textSecondary)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.obsidianFootnote)
             }
         }
         .padding(.horizontal, 16)
@@ -709,7 +909,7 @@ struct UserInfoCardView: View {
                 .fill(Color.obsidianSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
         )
@@ -728,17 +928,17 @@ struct SignOutCardView: View {
         }) {
             HStack(spacing: 16) {
                 // Sign Out Icon
-                Circle()
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color.statusNotInterested)
                     .frame(width: 40, height: 40)
                     .overlay(
                         Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.obsidianAction)
                             .foregroundColor(.white)
                     )
 
                 Text("Sign Out")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.obsidianTitle)
                     .foregroundColor(Color.statusNotInterested)
 
                 Spacer()
@@ -750,7 +950,7 @@ struct SignOutCardView: View {
                     .fill(Color.obsidianSurface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.statusNotInterested.opacity(0.3), lineWidth: 1)
+                            .stroke(Color.statusNotInterested.opacity(0.3), lineWidth: 0.5)
                     )
                     .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
             )
@@ -759,7 +959,6 @@ struct SignOutCardView: View {
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityIdentifier("signOutButton")
-        .accessibilityLabel("Sign Out")
         .alert("Sign Out", isPresented: $showingSignOutAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Sign Out", role: .destructive) {
@@ -782,22 +981,22 @@ struct StatCardView: View {
     var body: some View {
         HStack(spacing: 16) {
             // Icon
-            Circle()
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(color)
                 .frame(width: 40, height: 40)
                 .overlay(
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.obsidianAction)
                         .foregroundColor(.white)
                 )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.obsidianTitle)
                     .foregroundColor(Color.textPrimary)
 
                 Text(value)
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.displayMedium)
                     .foregroundColor(color)
             }
 
@@ -810,7 +1009,7 @@ struct StatCardView: View {
                 .fill(Color.obsidianSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
         )
@@ -842,25 +1041,25 @@ struct StatusProgressCardView: View {
     var body: some View {
         HStack(spacing: 16) {
             // Icon
-            Circle()
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(statusColor)
                 .frame(width: 40, height: 40)
                 .overlay(
                     Image(systemName: statusIcon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.obsidianAction)
                         .foregroundColor(.white)
                 )
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text(status.displayName)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.obsidianTitle)
                         .foregroundColor(Color.textPrimary)
 
                     Spacer()
 
                     Text("\(count)")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.obsidianTitle)
                         .foregroundColor(statusColor)
                 }
 
@@ -886,7 +1085,7 @@ struct StatusProgressCardView: View {
                 .fill(Color.obsidianSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
         )
@@ -914,22 +1113,22 @@ struct RecentActivityCardView: View {
     var body: some View {
         HStack(spacing: 16) {
             // Icon
-            Circle()
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(color)
                 .frame(width: 40, height: 40)
                 .overlay(
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.obsidianAction)
                         .foregroundColor(.white)
                 )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.obsidianTitle)
                     .foregroundColor(Color.textPrimary)
 
                 Text("\(count)")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.obsidianSubheadline)
                     .foregroundColor(color)
             }
 
@@ -942,12 +1141,184 @@ struct RecentActivityCardView: View {
                 .fill(Color.obsidianSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Cloud Provider Sheet
+
+struct CloudProviderSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var viewContext
+    @State private var selectedProvider = CloudSyncProvider.current
+    @State private var showingConfirmation = false
+    @State private var isMigrating = false
+    @ObservedObject private var syncManager = UserDataSyncManager.shared
+    @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+
+    private var leadsCount: Int {
+        let request = Lead.fetchRequest()
+        return (try? viewContext.count(for: request)) ?? 0
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Cloud Storage")
+                    .font(.obsidianSubheadline)
+                    .foregroundColor(.textPrimary)
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.obsidianCaption)
+                        .foregroundColor(.textSecondary)
+                        .frame(width: 30, height: 30)
+                        .background(Color.obsidianElevated)
+                        .clipShape(Circle())
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
+
+            // Provider options
+            VStack(spacing: 0) {
+                ForEach(CloudSyncProvider.allCases, id: \.self) { provider in
+                    Button {
+                        selectedProvider = provider
+                        if provider != CloudSyncProvider.current {
+                            showingConfirmation = true
+                        }
+                    } label: {
+                        HStack(spacing: 14) {
+                            ZStack {
+                                Circle()
+                                    .fill(providerColor(provider).opacity(0.12))
+                                    .frame(width: 40, height: 40)
+                                Image(systemName: provider.icon)
+                                    .font(.obsidianTitle)
+                                    .foregroundColor(providerColor(provider))
+                            }
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(provider.displayName)
+                                    .font(.obsidianCallout)
+                                    .foregroundColor(.textPrimary)
+                                Text(providerSubtitle(provider))
+                                    .font(.obsidianSmall)
+                                    .foregroundColor(.textMuted)
+                            }
+                            Spacer()
+                            if provider == CloudSyncProvider.current {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.obsidianSubheadline)
+                                    .foregroundColor(providerColor(provider))
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                    }
+                    if provider != CloudSyncProvider.allCases.last {
+                        Divider().padding(.leading, 70)
+                    }
+                }
+            }
+            .background(Color.obsidianSurface)
+            .cornerRadius(14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.obsidianBorder, lineWidth: 0.5)
+            )
+            .padding(.horizontal, 20)
+
+            Spacer()
+        }
+        .background(Color.obsidianBlack)
+        .presentationBackground(Color.obsidianBlack)
+        .overlay {
+            if isMigrating {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(.electricViolet)
+                    Text("Syncing before switching...")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.textSecondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.obsidianBlack.opacity(0.9))
+            }
+        }
+        .alert("Switch to \(selectedProvider.displayName)?", isPresented: $showingConfirmation) {
+            Button("Switch") {
+                performSwitch()
+            }
+            Button("Cancel", role: .cancel) {
+                selectedProvider = CloudSyncProvider.current
+            }
+        } message: {
+            if CloudSyncProvider.current == .firebase && selectedProvider == .icloud {
+                Text("A final Firebase sync will run first. All \(leadsCount) leads will then sync automatically via iCloud. Firebase will be kept as a backup.")
+            } else if selectedProvider == .icloud {
+                Text("All \(leadsCount) leads will sync automatically via iCloud using your Apple ID.")
+            } else if selectedProvider == .firebase {
+                Text("Switching to Firebase. Requires account sign-in for cloud sync.")
+            } else {
+                Text("Cloud sync will be disabled. Data stays on this device only.")
+            }
+        }
+        .alert("Restart Required", isPresented: $showRestartNeeded) {
+            Button("OK") { }
+        } message: {
+            Text("Please close and reopen the app for the sync provider change to take full effect.")
+        }
+    }
+
+    private func providerColor(_ provider: CloudSyncProvider) -> Color {
+        switch provider {
+        case .off: return .textMuted
+        case .firebase: return .electricViolet
+        case .icloud: return .statusConverted
+        }
+    }
+
+    private func providerSubtitle(_ provider: CloudSyncProvider) -> String {
+        switch provider {
+        case .off: return "Local only, no backup"
+        case .firebase: return "Cross-device, requires sign-in"
+        case .icloud: return "Automatic, uses Apple ID"
+        }
+    }
+
+    @State private var showRestartNeeded = false
+
+    private func performSwitch() {
+        let oldProvider = CloudSyncProvider.current
+        let newProvider = selectedProvider
+
+        if oldProvider == .firebase && userAccountManager.isLoggedIn {
+            isMigrating = true
+            syncManager.startSync()
+            Task {
+                for _ in 0..<60 {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    if !syncManager.syncStatus.isBusy { break }
+                }
+                await MainActor.run {
+                    isMigrating = false
+                    CloudSyncProvider.current = newProvider
+                    showRestartNeeded = true
+                }
+            }
+        } else {
+            CloudSyncProvider.current = newProvider
+            showRestartNeeded = true
+        }
     }
 }
 
@@ -1051,7 +1422,7 @@ struct SyncSettingsView: View {
 
                 if syncManager.syncInterval == interval {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20))
+                        .font(.obsidianSubheadline)
                         .foregroundColor(Color.electricViolet)
                 }
             }
@@ -1063,7 +1434,7 @@ struct SyncSettingsView: View {
     private func syncInfoRow(title: String, description: String, icon: String) -> some View {
         HStack {
             Image(systemName: icon)
-                .font(.system(size: 16))
+                .font(.obsidianCallout)
                 .foregroundColor(Color.electricViolet)
                 .frame(width: 24)
 
@@ -1104,7 +1475,7 @@ struct SyncSettingsView: View {
                 .padding(.bottom, 20)
         }
         .background(Color.obsidianSurface)
-        .cornerRadius(12)
+        .cornerRadius(16)
     }
 }
 
