@@ -73,7 +73,7 @@ struct LeadsListView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             GeometryReader { geometry in
                 VStack(spacing: 0) {
                     Rectangle()
