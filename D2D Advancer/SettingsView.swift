@@ -1342,6 +1342,7 @@ struct AppPreferencesView: View {
                         subtitle: "Default values for new leads, follow-ups, map, and backups.",
                         icon: "slider.horizontal.3"
                     )
+                    .accessibilityIdentifier("appPreferencesScreen")
 
                     MoreSectionGroup(
                         title: "Lead Defaults",
@@ -1363,6 +1364,7 @@ struct AppPreferencesView: View {
                                 }
                                 .pickerStyle(.menu)
                                 .labelsHidden()
+                                .accessibilityIdentifier("appPreferenceLeadStatusPicker")
                             }
                         )
 
@@ -1381,6 +1383,7 @@ struct AppPreferencesView: View {
                                 }
                                 .pickerStyle(.menu)
                                 .labelsHidden()
+                                .accessibilityIdentifier("appPreferenceLeadSortPicker")
                             }
                         )
                     }
@@ -1406,6 +1409,7 @@ struct AppPreferencesView: View {
                                 }
                                 .pickerStyle(.menu)
                                 .labelsHidden()
+                                .accessibilityIdentifier("appPreferenceFollowUpTimePicker")
                             }
                         )
 
@@ -1425,6 +1429,7 @@ struct AppPreferencesView: View {
                                 }
                                 .pickerStyle(.menu)
                                 .labelsHidden()
+                                .accessibilityIdentifier("appPreferenceCheckInTypePicker")
                             }
                         )
                     }
@@ -1448,6 +1453,7 @@ struct AppPreferencesView: View {
                                 }
                                 .pickerStyle(.menu)
                                 .labelsHidden()
+                                .accessibilityIdentifier("appPreferenceMapTypePicker")
                             }
                         )
 
@@ -1467,6 +1473,7 @@ struct AppPreferencesView: View {
                                 }
                                 .pickerStyle(.menu)
                                 .labelsHidden()
+                                .accessibilityIdentifier("appPreferenceBackupFrequencyPicker")
                             }
                         )
                     }

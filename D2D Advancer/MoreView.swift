@@ -46,8 +46,6 @@ struct MoreView: View {
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var syncManager = UserDataSyncManager.shared
     @ObservedObject private var teamService = TeamFirebaseService.shared
-    @State private var showingStatistics = false
-    @State private var showingSettings = false
     @State private var showingSyncSettings = false
     @State private var showingAuthentication = false
     @State private var exportFile: LeadExportFile?
@@ -98,6 +96,7 @@ struct MoreView: View {
                             todayActivityCard
                             workspaceSection
                             dataSyncSection
+                            preferencesSection
                             accountSection
                         }
                         .padding(.horizontal, 16)
@@ -375,6 +374,69 @@ struct MoreView: View {
             }
             .buttonStyle(PlainButtonStyle())
             .accessibilityIdentifier("moreImportLeadsButton")
+        }
+    }
+
+    private var preferencesSection: some View {
+        MoreSectionGroup(
+            title: "Preferences",
+            icon: "slider.horizontal.3",
+            subtitle: "Notifications, calendar, defaults, and job labels.",
+            accentColor: Color.statusNotHome
+        ) {
+            NavigationLink(destination: NotificationSettingsView()) {
+                MoreCardView(
+                    icon: "bell.fill",
+                    iconColor: Color.statusNotHome,
+                    title: "Notifications",
+                    subtitle: "Sounds, reminders, and daily summary",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreNotificationsCard")
+
+            moreDivider
+
+            NavigationLink(destination: CalendarSettingsView()) {
+                MoreCardView(
+                    icon: "calendar",
+                    iconColor: Color.statusNotInterested,
+                    title: "Calendar",
+                    subtitle: "Apple Calendar sync and alerts",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreCalendarSettingsCard")
+
+            moreDivider
+
+            NavigationLink(destination: AppPreferencesView()) {
+                MoreCardView(
+                    icon: "gearshape.2.fill",
+                    iconColor: Color.textSecondary,
+                    title: "App Preferences",
+                    subtitle: "Default lead, follow-up, and map choices",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreAppPreferencesCard")
+
+            moreDivider
+
+            NavigationLink(destination: AppointmentTypePresetsView()) {
+                MoreCardView(
+                    icon: "calendar.badge.plus",
+                    iconColor: Color.electricViolet,
+                    title: "Appointment Types",
+                    subtitle: "Default and custom job labels",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreAppointmentTypesCard")
         }
     }
 

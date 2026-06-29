@@ -325,6 +325,22 @@ final class D2D_AdvancerUITests: XCTestCase {
         XCTAssertTrue(element.isHittable, "Expected element to be hittable after scrolling: \(description)")
     }
 
+    @discardableResult
+    private func scrollToIdentifiedElement(
+        _ app: XCUIApplication,
+        _ identifier: String,
+        direction: ScrollDirection = .down,
+        maxSwipes: Int = 8
+    ) -> XCUIElement {
+        let element = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+        for _ in 0..<maxSwipes where !element.exists || !element.isHittable {
+            dragContent(app, direction: direction)
+        }
+        XCTAssertTrue(element.waitForExistence(timeout: 3), "Expected element to exist after scrolling: \(identifier)")
+        XCTAssertTrue(element.isHittable, "Expected element to be hittable after scrolling: \(identifier)")
+        return element
+    }
+
     private func scrollToText(
         _ app: XCUIApplication,
         _ text: String,
@@ -1168,6 +1184,45 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testMorePreferencesDestinationsSmoke() throws {
+        let app = makeApp()
+        app.launchArguments.append("-openMoreTabForUITests")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        scrollToIdentifiedElement(app, "moreNotificationsCard", direction: .down)
+        waitForIdentifiedElement(app, "moreCalendarSettingsCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreAppPreferencesCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreAppointmentTypesCard", timeout: 8)
+
+        tapIdentifiedElement(app, "moreNotificationsCard", direction: .down, timeout: 8)
+        waitForIdentifiedElement(app, "notificationSettingsScreen", timeout: 10)
+        waitForIdentifiedElement(app, "notificationPlaySoundToggle", timeout: 8)
+        scrollToButton(app, "notificationRefreshAllButton", direction: .down)
+
+        relaunch(app, opening: "-openMoreTabForUITests")
+        scrollToIdentifiedElement(app, "moreCalendarSettingsCard", direction: .down)
+        tapIdentifiedElement(app, "moreCalendarSettingsCard", direction: .down, timeout: 8)
+        waitForText(app, "Calendar Settings", timeout: 10)
+        waitForIdentifiedElement(app, "calendarSettingsEnableToggle", timeout: 8)
+
+        relaunch(app, opening: "-openMoreTabForUITests")
+        scrollToIdentifiedElement(app, "moreAppPreferencesCard", direction: .down)
+        tapIdentifiedElement(app, "moreAppPreferencesCard", direction: .down, timeout: 8)
+        waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
+        waitForIdentifiedElement(app, "appPreferenceLeadStatusPicker", timeout: 8)
+        waitForIdentifiedElement(app, "appPreferenceLeadSortPicker", timeout: 8)
+        scrollToIdentifiedElement(app, "appPreferenceBackupFrequencyPicker", direction: .down)
+
+        relaunch(app, opening: "-openMoreTabForUITests")
+        scrollToIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down)
+        tapIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down, timeout: 8)
+        waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
+        waitForIdentifiedElement(app, "appointmentTypesCreateButton", timeout: 8)
+        waitForIdentifiedElement(app, "appointmentTypesDoneButton", timeout: 8)
+    }
+
+    @MainActor
     func testPrimaryTabsAndMoreSurfacesSmoke() throws {
         let app = makeApp()
         app.launch()
@@ -1230,9 +1285,14 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "moreCloudStorageButton", timeout: 8)
         waitForIdentifiedElement(app, "moreExportLeadsButton", timeout: 8)
         waitForIdentifiedElement(app, "moreImportLeadsButton", timeout: 8)
-        waitForIdentifiedElement(app, "moreAccountCard", timeout: 8)
-        waitForIdentifiedElement(app, "moreDarkModeCard", timeout: 8)
+        scrollToIdentifiedElement(app, "moreNotificationsCard", direction: .down)
+        waitForIdentifiedElement(app, "moreCalendarSettingsCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreAppPreferencesCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreAppointmentTypesCard", timeout: 8)
+        scrollToIdentifiedElement(app, "moreAccountCard", direction: .down)
+        scrollToIdentifiedElement(app, "moreDarkModeCard", direction: .down)
 
+        scrollToIdentifiedElement(app, "moreCloudStorageButton", direction: .up)
         tapIdentifiedElement(app, "moreCloudStorageButton", timeout: 8)
         waitForIdentifiedElement(app, "cloudProviderSheet", timeout: 8)
         waitForText(app, "Cloud Storage", timeout: 8)

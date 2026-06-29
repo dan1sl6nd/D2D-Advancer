@@ -23,6 +23,7 @@ struct CalendarSettingsView: View {
                 ))
                 .font(.obsidianBody)
                 .foregroundColor(.textPrimary)
+                .accessibilityIdentifier("calendarSettingsEnableToggle")
 
                 if !calendarService.hasWriteAccessOrBetter {
                     HStack(spacing: 12) {

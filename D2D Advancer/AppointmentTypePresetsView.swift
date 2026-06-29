@@ -16,6 +16,7 @@ struct AppointmentTypePresetsView: View {
                         subtitle: "Manage default and custom job labels.",
                         icon: "calendar.badge.plus"
                     )
+                    .accessibilityIdentifier("appointmentTypesScreen")
 
                     defaultTypesCard
                     customTypesCard
@@ -33,6 +34,7 @@ struct AppointmentTypePresetsView: View {
                     ObsidianCompactIconButton(
                         icon: "plus",
                         accessibilityLabel: "Create appointment type",
+                        accessibilityIdentifier: "appointmentTypesCreateButton",
                         action: { showingCreateView = true }
                     )
                 }
@@ -43,6 +45,7 @@ struct AppointmentTypePresetsView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ObsidianPrimaryButtonStyle())
+                .accessibilityIdentifier("appointmentTypesDoneButton")
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(Color.obsidianBlack)
@@ -111,6 +114,7 @@ struct AppointmentTypePresetsView: View {
                         Label("Create First Type", systemImage: "plus")
                     }
                     .buttonStyle(ObsidianPrimaryButtonStyle())
+                    .accessibilityIdentifier("appointmentTypesCreateFirstButton")
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 32)

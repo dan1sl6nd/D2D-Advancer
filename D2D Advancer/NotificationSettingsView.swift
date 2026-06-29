@@ -23,6 +23,7 @@ struct NotificationSettingsView: View {
                             Text("Notification Permission")
                                 .font(.obsidianCallout)
                                 .foregroundColor(.textPrimary)
+                                .accessibilityIdentifier("notificationSettingsScreen")
 
                             Text(permissionStatusText)
                                 .font(.obsidianFootnote)
@@ -56,6 +57,7 @@ struct NotificationSettingsView: View {
                         }
                         .font(.obsidianBody)
                         .foregroundColor(.textPrimary)
+                        .accessibilityIdentifier("notificationPlaySoundToggle")
                 } header: {
                     Text("Sound")
                         .microLabel()
@@ -72,6 +74,7 @@ struct NotificationSettingsView: View {
                         }
                         .font(.obsidianBody)
                         .foregroundColor(.textPrimary)
+                        .accessibilityIdentifier("notificationFollowUpRemindersToggle")
 
                     if notificationService.notificationSettings.followUpReminders.isEnabled {
                         Picker("Reminder Time", selection: $notificationService.notificationSettings.followUpReminders.reminderTime) {
@@ -101,6 +104,7 @@ struct NotificationSettingsView: View {
                         }
                         .font(.obsidianBody)
                         .foregroundColor(.textPrimary)
+                        .accessibilityIdentifier("notificationAppointmentRemindersToggle")
 
                     if notificationService.notificationSettings.appointmentReminders.isEnabled {
                         VStack(alignment: .leading, spacing: 12) {
@@ -142,6 +146,7 @@ struct NotificationSettingsView: View {
                         }
                         .font(.obsidianBody)
                         .foregroundColor(.textPrimary)
+                        .accessibilityIdentifier("notificationDailySummaryToggle")
 
                     if notificationService.notificationSettings.dailySummary.isEnabled {
                         DatePicker("Summary Time", selection: $notificationService.notificationSettings.dailySummary.time, displayedComponents: .hourAndMinute)
@@ -165,11 +170,13 @@ struct NotificationSettingsView: View {
                         resetToDefaults()
                     }
                     .foregroundColor(.statusNotInterested)
+                    .accessibilityIdentifier("notificationResetDefaultsButton")
 
                     Button("Refresh All Notifications") {
                         notificationService.refreshAllNotifications()
                     }
                     .foregroundColor(.electricViolet)
+                    .accessibilityIdentifier("notificationRefreshAllButton")
                 } header: {
                     Text("Management")
                         .microLabel()
