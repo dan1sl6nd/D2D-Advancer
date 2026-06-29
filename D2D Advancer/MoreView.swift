@@ -221,6 +221,7 @@ struct MoreView: View {
                 )
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreOverviewCard")
 
             moreDivider
 
@@ -265,6 +266,7 @@ struct MoreView: View {
                 )
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreMessageTemplatesCard")
         }
     }
 
@@ -287,6 +289,7 @@ struct MoreView: View {
                 )
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreCloudStorageButton")
 
             if userAccountManager.hasActiveSession || CloudSyncProvider.current == .icloud {
                 moreDivider
@@ -315,6 +318,7 @@ struct MoreView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .disabled(syncManager.syncStatus.isBusy)
+                .accessibilityIdentifier("moreSyncDataButton")
 
                 moreDivider
 
@@ -330,6 +334,7 @@ struct MoreView: View {
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("moreSyncSettingsButton")
             }
 
             moreDivider
@@ -349,6 +354,7 @@ struct MoreView: View {
             }
             .buttonStyle(PlainButtonStyle())
             .disabled(allLeads.isEmpty)
+            .accessibilityIdentifier("moreExportLeadsButton")
 
             moreDivider
 
@@ -368,6 +374,7 @@ struct MoreView: View {
                 )
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreImportLeadsButton")
         }
     }
 
@@ -390,11 +397,13 @@ struct MoreView: View {
                 trailingContent: {
                     Toggle("Dark Mode", isOn: $darkModeEnabled)
                         .labelsHidden()
+                        .accessibilityIdentifier("moreDarkModeToggle")
                         .accessibilityLabel("Dark Mode")
                         .accessibilityValue(darkModeEnabled ? "Enabled" : "Disabled")
                         .accessibilityHint("Toggles dark appearance for the app.")
                 }
             )
+            .accessibilityIdentifier("moreDarkModeCard")
 
             moreDivider
 
@@ -424,8 +433,10 @@ struct MoreView: View {
                 accountRow(showChevron: true)
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreAccountCard")
         } else if userAccountManager.isAppleAuthed {
             accountRow(showChevron: false)
+                .accessibilityIdentifier("moreAccountCard")
         } else if CloudSyncProvider.current == .firebase {
             Button {
                 showingAuthentication = true
@@ -433,8 +444,10 @@ struct MoreView: View {
                 accountRow(showChevron: true)
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreAccountCard")
         } else {
             accountRow(showChevron: false)
+                .accessibilityIdentifier("moreAccountCard")
         }
     }
 
@@ -1500,6 +1513,7 @@ struct CloudProviderSheet: View {
             Spacer()
         }
         .background(Color.obsidianBlack)
+        .accessibilityIdentifier("cloudProviderSheet")
         .presentationBackground(Color.obsidianBlack)
         .overlay {
             if isMigrating {
@@ -1675,6 +1689,7 @@ struct SyncSettingsView: View {
                 }
             }
             .background(Color.obsidianBlack)
+            .accessibilityIdentifier("syncSettingsSheet")
             .navigationBarHidden(true)
         }
         .presentationDetents([.large])

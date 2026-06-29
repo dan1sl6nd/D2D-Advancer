@@ -62,6 +62,10 @@ struct D2D_AdvancerApp: App {
             UIView.setAnimationsEnabled(false)
             if launchArguments.contains("-openMoreTabForUITests") {
                 AppRouter.shared.selectedTab = 4
+            } else if launchArguments.contains("-openAppointmentsTabForUITests") {
+                AppRouter.shared.selectedTab = 3
+            } else if launchArguments.contains("-openFollowUpTabForUITests") {
+                AppRouter.shared.selectedTab = 2
             } else if launchArguments.contains("-openLeadsTabForUITests") {
                 AppRouter.shared.selectedTab = 1
             } else if launchArguments.contains("-openMapTabForUITests") {

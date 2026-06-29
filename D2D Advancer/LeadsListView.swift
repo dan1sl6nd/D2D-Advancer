@@ -96,11 +96,13 @@ struct LeadsListView: View {
                                 .background(Color.electricViolet.opacity(0.1))
                                 .clipShape(Capsule())
                                 .accessibilityElement(children: .ignore)
+                                .accessibilityIdentifier("leadsSortButton")
                                 .accessibilityLabel("Sort leads")
                                 .accessibilityValue(sortBy.rawValue)
                                 .accessibilityHint("Chooses the lead sort field.")
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("leadsSortButton")
 
                             Button {
                                 sortAscending.toggle()
@@ -111,9 +113,11 @@ struct LeadsListView: View {
                                     .frame(width: 28, height: 28)
                                     .background(Color.obsidianBorder.opacity(0.2))
                                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    .accessibilityIdentifier("leadsSortDirectionButton")
                             }
                             .accessibilityLabel(sortAscending ? "Sort ascending" : "Sort descending")
                             .accessibilityHint("Toggles the lead list sort direction.")
+                            .accessibilityIdentifier("leadsSortDirectionButton")
                         }
                     }
                     tabSelectionSection
@@ -124,6 +128,7 @@ struct LeadsListView: View {
             }
             .navigationBarHidden(true)
             .background(Color.obsidianBlack)
+            .accessibilityIdentifier("leadsScreen")
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
             }
@@ -828,10 +833,12 @@ struct FilterBar: View {
                         .fill(Color.electricViolet.opacity(0.12))
                 )
                 .accessibilityElement(children: .ignore)
+                .accessibilityIdentifier("leadsSortButton")
                 .accessibilityLabel("Sort leads")
                 .accessibilityValue(sortBy.rawValue)
                 .accessibilityHint("Chooses the lead sort field.")
             }
+            .accessibilityIdentifier("leadsSortButton")
             .accessibilityLabel("Sort leads")
             .accessibilityValue(sortBy.rawValue)
             .accessibilityHint("Chooses the lead sort field.")
@@ -849,9 +856,11 @@ struct FilterBar: View {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                     )
+                    .accessibilityIdentifier("leadsSortDirectionButton")
             }
             .accessibilityLabel(sortAscending ? "Sort ascending" : "Sort descending")
             .accessibilityHint("Toggles the lead list sort direction.")
+            .accessibilityIdentifier("leadsSortDirectionButton")
 
             Spacer()
         }

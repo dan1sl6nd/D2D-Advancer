@@ -56,6 +56,7 @@ struct AppointmentsView: View {
                             guard paywallManager.gateAction() else { return }
                             showingScheduleView = true
                         }
+                        .accessibilityIdentifier("appointmentsScheduleButton")
                     }
                     tabSelectionView
                     appointmentContentView
@@ -64,6 +65,7 @@ struct AppointmentsView: View {
             }
             .navigationBarHidden(true)
             .background(Color.obsidianBlack)
+            .accessibilityIdentifier("appointmentsScreen")
             .sheet(isPresented: $showingScheduleView) {
                 SelectLeadForAppointmentView { lead in
                     selectedLead = lead

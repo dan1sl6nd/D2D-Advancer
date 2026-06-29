@@ -169,6 +169,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         let tabArguments = [
             "-openMapTabForUITests",
             "-openLeadsTabForUITests",
+            "-openFollowUpTabForUITests",
+            "-openAppointmentsTabForUITests",
             "-openMoreTabForUITests"
         ]
         app.terminate()
@@ -249,6 +251,31 @@ final class D2D_AdvancerUITests: XCTestCase {
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))
         let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY))
         start.press(forDuration: 0.05, thenDragTo: end)
+    }
+
+    @discardableResult
+    private func waitForIdentifiedElement(
+        _ app: XCUIApplication,
+        _ identifier: String,
+        timeout: TimeInterval = 8
+    ) -> XCUIElement {
+        let element = app.descendants(matching: .any)[identifier]
+        XCTAssertTrue(element.waitForExistence(timeout: timeout), "Expected element to appear: \(identifier)")
+        return element
+    }
+
+    private func tapIdentifiedElement(
+        _ app: XCUIApplication,
+        _ identifier: String,
+        direction: ScrollDirection = .down,
+        timeout: TimeInterval = 8,
+        maxSwipes: Int = 8
+    ) {
+        let element = waitForIdentifiedElement(app, identifier, timeout: timeout)
+        for _ in 0..<maxSwipes where !element.isHittable {
+            dragContent(app, direction: direction)
+        }
+        tapElement(app, element, description: identifier)
     }
 
     private func scrollToButton(
@@ -713,6 +740,86 @@ final class D2D_AdvancerUITests: XCTestCase {
         let mapView = app.maps.firstMatch
         XCTAssertTrue(mapView.waitForExistence(timeout: timeout), "Map should exist")
         return mapView
+    }
+
+    @MainActor
+    func testPrimaryTabsAndMoreSurfacesSmoke() throws {
+        let app = makeApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        _ = waitForMapReady(app)
+        for identifier in [
+            "addLeadButton",
+            "mapStyleButton",
+            "threeDMapButton",
+            "mapToolsButton",
+            "quickAction_away",
+            "quickAction_later",
+            "quickAction_pass",
+            "quickAction_interest"
+        ] {
+            XCTAssertTrue(
+                app.buttons[identifier].waitForExistence(timeout: 8),
+                "Map control should be available: \(identifier)"
+            )
+        }
+
+        tapButton(app, "tab_Leads", timeout: 12)
+        waitForIdentifiedElement(app, "leadsScreen", timeout: 12)
+        waitForText(app, "Leads", timeout: 8)
+        let sortChipLabels = ["Date Updated", "Date", "Status", "Name", "Address"]
+        var leadSortChip: XCUIElement?
+        for label in sortChipLabels {
+            let candidate = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "label CONTAINS %@", label))
+                .firstMatch
+            if candidate.waitForExistence(timeout: 1) {
+                leadSortChip = candidate
+                break
+            }
+        }
+        XCTAssertNotNil(leadSortChip, "Lead sort chip should be visible")
+
+        tapButton(app, "tab_Follow_Up", timeout: 12)
+        waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
+        waitForText(app, "Follow Up", timeout: 8)
+
+        tapButton(app, "tab_Appts", timeout: 12)
+        waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
+        waitForText(app, "Appointments", timeout: 8)
+        XCTAssertTrue(
+            app.buttons["Schedule appointment"].waitForExistence(timeout: 8),
+            "Appointment schedule button should be available"
+        )
+        XCTAssertTrue(
+            app.buttons["Active appointments"].waitForExistence(timeout: 8),
+            "Appointment status tabs should be available"
+        )
+
+        tapButton(app, "tab_More", timeout: 12)
+        waitForText(app, "More", timeout: 8)
+        waitForIdentifiedElement(app, "moreOverviewCard", timeout: 8)
+        waitForIdentifiedElement(app, "teamWorkspaceCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreMessageTemplatesCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreCloudStorageButton", timeout: 8)
+        waitForIdentifiedElement(app, "moreExportLeadsButton", timeout: 8)
+        waitForIdentifiedElement(app, "moreImportLeadsButton", timeout: 8)
+        waitForIdentifiedElement(app, "moreAccountCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreDarkModeCard", timeout: 8)
+
+        tapIdentifiedElement(app, "moreCloudStorageButton", timeout: 8)
+        waitForIdentifiedElement(app, "cloudProviderSheet", timeout: 8)
+        waitForText(app, "Cloud Storage", timeout: 8)
+        tapButton(app, "Close cloud storage", timeout: 8)
+
+        relaunch(app, opening: "-openMoreTabForUITests")
+        tapIdentifiedElement(app, "moreOverviewCard", timeout: 12)
+        waitForTextContaining(app, "Lead volume", timeout: 12)
+
+        relaunch(app, opening: "-openMoreTabForUITests")
+        tapIdentifiedElement(app, "moreMessageTemplatesCard", timeout: 12)
+        waitForTextContaining(app, "Manage reusable SMS", timeout: 12)
     }
 
     @MainActor

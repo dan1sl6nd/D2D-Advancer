@@ -63,6 +63,7 @@ struct FollowUpView: View {
             }
             .navigationBarHidden(true)
             .background(Color.obsidianBlack)
+            .accessibilityIdentifier("followUpScreen")
             .sheet(item: $selectedLead) { lead in
                 FollowUpDetailView(lead: lead)
             }
