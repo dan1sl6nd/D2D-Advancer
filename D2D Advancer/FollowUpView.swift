@@ -280,6 +280,7 @@ struct FollowUpInteractiveRowView: View {
         .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
         .padding(.horizontal, 16)
         .contentShape(Rectangle())
+        .accessibilityIdentifier("followUpRow")
         .onTapGesture {
             onTap()
         }
@@ -334,6 +335,8 @@ struct FollowUpInteractiveRowView: View {
             }
         }
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(lead.displayName), \(timeStatus(for: followUpDate)), \(followUpDate.formatted(.dateTime.month().day().hour().minute()))")
+        .accessibilityHint("Open follow-up details")
     }
 
     private func followUpActionButton(
@@ -437,6 +440,7 @@ struct FollowUpDetailView: View {
                     .padding()
                     .padding(.bottom, 16)
                 }
+                .accessibilityIdentifier("followUpDetailScreen")
 
                 followUpBottomBar
             }
@@ -576,6 +580,7 @@ struct FollowUpDetailView: View {
                 ) {
                     leadForMessaging = lead
                 }
+                .accessibilityIdentifier("followUpDetailMessageButton")
 
                 ObsidianActionTile(
                     title: "Record Check-in",
@@ -585,6 +590,7 @@ struct FollowUpDetailView: View {
                 ) {
                     leadForCheckIn = lead
                 }
+                .accessibilityIdentifier("followUpDetailCheckInButton")
 
                 if lead.followUpDate != nil {
                     ObsidianActionTile(
@@ -595,6 +601,7 @@ struct FollowUpDetailView: View {
                     ) {
                         showingRescheduleView = true
                     }
+                    .accessibilityIdentifier("followUpDetailRescheduleButton")
                 }
 
                 ObsidianActionTile(
@@ -605,6 +612,7 @@ struct FollowUpDetailView: View {
                 ) {
                     showingLeadDetail = true
                 }
+                .accessibilityIdentifier("followUpDetailViewLeadButton")
             }
         }
     }
@@ -613,22 +621,24 @@ struct FollowUpDetailView: View {
     private var followUpBottomBar: some View {
         HStack(spacing: 12) {
             if lead.followUpDate != nil {
-                Button {
+                followUpActionButton(
+                    title: "Complete",
+                    icon: "checkmark.circle.fill",
+                    tone: .secondary,
+                    accessibilityIdentifier: "followUpDetailCompleteButton"
+                ) {
                     completeFollowUp()
-                } label: {
-                    Label("Complete", systemImage: "checkmark.circle.fill")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(ObsidianSecondaryButtonStyle())
             }
 
-            Button {
+            followUpActionButton(
+                title: "Done",
+                icon: "checkmark.circle.fill",
+                tone: .primary,
+                accessibilityIdentifier: "followUpDetailDoneButton"
+            ) {
                 dismiss()
-            } label: {
-                Label("Done", systemImage: "checkmark.circle.fill")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(ObsidianPrimaryButtonStyle())
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -640,6 +650,75 @@ struct FollowUpDetailView: View {
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
         .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))
+    }
+
+    private func followUpActionButton(
+        title: String,
+        icon: String,
+        tone: FollowUpActionTone,
+        accessibilityIdentifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 16, height: 16)
+
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .allowsTightening(true)
+            }
+            .foregroundColor(tone.foregroundColor)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .padding(.horizontal, 8)
+            .background(tone.backgroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(tone.borderColor, lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private enum FollowUpActionTone {
+        case primary
+        case secondary
+
+        var foregroundColor: Color {
+            switch self {
+            case .primary:
+                return .white
+            case .secondary:
+                return Color.textPrimary
+            }
+        }
+
+        var backgroundColor: Color {
+            switch self {
+            case .primary:
+                return Color.electricViolet
+            case .secondary:
+                return Color.obsidianSurface
+            }
+        }
+
+        var borderColor: Color {
+            switch self {
+            case .primary:
+                return Color.electricViolet.opacity(0.85)
+            case .secondary:
+                return Color.obsidianBorder.opacity(0.75)
+            }
+        }
     }
 
     private var leadInitial: String {
@@ -725,9 +804,12 @@ struct RescheduleFollowUpView: View {
             .background(Color.obsidianBlack.ignoresSafeArea())
             .navigationTitle("Reschedule")
             .obsidianInlineNavigation()
+            .accessibilityIdentifier("followUpRescheduleSheet")
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: newDate <= Date(),
+                    primaryAccessibilityIdentifier: "followUpRescheduleSaveButton",
+                    secondaryAccessibilityIdentifier: "followUpRescheduleCancelButton",
                     primaryAction: save,
                     secondaryAction: { dismiss() },
                     primaryLabel: {
@@ -783,6 +865,7 @@ struct RescheduleFollowUpView: View {
                     displayedComponents: [.date, .hourAndMinute]
                 )
                 .datePickerStyle(.compact)
+                .accessibilityIdentifier("followUpRescheduleDatePicker")
                 .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
                 .padding(12)
@@ -802,10 +885,10 @@ struct RescheduleFollowUpView: View {
                         GridItem(.flexible(), spacing: 8),
                         GridItem(.flexible(), spacing: 8)
                     ], spacing: 8) {
-                        QuickTimeButton(title: "Tomorrow 9 AM", date: quickDate(days: 1, hour: 9), selectedDate: $newDate)
-                        QuickTimeButton(title: "Tomorrow 2 PM", date: quickDate(days: 1, hour: 14), selectedDate: $newDate)
-                        QuickTimeButton(title: "In 3 Days 10 AM", date: quickDate(days: 3, hour: 10), selectedDate: $newDate)
-                        QuickTimeButton(title: "Next Week 9 AM", date: quickDate(days: 7, hour: 9), selectedDate: $newDate)
+                        QuickTimeButton(title: "Tomorrow 9 AM", date: quickDate(days: 1, hour: 9), selectedDate: $newDate, accessibilityIdentifier: "followUpRescheduleTomorrow9Button")
+                        QuickTimeButton(title: "Tomorrow 2 PM", date: quickDate(days: 1, hour: 14), selectedDate: $newDate, accessibilityIdentifier: "followUpRescheduleTomorrow2Button")
+                        QuickTimeButton(title: "In 3 Days 10 AM", date: quickDate(days: 3, hour: 10), selectedDate: $newDate, accessibilityIdentifier: "followUpReschedule3DaysButton")
+                        QuickTimeButton(title: "Next Week 9 AM", date: quickDate(days: 7, hour: 9), selectedDate: $newDate, accessibilityIdentifier: "followUpRescheduleNextWeekButton")
                     }
                 }
             }
@@ -877,6 +960,7 @@ struct QuickTimeButton: View {
     let title: String
     let date: Date
     @Binding var selectedDate: Date
+    var accessibilityIdentifier: String? = nil
 
     private var isSelected: Bool {
         Calendar.current.isDate(selectedDate, equalTo: date, toGranularity: .minute)
@@ -912,6 +996,7 @@ struct QuickTimeButton: View {
                 )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier(accessibilityIdentifier ?? title)
     }
 }
 

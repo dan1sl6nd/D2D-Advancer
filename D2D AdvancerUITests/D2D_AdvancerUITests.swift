@@ -469,6 +469,31 @@ final class D2D_AdvancerUITests: XCTestCase {
         sleep(4)
     }
 
+    private func createNotHomeFollowUpLead(_ app: XCUIApplication, name: String) {
+        if !app.buttons["addLeadButton"].waitForExistence(timeout: 4) {
+            tapButton(app, "tab_Map", timeout: 12)
+        }
+        XCTAssertTrue(app.buttons["addLeadButton"].waitForExistence(timeout: 12), "Map add lead button should be ready before creating a follow-up lead")
+        tapButton(app, "addLeadButton", timeout: 12)
+
+        let clearDraftButton = app.buttons["Clear"]
+        if clearDraftButton.waitForExistence(timeout: 2), clearDraftButton.isHittable {
+            clearDraftButton.tap()
+        }
+
+        typeText(name, into: app.textFields["addLeadNameField"])
+        let notHomeButton = app.buttons["Not Home"]
+        for _ in 0..<6 where !notHomeButton.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(notHomeButton.waitForExistence(timeout: 8), "Not Home status should be available")
+        notHomeButton.tap()
+
+        tapButton(app, "addLeadSaveButton", timeout: 10)
+        denySystemPermissionIfPresented(timeout: 2)
+        XCTAssertTrue(app.buttons["addLeadButton"].waitForExistence(timeout: 15), "Saving a Not Home lead should return to the map")
+    }
+
     private func createPersonalLeadThroughUI(_ app: XCUIApplication, name: String) {
         if !app.buttons["addLeadButton"].waitForExistence(timeout: 4) {
             tapButton(app, "tab_Map", timeout: 12)
@@ -962,6 +987,44 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
         let deletedAppointmentText = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", leadName)).firstMatch
         XCTAssertFalse(deletedAppointmentText.waitForExistence(timeout: 4), "Deleted test appointment should leave the appointment list")
+    }
+
+    @MainActor
+    func testFollowUpDetailRescheduleCompleteSmoke() throws {
+        let app = makeApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        _ = waitForMapReady(app)
+        let leadName = "UI Follow \(Int(Date().timeIntervalSince1970))"
+        createNotHomeFollowUpLead(app, name: leadName)
+
+        tapButton(app, "tab_Follow_Up", timeout: 12)
+        waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
+        waitForTextContaining(app, leadName, timeout: 15)
+
+        let followUpRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "followUpRow", leadName))
+            .firstMatch
+        XCTAssertTrue(followUpRow.waitForExistence(timeout: 10), "Created follow-up row should be tappable")
+        tapElement(app, followUpRow, description: "created follow-up row")
+        waitForIdentifiedElement(app, "followUpDetailScreen", timeout: 10)
+        waitForIdentifiedElement(app, "followUpDetailCompleteButton", timeout: 8)
+        waitForIdentifiedElement(app, "followUpDetailDoneButton", timeout: 8)
+        waitForIdentifiedElement(app, "followUpDetailCheckInButton", timeout: 8)
+        waitForIdentifiedElement(app, "followUpDetailRescheduleButton", timeout: 8)
+        waitForIdentifiedElement(app, "followUpDetailViewLeadButton", timeout: 8)
+
+        tapIdentifiedElement(app, "followUpDetailRescheduleButton", timeout: 8)
+        waitForIdentifiedElement(app, "followUpRescheduleSheet", timeout: 10)
+        tapIdentifiedElement(app, "followUpReschedule3DaysButton", timeout: 8)
+        tapButton(app, "followUpRescheduleSaveButton", timeout: 8)
+        waitForIdentifiedElement(app, "followUpDetailScreen", timeout: 10)
+
+        tapIdentifiedElement(app, "followUpDetailCompleteButton", timeout: 8)
+        waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
+        let completedFollowUp = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", leadName)).firstMatch
+        XCTAssertFalse(completedFollowUp.waitForExistence(timeout: 5), "Completed follow-up should leave the Follow Up list")
     }
 
     @MainActor
