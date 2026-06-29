@@ -872,6 +872,7 @@ struct AccountManagementView: View {
                     .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
+                    .accessibilityIdentifier("accountManagementScreen")
 
                 Text(userAccountManager.currentUser?.email ?? "Signed in")
                     .font(.obsidianFootnote)
@@ -926,6 +927,7 @@ struct AccountManagementView: View {
                         .padding(.vertical, 7)
                         .background(Color.electricViolet.opacity(0.12))
                         .clipShape(Capsule())
+                        .accessibilityIdentifier("accountNameEditButton")
                     }
                 )
             }
@@ -974,6 +976,7 @@ struct AccountManagementView: View {
                 text: $newName,
                 icon: "person.fill"
             )
+            .accessibilityIdentifier("accountNameField")
 
             HStack(spacing: 10) {
                 Button("Cancel") {
@@ -982,6 +985,7 @@ struct AccountManagementView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("accountNameCancelButton")
 
                 Button("Save") {
                     userAccountManager.updateUserName(newName: newName)
@@ -991,6 +995,7 @@ struct AccountManagementView: View {
                 .buttonStyle(ObsidianPrimaryButtonStyle())
                 .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .opacity(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
+                .accessibilityIdentifier("accountNameSaveButton")
             }
         }
         .padding(.horizontal, 16)
@@ -1016,6 +1021,7 @@ struct AccountManagementView: View {
                 )
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("accountChangePasswordButton")
 
             Rectangle()
                 .fill(Color.obsidianBorder.opacity(0.5))
@@ -1036,6 +1042,7 @@ struct AccountManagementView: View {
                 )
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("accountDeleteAccountButton")
         }
     }
 
@@ -1154,6 +1161,7 @@ struct PasswordChangeView: View {
                 Text("Change Password")
                     .font(.obsidianHeadline)
                     .foregroundColor(Color.textPrimary)
+                    .accessibilityIdentifier("passwordChangeSheet")
 
                 Text("Use your current password to update account access.")
                     .font(.obsidianFootnote)
@@ -1166,7 +1174,8 @@ struct PasswordChangeView: View {
             ObsidianCompactIconButton(
                 icon: "xmark",
                 accessibilityLabel: "Close password change",
-                accentColor: Color.textSecondary
+                accentColor: Color.textSecondary,
+                accessibilityIdentifier: "passwordChangeCloseButton"
             ) {
                 dismiss()
             }
@@ -1185,9 +1194,24 @@ struct PasswordChangeView: View {
             accentColor: Color.statusNotHome
         ) {
             VStack(spacing: 12) {
-                passwordField(title: "Current Password", text: $currentPassword, icon: "lock.fill")
-                passwordField(title: "New Password", text: $newPassword, icon: "lock.rotation")
-                passwordField(title: "Confirm New Password", text: $confirmPassword, icon: "checkmark.seal.fill")
+                passwordField(
+                    title: "Current Password",
+                    text: $currentPassword,
+                    icon: "lock.fill",
+                    identifier: "passwordChangeCurrentField"
+                )
+                passwordField(
+                    title: "New Password",
+                    text: $newPassword,
+                    icon: "lock.rotation",
+                    identifier: "passwordChangeNewField"
+                )
+                passwordField(
+                    title: "Confirm New Password",
+                    text: $confirmPassword,
+                    icon: "checkmark.seal.fill",
+                    identifier: "passwordChangeConfirmField"
+                )
             }
         }
     }
@@ -1223,6 +1247,7 @@ struct PasswordChangeView: View {
                 .buttonStyle(ObsidianPrimaryButtonStyle())
                 .disabled(!isFormValid || userAccountManager.authStatus == .loading)
                 .opacity(isFormValid ? 1 : 0.55)
+                .accessibilityIdentifier("passwordChangeSubmitButton")
             }
         }
     }
@@ -1270,7 +1295,7 @@ struct PasswordChangeView: View {
         }
     }
 
-    private func passwordField(title: String, text: Binding<String>, icon: String) -> some View {
+    private func passwordField(title: String, text: Binding<String>, icon: String, identifier: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
@@ -1293,6 +1318,7 @@ struct PasswordChangeView: View {
                 )
                 .foregroundColor(Color.textPrimary)
                 .textContentType(.password)
+                .accessibilityIdentifier(identifier)
         }
     }
 
@@ -1497,6 +1523,7 @@ struct DeleteAccountView: View {
                                     )
                                     .foregroundColor(Color.textPrimary)
                                     .textContentType(.password)
+                                    .accessibilityIdentifier("deleteAccountPasswordField")
                             }
                         }
 
@@ -1525,6 +1552,7 @@ struct DeleteAccountView: View {
                 Text("Delete Account")
                     .font(.obsidianHeadline)
                     .foregroundColor(Color.textPrimary)
+                    .accessibilityIdentifier("deleteAccountSheet")
 
                 Text("Confirm this only when you are sure.")
                     .font(.obsidianFootnote)
@@ -1537,7 +1565,8 @@ struct DeleteAccountView: View {
             ObsidianCompactIconButton(
                 icon: "xmark",
                 accessibilityLabel: "Close delete account",
-                accentColor: Color.textSecondary
+                accentColor: Color.textSecondary,
+                accessibilityIdentifier: "deleteAccountCloseButton"
             ) {
                 dismiss()
             }
@@ -1571,6 +1600,7 @@ struct DeleteAccountView: View {
                 .buttonStyle(ObsidianDangerButtonStyle())
                 .disabled(!isPasswordValid || userAccountManager.authStatus == .loading)
                 .opacity(isPasswordValid ? 1 : 0.55)
+                .accessibilityIdentifier("deleteAccountSubmitButton")
             }
         }
     }

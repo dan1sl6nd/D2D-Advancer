@@ -1114,6 +1114,60 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testMoreAccountManagementSheetsSmoke() throws {
+        try requireTeamEmulatorUITestHarness()
+
+        let runId = UUID().uuidString
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+            .prefix(8)
+        let email = "account-ui-\(runId)@example.com"
+        let password = teamUITestCredentials().password
+        let app = makeTeamEmulatorApp(
+            autoAuthEmail: email,
+            autoAuthDisplayName: "Account UI",
+            autoAuthPassword: password,
+            shouldCreateAutoAuthAccount: true
+        )
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForIdentifiedElement(app, "moreAccountCard", timeout: 20)
+        waitForText(app, "Account UI", timeout: 25)
+        tapIdentifiedElement(app, "moreAccountCard", timeout: 8)
+
+        waitForIdentifiedElement(app, "accountManagementScreen", timeout: 12)
+        waitForTextContaining(app, email, timeout: 12)
+
+        scrollToButton(app, "accountNameEditButton", direction: .down).tap()
+        waitForIdentifiedElement(app, "accountNameField", timeout: 8)
+        waitForIdentifiedElement(app, "accountNameSaveButton", timeout: 8)
+        tapButton(app, "accountNameCancelButton", timeout: 8)
+
+        scrollToButton(app, "accountChangePasswordButton", direction: .down).tap()
+        waitForIdentifiedElement(app, "passwordChangeSheet", timeout: 10)
+        waitForIdentifiedElement(app, "passwordChangeCurrentField", timeout: 8)
+        waitForIdentifiedElement(app, "passwordChangeNewField", timeout: 8)
+        waitForIdentifiedElement(app, "passwordChangeConfirmField", timeout: 8)
+        waitForIdentifiedElement(app, "passwordChangeSubmitButton", timeout: 8)
+        tapIdentifiedElement(app, "passwordChangeCloseButton", timeout: 8)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["passwordChangeSheet"].waitForExistence(timeout: 5),
+            "Password change sheet should close cleanly"
+        )
+
+        scrollToButton(app, "accountDeleteAccountButton", direction: .down).tap()
+        waitForIdentifiedElement(app, "deleteAccountSheet", timeout: 10)
+        waitForIdentifiedElement(app, "deleteAccountPasswordField", timeout: 8)
+        waitForIdentifiedElement(app, "deleteAccountSubmitButton", timeout: 8)
+        tapIdentifiedElement(app, "deleteAccountCloseButton", timeout: 8)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["deleteAccountSheet"].waitForExistence(timeout: 5),
+            "Delete account sheet should close cleanly"
+        )
+    }
+
+    @MainActor
     func testPrimaryTabsAndMoreSurfacesSmoke() throws {
         let app = makeApp()
         app.launch()
