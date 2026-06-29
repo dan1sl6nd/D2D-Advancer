@@ -743,6 +743,36 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testAddLeadFormCoreFieldsAndDismissSmoke() throws {
+        let app = makeApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        _ = waitForMapReady(app)
+        tapButton(app, "addLeadButton", timeout: 12)
+
+        for identifier in [
+            "addLeadCancelButton",
+            "addLeadSaveButton",
+            "addLeadNameField",
+            "addLeadPhoneField",
+            "addLeadEmailField",
+            "addLeadAddressField",
+            "addLeadPriceField",
+            "addLeadStatusMenu",
+            "addLeadNotesField"
+        ] {
+            waitForIdentifiedElement(app, identifier, timeout: 8)
+        }
+
+        tapButton(app, "addLeadCancelButton", timeout: 8)
+        XCTAssertTrue(
+            app.buttons["addLeadButton"].waitForExistence(timeout: 8),
+            "Cancel should dismiss Add Lead and return to the map"
+        )
+    }
+
+    @MainActor
     func testPrimaryTabsAndMoreSurfacesSmoke() throws {
         let app = makeApp()
         app.launch()

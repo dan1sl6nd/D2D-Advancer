@@ -187,6 +187,7 @@ struct AddLeadView: View {
                             .shadow(color: Color.black, radius: 2, x: 0, y: 1)
                     )
                 }
+                .accessibilityIdentifier("addLeadCancelButton")
                 
                 Button(action: {
                     saveLead()
@@ -416,6 +417,7 @@ struct AddLeadView: View {
                 }
 
                 LeadNotesEditor(title: "Notes", text: $notes, minHeight: 108)
+                    .accessibilityIdentifier("addLeadNotesField")
             }
         }
     }
