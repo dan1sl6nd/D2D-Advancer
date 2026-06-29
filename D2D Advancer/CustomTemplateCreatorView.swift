@@ -32,7 +32,7 @@ struct CustomTemplateCreatorView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 editorHeader
 
@@ -401,7 +401,7 @@ struct PreviewTemplateView: View {
     let category: MessageTemplate.MessageCategory
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 previewHeader
 
@@ -418,6 +418,7 @@ struct PreviewTemplateView: View {
             }
             .background(Color.obsidianBlack)
             .navigationBarHidden(true)
+            .navigationBarBackButtonHidden(true)
             .accessibilityIdentifier("customTemplatePreviewSheet")
         }
         .presentationBackground(Color.obsidianBlack)
@@ -439,19 +440,14 @@ struct PreviewTemplateView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button {
+            ObsidianCompactIconButton(
+                icon: "xmark",
+                accessibilityLabel: "Close preview",
+                accentColor: Color.textSecondary,
+                accessibilityIdentifier: "customTemplatePreviewCloseButton"
+            ) {
                 dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.obsidianCallout.weight(.semibold))
-                    .foregroundColor(Color.textSecondary)
-                    .frame(width: 38, height: 38)
-                    .background(Color.textSecondary.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .buttonStyle(PlainButtonStyle())
-            .accessibilityLabel("Close preview")
-            .accessibilityIdentifier("customTemplatePreviewCloseButton")
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
