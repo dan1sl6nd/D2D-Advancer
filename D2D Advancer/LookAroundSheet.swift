@@ -51,6 +51,7 @@ struct LookAroundSheet: View {
                 Text(title)
                     .font(.obsidianTitle)
                     .foregroundColor(Color.textPrimary)
+                    .accessibilityIdentifier("lookAroundSheet")
 
                 Text("Preview the property before you walk up.")
                     .font(.obsidianFootnote)
@@ -63,7 +64,8 @@ struct LookAroundSheet: View {
             ObsidianCompactIconButton(
                 icon: "xmark",
                 accessibilityLabel: "Close street view",
-                accentColor: Color.textSecondary
+                accentColor: Color.textSecondary,
+                accessibilityIdentifier: "streetViewCloseButton"
             ) {
                 dismiss()
             }
@@ -81,6 +83,7 @@ struct LookAroundSheet: View {
                 Text("Selected location")
                     .font(.obsidianCaption)
                     .foregroundColor(Color.textSecondary)
+                    .accessibilityIdentifier("streetViewLocationSummary")
 
                 Text(coordinateLabel)
                     .font(.obsidianCallout)
@@ -119,6 +122,9 @@ struct LookAroundSheet: View {
                         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("streetViewProvider_\(provider.rawValue.lowercased())")
+                .accessibilityLabel("\(provider.rawValue) street view")
+                .accessibilityAddTraits(selectedProvider == provider ? [.isSelected] : [])
             }
         }
         .padding(4)
@@ -140,6 +146,7 @@ struct LookAroundSheet: View {
                 Text(selectedProvider == .apple ? "Apple Look Around" : "Google Street View")
                     .font(.obsidianHeadline)
                     .foregroundColor(Color.textPrimary)
+                    .accessibilityIdentifier("streetViewPreviewTitle")
 
                 Spacer()
             }
@@ -181,6 +188,7 @@ struct LookAroundSheet: View {
                     .foregroundColor(.textMuted)
             }
             .frame(maxWidth: .infinity, minHeight: 420)
+            .accessibilityIdentifier("appleLookAroundLoading")
         } else if let scene = scene {
             LookAroundRepresentable(scene: scene)
                 .frame(minHeight: 420)
@@ -214,6 +222,7 @@ struct LookAroundSheet: View {
             .padding(18)
             .background(Color.obsidianElevated)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .accessibilityIdentifier("appleLookAroundUnavailable")
         }
     }
 
@@ -274,6 +283,7 @@ private struct GoogleStreetWebView: UIViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
+        webView.accessibilityIdentifier = "googleStreetViewWebView"
         webView.isOpaque = false
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
@@ -335,6 +345,7 @@ private struct LookAroundRepresentable: UIViewControllerRepresentable {
         let vc = MKLookAroundViewController()
         vc.scene = scene
         vc.isNavigationEnabled = true
+        vc.view.accessibilityIdentifier = "appleLookAroundView"
         return vc
     }
 

@@ -1443,6 +1443,19 @@ final class D2D_AdvancerUITests: XCTestCase {
         XCTAssertTrue(addLeadBtn.waitForExistence(timeout: 5), "Long press should show the Add Lead action")
         screenshot(app, name: "08-LongPressMenuVisible")
         XCTAssertTrue(streetViewBtn.exists, "Street View Here should exist")
+
+        tapElement(app, streetViewBtn, description: "longPressStreetViewButton")
+        waitForIdentifiedElement(app, "lookAroundSheet", timeout: 10)
+        waitForIdentifiedElement(app, "streetViewLocationSummary", timeout: 8)
+        waitForIdentifiedElement(app, "streetViewPreviewTitle", timeout: 8)
+        waitForIdentifiedElement(app, "streetViewProvider_apple", timeout: 8)
+        tapIdentifiedElement(app, "streetViewProvider_google", timeout: 8)
+        waitForText(app, "Google Street View", timeout: 8)
+        tapIdentifiedElement(app, "streetViewCloseButton", timeout: 8)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["lookAroundSheet"].waitForNonExistence(timeout: 8),
+            "Street View sheet should dismiss cleanly"
+        )
     }
 
     @MainActor

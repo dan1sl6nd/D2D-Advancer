@@ -554,7 +554,7 @@ struct MapView: View {
                         },
                         onCancel: { activeDialog = nil }
                     )
-                    .presentationDetents([.medium])
+                    .presentationDetents([.large])
                 }
             }
             .sheet(isPresented: $showingLookAround) {
