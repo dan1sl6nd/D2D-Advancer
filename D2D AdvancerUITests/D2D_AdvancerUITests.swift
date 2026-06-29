@@ -17,6 +17,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append("-skipOnboardingForUITests")
         app.launchArguments.append("-unlockPremiumForUITests")
+        app.launchArguments.append("-resetMessageTemplatesForUITests")
         return app
     }
 
@@ -145,7 +146,7 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     private func tapButton(_ app: XCUIApplication, _ identifier: String, timeout: TimeInterval = 8) {
-        let button = app.buttons[identifier]
+        let button = app.buttons.matching(identifier: identifier).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: timeout), "Expected button to appear: \(identifier)")
         tapElement(app, button, description: identifier)
     }
@@ -208,7 +209,9 @@ final class D2D_AdvancerUITests: XCTestCase {
             let button = app.keyboards.buttons[label]
             if button.waitForExistence(timeout: 1), button.isHittable {
                 button.tap()
-                return
+                if !app.keyboards.firstMatch.waitForExistence(timeout: 1) {
+                    return
+                }
             }
         }
 
@@ -273,7 +276,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         _ identifier: String,
         timeout: TimeInterval = 8
     ) -> XCUIElement {
-        let element = app.descendants(matching: .any)[identifier]
+        let element = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
         XCTAssertTrue(element.waitForExistence(timeout: timeout), "Expected element to appear: \(identifier)")
         return element
     }
@@ -1025,6 +1028,62 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
         let completedFollowUp = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", leadName)).firstMatch
         XCTAssertFalse(completedFollowUp.waitForExistence(timeout: 5), "Completed follow-up should leave the Follow Up list")
+    }
+
+    @MainActor
+    func testMessageTemplateCreatePreviewAndEditSmoke() throws {
+        let app = makeApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        tapButton(app, "tab_More", timeout: 12)
+        tapIdentifiedElement(app, "moreMessageTemplatesCard", timeout: 12)
+        waitForIdentifiedElement(app, "messageTemplatesScreen", timeout: 10)
+
+        tapButton(app, "messageTemplateToolbarCreateButton", timeout: 8)
+        waitForIdentifiedElement(app, "customTemplateEditorSheet", timeout: 10)
+
+        let templateTitle = "UI Template \(Int(Date().timeIntervalSince1970))"
+        typeText(templateTitle, into: app.textFields["customTemplateTitleField"], timeout: 8)
+        dismissKeyboardIfPresent(app)
+
+        let messageField = app.descendants(matching: .any)["customTemplateMessageField"]
+        scrollToElement(messageField, in: app, direction: .down, description: "custom template message field")
+        typeText("Hi {name}, this is a reusable follow up for {address}.", into: messageField, timeout: 8)
+        let messageDoneButton = app.buttons["customTemplateMessageDoneButton"]
+        if messageDoneButton.waitForExistence(timeout: 3), messageDoneButton.isHittable {
+            messageDoneButton.tap()
+        } else {
+            dismissKeyboardIfPresent(app)
+        }
+
+        tapIdentifiedElement(app, "customTemplatePreviewButton", direction: .down, timeout: 8)
+        waitForText(app, "Template Preview", timeout: 8)
+        let previewCloseByIdentifier = app.descendants(matching: .any)
+            .matching(identifier: "customTemplatePreviewCloseButton")
+            .firstMatch
+        if previewCloseByIdentifier.waitForExistence(timeout: 2) {
+            tapElement(app, previewCloseByIdentifier, description: "customTemplatePreviewCloseButton")
+        } else {
+            let previewCloseByLabel = app.buttons["Close preview"]
+            XCTAssertTrue(previewCloseByLabel.waitForExistence(timeout: 8), "Expected preview close button to appear")
+            tapElement(app, previewCloseByLabel, description: "Close preview")
+        }
+        waitForIdentifiedElement(app, "customTemplateEditorSheet", timeout: 10)
+
+        tapButton(app, "customTemplateSaveButton", timeout: 8)
+        waitForIdentifiedElement(app, "messageTemplatesScreen", timeout: 10)
+        waitForTextContaining(app, templateTitle, timeout: 10)
+
+        let savedTemplateRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "messageTemplateRow", templateTitle))
+            .firstMatch
+        XCTAssertTrue(savedTemplateRow.waitForExistence(timeout: 8), "Saved custom template row should be visible")
+        tapElement(app, savedTemplateRow, description: "saved custom template row")
+        waitForIdentifiedElement(app, "customTemplateEditorSheet", timeout: 10)
+        XCTAssertTrue(app.textFields["customTemplateTitleField"].waitForExistence(timeout: 8), "Custom template title field should be editable")
+        tapButton(app, "customTemplateCancelButton", timeout: 8)
+        waitForIdentifiedElement(app, "messageTemplatesScreen", timeout: 10)
     }
 
     @MainActor

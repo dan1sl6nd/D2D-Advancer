@@ -43,16 +43,19 @@ struct CustomTemplateCreatorView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 4)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, 96)
                 }
                 .background(Color.obsidianBlack)
             }
             .background(Color.obsidianBlack)
             .navigationBarHidden(true)
             .navigationBarBackButtonHidden(true)
+            .accessibilityIdentifier("customTemplateEditorSheet")
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !isValidTemplate,
+                    primaryAccessibilityIdentifier: "customTemplateSaveButton",
+                    secondaryAccessibilityIdentifier: "customTemplateCancelButton",
                     primaryAction: saveTemplate,
                     secondaryAction: { dismiss() },
                     primaryLabel: {
@@ -111,7 +114,8 @@ struct CustomTemplateCreatorView: View {
             ObsidianCompactIconButton(
                 icon: "xmark",
                 accessibilityLabel: "Close template editor",
-                accentColor: Color.textSecondary
+                accentColor: Color.textSecondary,
+                accessibilityIdentifier: "customTemplateCloseButton"
             ) {
                 dismiss()
             }
@@ -167,7 +171,13 @@ struct CustomTemplateCreatorView: View {
             subtitle: "Name the template and choose where it appears."
         ) {
             VStack(alignment: .leading, spacing: 18) {
-            LeadFormTextField(title: "Template Name", placeholder: "Enter template name", text: $title, icon: "doc.text.fill")
+            LeadFormTextField(
+                title: "Template Name",
+                placeholder: "Enter template name",
+                text: $title,
+                icon: "doc.text.fill",
+                accessibilityIdentifier: "customTemplateTitleField"
+            )
             
             VStack(alignment: .leading, spacing: 12) {
                 Text("Category")
@@ -211,6 +221,7 @@ struct CustomTemplateCreatorView: View {
                             .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                     )
                 }
+                .accessibilityIdentifier("customTemplateCategoryMenu")
             }
             
             VStack(alignment: .leading, spacing: 16) {
@@ -219,8 +230,18 @@ struct CustomTemplateCreatorView: View {
                     .foregroundColor(Color.textPrimary)
 
                 VStack(spacing: 12) {
-                    channelToggleRow(title: "SMS Messages", icon: "message.fill", isOn: $isForSMS)
-                    channelToggleRow(title: "Email Messages", icon: "envelope.fill", isOn: $isForEmail)
+                    channelToggleRow(
+                        title: "SMS Messages",
+                        icon: "message.fill",
+                        isOn: $isForSMS,
+                        accessibilityIdentifier: "customTemplateSMSToggle"
+                    )
+                    channelToggleRow(
+                        title: "Email Messages",
+                        icon: "envelope.fill",
+                        isOn: $isForEmail,
+                        accessibilityIdentifier: "customTemplateEmailToggle"
+                    )
                 }
             }
         }
@@ -234,7 +255,13 @@ struct CustomTemplateCreatorView: View {
             subtitle: "Use placeholders to personalize messages from lead data."
         ) {
             VStack(alignment: .leading, spacing: 18) {
-            LeadNotesEditor(title: "Template Message", text: $message, minHeight: 128)
+            LeadNotesEditor(
+                title: "Template Message",
+                text: $message,
+                minHeight: 128,
+                accessibilityIdentifier: "customTemplateMessageField",
+                keyboardDoneAccessibilityIdentifier: "customTemplateMessageDoneButton"
+            )
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -268,9 +295,9 @@ struct CustomTemplateCreatorView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(FollowUpMessageTemplates.availablePlaceholders, id: \.placeholder) { item in
-	                            Button(action: {
-	                                insertPlaceholder(item.placeholder)
-	                            }) {
+                            Button(action: {
+                                insertPlaceholder(item.placeholder)
+                            }) {
 	                                VStack(alignment: .leading, spacing: 4) {
 	                                    Text(item.placeholder)
 	                                        .font(.obsidianSmall)
@@ -288,6 +315,7 @@ struct CustomTemplateCreatorView: View {
                                         .stroke(Color.electricViolet.opacity(0.3), lineWidth: 0.5)
                                 )
                             }
+                            .accessibilityIdentifier("customTemplatePlaceholder_\(item.placeholder)")
                         }
                     }
                 }
@@ -297,15 +325,32 @@ struct CustomTemplateCreatorView: View {
                 Button(action: {
                     showingPreview = true
                 }) {
-                    MoreCardView(
-                        icon: "eye.fill",
-                        iconColor: Color.electricViolet,
-                        title: "Preview Message",
-                        subtitle: "Check how this template looks with sample data",
-                        showChevron: true
-                    )
+                    HStack(spacing: 14) {
+                        ObsidianIconTile(icon: "eye.fill", tint: Color.electricViolet, size: 42)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Preview Message")
+                                .font(.obsidianCallout)
+                                .foregroundColor(Color.textPrimary)
+
+                            Text("Check how this template looks with sample data")
+                                .font(.obsidianFootnote)
+                                .foregroundColor(Color.textSecondary)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(Color.textMuted)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("customTemplatePreviewButton")
                 .background(Color.obsidianElevated)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
@@ -317,7 +362,12 @@ struct CustomTemplateCreatorView: View {
         }
     }
 
-    private func channelToggleRow(title: String, icon: String, isOn: Binding<Bool>) -> some View {
+    private func channelToggleRow(
+        title: String,
+        icon: String,
+        isOn: Binding<Bool>,
+        accessibilityIdentifier: String
+    ) -> some View {
         HStack(spacing: 12) {
             ObsidianIconTile(icon: icon, tint: Color.electricViolet, size: 34)
 
@@ -332,6 +382,7 @@ struct CustomTemplateCreatorView: View {
                 .toggleStyle(SwitchToggleStyle(tint: Color.electricViolet))
                 .accessibilityLabel(title)
                 .accessibilityValue(isOn.wrappedValue ? "Enabled" : "Disabled")
+                .accessibilityIdentifier(accessibilityIdentifier)
         }
         .padding(12)
         .background(Color.obsidianElevated)
@@ -367,6 +418,7 @@ struct PreviewTemplateView: View {
             }
             .background(Color.obsidianBlack)
             .navigationBarHidden(true)
+            .accessibilityIdentifier("customTemplatePreviewSheet")
         }
         .presentationBackground(Color.obsidianBlack)
     }
@@ -385,16 +437,21 @@ struct PreviewTemplateView: View {
                     .foregroundColor(Color.textSecondary)
                     .lineLimit(2)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 0)
-
-            ObsidianCompactIconButton(
-                icon: "xmark",
-                accessibilityLabel: "Close preview",
-                accentColor: Color.textSecondary
-            ) {
+            Button {
                 dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.obsidianCallout.weight(.semibold))
+                    .foregroundColor(Color.textSecondary)
+                    .frame(width: 38, height: 38)
+                    .background(Color.textSecondary.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityLabel("Close preview")
+            .accessibilityIdentifier("customTemplatePreviewCloseButton")
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)

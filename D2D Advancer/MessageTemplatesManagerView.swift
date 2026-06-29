@@ -20,13 +20,15 @@ struct MessageTemplatesManagerView: View {
             .padding(.top, 16)
         }
         .background(Color.obsidianBlack.ignoresSafeArea())
+        .accessibilityIdentifier("messageTemplatesScreen")
         .navigationTitle("Message Templates")
         .obsidianInlineNavigation()
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 ObsidianCompactIconButton(
                     icon: "plus",
-                    accessibilityLabel: "Create message template"
+                    accessibilityLabel: "Create message template",
+                    accessibilityIdentifier: "messageTemplateToolbarCreateButton"
                 ) {
                     editingTemplate = nil
                     showingCreator = true
@@ -151,6 +153,7 @@ struct MessageTemplatesManagerView: View {
                 )
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("messageTemplateEmptyCreateButton")
         }
     }
 
@@ -234,6 +237,7 @@ struct MessageTemplatesManagerView: View {
                 .padding(.vertical, 13)
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("messageTemplateRow")
 
             if isCustom {
                 Button {
@@ -249,6 +253,7 @@ struct MessageTemplatesManagerView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("messageTemplateDeleteButton")
                 .padding(.trailing, 16)
                 .padding(.top, 15)
             } else {

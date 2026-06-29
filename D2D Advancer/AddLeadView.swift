@@ -1261,6 +1261,10 @@ struct LeadNotesEditor: View {
     let title: String
     @Binding var text: String
     var minHeight: CGFloat = 110
+    var accessibilityIdentifier: String? = nil
+    var keyboardDoneAccessibilityIdentifier: String = "leadNotesEditorDoneButton"
+
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1268,9 +1272,33 @@ struct LeadNotesEditor: View {
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.textSecondary)
 
-            TextEditor(text: $text)
-                .frame(minHeight: minHeight)
-                .obsidianEditorSurface(cornerRadius: 14)
+            if let accessibilityIdentifier {
+                TextEditor(text: $text)
+                    .focused($isFocused)
+                    .frame(minHeight: minHeight)
+                    .obsidianEditorSurface(cornerRadius: 14)
+                    .accessibilityIdentifier(accessibilityIdentifier)
+                    .toolbar { keyboardToolbar }
+            } else {
+                TextEditor(text: $text)
+                    .focused($isFocused)
+                    .frame(minHeight: minHeight)
+                    .obsidianEditorSurface(cornerRadius: 14)
+                    .toolbar { keyboardToolbar }
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var keyboardToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button("Done") {
+                isFocused = false
+            }
+            .font(.obsidianCallout.weight(.semibold))
+            .foregroundColor(Color.electricViolet)
+            .accessibilityIdentifier(keyboardDoneAccessibilityIdentifier)
         }
     }
 }

@@ -35,6 +35,10 @@ struct D2D_AdvancerApp: App {
             UserDefaults.standard.removeObject(forKey: "isGuestMode")
             print("🧪 Firebase auth reset for UI tests")
         }
+        if launchArguments.contains("-resetMessageTemplatesForUITests") {
+            UserDefaults.standard.removeObject(forKey: "custom_message_templates")
+            print("🧪 Message templates reset for UI tests")
+        }
         if shouldResetOnboardingForUITests || shouldShowOnboardingForUITests {
             UserDefaults.standard.removeObject(forKey: "onboarding_completed")
             UserDefaults.standard.removeObject(forKey: "onboarding_profile")
