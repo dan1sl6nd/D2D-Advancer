@@ -55,6 +55,7 @@ enum AppError: LocalizedError {
 
 class ErrorHandler: ObservableObject {
     @Published var currentError: AppError?
+    @Published var currentContext: String?
     @Published var showingError = false
     
     static let shared = ErrorHandler()
@@ -68,6 +69,7 @@ class ErrorHandler: ObservableObject {
         
         DispatchQueue.main.async {
             self.currentError = appError
+            self.currentContext = context
             self.showingError = true
         }
     }
@@ -118,12 +120,14 @@ class ErrorHandler: ObservableObject {
         
         DispatchQueue.main.async {
             self.currentError = appError
+            self.currentContext = context
             self.showingError = true
         }
     }
     
     func clearError() {
         currentError = nil
+        currentContext = nil
         showingError = false
     }
 }
@@ -150,7 +154,15 @@ struct ErrorAlert: ViewModifier {
                 }
             } message: {
                 if let error = errorHandler.currentError {
+                    #if DEBUG
+                    if let context = errorHandler.currentContext, !context.isEmpty {
+                        Text("\(error.userFriendlyMessage)\n\nDebug: \(context)")
+                    } else {
+                        Text(error.userFriendlyMessage)
+                    }
+                    #else
                     Text(error.userFriendlyMessage)
+                    #endif
                 }
             }
     }

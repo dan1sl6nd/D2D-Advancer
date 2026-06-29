@@ -270,43 +270,55 @@ struct NeighborhoodLegendView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                Text("Area Score Legend")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .padding(.top)
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                ObsidianScreenTitle(
+                    title: "Area Score Legend",
+                    subtitle: "How neighborhood recommendation scores are grouped.",
+                    icon: "info.circle.fill"
+                )
+                .padding(.top, 18)
 
-                VStack(spacing: 12) {
+                ObsidianSectionCard(
+                    title: "Score Bands",
+                    icon: "chart.bar.fill",
+                    subtitle: "Higher scores mean a stronger fit for your target profile."
+                ) {
+                    VStack(spacing: 12) {
                     LegendRow(color: .statusInterested, label: "Excellent", range: "90-100", description: "Best fit for your target demographics")
                     LegendRow(color: Color(red: 0.7, green: 0.9, blue: 0.4), label: "Very Good", range: "75-89", description: "Strong match with good potential")
                     LegendRow(color: .yellow, label: "Good", range: "60-74", description: "Moderate match worth considering")
                     LegendRow(color: .statusNotHome, label: "Fair", range: "45-59", description: "Some potential but not ideal")
                     LegendRow(color: .statusNotInterested, label: "Poor", range: "0-44", description: "Low match with target demographics")
+                    }
                 }
-                .padding()
 
-                Text("Scores are based on income, home values, population density, and your historical conversion rate in each area.")
-                    .font(.caption)
-                    .foregroundColor(Color.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-
-                Spacer()
-
-                Button("Done") {
-                    dismiss()
+                ObsidianStatusBanner(
+                    icon: "target",
+                    title: "How scores are calculated",
+                    message: "Scores are based on income, home values, population density, and your historical conversion rate in each area.",
+                    tint: Color.electricViolet
+                )
                 }
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Color.electricViolet)
-                .cornerRadius(12)
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.bottom, 28)
             }
-            .navigationBarHidden(true)
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle("Area Score Legend")
+            .obsidianInlineNavigation()
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    dismiss()
+                } label: {
+                    Label("Done", systemImage: "checkmark")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.obsidianBlack)
+            }
         }
     }
 }
@@ -327,14 +339,15 @@ struct LegendRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(label)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.obsidianCallout)
+                        .foregroundColor(.textPrimary)
                     Text("(\(range))")
-                        .font(.system(size: 13))
+                        .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
                 }
 
                 Text(description)
-                    .font(.system(size: 12))
+                    .font(.obsidianSmall)
                     .foregroundColor(Color.textSecondary)
             }
 

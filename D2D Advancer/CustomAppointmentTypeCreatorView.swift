@@ -9,6 +9,7 @@ struct CustomAppointmentTypeCreatorView: View {
     @State private var selectedColor: String = "blue"
     @State private var showingIconPicker = false
     @State private var showingPreview = false
+    @State private var saveErrorMessage: String?
     
     let editingType: CustomAppointmentType?
     
@@ -45,153 +46,76 @@ struct CustomAppointmentTypeCreatorView: View {
     }
     
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Type Details Card
-                        typeDetailsCard
-                        
-                        // Appearance Card
-                        appearanceCard
-                        
-                        // Preview Card
-                        previewCard
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
-                }
-                .background(Color(UIColor.systemGroupedBackground))
-            }
-            .navigationTitle(editingType != nil ? "Edit Type" : "Create Type")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .safeAreaInset(edge: .bottom) {
-                // Card-based button design
-                HStack(spacing: 16) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                            Text("Cancel")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(Color.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(UIColor.secondarySystemBackground))
-                                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        )
-                    }
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: editingType != nil ? "Edit Type" : "Create Type",
+                        subtitle: "Customize appointment labels used in scheduling.",
+                        icon: "calendar.badge.plus"
+                    )
 
-                    Button(action: {
-                        saveType()
-                    }) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3)
-                            Text(editingType != nil ? "Update Type" : "Create Type")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            !isValidType ? Color.textSecondary : Color.electricViolet,
-                                            !isValidType ? Color.textSecondary.opacity(0.8) : Color.electricViolet.opacity(0.8)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: !isValidType ? .clear : Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                    .disabled(!isValidType)
+                    typeDetailsCard
+                    appearanceCard
+                    previewCard
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle(editingType != nil ? "Edit Type" : "Create Type")
+            .obsidianInlineNavigation()
+            .navigationBarBackButtonHidden(true)
+            .safeAreaInset(edge: .bottom) {
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: !isValidType,
+                    primaryAction: saveType,
+                    secondaryAction: { dismiss() },
+                    primaryLabel: {
+                        Label(editingType != nil ? "Update" : "Create", systemImage: "checkmark.circle.fill")
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
+                    }
                 )
             }
             .sheet(isPresented: $showingIconPicker) {
                 IconPickerView(selectedIcon: $selectedIcon)
             }
+            .alert(
+                "Type not saved",
+                isPresented: Binding(
+                    get: { saveErrorMessage != nil },
+                    set: { if !$0 { saveErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(saveErrorMessage ?? "Please try again.")
+            }
         }
     }
     
     private var typeDetailsCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "tag.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.title2)
-
-                Text("Type Details")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-
-                Spacer()
-            }
-            
-            // Type Name Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Type Name")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(Color.textPrimary)
-
-                TextField("Enter type name", text: $typeName)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color.obsidianSurface)
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
-                    )
-            }
+        ObsidianSectionCard(
+            title: "Type Details",
+            icon: "tag.fill",
+            subtitle: "The name shown in appointment lists and details."
+        ) {
+            LeadFormTextField(title: "Type Name", placeholder: "Enter type name", text: $typeName, icon: "tag.fill")
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
 
     private var appearanceCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "paintbrush.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.title2)
-
-                Text("Appearance")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-
-                Spacer()
-            }
-            
-            // Icon Selection
+        ObsidianSectionCard(
+            title: "Appearance",
+            icon: "paintbrush.fill",
+            subtitle: "Pick an icon and color that are easy to scan."
+        ) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Icon")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textPrimary)
                 
                 Button(action: {
@@ -200,7 +124,7 @@ struct CustomAppointmentTypeCreatorView: View {
                     HStack {
                         Image(systemName: selectedIcon)
                             .foregroundColor(selectedColorObj)
-                            .font(.title3)
+                            .font(.obsidianCallout)
                             .frame(width: 24)
                         
                         Text("Tap to change icon")
@@ -217,7 +141,7 @@ struct CustomAppointmentTypeCreatorView: View {
                     .background(Color.obsidianSurface)
                     .cornerRadius(10)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                     )
                 }
@@ -227,8 +151,7 @@ struct CustomAppointmentTypeCreatorView: View {
             // Color Selection
             VStack(alignment: .leading, spacing: 12) {
                 Text("Color")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textPrimary)
                 
                 LazyVGrid(columns: [
@@ -246,43 +169,28 @@ struct CustomAppointmentTypeCreatorView: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
 
     private var previewCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "eye.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.title2)
-
-                Text("Preview")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-
-                Spacer()
-            }
-            
-            // Preview Display
+        ObsidianSectionCard(
+            title: "Preview",
+            icon: "eye.fill",
+            subtitle: "How this type appears in scheduling."
+        ) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("How your appointment type will appear:")
-                    .font(.subheadline)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
                 
                 // Preview Chip
                 HStack {
                     Image(systemName: selectedIcon)
                         .foregroundColor(selectedColorObj)
-                        .font(.title3)
+                        .font(.obsidianCallout)
                         .frame(width: 24)
                     
                     Text(typeName.isEmpty ? "New Appointment Type" : typeName)
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.obsidianBody)
                         .foregroundColor(Color.textPrimary)
                     
                     Spacer()
@@ -297,10 +205,6 @@ struct CustomAppointmentTypeCreatorView: View {
                 )
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
 
     private func saveType() {
@@ -313,10 +217,16 @@ struct CustomAppointmentTypeCreatorView: View {
             dateCreated: editingType?.dateCreated ?? Date()
         )
         
+        let didSave: Bool
         if editingType != nil {
-            typeManager.updateCustomType(customType)
+            didSave = typeManager.updateCustomType(customType)
         } else {
-            typeManager.addCustomType(customType)
+            didSave = typeManager.addCustomType(customType)
+        }
+
+        guard didSave else {
+            saveErrorMessage = typeManager.lastErrorMessage ?? "Could not save this appointment type. Please try again."
+            return
         }
         
         dismiss()
@@ -398,10 +308,11 @@ struct IconPickerView: View {
     }
     
     var body: some View {
-        NavigationView {
-            VStack {
+        NavigationStack {
+            VStack(spacing: 0) {
                 IconSearchBar(text: $searchText)
                     .padding(.horizontal, 16)
+                    .padding(.top, 12)
                 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
@@ -410,8 +321,7 @@ struct IconPickerView: View {
                                 // Category Header
                                 HStack {
                                     Text(category)
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
+                                        .font(.obsidianTitle)
                                         .foregroundColor(Color.textPrimary)
 
                                     Spacer()
@@ -439,14 +349,18 @@ struct IconPickerView: View {
                     .padding(.vertical, 20)
                 }
             }
+            .background(Color.obsidianBlack.ignoresSafeArea())
             .navigationTitle("Choose Icon")
-            .navigationBarTitleDisplayMode(.inline)
+            .obsidianInlineNavigation()
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
+                    ObsidianCompactIconButton(
+                        icon: "checkmark",
+                        accessibilityLabel: "Done choosing icon",
+                        accentColor: Color.electricViolet
+                    ) {
                         dismiss()
                     }
-                    .fontWeight(.semibold)
                 }
             }
         }
@@ -462,13 +376,12 @@ struct IconSelectionChip: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Image(systemName: iconData.symbol)
-                    .font(.title2)
+                    .font(.obsidianCallout)
                     .foregroundColor(isSelected ? Color.electricViolet : Color.textPrimary)
                     .frame(width: 28, height: 28)
 
                 Text(iconData.name)
-                    .font(.caption2)
-                    .fontWeight(.medium)
+                    .font(.micro)
                     .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
@@ -499,6 +412,8 @@ struct IconSearchBar: View {
                 .foregroundColor(Color.textSecondary)
 
             TextField("Search icons...", text: $text)
+                .font(.obsidianBody)
+                .foregroundColor(Color.textPrimary)
 
             if !text.isEmpty {
                 Button(action: {

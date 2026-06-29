@@ -15,21 +15,27 @@ struct AddCheckInView: View {
     @State private var showingDatePicker = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: "Record Check-in",
+                        subtitle: "Log the contact method, outcome, notes, and next follow-up.",
+                        icon: "checkmark.circle.fill"
+                    )
+
                     // Lead Information Section
                     modernSectionCard(title: "Lead Information", icon: "person.crop.circle.fill") {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(lead.displayName)
-                                        .font(.title3)
-                                        .fontWeight(.semibold)
-                                    
+                                        .font(.obsidianCallout)
+                                        .foregroundColor(Color.textPrimary)
+
                                     if let address = lead.address {
                                         Text(address)
-                                            .font(.subheadline)
+                                            .font(.obsidianFootnote)
                                             .foregroundColor(Color.textSecondary)
                                     }
                                 }
@@ -45,8 +51,8 @@ struct AddCheckInView: View {
                                     .frame(width: 20)
                                 
                                 Text("Check-in #\(lead.checkInCount + 1)")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
+                                    .font(.obsidianTitle)
+                                    .foregroundColor(Color.textPrimary)
                                 
                                 Spacer()
                             }
@@ -64,34 +70,7 @@ struct AddCheckInView: View {
                     
                     // Notes Section
                     modernSectionCard(title: "Notes", icon: "note.text") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "note.text")
-                                    .foregroundColor(Color.electricViolet)
-                                    .frame(width: 20)
-                                
-                                Text("Check-in Notes")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                            }
-                            
-                            TextEditor(text: $notes)
-                                .frame(minHeight: 100)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(Color.obsidianSurface)
-                                .cornerRadius(12)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
-                                )
-                                .placeholder(when: notes.isEmpty) {
-                                    Text("Add notes about this follow-up...")
-                                        .foregroundColor(Color.textSecondary)
-                                        .padding(.horizontal, 20)
-                                        .padding(.vertical, 20)
-                                }
-                        }
+                        LeadNotesEditor(title: "Check-in Notes", text: $notes, minHeight: 108)
                     }
                     
                     // Next Follow-up Section
@@ -105,77 +84,34 @@ struct AddCheckInView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
             }
+            .background(Color.obsidianBlack.ignoresSafeArea())
             .navigationTitle("Record Check-in")
-            .navigationBarTitleDisplayMode(.inline)
+            .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
             .safeAreaInset(edge: .bottom) {
-                // Card-based button design
-                HStack(spacing: 16) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                            Text("Cancel")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(Color.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(UIColor.secondarySystemBackground))
-                                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        )
+                ObsidianBottomActionBar(
+                    primaryAction: saveCheckIn,
+                    secondaryAction: { dismiss() },
+                    primaryLabel: {
+                        Label("Save", systemImage: "checkmark.circle.fill")
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
                     }
-
-                    Button(action: {
-                        saveCheckIn()
-                    }) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3)
-                            Text("Save Check-in")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.electricViolet, Color.electricViolet.opacity(0.8)]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color.obsidianElevated)
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
             .sheet(isPresented: $showingDatePicker) {
-                NavigationView {
+                NavigationStack {
                     VStack(spacing: 20) {
                         Text("Select Next Follow-up Date")
-                            .font(.title2)
-                            .fontWeight(.semibold)
+                            .font(.obsidianTitle)
+                            .foregroundColor(Color.textPrimary)
                             .padding(.top)
                         
-                        DatePicker("", selection: Binding(
+                        DatePicker("Next follow-up date", selection: Binding(
                             get: { scheduledNextFollowUp ?? Date() },
                             set: { scheduledNextFollowUp = $0 }
                         ), displayedComponents: [.date, .hourAndMinute])
@@ -185,43 +121,16 @@ struct AddCheckInView: View {
                         
                         Spacer(minLength: 20)
                     }
+                    .background(Color.obsidianBlack.ignoresSafeArea())
                     .navigationTitle("Next Follow-up")
-                    .navigationBarTitleDisplayMode(.inline)
+                    .obsidianInlineNavigation()
                     .safeAreaInset(edge: .bottom) {
-                        HStack(spacing: 12) {
-                            Button(action: {
-                                showingDatePicker = false
-                            }) {
-                                Text("Cancel")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(Color.textSecondary)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color(UIColor.secondarySystemBackground))
-                                    )
-                            }
-                            
-                            Button(action: {
-                                showingDatePicker = false
-                            }) {
-                                Text("Done")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.electricViolet)
-                                    )
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.obsidianElevated)
+                        ObsidianBottomActionBar(
+                            primaryAction: { showingDatePicker = false },
+                            secondaryAction: { showingDatePicker = false },
+                            primaryLabel: { Label("Done", systemImage: "checkmark.circle.fill") },
+                            secondaryLabel: { Label("Cancel", systemImage: "xmark.circle.fill") }
+                        )
                     }
                 }
                 .presentationDetents([.height(250)])
@@ -230,35 +139,27 @@ struct AddCheckInView: View {
     }
     
     private func saveCheckIn() {
+        let resultingStatus = FollowUpCheckIn.resolvedLeadStatus(
+            after: outcome,
+            currentStatus: lead.leadStatus
+        )
+        let effectiveNextFollowUp = FollowUpCheckIn.effectiveScheduledNextFollowUp(
+            scheduledNextFollowUp,
+            resultingStatus: resultingStatus
+        )
+
         let checkIn = FollowUpCheckIn.create(in: viewContext, for: lead)
         checkIn.checkInTypeEnum = checkInType
         checkIn.outcomeEnum = outcome
         checkIn.notes = notes.isEmpty ? nil : notes
-        checkIn.scheduledNextFollowUp = scheduledNextFollowUp
+        checkIn.scheduledNextFollowUp = effectiveNextFollowUp
         
-        // Update lead's next follow-up date if scheduled
-        if let nextFollowUp = scheduledNextFollowUp {
-            lead.setFollowUpDate(nextFollowUp)
-        }
-        
-        // Update lead status based on outcome
-        switch outcome {
-        case .converted:
-            lead.leadStatus = .converted
-        case .interested:
-            // Do not downgrade a sold lead to interested
-            if lead.leadStatus != .converted {
-                lead.leadStatus = .interested
-            }
-        case .notInterested:
-            // Explicit user action: allow setting to not interested even from sold
-            lead.leadStatus = .notInterested
-        case .successful, .noAnswer, .reschedule, .callback:
-            // Keep current status
-            break
-        }
-        
-        lead.updatedDate = Date()
+        lead.applyLeadStatus(
+            resultingStatus,
+            followUpDate: effectiveNextFollowUp,
+            shouldReplaceFollowUpDate: true,
+            autoSave: false
+        )
         
         do {
             try viewContext.save()
@@ -276,35 +177,9 @@ struct AddCheckInView: View {
     // MARK: - Modern UI Components
     
     private func modernSectionCard<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(Color.electricViolet)
-                    .font(.title2)
-
-                Text(title)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(Color.textPrimary)
-
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            
+        ObsidianSectionCard(title: title, icon: icon) {
             content()
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.obsidianElevated)
-                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.obsidianBorder.opacity(0.2), lineWidth: 1)
-        )
     }
     
     @ViewBuilder
@@ -316,8 +191,8 @@ struct AddCheckInView: View {
                     .frame(width: 20)
 
                 Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
             }
 
             Menu {
@@ -330,6 +205,7 @@ struct AddCheckInView: View {
             } label: {
                 HStack {
                     Label(selection.wrappedValue.displayName, systemImage: selection.wrappedValue.icon)
+                        .font(.obsidianBody)
                         .foregroundColor(Color.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.down")
@@ -357,8 +233,8 @@ struct AddCheckInView: View {
                     .frame(width: 20)
 
                 Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
             }
 
             Menu {
@@ -371,6 +247,7 @@ struct AddCheckInView: View {
             } label: {
                 HStack {
                     Text(selection.wrappedValue.displayName)
+                        .font(.obsidianBody)
                         .foregroundColor(Color.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.down")
@@ -398,14 +275,15 @@ struct AddCheckInView: View {
                     .frame(width: 20)
 
                 Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
             }
 
             Button(action: action) {
                 HStack {
                     if let selectedDate = date.wrappedValue {
                         Text(selectedDate.formatted(.dateTime.day().month().year().hour().minute()))
+                            .font(.obsidianBody)
                             .foregroundColor(Color.textPrimary)
 
                         Spacer()
@@ -418,6 +296,7 @@ struct AddCheckInView: View {
                         }
                     } else {
                         Text("Set Date & Time")
+                            .font(.obsidianBody)
                             .foregroundColor(Color.textSecondary)
 
                         Spacer()
@@ -441,7 +320,7 @@ struct AddCheckInView: View {
 
 #Preview {
     let context = PersistenceController.preview.container.viewContext
-    let lead = Lead(context: context)
+    let lead = Lead.create(in: context)
     lead.name = "John Doe"
     lead.address = "123 Main St, Toronto, ON"
     lead.leadStatus = .notContacted

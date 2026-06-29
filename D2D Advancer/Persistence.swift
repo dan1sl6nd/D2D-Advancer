@@ -10,6 +10,13 @@ import CoreData
 class PersistenceController {
     static let shared = PersistenceController()
 
+    private static let managedObjectModel: NSManagedObjectModel = {
+        guard let model = NSManagedObjectModel.mergedModel(from: [Bundle.main, Bundle(for: Lead.self)]) else {
+            fatalError("Could not load D2D Advancer Core Data model")
+        }
+        return model
+    }()
+
     @MainActor
     static let preview: PersistenceController = {
         let result = PersistenceController(inMemory: true)
@@ -53,8 +60,8 @@ class PersistenceController {
         didLoadPersistentStore && !container.persistentStoreCoordinator.persistentStores.isEmpty
     }
 
-    private init(inMemory: Bool = false) {
-        container = NSPersistentContainer(name: "D2D_Advancer")
+    init(inMemory: Bool = false) {
+        container = NSPersistentContainer(name: "D2D_Advancer", managedObjectModel: Self.managedObjectModel)
         
         if inMemory {
             guard let description = container.persistentStoreDescriptions.first else {
@@ -140,7 +147,7 @@ class PersistenceController {
         let context = container.viewContext
         
         // Check if any follow-ups exist
-        let followUpRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let followUpRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
         followUpRequest.predicate = NSPredicate(format: "followUpDate != nil")
         
         do {
@@ -199,7 +206,7 @@ class PersistenceController {
         let context = container.viewContext
         
         // Export follow-ups to UserDefaults as emergency backup
-        let followUpRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let followUpRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
         followUpRequest.predicate = NSPredicate(format: "followUpDate != nil")
         
         do {
@@ -268,12 +275,14 @@ class PersistenceController {
             }
             
             // Find existing lead
-            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
             fetchRequest.predicate = NSPredicate(format: "id == %@", id as CVarArg)
             
             do {
                 let existingLeads = try context.fetch(fetchRequest)
-                if let existingLead = existingLeads.first, existingLead.followUpDate == nil {
+                if let existingLead = existingLeads.first,
+                   existingLead.followUpDate == nil,
+                   existingLead.leadStatus.allowsActiveFollowUp {
                     // Restore follow-up date only if it's missing
                     existingLead.followUpDate = Date(timeIntervalSince1970: followUpTimestamp)
                     restoredCount += 1
@@ -289,6 +298,11 @@ class PersistenceController {
             do {
                 try context.save()
                 print("✅ Successfully restored \(restoredCount) follow-ups")
+                if NotificationService.shouldRefreshNotificationsAfterFollowUpRestore(restoredCount: restoredCount) {
+                    Task { @MainActor in
+                        NotificationService.shared.refreshAllNotifications()
+                    }
+                }
             } catch {
                 print("❌ Failed to save restored follow-ups: \(error)")
                 context.rollback()
@@ -308,7 +322,7 @@ class PersistenceController {
         normalizeLegacyStatuses(context)
         
         // Check current follow-up count
-        let followUpRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let followUpRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
         followUpRequest.predicate = NSPredicate(format: "followUpDate != nil")
         
         do {
@@ -349,14 +363,14 @@ class PersistenceController {
         guard hasPersistentStore else { return }
         
         // Map any legacy status strings (e.g., "sold", "closed") to current enum raw values
-        let fetch: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let fetch: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
         fetch.predicate = NSPredicate(format: "status IN %@", ["sold", "closed", "close", "won"]) 
         do {
             let legacyLeads = try context.fetch(fetch)
             if !legacyLeads.isEmpty {
                 for lead in legacyLeads {
                     lead.status = Lead.Status.converted.rawValue
-                    lead.updatedDate = Date()
+                    lead.setFollowUpDate(nil, autoSave: false)
                 }
                 try context.save()
                 print("✅ Normalized \(legacyLeads.count) legacy 'sold/closed' statuses to 'converted'")

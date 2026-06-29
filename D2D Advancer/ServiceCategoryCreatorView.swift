@@ -7,6 +7,7 @@ struct ServiceCategoryCreatorView: View {
     @State private var name: String = ""
     @State private var selectedIcon: String = "drop.fill"
     @State private var selectedColor: String = "blue"
+    @State private var saveErrorMessage: String?
     
     let editingCategory: ServiceCategory?
     
@@ -24,149 +25,71 @@ struct ServiceCategoryCreatorView: View {
     }
     
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Category Info Card
-                        categoryDetailsCard
-                        
-                        // Icon Selection Card
-                        iconSelectionCard
-                        
-                        // Color Selection Card
-                        colorSelectionCard
-                        
-                        // Preview Card
-                        previewCard
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
-                }
-                .background(Color(UIColor.systemGroupedBackground))
-            }
-            .navigationTitle(editingCategory != nil ? "Edit Service" : "Add Service")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .safeAreaInset(edge: .bottom) {
-                // Card-based button design
-                HStack(spacing: 16) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                            Text("Cancel")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(UIColor.secondarySystemBackground))
-                                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        )
-                    }
-                    
-                    Button(action: {
-                        saveCategory()
-                    }) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3)
-                            Text(editingCategory != nil ? "Update" : "Add Service")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            !isValidCategory ? Color.gray : colorForName(selectedColor),
-                                            !isValidCategory ? Color.gray.opacity(0.8) : colorForName(selectedColor).opacity(0.8)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: !isValidCategory ? .clear : colorForName(selectedColor).opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                    .disabled(!isValidCategory)
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: editingCategory != nil ? "Edit Service" : "Add Service",
+                        subtitle: "Name, icon, and color used across lead forms.",
+                        icon: "tag.fill"
+                    )
+
+                    categoryDetailsCard
+                    iconSelectionCard
+                    colorSelectionCard
+                    previewCard
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle(editingCategory != nil ? "Edit Service" : "Add Service")
+            .obsidianInlineNavigation()
+            .navigationBarBackButtonHidden(true)
+            .safeAreaInset(edge: .bottom) {
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: !isValidCategory,
+                    primaryAction: saveCategory,
+                    secondaryAction: { dismiss() },
+                    primaryLabel: {
+                        Label(editingCategory != nil ? "Update" : "Add", systemImage: "checkmark.circle.fill")
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
+                    }
                 )
+            }
+            .alert(
+                "Service not saved",
+                isPresented: Binding(
+                    get: { saveErrorMessage != nil },
+                    set: { if !$0 { saveErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(saveErrorMessage ?? "Please try again.")
             }
         }
     }
     
     private var categoryDetailsCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "tag.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Service Details")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Service Name Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Service Name")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
-                TextField("Enter service name", text: $name)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                    )
-            }
+        ObsidianSectionCard(
+            title: "Service Details",
+            icon: "tag.fill",
+            subtitle: "This is what you will pick when creating or editing leads."
+        ) {
+            LeadFormTextField(title: "Service Name", placeholder: "Enter service name", text: $name, icon: "tag.fill")
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
     private var iconSelectionCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "app.badge.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Choose Icon")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Icon Grid
+        ObsidianSectionCard(
+            title: "Choose Icon",
+            icon: "app.badge.fill",
+            subtitle: "Use a recognizable symbol for this service."
+        ) {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
                 ForEach(ServiceCategory.availableIcons, id: \.self) { icon in
                     Button(action: {
@@ -178,38 +101,25 @@ struct ServiceCategoryCreatorView: View {
                             .frame(width: 44, height: 44)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(selectedIcon == icon ? colorForName(selectedColor) : Color(UIColor.tertiarySystemBackground))
+                                    .fill(selectedIcon == icon ? colorForName(selectedColor) : Color.obsidianElevated)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(selectedIcon == icon ? colorForName(selectedColor) : Color.clear, lineWidth: 2)
                             )
                     }
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
     private var colorSelectionCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "paintpalette.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Choose Color")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Color Grid
+        ObsidianSectionCard(
+            title: "Choose Color",
+            icon: "paintpalette.fill",
+            subtitle: "Color helps this service stand out in lists."
+        ) {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 6), spacing: 8) {
                 ForEach(ServiceCategory.availableColors, id: \.self) { color in
                     Button(action: {
@@ -220,7 +130,7 @@ struct ServiceCategoryCreatorView: View {
                             .frame(width: 44, height: 44)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(selectedColor == color ? Color.primary : Color.clear, lineWidth: 3)
+                                    .stroke(selectedColor == color ? Color.textPrimary : Color.clear, lineWidth: 3)
                             )
                             .overlay(
                                 selectedColor == color ?
@@ -231,31 +141,18 @@ struct ServiceCategoryCreatorView: View {
                                 : nil
                             )
                     }
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
     private var previewCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "eye.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Preview")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Preview
+        ObsidianSectionCard(
+            title: "Preview",
+            icon: "eye.fill",
+            subtitle: "How this service will appear in the app."
+        ) {
             HStack(spacing: 12) {
                 Image(systemName: selectedIcon)
                     .font(.title2)
@@ -268,25 +165,20 @@ struct ServiceCategoryCreatorView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(name.isEmpty ? "Service Name" : name)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                        .font(.obsidianTitle)
+                        .foregroundColor(Color.textPrimary)
                     
                     Text("Custom Service Category")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
                 }
                 
                 Spacer()
             }
             .padding(16)
-            .background(Color(UIColor.tertiarySystemBackground))
-            .cornerRadius(12)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
     private func colorForName(_ colorName: String) -> Color {
@@ -317,10 +209,16 @@ struct ServiceCategoryCreatorView: View {
             dateCreated: editingCategory?.dateCreated ?? Date()
         )
         
+        let didSave: Bool
         if editingCategory != nil {
-            categoryManager.updateCustomCategory(category)
+            didSave = categoryManager.updateCustomCategory(category)
         } else {
-            categoryManager.addCustomCategory(category)
+            didSave = categoryManager.addCustomCategory(category)
+        }
+
+        guard didSave else {
+            saveErrorMessage = categoryManager.lastErrorMessage ?? "Could not save this service. Please try again."
+            return
         }
         
         dismiss()

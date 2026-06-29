@@ -7,10 +7,16 @@ import CoreData
 
 @MainActor
 class FirebaseService: ObservableObject {
-    static let shared = FirebaseService()
-    private let auth = Auth.auth()
-    private let db = Firestore.firestore()
-    private let accountBackupService = CloudKitAccountBackupService.shared
+    static let shared: FirebaseService = {
+        FirebaseBootstrap.configureIfNeeded()
+        return FirebaseService()
+    }()
+
+    private let auth: Auth
+    private let db: Firestore
+    private var accountBackupService: CloudKitAccountBackupService? {
+        CloudKitAccountBackupService.shared
+    }
     private var authStateListenerHandle: AuthStateDidChangeListenerHandle?
 
     private let onboardingCompletedKey = "onboarding_completed"
@@ -52,10 +58,9 @@ class FirebaseService: ObservableObject {
     @Published var isAuthenticated = false
     
     private init() {
-        // Configure Firebase
-        if FirebaseApp.app() == nil {
-            FirebaseApp.configure()
-        }
+        FirebaseBootstrap.configureIfNeeded()
+        auth = Auth.auth()
+        db = Firestore.firestore()
         FirebaseEmulatorConfiguration.applyIfNeeded(auth: auth, firestore: db)
         
         // Listen for auth changes
@@ -269,11 +274,15 @@ class FirebaseService: ObservableObject {
             print("⚠️ Failed to sync account profile to Firestore: \(error.localizedDescription)")
         }
 
-        do {
-            try await accountBackupService.uploadProfile(payload)
-            print("☁️ Account profile synced to CloudKit backup")
-        } catch {
-            print("⚠️ Failed to sync account profile to CloudKit backup: \(error.localizedDescription)")
+        if let accountBackupService {
+            do {
+                try await accountBackupService.uploadProfile(payload)
+                print("☁️ Account profile synced to CloudKit backup")
+            } catch {
+                print("⚠️ Failed to sync account profile to CloudKit backup: \(error.localizedDescription)")
+            }
+        } else {
+            print("⚠️ CloudKit account backup unavailable in this runtime")
         }
     }
 
@@ -297,6 +306,11 @@ class FirebaseService: ObservableObject {
         }
 
         guard !restoredFromFirestore else { return }
+
+        guard let accountBackupService else {
+            print("⚠️ CloudKit account backup unavailable in this runtime")
+            return
+        }
 
         do {
             if let payload = try await accountBackupService.fetchProfile(for: user.uid) {

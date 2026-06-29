@@ -10,19 +10,51 @@ enum SyncError: Error {
     case dataCorruption(String)
 }
 
+enum LeadDeletionTombstoneStore {
+    static func loadDeletedIds(from userDefaults: UserDefaults, key: String) -> Set<UUID> {
+        let values = userDefaults.stringArray(forKey: key) ?? []
+        return Set(values.compactMap(UUID.init(uuidString:)))
+    }
+
+    static func markDeleted(_ ids: Set<UUID>, in userDefaults: UserDefaults, key: String) {
+        guard !ids.isEmpty else { return }
+        let existing = loadDeletedIds(from: userDefaults, key: key)
+        save(existing.union(ids), to: userDefaults, key: key)
+    }
+
+    private static func save(_ ids: Set<UUID>, to userDefaults: UserDefaults, key: String) {
+        let values = ids
+            .map(\.uuidString)
+            .sorted()
+        userDefaults.set(values, forKey: key)
+    }
+}
+
+enum LeadCloudMergePolicy {
+    static func shouldSkipRemoteLead(documentId: String, deletedIds: Set<UUID>) -> Bool {
+        guard let id = UUID(uuidString: documentId) else { return false }
+        return deletedIds.contains(id)
+    }
+}
+
 @MainActor
 class UserDataSyncManager: ObservableObject {
     static let shared = UserDataSyncManager()
+    nonisolated static let privateCloudKitUserId = "icloudPrivateUser"
+    nonisolated static let deletedLeadIdsKey = "deleted_lead_ids"
     
     @Published var syncStatus: SyncStatus = .idle
     @Published var lastSyncDate: Date?
     @Published var isAutoSyncEnabled = true  // Enabled by default
     @Published var syncInterval: SyncInterval = .oneHour  // Default to 1 hour
     
-    private let db = Firestore.firestore()
-    private let cloudKitBackupService = CloudKitLeadBackupService.shared
-    private let firebaseService = FirebaseService.shared
+    private let db: Firestore
+    private var cloudKitBackupService: CloudKitLeadBackupService? {
+        CloudKitLeadBackupService.shared
+    }
+    private let firebaseService: FirebaseService
     private var syncTimer: Timer?
+    private var hasActivatedAutoSyncTimer = false
     
     enum SyncInterval: String, CaseIterable {
         case thirtyMinutes = "30min"
@@ -63,8 +95,10 @@ class UserDataSyncManager: ObservableObject {
     }
     
     private init() {
+        FirebaseBootstrap.configureIfNeeded()
+        db = Firestore.firestore()
+        firebaseService = FirebaseService.shared
         loadSyncSettings()
-        startSyncTimer()
     }
     
     enum SyncStatus: Equatable {
@@ -106,6 +140,13 @@ class UserDataSyncManager: ObservableObject {
         provider: CloudSyncProvider,
         isAuthenticated: Bool
     ) -> Bool {
+        shouldUseFirebasePersonalSync(provider: provider, isAuthenticated: isAuthenticated)
+    }
+
+    nonisolated static func shouldUseFirebasePersonalSync(
+        provider: CloudSyncProvider,
+        isAuthenticated: Bool
+    ) -> Bool {
         provider == .firebase && isAuthenticated
     }
 
@@ -115,8 +156,57 @@ class UserDataSyncManager: ObservableObject {
     ) -> Bool {
         shouldUseFirebaseLeadSync(provider: provider, isAuthenticated: isAuthenticated)
     }
+
+    nonisolated static func cloudKitLeadBackupUserId(
+        provider: CloudSyncProvider,
+        isAuthenticated: Bool,
+        currentUserId: String?
+    ) -> String? {
+        switch provider {
+        case .firebase:
+            guard isAuthenticated else { return nil }
+            return currentUserId
+        case .icloud:
+            return privateCloudKitUserId
+        case .off:
+            return nil
+        }
+    }
+
+    nonisolated static func shouldDeleteLeadFromCloud(
+        provider: CloudSyncProvider,
+        isAuthenticated: Bool
+    ) -> Bool {
+        provider == .icloud || shouldDeleteLeadFromFirebase(provider: provider, isAuthenticated: isAuthenticated)
+    }
+
+    nonisolated static func markLeadDeletedLocally(_ id: UUID, userDefaults: UserDefaults = .standard) {
+        LeadDeletionTombstoneStore.markDeleted([id], in: userDefaults, key: deletedLeadIdsKey)
+    }
     
     func startSync(includeAppointments: Bool = true) {
+        let provider = CloudSyncProvider.current
+
+        guard provider != .off else {
+            DispatchQueue.main.async {
+                if self.syncStatus == .syncing || self.lastSyncDate != nil {
+                    self.syncStatus = .idle
+                }
+            }
+            AppointmentManager.shared.stopFirebaseListener()
+            print("⏭️ Cloud sync skipped: \(provider.displayName) sync mode active")
+            return
+        }
+
+        guard provider != .icloud else {
+            AppointmentManager.shared.stopFirebaseListener()
+            print("☁️ Starting iCloud lead sync")
+            Task {
+                await performCloudKitOnlySync(includeAppointments: includeAppointments)
+            }
+            return
+        }
+
         guard firebaseService.isAuthenticated else {
             DispatchQueue.main.async {
                 // Only show failed status if user was previously syncing or if they had a last sync
@@ -196,12 +286,19 @@ class UserDataSyncManager: ObservableObject {
         loadSyncSettings()
         restartSyncTimer()
     }
+
+    func activateAutoSyncTimerIfNeeded() {
+        guard !hasActivatedAutoSyncTimer else { return }
+        hasActivatedAutoSyncTimer = true
+        startSyncTimer()
+    }
     
     func toggleAutoSync(_ enabled: Bool) {
         isAutoSyncEnabled = enabled
         saveSyncSettings()
         
         if enabled {
+            hasActivatedAutoSyncTimer = true
             startSyncTimer()
         } else {
             stopSyncTimer()
@@ -234,12 +331,21 @@ class UserDataSyncManager: ObservableObject {
     }
     
     private func performScheduledSync() {
-        guard firebaseService.isAuthenticated else {
-            print("⏰ Skipping scheduled sync - user not authenticated")
+        let provider = CloudSyncProvider.current
+
+        guard provider != .off else {
+            print("⏰ Skipping scheduled sync - cloud sync is off")
             return
         }
-        
-        print("⏰ Performing scheduled sync (\(syncInterval.displayName))...")
+
+        if provider == .firebase {
+            guard firebaseService.isAuthenticated else {
+                print("⏰ Skipping scheduled sync - user not authenticated")
+                return
+            }
+        }
+
+        print("⏰ Performing scheduled \(provider.displayName) sync (\(syncInterval.displayName))...")
         startSync()
     }
     
@@ -259,6 +365,44 @@ class UserDataSyncManager: ObservableObject {
         
         // Start general data sync (including appointments)
         startSync()
+    }
+
+    private func performCloudKitOnlySync(includeAppointments: Bool = true) async {
+        await MainActor.run {
+            syncStatus = .syncing
+        }
+
+        do {
+            print("☁️ Starting iCloud background sync operations...")
+            await cleanupCorruptedLeads()
+
+            let userId = Self.privateCloudKitUserId
+            let restoredCount = try await restoreLeadsFromCloudKitBackup(userId: userId)
+            if restoredCount > 0 {
+                print("☁️ Restored \(restoredCount) leads from CloudKit backup before upload")
+            }
+
+            let leadPayloads = try await fetchLeadSyncPayloads()
+            let uploadedCount = try await uploadLeadsToCloudKitBackupStrict(userId: userId, payloads: leadPayloads)
+            print("☁️ iCloud lead backup upload completed: \(uploadedCount) leads")
+
+            if includeAppointments {
+                await AppointmentManager.shared.syncAllAppointmentsToFirebase()
+            } else {
+                print("🗓️ Skipping appointment sync as requested")
+            }
+
+            await MainActor.run {
+                syncStatus = .completed
+                lastSyncDate = Date()
+            }
+            print("✅ iCloud data sync completed successfully")
+        } catch {
+            await MainActor.run {
+                print("⚠️ iCloud data sync failed: \(error.localizedDescription)")
+                syncStatus = .failed(error.localizedDescription)
+            }
+        }
     }
     
     private func performSync(includeAppointments: Bool = true) async {
@@ -363,7 +507,7 @@ class UserDataSyncManager: ObservableObject {
         let backgroundContext = container.newBackgroundContext()
 
         return try await backgroundContext.perform {
-            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: backgroundContext)
             let leads = try backgroundContext.fetch(fetchRequest)
 
             var payloads: [LeadSyncPayload] = []
@@ -474,11 +618,19 @@ class UserDataSyncManager: ObservableObject {
 
     private func uploadLeadsToCloudKitBackup(userId: String, payloads: [LeadSyncPayload]) async {
         do {
-            let uploadedCount = try await cloudKitBackupService.uploadLeads(payloads, for: userId)
+            let uploadedCount = try await uploadLeadsToCloudKitBackupStrict(userId: userId, payloads: payloads)
             print("☁️ CloudKit backup upload completed: \(uploadedCount) leads")
         } catch {
             print("⚠️ CloudKit backup upload skipped: \(error.localizedDescription)")
         }
+    }
+
+    private func uploadLeadsToCloudKitBackupStrict(userId: String, payloads: [LeadSyncPayload]) async throws -> Int {
+        guard let cloudKitBackupService else {
+            throw CloudKitLeadBackupError.containerUnavailable(CloudKitLeadBackupService.containerIdentifier)
+        }
+
+        return try await cloudKitBackupService.uploadLeads(payloads, for: userId)
     }
 
     private func uploadLeadsToFirestore(userId: String, payloads: [LeadSyncPayload]) async throws {
@@ -506,30 +658,54 @@ class UserDataSyncManager: ObservableObject {
         print("📤 Upload completed: \(payloads.count) leads")
     }
     
-    func deleteLeadFromFirebase(leadId: String) async throws {
-        guard let currentUser = Auth.auth().currentUser else {
+    func deleteLeadFromCloud(leadId: String) async throws {
+        let provider = CloudSyncProvider.current
+        let firebaseUserId = firebaseService.currentUser?.uid ?? Auth.auth().currentUser?.uid
+        let firestoreUserId = Self.shouldDeleteLeadFromFirebase(
+            provider: provider,
+            isAuthenticated: firebaseService.isAuthenticated
+        ) ? firebaseUserId : nil
+        let cloudKitUserId = Self.cloudKitLeadBackupUserId(
+            provider: provider,
+            isAuthenticated: firebaseService.isAuthenticated,
+            currentUserId: firebaseUserId
+        )
+
+        if provider == .firebase && firestoreUserId == nil {
             throw SyncError.notAuthenticated
         }
-        
-        let userId = currentUser.uid
-        print("🗑️ Deleting lead \(leadId) from Firebase...")
-        
-        try await db.collection("users")
-            .document(userId)
-            .collection("leads")
-            .document(leadId)
-            .delete()
 
-        if let leadUUID = UUID(uuidString: leadId) {
-            do {
-                try await cloudKitBackupService.deleteLead(leadUUID, for: userId)
-                print("☁️ Lead \(leadId) deleted from CloudKit backup")
-            } catch {
-                print("⚠️ Failed to delete lead from CloudKit backup: \(error.localizedDescription)")
-            }
+        if let firestoreUserId {
+            print("🗑️ Deleting lead \(leadId) from Firebase...")
+            try await db.collection("users")
+                .document(firestoreUserId)
+                .collection("leads")
+                .document(leadId)
+                .delete()
+            print("✅ Lead \(leadId) deleted from Firebase")
         }
-        
-        print("✅ Lead \(leadId) deleted from Firebase")
+
+        guard let leadUUID = UUID(uuidString: leadId), let cloudKitUserId else {
+            return
+        }
+
+        do {
+            guard let cloudKitBackupService else {
+                throw CloudKitLeadBackupError.containerUnavailable(CloudKitLeadBackupService.containerIdentifier)
+            }
+
+            try await cloudKitBackupService.deleteLead(leadUUID, for: cloudKitUserId)
+            print("☁️ Lead \(leadId) deleted from CloudKit backup")
+        } catch {
+            if provider == .icloud {
+                throw error
+            }
+            print("⚠️ Failed to delete lead from CloudKit backup: \(error.localizedDescription)")
+        }
+    }
+
+    func deleteLeadFromFirebase(leadId: String) async throws {
+        try await deleteLeadFromCloud(leadId: leadId)
     }
     
     func clearSyncState() {
@@ -572,6 +748,7 @@ class UserDataSyncManager: ObservableObject {
 
         let container = PersistenceController.shared.container
         let backgroundContext = container.newBackgroundContext()
+        let deletedLeadIds = Self.locallyDeletedLeadIds()
 
         let summary = try await backgroundContext.perform {
             var downloadedCount = 0
@@ -582,6 +759,7 @@ class UserDataSyncManager: ObservableObject {
                 let mergeOutcome = try UserDataSyncManager.mergeLeadDocumentData(
                     document.data(),
                     documentId: document.documentID,
+                    deletedLeadIds: deletedLeadIds,
                     in: backgroundContext
                 )
 
@@ -608,6 +786,10 @@ class UserDataSyncManager: ObservableObject {
         }
 
         print("📥 Download completed: \(summary.downloaded) new leads, \(summary.updated) updated leads, \(summary.skipped) skipped")
+        await refreshNotificationsAfterLeadDataMutationIfNeeded(
+            inserted: summary.downloaded,
+            updated: summary.updated
+        )
         return summary
     }
 
@@ -627,6 +809,10 @@ class UserDataSyncManager: ObservableObject {
     }
 
     private func restoreLeadsFromCloudKitBackup(userId: String) async throws -> Int {
+        guard let cloudKitBackupService else {
+            throw CloudKitLeadBackupError.containerUnavailable(CloudKitLeadBackupService.containerIdentifier)
+        }
+
         let backupPayloads = try await cloudKitBackupService.fetchLeads(for: userId)
         guard !backupPayloads.isEmpty else {
             return 0
@@ -634,6 +820,7 @@ class UserDataSyncManager: ObservableObject {
 
         let container = PersistenceController.shared.container
         let backgroundContext = container.newBackgroundContext()
+        let deletedLeadIds = Self.locallyDeletedLeadIds()
 
         let restoredCount = try await backgroundContext.perform {
             var mergedCount = 0
@@ -642,6 +829,7 @@ class UserDataSyncManager: ObservableObject {
                 let mergeOutcome = try UserDataSyncManager.mergeLeadDocumentData(
                     payload.syncDictionary,
                     documentId: payload.id.uuidString,
+                    deletedLeadIds: deletedLeadIds,
                     in: backgroundContext
                 )
 
@@ -658,7 +846,22 @@ class UserDataSyncManager: ObservableObject {
             return mergedCount
         }
 
+        await refreshNotificationsAfterLeadDataMutationIfNeeded(
+            inserted: restoredCount,
+            updated: 0
+        )
         return restoredCount
+    }
+
+    private func refreshNotificationsAfterLeadDataMutationIfNeeded(inserted: Int, updated: Int) async {
+        guard NotificationService.shouldRefreshNotificationsAfterLeadDataMutation(
+            inserted: inserted,
+            updated: updated
+        ) else { return }
+
+        await MainActor.run {
+            NotificationService.shared.refreshAllNotifications()
+        }
     }
 
     private enum LeadMergeOutcome {
@@ -670,13 +873,20 @@ class UserDataSyncManager: ObservableObject {
     nonisolated private static func mergeLeadDocumentData(
         _ data: [String: Any],
         documentId: String,
+        deletedLeadIds: Set<UUID>,
         in context: NSManagedObjectContext
     ) throws -> LeadMergeOutcome {
         guard let documentUUID = UUID(uuidString: documentId) else {
             return .skipped
         }
+        guard !LeadCloudMergePolicy.shouldSkipRemoteLead(
+            documentId: documentId,
+            deletedIds: deletedLeadIds
+        ) else {
+            return .skipped
+        }
 
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
         fetchRequest.predicate = NSPredicate(format: "id == %@", documentUUID as CVarArg)
 
         let existingLeads = try context.fetch(fetchRequest)
@@ -699,10 +909,14 @@ class UserDataSyncManager: ObservableObject {
             return .updated
         }
 
-        let lead = Lead(context: context)
+        let lead = Lead.create(in: context)
         lead.id = documentUUID
         applyLeadDocumentData(data, to: lead)
         return .inserted
+    }
+
+    nonisolated private static func locallyDeletedLeadIds(userDefaults: UserDefaults = .standard) -> Set<UUID> {
+        LeadDeletionTombstoneStore.loadDeletedIds(from: userDefaults, key: deletedLeadIdsKey)
     }
 
     nonisolated private static func applyLeadDocumentData(_ data: [String: Any], to lead: Lead) {
@@ -740,10 +954,11 @@ class UserDataSyncManager: ObservableObject {
 
         lead.lastContactDate = UserDataSyncManager.parseDateValue(data["lastContactDate"])
 
-        // Preserve local follow-up date if remote doesn't provide a value.
-        if let followUpDate = UserDataSyncManager.parseDateValue(data["followUpDate"]) {
-            lead.followUpDate = followUpDate
-        }
+        let mergedFollowUpDate = UserDataSyncManager.resolvedFollowUpDateForMerge(
+            data,
+            existingDate: lead.followUpDate
+        )
+        lead.followUpDate = lead.leadStatus.resolvedFollowUpDate(mergedFollowUpDate)
 
         lead.priority = UserDataSyncManager.parseInt16Value(data["priority"]) ?? 0
         lead.source = UserDataSyncManager.optionalStringValue(data["source"])
@@ -799,29 +1014,61 @@ class UserDataSyncManager: ObservableObject {
         }
     }
 
-    nonisolated private static func parseCheckInArray(_ value: Any?) -> [LeadCheckInSyncPayload]? {
+    nonisolated static func parseCheckInArray(_ value: Any?) -> [LeadCheckInSyncPayload]? {
         guard let value else { return nil }
 
         if let checkInMaps = value as? [[String: Any]] {
-            return checkInMaps.compactMap(parseCheckInDictionary)
+            return parseCheckInDictionaries(checkInMaps)
         }
 
         if let checkInValues = value as? [Any] {
-            let parsed = checkInValues.compactMap { item -> LeadCheckInSyncPayload? in
+            var maps: [[String: Any]] = []
+            maps.reserveCapacity(checkInValues.count)
+
+            for item in checkInValues {
                 guard let itemMap = item as? [String: Any] else { return nil }
-                return parseCheckInDictionary(itemMap)
+                maps.append(itemMap)
             }
-            return parsed
+
+            return parseCheckInDictionaries(maps)
         }
 
         if let jsonString = value as? String,
            let jsonData = jsonString.data(using: .utf8),
            let jsonObject = try? JSONSerialization.jsonObject(with: jsonData),
            let jsonArray = jsonObject as? [[String: Any]] {
-            return jsonArray.compactMap(parseCheckInDictionary)
+            return parseCheckInDictionaries(jsonArray)
         }
 
         return nil
+    }
+
+    nonisolated static func resolvedFollowUpDateForMerge(
+        _ data: [String: Any],
+        existingDate: Date?
+    ) -> Date? {
+        guard data.keys.contains("followUpDate") else {
+            // Legacy remote documents did not always include follow-up data. Keep
+            // the local reminder unless the remote payload explicitly provides or
+            // clears the field.
+            return existingDate
+        }
+
+        return parseDateValue(data["followUpDate"])
+    }
+
+    nonisolated private static func parseCheckInDictionaries(_ dictionaries: [[String: Any]]) -> [LeadCheckInSyncPayload]? {
+        var parsed: [LeadCheckInSyncPayload] = []
+        parsed.reserveCapacity(dictionaries.count)
+
+        for dictionary in dictionaries {
+            guard let payload = parseCheckInDictionary(dictionary) else {
+                return nil
+            }
+            parsed.append(payload)
+        }
+
+        return parsed
     }
 
     nonisolated private static func parseCheckInDictionary(_ dictionary: [String: Any]) -> LeadCheckInSyncPayload? {
@@ -968,22 +1215,7 @@ class UserDataSyncManager: ObservableObject {
 
     // Normalize remote status strings to current app values
     nonisolated private static func normalizeLeadStatus(_ status: String) -> String {
-        let s = status.lowercased()
-        switch s {
-        case "sold", "closed", "close", "won":
-            return Lead.Status.converted.rawValue
-        case "not_interested", "no_interest", "lost":
-            return Lead.Status.notInterested.rawValue
-        case "not_home", "no_answer":
-            return Lead.Status.notHome.rawValue
-        case "interested", "prospect":
-            return Lead.Status.interested.rawValue
-        case "not_contacted", "new", "cold":
-            return Lead.Status.notContacted.rawValue
-        default:
-            // Fallback to existing string; if unknown, the Lead.leadStatus getter will handle
-            return status
-        }
+        Lead.Status.normalizedRawValueOrDefault(from: status)
     }
     
     private func cleanupCorruptedLeads() async {
@@ -993,25 +1225,33 @@ class UserDataSyncManager: ObservableObject {
         let backgroundContext = container.newBackgroundContext()
         
         await backgroundContext.perform {
-            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: backgroundContext)
             
             do {
                 let allLeads = try backgroundContext.fetch(fetchRequest)
                 var corruptedCount = 0
                 
                 for lead in allLeads {
-                    let hasName = lead.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                    let hasAddress = lead.address?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    let trimmedName = lead.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let trimmedAddress = lead.address?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let hasName = trimmedName?.isEmpty == false
+                    let hasAddress = trimmedAddress?.isEmpty == false
                     let hasId = lead.id != nil
                     
                     // Remove leads that are truly corrupted:
                     // 1. No ID (database corruption)
-                    // 2. No name AND no address (no useful location data)
-                    let shouldDelete = !hasId || (!hasName && !hasAddress)
+                    // 2. No name, address, or usable map coordinate.
+                    let shouldDelete = UserDataSyncManager.shouldDeleteCorruptedLead(
+                        hasId: hasId,
+                        name: lead.name,
+                        address: lead.address,
+                        latitude: lead.latitude,
+                        longitude: lead.longitude
+                    )
                     
                     if shouldDelete {
-                        let leadName = hasName ? lead.name! : "No Name"
-                        let leadAddress = hasAddress ? lead.address! : "No Address"
+                        let leadName = hasName ? (trimmedName ?? "No Name") : "No Name"
+                        let leadAddress = hasAddress ? (trimmedAddress ?? "No Address") : "No Address"
                         let leadId = lead.id?.uuidString ?? "No ID"
                         
                         if !hasId {
@@ -1037,6 +1277,30 @@ class UserDataSyncManager: ObservableObject {
                 print("❌ Failed to clean up corrupted leads: \(error)")
             }
         }
+    }
+
+    nonisolated static func shouldDeleteCorruptedLead(
+        hasId: Bool,
+        name: String?,
+        address: String?,
+        latitude: Double,
+        longitude: Double
+    ) -> Bool {
+        guard hasId else { return true }
+
+        let hasName = optionalTrimmedString(name) != nil
+        let hasAddress = optionalTrimmedString(address) != nil
+        let hasCoordinate = isUsableLeadCoordinate(latitude: latitude, longitude: longitude)
+
+        return !hasName && !hasAddress && !hasCoordinate
+    }
+
+    nonisolated private static func isUsableLeadCoordinate(latitude: Double, longitude: Double) -> Bool {
+        guard latitude.isFinite, longitude.isFinite else { return false }
+        guard (-90...90).contains(latitude), (-180...180).contains(longitude) else { return false }
+
+        // Core Data's default zero coordinate is not a real saved doorstep.
+        return latitude != 0 || longitude != 0
     }
     
     // MARK: - Appointment Sync Methods

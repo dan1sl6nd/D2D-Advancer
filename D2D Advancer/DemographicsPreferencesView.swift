@@ -7,27 +7,20 @@ struct DemographicsPreferencesView: View {
     @State private var showingCustomHomeValue = false
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    // Header
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Target Demographics")
-                            .font(.title)
-                            .fontWeight(.bold)
-
-                        Text("Configure your ideal customer profile to get better area recommendations")
-                            .font(.subheadline)
-                            .foregroundColor(Color.textSecondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                LazyVStack(spacing: 20) {
+                    ObsidianScreenTitle(
+                        title: "Target Demographics",
+                        subtitle: "Set the customer profile used for area recommendations.",
+                        icon: "person.2.crop.square.stack.fill"
+                    )
                     .padding(.horizontal, 20)
-                    .padding(.top, 20)
 
-                    // Preset Profiles
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Quick Profiles")
-                            .font(.headline)
+                            .font(.obsidianTitle)
+                            .foregroundColor(.textPrimary)
                             .padding(.horizontal, 20)
 
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -46,146 +39,144 @@ struct DemographicsPreferencesView: View {
                         }
                     }
 
-                    // Income Range
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "dollarsign.circle.fill")
                                 .foregroundColor(Color.statusInterested)
                             Text("Target Income Range")
-                                .font(.headline)
+                                .font(.obsidianTitle)
+                                .foregroundColor(.textPrimary)
                         }
                         .padding(.horizontal, 20)
 
                         VStack(spacing: 16) {
                             HStack {
                                 Text("Min")
-                                    .font(.subheadline)
+                                    .font(.obsidianFootnote)
                                     .foregroundColor(Color.textSecondary)
                                     .frame(width: 50, alignment: .leading)
 
                                 Slider(value: $preferences.targetIncomeMin, in: 20000...300000, step: 10000)
 
                                 Text(formatCurrency(preferences.targetIncomeMin))
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                                    .font(.obsidianFootnote)
+                                    .foregroundColor(.textPrimary)
                                     .frame(width: 80, alignment: .trailing)
                             }
 
                             HStack {
                                 Text("Max")
-                                    .font(.subheadline)
+                                    .font(.obsidianFootnote)
                                     .foregroundColor(Color.textSecondary)
                                     .frame(width: 50, alignment: .leading)
 
                                 Slider(value: $preferences.targetIncomeMax, in: 30000...500000, step: 10000)
 
                                 Text(formatCurrency(preferences.targetIncomeMax))
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                                    .font(.obsidianFootnote)
+                                    .foregroundColor(.textPrimary)
                                     .frame(width: 80, alignment: .trailing)
                             }
                         }
                         .padding(16)
-                        .background(Color.obsidianSurface)
-                        .cornerRadius(12)
+                        .surfaceCard()
                         .padding(.horizontal, 20)
                     }
 
-                    // Home Value Range
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "house.circle.fill")
                                 .foregroundColor(Color.electricViolet)
                             Text("Target Home Value Range")
-                                .font(.headline)
+                                .font(.obsidianTitle)
+                                .foregroundColor(.textPrimary)
                         }
                         .padding(.horizontal, 20)
 
                         VStack(spacing: 16) {
                             HStack {
                                 Text("Min")
-                                    .font(.subheadline)
+                                    .font(.obsidianFootnote)
                                     .foregroundColor(Color.textSecondary)
                                     .frame(width: 50, alignment: .leading)
 
                                 Slider(value: $preferences.targetHomeValueMin, in: 50000...1000000, step: 25000)
 
                                 Text(formatCurrency(preferences.targetHomeValueMin))
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                                    .font(.obsidianFootnote)
+                                    .foregroundColor(.textPrimary)
                                     .frame(width: 90, alignment: .trailing)
                             }
 
                             HStack {
                                 Text("Max")
-                                    .font(.subheadline)
+                                    .font(.obsidianFootnote)
                                     .foregroundColor(Color.textSecondary)
                                     .frame(width: 50, alignment: .leading)
 
                                 Slider(value: $preferences.targetHomeValueMax, in: 100000...2000000, step: 50000)
 
                                 Text(formatCurrency(preferences.targetHomeValueMax))
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                                    .font(.obsidianFootnote)
+                                    .foregroundColor(.textPrimary)
                                     .frame(width: 90, alignment: .trailing)
                             }
                         }
                         .padding(16)
-                        .background(Color.obsidianSurface)
-                        .cornerRadius(12)
+                        .surfaceCard()
                         .padding(.horizontal, 20)
                     }
 
-                    // Homeownership Preference
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "person.crop.circle.fill")
                                 .foregroundColor(Color.statusNotHome)
                             Text("Homeownership")
-                                .font(.headline)
+                                .font(.obsidianTitle)
+                                .foregroundColor(.textPrimary)
                         }
                         .padding(.horizontal, 20)
 
                         Toggle("Prefer Homeowners", isOn: $preferences.preferHomeowners)
+                            .font(.obsidianBody)
+                            .foregroundColor(.textPrimary)
                             .padding(16)
-                            .background(Color.obsidianSurface)
-                            .cornerRadius(12)
+                            .surfaceCard()
                             .padding(.horizontal, 20)
                     }
 
                     Spacer(minLength: 80)
                 }
+                .padding(.top, 18)
             }
-            .navigationBarHidden(true)
-            .safeAreaInset(edge: .bottom) {
-                HStack(spacing: 12) {
-                    Button("Reset") {
-                        preferences.resetToDefaults()
-                    }
-                    .font(.headline)
-                    .foregroundColor(Color.statusNotInterested)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.statusNotInterested.opacity(0.1))
-                    .cornerRadius(12)
-
-                    Button("Done") {
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle("Target Demographics")
+            .obsidianInlineNavigation()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    ObsidianCompactIconButton(
+                        icon: "xmark",
+                        accessibilityLabel: "Close demographics preferences",
+                        accentColor: Color.textSecondary
+                    ) {
                         dismiss()
                     }
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.electricViolet)
-                    .cornerRadius(12)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+            }
+            .safeAreaInset(edge: .bottom) {
+                ObsidianBottomActionBar(
+                    primaryAction: {
+                        dismiss()
+                    },
+                    secondaryAction: {
+                        preferences.resetToDefaults()
+                    },
+                    primaryLabel: {
+                        Label("Done", systemImage: "checkmark")
+                    },
+                    secondaryLabel: {
+                        Label("Reset", systemImage: "arrow.counterclockwise")
+                    }
                 )
             }
         }
@@ -218,13 +209,13 @@ struct ProfileCard: View {
                     )
 
                 Text(profile.rawValue)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.obsidianCaption)
                     .foregroundColor(Color.textPrimary)
                     .lineLimit(2)
                     .frame(height: 34)
 
                 Text(profile.description)
-                    .font(.caption)
+                    .font(.obsidianSmall)
                     .foregroundColor(Color.textSecondary)
                     .lineLimit(3)
                     .frame(height: 45)

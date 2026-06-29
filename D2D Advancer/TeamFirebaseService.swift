@@ -1,7 +1,96 @@
 import Foundation
 import CoreLocation
 import FirebaseAuth
+import FirebaseCore
 import FirebaseFirestore
+
+struct TeamCachedMembershipSnapshot: Codable {
+    var team: TeamWorkspace
+    var member: TeamMember
+    var savedAt: Date
+
+    func isFresh(now: Date = Date(), maxAge: TimeInterval) -> Bool {
+        now.timeIntervalSince(savedAt) <= maxAge
+    }
+}
+
+enum TeamCachedMembershipLocalStore {
+    static func save(_ snapshot: TeamCachedMembershipSnapshot, to userDefaults: UserDefaults, key: String) throws {
+        let data = try JSONEncoder().encode(snapshot)
+        userDefaults.set(data, forKey: key)
+    }
+
+    static func loadSnapshot(from userDefaults: UserDefaults, key: String) throws -> TeamCachedMembershipSnapshot? {
+        guard let data = userDefaults.data(forKey: key) else { return nil }
+        return try JSONDecoder().decode(TeamCachedMembershipSnapshot.self, from: data)
+    }
+
+    static func loadFreshSnapshot(
+        from userDefaults: UserDefaults,
+        key: String,
+        now: Date = Date(),
+        maxAge: TimeInterval
+    ) throws -> TeamCachedMembershipSnapshot? {
+        guard let snapshot = try loadSnapshot(from: userDefaults, key: key) else { return nil }
+        return snapshot.isFresh(now: now, maxAge: maxAge) ? snapshot : nil
+    }
+}
+
+struct TeamCurrentTeamLoadRequest: Equatable {
+    var displayName: String?
+    var email: String?
+}
+
+enum TeamCurrentTeamLoadCoalescingPolicy {
+    static func queuedRequest(
+        current: TeamCurrentTeamLoadRequest?,
+        incoming: TeamCurrentTeamLoadRequest
+    ) -> TeamCurrentTeamLoadRequest {
+        incoming
+    }
+}
+
+enum TeamFirestoreMergePayloadValue {
+    static func nullable<T>(_ value: T?) -> Any {
+        value ?? NSNull()
+    }
+
+    static func omittedWhenNil<T>(_ value: T?) -> Any {
+        value as Any
+    }
+
+    static func isNilOptional(_ value: Any) -> Bool {
+        let mirror = Mirror(reflecting: value)
+        return mirror.displayStyle == .optional && mirror.children.isEmpty
+    }
+}
+
+enum TeamFirestoreRESTProbeLogPolicy {
+    static func bodySnippet(_ body: String, maxLength: Int = 300) -> String {
+        let normalized = body
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.count > maxLength else { return normalized }
+
+        let endIndex = normalized.index(normalized.startIndex, offsetBy: maxLength)
+        return String(normalized[..<endIndex]) + "..."
+    }
+
+    static func summary(label: String, statusCode: Int, body: String, publicProbe: Bool) -> String {
+        var message = "\(label) status: \(statusCode)"
+        if publicProbe, statusCode == 403 {
+            message += " (expected if Firestore rules block public reads)"
+        }
+
+        let snippet = bodySnippet(body)
+        if !snippet.isEmpty {
+            message += " body: \(snippet)"
+        }
+
+        return message
+    }
+}
 
 @MainActor
 final class TeamFirebaseService: ObservableObject {
@@ -24,21 +113,100 @@ final class TeamFirebaseService: ObservableObject {
     private static let cachedMembershipKey = "teamFirebase.cachedMembership.v1"
     private static let cachedMembershipMaxAge: TimeInterval = 14 * 24 * 60 * 60
 
-    private let db = Firestore.firestore()
+    private let db: Firestore
     private var teamListenerRegistrations: [ListenerRegistration] = []
+    private var hasPreparedFirestoreNetwork = false
+    private var queuedCurrentTeamLoadRequest: TeamCurrentTeamLoadRequest?
 
     private init() {
+        FirebaseBootstrap.configureIfNeeded()
+        db = Firestore.firestore()
         FirebaseEmulatorConfiguration.applyIfNeeded(firestore: db)
         restoreCachedMembershipIfAvailable()
     }
 
+    nonisolated static let removedTeamAccessMessage = "You no longer have access to this team. Ask the owner for a new invite if needed."
+    nonisolated static let teamOfflineMessage = "Team is offline. Showing saved team data until the connection returns."
+    nonisolated static let teamSetupOfflineMessage = "Team is offline. Connect to the internet to create or join a team."
+
+    nonisolated static func userFacingErrorMessage(for error: Error) -> String {
+        if isPermissionDeniedError(error) {
+            return "Team permissions need updating. Refresh Team or sign in again."
+        }
+        if isOfflineError(error) {
+            return teamOfflineMessage
+        }
+        return error.localizedDescription
+    }
+
+    nonisolated static func isStaleNoTeamSetupMessage(_ message: String) -> Bool {
+        message.localizedCaseInsensitiveContains("team permissions need updating")
+            || message.localizedCaseInsensitiveContains("no active team")
+            || message.localizedCaseInsensitiveContains("missing or insufficient permissions")
+    }
+
+    nonisolated static func isPermissionDeniedError(_ error: Error) -> Bool {
+        let message = error.localizedDescription
+        return message.localizedCaseInsensitiveContains("Missing or insufficient permissions")
+            || message.localizedCaseInsensitiveContains("permission_denied")
+    }
+
+    nonisolated static func isOfflineError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        let message = error.localizedDescription
+        return nsError.domain == NSURLErrorDomain
+            || message.localizedCaseInsensitiveContains("client is offline")
+            || message.localizedCaseInsensitiveContains("connection appears to be offline")
+            || message.localizedCaseInsensitiveContains("network connection was lost")
+            || message.localizedCaseInsensitiveContains("not connected to the internet")
+    }
+
+    nonisolated static func shouldClearMemberSessionAfterPermissionError(
+        error: Error,
+        profileRole: TeamRole?,
+        cachedRole: TeamRole?
+    ) -> Bool {
+        guard isPermissionDeniedError(error) else { return false }
+        return profileRole == .member || cachedRole == .member
+    }
+
+    func clearStaleNoTeamSetupErrors() {
+        if let lastErrorMessage,
+           Self.isStaleNoTeamSetupMessage(lastErrorMessage) {
+            self.lastErrorMessage = nil
+        }
+
+        if case .failed(let message) = syncWriteState,
+           Self.isStaleNoTeamSetupMessage(message) {
+            syncWriteState = .idle
+        }
+    }
+
     func loadCurrentTeam(displayName: String? = nil, email: String? = nil) async {
+        let request = TeamCurrentTeamLoadRequest(displayName: displayName, email: email)
+        guard !isLoading else {
+            queuedCurrentTeamLoadRequest = TeamCurrentTeamLoadCoalescingPolicy.queuedRequest(
+                current: queuedCurrentTeamLoadRequest,
+                incoming: request
+            )
+            return
+        }
+
+        var requestToLoad: TeamCurrentTeamLoadRequest? = request
+        while let currentRequest = requestToLoad {
+            queuedCurrentTeamLoadRequest = nil
+            await performCurrentTeamLoad(request: currentRequest)
+            requestToLoad = queuedCurrentTeamLoadRequest
+        }
+    }
+
+    private func performCurrentTeamLoad(request: TeamCurrentTeamLoadRequest) async {
         isLoading = true
         lastErrorMessage = nil
         defer { isLoading = false }
 
         do {
-            try await prepareFirestoreForTeamUse()
+            try await prepareFirestoreForTeamUse(force: true)
             let user = try requireFirebaseUser()
 
             let profile = try await teamProfileRef(userId: user.uid).getDocument()
@@ -47,39 +215,89 @@ final class TeamFirebaseService: ObservableObject {
                 clearLocalTeam(removeCachedMembership: true)
                 return
             }
+            let profileRole = (profile.data()?[TeamFirebaseSchema.Field.role] as? String)
+                .flatMap(TeamRole.init(rawValue:))
 
-            let team = try await loadTeam(teamId: teamId)
-            let member = try await loadMember(teamId: teamId, userId: user.uid)
+            let team: TeamWorkspace
+            let member: TeamMember
+            do {
+                team = try await loadTeam(teamId: teamId)
+                member = try await loadMember(teamId: teamId, userId: user.uid)
+            } catch {
+                if Self.shouldClearMemberSessionAfterPermissionError(
+                    error: error,
+                    profileRole: profileRole,
+                    cachedRole: currentMember?.role
+                ) {
+                    await handleRevokedTeamAccess(userId: user.uid)
+                    return
+                }
+                throw error
+            }
+
+            guard member.status == .active else {
+                await handleRevokedTeamAccess(userId: user.uid)
+                return
+            }
 
             stopTeamRealtimeListeners()
             activeTeam = team
             currentMember = member
             if member.role == .owner {
-                teamMembers = try await loadMembers(teamId: teamId)
+                teamMembers = await loadOptionalTeamValue(context: "members", fallback: teamMembers.isEmpty ? [member] : teamMembers) {
+                    try await loadMembers(teamId: teamId)
+                }
             } else {
-                teamMembers = [member]
+                teamMembers = await loadOptionalTeamValue(context: "owner member", fallback: [member]) {
+                    let owner = try await loadMember(teamId: teamId, userId: team.ownerUserId)
+                    return TeamMemberRoster.normalized(owner.userId == member.userId ? [member] : [owner, member])
+                }
             }
-            teamLeads = try await loadTeamLeads(team: team, member: member)
-            teamBookings = try await loadTeamBookings(team: team, member: member)
-            dutySessions = try await loadDutySessions(team: team, member: member)
-            dutyLocationPoints = try await loadDutyLocationPoints(team: team, member: member)
-            ownerNotifications = member.role == .owner ? try await loadOwnerNotifications(team: team) : []
-            activityLog = try await loadActivityLog(team: team, member: member)
-            activeDutySession = dutySessions.first { $0.repUserId == member.userId && $0.status == .active }
+            teamLeads = await loadOptionalTeamValue(context: "team leads", fallback: teamLeads) {
+                try await loadTeamLeads(team: team, member: member)
+            }
+            teamBookings = await loadOptionalTeamValue(context: "team bookings", fallback: teamBookings) {
+                try await loadTeamBookings(team: team, member: member)
+            }
+            dutySessions = await loadOptionalTeamValue(context: "duty sessions", fallback: dutySessions) {
+                try await loadDutySessions(team: team, member: member)
+            }
+            dutyLocationPoints = await loadOptionalTeamValue(context: "duty location points", fallback: dutyLocationPoints) {
+                try await loadDutyLocationPoints(team: team, member: member)
+            }
+            if member.role == .owner {
+                ownerNotifications = await loadOptionalTeamValue(context: "owner notifications", fallback: ownerNotifications) {
+                    try await loadOwnerNotifications(team: team)
+                }
+            } else {
+                ownerNotifications = []
+            }
+            activityLog = await loadOptionalTeamValue(context: "activity log", fallback: activityLog) {
+                try await loadActivityLog(team: team, member: member)
+            }
+            updateActiveDutySession(for: member.userId)
             cacheMembership(team: team, member: member)
             startTeamRealtimeListeners(team: team, member: member)
         } catch TeamFirebaseServiceError.notAuthenticated {
             restoreCachedMembershipIfAvailable()
         } catch {
-            lastErrorMessage = error.localizedDescription
+            if Self.isOfflineError(error), activeTeam != nil, currentMember != nil {
+                hasPreparedFirestoreNetwork = false
+                #if DEBUG
+                await debugLogFirestoreRESTProbe()
+                #endif
+                print("⚠️ Team refresh failed while offline; keeping cached Team workspace visible.")
+            } else {
+                lastErrorMessage = Self.userFacingErrorMessage(for: error)
+            }
         }
     }
 
     func createTeam(name: String, displayName: String?, email: String?) async throws {
         try await prepareFirestoreForTeamUse()
-        let user = try requireFirebaseUser()
+        let user = try await requireFreshFirebaseUser()
 
-        let existingProfile = try await teamProfileRef(userId: user.uid).getDocument()
+        let existingProfile = try await getServerDocument(teamProfileRef(userId: user.uid))
         if existingProfile.exists {
             throw TeamFirebaseServiceError.alreadyInTeam
         }
@@ -113,7 +331,7 @@ final class TeamFirebaseService: ObservableObject {
             targetUserId: owner.userId,
             createdAt: now
         )
-        try await commitTeamBatch(batch, pendingWriteCount: 4)
+        try await commitTeamBatch(batch, pendingWriteCount: 4, allowsLocalQueueFallback: false)
 
         activeTeam = team
         currentMember = owner
@@ -129,9 +347,9 @@ final class TeamFirebaseService: ObservableObject {
         cacheMembership(team: team, member: owner)
     }
 
-    func createInvite() async throws -> TeamInvite {
+    func createInvite(workType: TeamMemberWorkType = .salesRep) async throws -> TeamInvite {
         try await prepareFirestoreForTeamUse()
-        let user = try requireFirebaseUser()
+        let user = try await requireFreshFirebaseUser()
         guard let team = activeTeam, let member = currentMember else {
             throw TeamFirebaseServiceError.noActiveTeam
         }
@@ -157,6 +375,7 @@ final class TeamFirebaseService: ObservableObject {
             displayName: "Pending Rep",
             email: nil,
             acceptedInviteId: invite.code,
+            workType: workType,
             joinedAt: now
         )
 
@@ -175,13 +394,13 @@ final class TeamFirebaseService: ObservableObject {
         )
         try await commitTeamBatch(batch, pendingWriteCount: 3)
 
-        teamMembers.append(pendingMember)
+        teamMembers = TeamMemberRoster.upserting(pendingMember, into: teamMembers)
         return invite
     }
 
     func joinTeam(inviteCode: String, displayName: String?, email: String?) async throws {
         try await prepareFirestoreForTeamUse()
-        let user = try requireFirebaseUser()
+        let user = try await requireFreshFirebaseUser()
         let code = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !code.isEmpty else { throw TeamFirebaseServiceError.invalidInvite }
 
@@ -207,12 +426,16 @@ final class TeamFirebaseService: ObservableObject {
 
         let now = Date()
         let pendingUserId = "\(TeamFirebaseSchema.pendingRepUserPrefix)-\(code)"
+        let pendingMemberSnapshot = try? await memberRef(teamId: teamId, userId: pendingUserId).getDocument()
+        let pendingMember = pendingMemberSnapshot
+            .flatMap { snapshot in snapshot.data().flatMap { decodeMember(id: snapshot.documentID, data: $0) } }
         let member = TeamMember.rep(
             teamId: teamId,
             userId: user.uid,
             displayName: Self.nilIfBlank(displayName) ?? Self.nilIfBlank(user.displayName) ?? "Team Rep",
             email: Self.nilIfBlank(email) ?? user.email,
             acceptedInviteId: code,
+            workType: pendingMember?.workType ?? .salesRep,
             joinedAt: now
         )
 
@@ -353,12 +576,106 @@ final class TeamFirebaseService: ObservableObject {
     }
 
     @discardableResult
+    func createOwnerTechnicianJobLead(
+        name: String,
+        address: String,
+        phone: String? = nil,
+        email: String? = nil,
+        coordinate: TeamCoordinate,
+        notes: String = "",
+        serviceCategory: String? = nil,
+        price: Double = 0,
+        technician: TeamMember,
+        startDate: Date,
+        endDate: Date,
+        now: Date = Date()
+    ) async throws -> TeamBooking {
+        try await prepareFirestoreForTeamUse()
+        let user = try requireFirebaseUser()
+        guard let team = activeTeam, let member = currentMember, member.userId == user.uid else {
+            throw TeamFirebaseServiceError.noActiveTeam
+        }
+
+        var lead = TeamLead.newRepLead(
+            teamId: team.id,
+            creatorUserId: user.uid,
+            name: Self.nilIfBlank(name) ?? "New Lead",
+            address: Self.nilIfBlank(address) ?? "No address",
+            coordinate: coordinate,
+            now: now
+        )
+        lead.phone = Self.nilIfBlank(phone)
+        lead.email = Self.nilIfBlank(email)
+        lead.status = .converted
+        lead.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        lead.serviceCategory = Self.nilIfBlank(serviceCategory)
+        lead.price = max(0, price)
+        lead.estimatedValue = max(0, price)
+        lead.assignedToUserId = member.userId
+        lead.createdByUserId = member.userId
+        lead.updatedByUserId = member.userId
+
+        guard TeamLeadDispatchPolicy.canDispatchLeadToTechnician(
+            actor: member,
+            team: team,
+            technician: technician,
+            lead: lead
+        ) else {
+            throw TeamFirebaseServiceError.writeBlocked
+        }
+
+        let booking = TeamLeadDispatchPolicy.booking(
+            from: lead,
+            to: technician,
+            by: member,
+            startDate: startDate,
+            endDate: endDate,
+            now: now
+        )
+
+        let batch = db.batch()
+        batch.setData(leadData(lead), forDocument: leadRef(teamId: team.id, leadId: lead.id))
+        batch.setData(bookingData(booking), forDocument: bookingRef(teamId: team.id, bookingId: booking.id), merge: true)
+        addActivityLog(
+            to: batch,
+            teamId: team.id,
+            actor: member,
+            kind: .leadCreated,
+            subjectId: lead.id,
+            subjectTitle: lead.name,
+            targetUserId: member.userId,
+            createdAt: now
+        )
+        addActivityLog(
+            to: batch,
+            teamId: team.id,
+            actor: member,
+            kind: .bookingAssigned,
+            subjectId: booking.id,
+            subjectTitle: booking.title,
+            targetUserId: technician.userId,
+            createdAt: now
+        )
+        try await commitTeamBatch(batch, pendingWriteCount: 4)
+
+        teamLeads.removeAll { $0.id == lead.id }
+        teamLeads.append(lead)
+        if let bookingIndex = teamBookings.firstIndex(where: { $0.id == booking.id }) {
+            teamBookings[bookingIndex] = booking
+        } else {
+            teamBookings.append(booking)
+        }
+        return booking
+    }
+
+    @discardableResult
     func updateTeamLead(
         leadId: String,
         status: TeamLeadStatus? = nil,
         isHighPriority: Bool? = nil,
         highPriorityReason: String? = nil,
         repStatusNote: String? = nil,
+        editableFields: TeamLeadEditableFields? = nil,
         now: Date = Date()
     ) async throws -> TeamLead {
         try await prepareFirestoreForTeamUse()
@@ -392,6 +709,9 @@ final class TeamFirebaseService: ObservableObject {
         }
         if let repStatusNote {
             after.notes = Self.nilIfBlank(repStatusNote) ?? after.notes
+        }
+        if let editableFields {
+            after = editableFields.applying(to: after, updatedByUserId: user.uid, now: now)
         }
         after.updatedByUserId = user.uid
         after.updatedAt = now
@@ -432,6 +752,18 @@ final class TeamFirebaseService: ObservableObject {
                 kind: .repStatusReply,
                 subjectId: after.id,
                 subjectTitle: after.name,
+                targetUserId: after.assignedToUserId,
+                createdAt: now
+            )
+        }
+        if editableFields != nil {
+            addActivityLog(
+                to: batch,
+                teamId: team.id,
+                actor: member,
+                kind: .leadStatusUpdated,
+                subjectId: after.id,
+                subjectTitle: "\(after.name) details",
                 targetUserId: after.assignedToUserId,
                 createdAt: now
             )
@@ -484,6 +816,85 @@ final class TeamFirebaseService: ObservableObject {
     }
 
     @discardableResult
+    func dispatchTeamLeadToTechnicianJob(
+        lead: TeamLead,
+        technician: TeamMember,
+        startDate: Date,
+        endDate: Date,
+        now: Date = Date()
+    ) async throws -> TeamBooking {
+        try await prepareFirestoreForTeamUse()
+        let user = try requireFirebaseUser()
+        guard let team = activeTeam, let member = currentMember, member.userId == user.uid else {
+            throw TeamFirebaseServiceError.noActiveTeam
+        }
+
+        let snapshot = try await leadRef(teamId: team.id, leadId: lead.id).getDocument()
+        guard let data = snapshot.data(), let before = decodeLead(id: snapshot.documentID, data: data) else {
+            throw TeamFirebaseServiceError.noActiveTeam
+        }
+        guard TeamLeadDispatchPolicy.canDispatchLeadToTechnician(
+            actor: member,
+            team: team,
+            technician: technician,
+            lead: before
+        ) else {
+            throw TeamFirebaseServiceError.writeBlocked
+        }
+
+        let soldLead = TeamLeadDispatchPolicy.soldLead(before, by: member, now: now)
+        let booking = TeamLeadDispatchPolicy.booking(
+            from: soldLead,
+            to: technician,
+            by: member,
+            startDate: startDate,
+            endDate: endDate,
+            now: now
+        )
+        let events = TeamNotificationPolicy.ownerLeadEvents(before: before, after: soldLead)
+
+        let batch = db.batch()
+        batch.setData(leadData(soldLead), forDocument: leadRef(teamId: team.id, leadId: soldLead.id), merge: true)
+        batch.setData(bookingData(booking), forDocument: bookingRef(teamId: team.id, bookingId: booking.id), merge: true)
+        addOwnerNotifications(to: batch, team: team, lead: soldLead, events: events, createdAt: now)
+        if before.status != soldLead.status {
+            addActivityLog(
+                to: batch,
+                teamId: team.id,
+                actor: member,
+                kind: .leadStatusUpdated,
+                subjectId: soldLead.id,
+                subjectTitle: soldLead.name,
+                targetUserId: soldLead.assignedToUserId,
+                createdAt: now
+            )
+        }
+        addActivityLog(
+            to: batch,
+            teamId: team.id,
+            actor: member,
+            kind: .bookingAssigned,
+            subjectId: booking.id,
+            subjectTitle: booking.title,
+            targetUserId: technician.userId,
+            createdAt: now
+        )
+        try await commitTeamBatch(batch, pendingWriteCount: events.count + 3)
+
+        if let leadIndex = teamLeads.firstIndex(where: { $0.id == soldLead.id }) {
+            teamLeads[leadIndex] = soldLead
+        } else {
+            teamLeads.append(soldLead)
+        }
+        if let bookingIndex = teamBookings.firstIndex(where: { $0.id == booking.id }) {
+            teamBookings[bookingIndex] = booking
+        } else {
+            teamBookings.append(booking)
+        }
+        return booking
+    }
+
+    @discardableResult
     func assignTeamBooking(_ booking: TeamBooking, to target: TeamMember, now: Date = Date()) async throws -> TeamBooking {
         try await prepareFirestoreForTeamUse()
         let user = try requireFirebaseUser()
@@ -518,6 +929,103 @@ final class TeamFirebaseService: ObservableObject {
             teamBookings[index] = after
         }
         return after
+    }
+
+    @discardableResult
+    func sendAppointmentToTeamBooking(_ appointment: Appointment, to target: TeamMember, now: Date = Date()) async throws -> TeamBooking {
+        try await prepareFirestoreForTeamUse()
+        let user = try requireFirebaseUser()
+        guard let team = activeTeam, let member = currentMember, member.userId == user.uid else {
+            throw TeamFirebaseServiceError.noActiveTeam
+        }
+
+        let booking = TeamBooking(
+            id: appointment.id.uuidString,
+            teamId: team.id,
+            leadId: appointment.leadId?.uuidString ?? appointment.id.uuidString,
+            assignedToUserId: target.userId,
+            title: Self.nilIfBlank(appointment.title) ?? "Scheduled Job",
+            notes: appointment.notes,
+            startDate: appointment.startDate,
+            endDate: appointment.endDate,
+            location: Self.nilIfBlank(appointment.location) ?? "No location",
+            status: bookingStatus(for: appointment.status),
+            createdByUserId: member.userId,
+            updatedByUserId: member.userId,
+            createdAt: now,
+            updatedAt: now
+        )
+        guard TeamAssignmentPolicy.canAssignBooking(actor: member, team: team, target: target, booking: booking) else {
+            throw TeamFirebaseServiceError.writeBlocked
+        }
+
+        let batch = db.batch()
+        batch.setData(bookingData(booking), forDocument: bookingRef(teamId: team.id, bookingId: booking.id), merge: true)
+        addActivityLog(
+            to: batch,
+            teamId: team.id,
+            actor: member,
+            kind: .bookingAssigned,
+            subjectId: booking.id,
+            subjectTitle: booking.title,
+            targetUserId: target.userId,
+            createdAt: now
+        )
+        try await commitTeamBatch(batch, pendingWriteCount: 2)
+
+        if let index = teamBookings.firstIndex(where: { $0.id == booking.id }) {
+            teamBookings[index] = booking
+        } else {
+            teamBookings.append(booking)
+        }
+        return booking
+    }
+
+    @discardableResult
+    func updateTeamBookingStatus(_ booking: TeamBooking, status: TeamBookingStatus, now: Date = Date()) async throws -> TeamBooking {
+        try await prepareFirestoreForTeamUse()
+        let user = try requireFirebaseUser()
+        guard let team = activeTeam, let member = currentMember, member.userId == user.uid else {
+            throw TeamFirebaseServiceError.noActiveTeam
+        }
+
+        let snapshot = try await bookingRef(teamId: team.id, bookingId: booking.id).getDocument()
+        guard let data = snapshot.data(), var updated = decodeBooking(id: snapshot.documentID, data: data) else {
+            throw TeamFirebaseServiceError.noActiveTeam
+        }
+        guard TeamAccessPolicy.canWriteAssignedRecord(
+            userId: user.uid,
+            role: member.role,
+            planStatus: team.planStatus,
+            assignedToUserId: updated.assignedToUserId
+        ) else {
+            throw TeamFirebaseServiceError.writeBlocked
+        }
+
+        updated.status = status
+        updated.updatedByUserId = member.userId
+        updated.updatedAt = now
+
+        let batch = db.batch()
+        batch.setData(bookingData(updated), forDocument: bookingRef(teamId: team.id, bookingId: booking.id), merge: true)
+        addActivityLog(
+            to: batch,
+            teamId: team.id,
+            actor: member,
+            kind: .bookingStatusUpdated,
+            subjectId: updated.id,
+            subjectTitle: "\(updated.title) \(status.displayName.lowercased())",
+            targetUserId: updated.assignedToUserId,
+            createdAt: now
+        )
+        try await commitTeamBatch(batch, pendingWriteCount: 2)
+
+        if let index = teamBookings.firstIndex(where: { $0.id == updated.id }) {
+            teamBookings[index] = updated
+        } else {
+            teamBookings.append(updated)
+        }
+        return updated
     }
 
     @discardableResult
@@ -589,12 +1097,13 @@ final class TeamFirebaseService: ObservableObject {
         }
 
         let read = TeamOwnerNotification.markedRead(notification, at: now)
-        let batch = db.batch()
-        batch.setData([
+        try await setTeamData([
             TeamFirebaseSchema.Field.readAt: Timestamp(date: now)
         ], forDocument: ownerNotificationRef(teamId: team.id, notificationId: notification.id), merge: true)
+
+        let activityLogBatch = db.batch()
         addActivityLog(
-            to: batch,
+            to: activityLogBatch,
             teamId: team.id,
             actor: member,
             kind: .ownerAlertRead,
@@ -603,7 +1112,7 @@ final class TeamFirebaseService: ObservableObject {
             targetUserId: notification.assignedToUserId,
             createdAt: now
         )
-        try await commitTeamBatch(batch, pendingWriteCount: 2)
+        commitOptionalTeamBatch(activityLogBatch, context: "owner alert read activity log")
 
         if let index = ownerNotifications.firstIndex(where: { $0.id == read.id }) {
             ownerNotifications[index] = read
@@ -637,6 +1146,152 @@ final class TeamFirebaseService: ObservableObject {
 
         if let index = teamMembers.firstIndex(where: { $0.id == removed.id }) {
             teamMembers[index] = removed
+        }
+    }
+
+    func leaveCurrentTeam(now: Date = Date()) async throws {
+        try await prepareFirestoreForTeamUse()
+        let user = try requireFirebaseUser()
+        guard let team = activeTeam, let member = currentMember, member.userId == user.uid else {
+            throw TeamFirebaseServiceError.noActiveTeam
+        }
+        guard TeamAccessPolicy.canLeaveTeam(member: member, team: team) else {
+            throw TeamFirebaseServiceError.writeBlocked
+        }
+
+        let removed = TeamMember.removed(member, removedAt: now)
+        let batch = db.batch()
+        var pendingWriteCount = 3
+
+        if let session = activeDutySession, session.repUserId == user.uid {
+            let ended = TeamDutySession.ended(
+                id: session.id,
+                teamId: session.teamId,
+                repUserId: session.repUserId,
+                startedAt: session.startedAt,
+                endedAt: now,
+                distanceMeters: session.distanceMeters
+            )
+            batch.setData(
+                dutySessionData(ended),
+                forDocument: dutySessionRef(teamId: session.teamId, sessionId: session.id),
+                merge: true
+            )
+            pendingWriteCount += 1
+        }
+
+        batch.setData(memberData(removed, updatedAt: now), forDocument: memberRef(teamId: team.id, userId: member.userId), merge: true)
+        batch.deleteDocument(teamProfileRef(userId: user.uid))
+        addActivityLog(
+            to: batch,
+            teamId: team.id,
+            actor: member,
+            kind: .memberLeft,
+            subjectId: member.userId,
+            subjectTitle: team.name,
+            targetUserId: member.userId,
+            createdAt: now
+        )
+        try await commitTeamBatch(batch, pendingWriteCount: pendingWriteCount)
+
+        clearLocalTeam(removeCachedMembership: true)
+    }
+
+    func closeCurrentTeam(now: Date = Date()) async throws {
+        try await prepareFirestoreForTeamUse()
+        let user = try requireFirebaseUser()
+        guard var team = activeTeam, let member = currentMember, member.userId == user.uid else {
+            throw TeamFirebaseServiceError.noActiveTeam
+        }
+        guard TeamAccessPolicy.canCloseTeam(owner: member, team: team) else {
+            throw TeamFirebaseServiceError.writeBlocked
+        }
+
+        let members = try await loadMembers(teamId: team.id)
+        team.planStatus = .paused
+        team.updatedAt = now
+
+        let batch = db.batch()
+        var pendingWriteCount = 3
+
+        batch.setData(teamData(team), forDocument: teamRef(team.id), merge: true)
+        batch.deleteDocument(teamProfileRef(userId: user.uid))
+
+        for teamMember in members {
+            let removed = TeamMember.removed(teamMember, removedAt: now)
+            batch.setData(memberData(removed, updatedAt: now), forDocument: memberRef(teamId: team.id, userId: teamMember.userId), merge: true)
+            pendingWriteCount += 1
+
+            if teamMember.isPendingInvite, let inviteCode = teamMember.acceptedInviteId {
+                batch.deleteDocument(inviteRef(inviteCode))
+                pendingWriteCount += 1
+            }
+        }
+
+        var activeSessionsById = Dictionary(
+            uniqueKeysWithValues: dutySessions
+                .filter { $0.teamId == team.id && $0.status == .active }
+                .map { ($0.id, $0) }
+        )
+        if let activeDutySession,
+           activeDutySession.teamId == team.id,
+           activeDutySession.status == .active {
+            activeSessionsById[activeDutySession.id] = activeDutySession
+        }
+
+        for session in activeSessionsById.values {
+            let ended = TeamDutySession.ended(
+                id: session.id,
+                teamId: session.teamId,
+                repUserId: session.repUserId,
+                startedAt: session.startedAt,
+                endedAt: now,
+                distanceMeters: session.distanceMeters
+            )
+            batch.setData(
+                dutySessionData(ended),
+                forDocument: dutySessionRef(teamId: session.teamId, sessionId: session.id),
+                merge: true
+            )
+            pendingWriteCount += 1
+        }
+
+        addActivityLog(
+            to: batch,
+            teamId: team.id,
+            actor: member,
+            kind: .teamClosed,
+            subjectId: team.id,
+            subjectTitle: team.name,
+            targetUserId: member.userId,
+            createdAt: now
+        )
+        try await commitTeamBatch(batch, pendingWriteCount: pendingWriteCount)
+
+        clearLocalTeam(removeCachedMembership: true)
+    }
+
+    func updateMemberWorkType(_ memberToUpdate: TeamMember, workType: TeamMemberWorkType, now: Date = Date()) async throws {
+        try await prepareFirestoreForTeamUse()
+        let user = try requireFirebaseUser()
+        guard let team = activeTeam, let member = currentMember, member.userId == user.uid else {
+            throw TeamFirebaseServiceError.noActiveTeam
+        }
+        guard member.role == .owner,
+              member.status == .active,
+              memberToUpdate.role == .member,
+              memberToUpdate.status == .active,
+              !memberToUpdate.isPendingInvite,
+              team.planStatus.allowsTeamWrite else {
+            throw TeamFirebaseServiceError.writeBlocked
+        }
+
+        var updated = memberToUpdate
+        updated.workType = workType
+        try await setTeamData(memberData(updated, updatedAt: now), forDocument: memberRef(teamId: team.id, userId: memberToUpdate.userId), merge: true)
+
+        if let index = teamMembers.firstIndex(where: { $0.id == updated.id }) {
+            teamMembers[index] = updated
         }
     }
 
@@ -798,10 +1453,12 @@ final class TeamFirebaseService: ObservableObject {
 
 enum TeamFirebaseServiceError: LocalizedError {
     case alreadyInTeam
+    case firebaseSessionExpired
     case invalidInvite
     case noActiveTeam
     case notAuthenticated
     case ownerOnly
+    case serverConfirmationTimedOut
     case teamFull
     case writeBlocked
 
@@ -809,6 +1466,8 @@ enum TeamFirebaseServiceError: LocalizedError {
         switch self {
         case .alreadyInTeam:
             return "This Apple sign-in is already in a team."
+        case .firebaseSessionExpired:
+            return "Team sign-in expired. Continue with Apple again to reconnect Team."
         case .invalidInvite:
             return "This invite code is invalid, expired, or already used."
         case .noActiveTeam:
@@ -817,6 +1476,8 @@ enum TeamFirebaseServiceError: LocalizedError {
             return "Sign in with Apple to use Team."
         case .ownerOnly:
             return "Only the team owner can do that."
+        case .serverConfirmationTimedOut:
+            return "Team could not be confirmed with the cloud. Check your connection and try again."
         case .teamFull:
             return "The included team seats are full."
         case .writeBlocked:
@@ -826,13 +1487,115 @@ enum TeamFirebaseServiceError: LocalizedError {
 }
 
 private extension TeamFirebaseService {
-    func prepareFirestoreForTeamUse() async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            db.enableNetwork { error in
+#if DEBUG
+    func debugLogFirestoreRESTProbe() async {
+        guard let options = FirebaseApp.app()?.options,
+              let projectID = options.projectID,
+              let apiKey = options.apiKey else {
+            print("🧪 Firestore REST probe skipped: Firebase options unavailable")
+            return
+        }
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "firestore.googleapis.com"
+        components.path = "/v1/projects/\(projectID)/databases/(default)/documents/teams"
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        guard let url = components.url else {
+            print("🧪 Firestore REST probe skipped: invalid URL")
+            return
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let body = String(data: data, encoding: .utf8) ?? ""
+            print("🧪 \(TeamFirestoreRESTProbeLogPolicy.summary(label: "Firestore public REST probe", statusCode: statusCode, body: body, publicProbe: true))")
+        } catch {
+            print("🧪 Firestore public REST probe failed before HTTP response: \(error.localizedDescription)")
+        }
+
+        guard let user = Auth.auth().currentUser else {
+            print("🧪 Firestore auth REST probe skipped: no Firebase Auth user")
+            return
+        }
+
+        let idToken: String
+        do {
+            do {
+                idToken = try await firebaseIDToken(for: user, forceRefresh: false)
+            } catch {
+                print("🧪 Firestore auth REST probe could not read cached Firebase ID token: \(error.localizedDescription)")
+                idToken = try await firebaseIDToken(for: user, forceRefresh: true)
+                print("🧪 Firestore auth REST probe recovered with refreshed Firebase ID token")
+            }
+        } catch {
+            print("🧪 Firestore auth REST probe failed before HTTP request: Firebase ID token unavailable (\(error.localizedDescription))")
+            return
+        }
+
+        var authComponents = URLComponents()
+        authComponents.scheme = "https"
+        authComponents.host = "firestore.googleapis.com"
+        authComponents.path = "/v1/projects/\(projectID)/databases/(default)/documents/users/\(user.uid)/teamProfile/\(TeamFirebaseSchema.currentTeamProfileDocumentId)"
+        authComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        guard let authURL = authComponents.url else {
+            print("🧪 Firestore auth REST probe skipped: invalid URL")
+            return
+        }
+
+        do {
+            var request = URLRequest(url: authURL)
+            request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let body = String(data: data, encoding: .utf8) ?? ""
+            print("🧪 \(TeamFirestoreRESTProbeLogPolicy.summary(label: "Firestore authenticated REST probe", statusCode: statusCode, body: body, publicProbe: false))")
+        } catch {
+            print("🧪 Firestore auth REST probe failed before HTTP response: \(error.localizedDescription)")
+        }
+    }
+#endif
+
+    static let teamWriteAckWaitLimit: TimeInterval = 8
+    static let teamServerConfirmationWaitLimit: TimeInterval = 20
+
+    func prepareFirestoreForTeamUse(force: Bool = false) async throws {
+        guard force || !hasPreparedFirestoreNetwork else { return }
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                db.enableNetwork { error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume()
+                    }
+                }
+            }
+            hasPreparedFirestoreNetwork = true
+        } catch {
+            hasPreparedFirestoreNetwork = false
+            throw error
+        }
+    }
+
+    func getServerDocument(_ document: DocumentReference) async throws -> DocumentSnapshot {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<DocumentSnapshot, Error>) in
+            let completion = TeamDocumentCompletionBox(continuation: continuation)
+            let timeout = DispatchWorkItem {
+                completion.resume(throwing: TeamFirebaseServiceError.serverConfirmationTimedOut)
+            }
+            completion.setTimeoutWorkItem(timeout)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.teamServerConfirmationWaitLimit, execute: timeout)
+            document.getDocument(source: .server) { snapshot, error in
                 if let error {
-                    continuation.resume(throwing: error)
+                    completion.resume(throwing: error)
+                } else if let snapshot {
+                    completion.resume(returning: snapshot)
                 } else {
-                    continuation.resume()
+                    completion.resume(throwing: TeamFirebaseServiceError.serverConfirmationTimedOut)
                 }
             }
         }
@@ -843,26 +1606,50 @@ private extension TeamFirebaseService {
         return trimmed?.isEmpty == false ? trimmed : nil
     }
 
-    private struct CachedMembership: Codable {
-        var team: TeamWorkspace
-        var member: TeamMember
-        var savedAt: Date
+    func bookingStatus(for appointmentStatus: Appointment.AppointmentStatus) -> TeamBookingStatus {
+        switch appointmentStatus {
+        case .scheduled:
+            return .scheduled
+        case .confirmed:
+            return .confirmed
+        case .completed:
+            return .completed
+        case .cancelled:
+            return .cancelled
+        case .rescheduled:
+            return .rescheduled
+        }
     }
 
     private func cacheMembership(team: TeamWorkspace, member: TeamMember) {
-        let cached = CachedMembership(team: team, member: member, savedAt: Date())
-        guard let data = try? JSONEncoder().encode(cached) else { return }
-        UserDefaults.standard.set(data, forKey: Self.cachedMembershipKey)
-        UserDefaults.standard.synchronize()
+        let cached = TeamCachedMembershipSnapshot(team: team, member: member, savedAt: Date())
+        do {
+            try TeamCachedMembershipLocalStore.save(cached, to: .standard, key: Self.cachedMembershipKey)
+            UserDefaults.standard.synchronize()
+        } catch {
+            let message = "Team cache could not be saved: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("⚠️ \(message)")
+        }
     }
 
     private func restoreCachedMembershipIfAvailable() {
         guard activeTeam == nil || currentMember == nil else { return }
-        guard let data = UserDefaults.standard.data(forKey: Self.cachedMembershipKey),
-              let cached = try? JSONDecoder().decode(CachedMembership.self, from: data),
-              Date().timeIntervalSince(cached.savedAt) <= Self.cachedMembershipMaxAge else {
+        let cached: TeamCachedMembershipSnapshot?
+        do {
+            cached = try TeamCachedMembershipLocalStore.loadFreshSnapshot(
+                from: .standard,
+                key: Self.cachedMembershipKey,
+                maxAge: Self.cachedMembershipMaxAge
+            )
+        } catch {
+            let message = "Saved Team cache could not be loaded: \(error.localizedDescription)"
+            lastErrorMessage = message
+            UserDefaults.standard.removeObject(forKey: Self.cachedMembershipKey)
+            print("⚠️ \(message)")
             return
         }
+        guard let cached else { return }
 
         activeTeam = cached.team
         currentMember = cached.member
@@ -883,6 +1670,33 @@ private extension TeamFirebaseService {
         return user
     }
 
+    func requireFreshFirebaseUser() async throws -> User {
+        let user = try requireFirebaseUser()
+        do {
+            _ = try await firebaseIDToken(for: user, forceRefresh: true)
+            return user
+        } catch {
+            hasPreparedFirestoreNetwork = false
+            print("⚠️ Firebase Team session token refresh failed: \(error.localizedDescription)")
+            try? Auth.auth().signOut()
+            throw TeamFirebaseServiceError.firebaseSessionExpired
+        }
+    }
+
+    func firebaseIDToken(for user: User, forceRefresh: Bool) async throws -> String {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+            user.getIDTokenForcingRefresh(forceRefresh) { token, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let token {
+                    continuation.resume(returning: token)
+                } else {
+                    continuation.resume(throwing: TeamFirebaseServiceError.notAuthenticated)
+                }
+            }
+        }
+    }
+
     func clearLocalTeam(removeCachedMembership: Bool = false) {
         stopTeamRealtimeListeners()
         activeTeam = nil
@@ -891,12 +1705,26 @@ private extension TeamFirebaseService {
         teamLeads = []
         teamBookings = []
         dutySessions = []
+        dutyLocationPoints = []
         ownerNotifications = []
+        activityLog = []
         activeDutySession = nil
+        syncWriteState = .idle
         if removeCachedMembership {
             UserDefaults.standard.removeObject(forKey: Self.cachedMembershipKey)
             UserDefaults.standard.synchronize()
         }
+    }
+
+    func handleRevokedTeamAccess(userId: String) async {
+        do {
+            try await teamProfileRef(userId: userId).delete()
+        } catch {
+            print("⚠️ Team profile cleanup failed after access revocation: \(Self.userFacingErrorMessage(for: error))")
+        }
+
+        clearLocalTeam(removeCachedMembership: true)
+        lastErrorMessage = Self.removedTeamAccessMessage
     }
 
     func stopTeamRealtimeListeners() {
@@ -915,15 +1743,12 @@ private extension TeamFirebaseService {
                         Task { @MainActor in
                             guard let self else { return }
                             if let error {
-                                self.lastErrorMessage = error.localizedDescription
+                                self.handleRealtimeListenerError(error, context: "members")
                                 return
                             }
-                            self.teamMembers = snapshot?.documents
+                            self.teamMembers = TeamMemberRoster.normalized(snapshot?.documents
                                 .compactMap { self.decodeMember(id: $0.documentID, data: $0.data()) }
-                                .sorted { lhs, rhs in
-                                    if lhs.role != rhs.role { return lhs.role == .owner }
-                                    return lhs.joinedAt < rhs.joinedAt
-                                } ?? []
+                                ?? [])
                         }
                     }
             )
@@ -935,7 +1760,7 @@ private extension TeamFirebaseService {
                     Task { @MainActor in
                         guard let self else { return }
                         if let error {
-                            self.lastErrorMessage = error.localizedDescription
+                            self.handleRealtimeListenerError(error, context: "team leads")
                             return
                         }
                         self.teamLeads = snapshot?.documents
@@ -950,7 +1775,7 @@ private extension TeamFirebaseService {
                     Task { @MainActor in
                         guard let self else { return }
                         if let error {
-                            self.lastErrorMessage = error.localizedDescription
+                            self.handleRealtimeListenerError(error, context: "team bookings")
                             return
                         }
                         self.teamBookings = snapshot?.documents
@@ -959,40 +1784,39 @@ private extension TeamFirebaseService {
                 }
         )
 
-        teamListenerRegistrations.append(
-            dutySessionsQuery(team: team, member: member)
-                .addSnapshotListener { [weak self] snapshot, error in
-                    Task { @MainActor in
-                        guard let self else { return }
-                        if let error {
-                            self.lastErrorMessage = error.localizedDescription
-                            return
-                        }
-                        let sessions = snapshot?.documents
-                            .compactMap { self.decodeDutySession(id: $0.documentID, data: $0.data()) } ?? []
-                        self.dutySessions = sessions
-                        self.activeDutySession = sessions.first {
-                            $0.repUserId == member.userId && $0.status == .active
-                        }
-                    }
-                }
-        )
+        if member.role == .owner {
+            listenDutySessions(
+                query: dutySessionsQuery(team: team, member: member),
+                replacingUserIds: nil,
+                currentUserId: member.userId
+            )
+            listenDutyLocationPoints(
+                query: dutyLocationPointsQuery(team: team, member: member),
+                replacingUserIds: nil
+            )
+        } else {
+            listenDutySessions(
+                query: dutySessionsForUserQuery(team: team, userId: member.userId),
+                replacingUserIds: [member.userId],
+                currentUserId: member.userId
+            )
+            listenDutyLocationPoints(
+                query: dutyLocationPointsForUserQuery(team: team, userId: member.userId),
+                replacingUserIds: [member.userId]
+            )
 
-        teamListenerRegistrations.append(
-            dutyLocationPointsQuery(team: team, member: member)
-                .addSnapshotListener { [weak self] snapshot, error in
-                    Task { @MainActor in
-                        guard let self else { return }
-                        if let error {
-                            self.lastErrorMessage = error.localizedDescription
-                            return
-                        }
-                        self.dutyLocationPoints = snapshot?.documents
-                            .compactMap { self.decodeDutyLocationPoint(id: $0.documentID, data: $0.data()) }
-                            .sorted { $0.recordedAt < $1.recordedAt } ?? []
-                    }
-                }
-        )
+            if team.ownerUserId != member.userId {
+                listenDutySessions(
+                    query: dutySessionsForUserQuery(team: team, userId: team.ownerUserId),
+                    replacingUserIds: [team.ownerUserId],
+                    currentUserId: member.userId
+                )
+                listenDutyLocationPoints(
+                    query: dutyLocationPointsForUserQuery(team: team, userId: team.ownerUserId),
+                    replacingUserIds: [team.ownerUserId]
+                )
+            }
+        }
 
         if member.role == .owner {
             teamListenerRegistrations.append(
@@ -1002,7 +1826,7 @@ private extension TeamFirebaseService {
                         Task { @MainActor in
                             guard let self else { return }
                             if let error {
-                                self.lastErrorMessage = error.localizedDescription
+                                self.handleRealtimeListenerError(error, context: "owner notifications")
                                 return
                             }
                             self.ownerNotifications = snapshot?.documents
@@ -1019,18 +1843,12 @@ private extension TeamFirebaseService {
                     Task { @MainActor in
                         guard let self else { return }
                         if let error {
-                            self.lastErrorMessage = error.localizedDescription
-                            self.syncWriteState = .failed(error.localizedDescription)
+                            self.handleRealtimeListenerError(error, context: "activity log")
                             return
                         }
                         self.activityLog = snapshot?.documents
                             .compactMap { self.decodeActivityLogEntry(id: $0.documentID, data: $0.data()) }
                             .sorted { $0.createdAt > $1.createdAt } ?? []
-                        if snapshot?.metadata.hasPendingWrites == true {
-                            self.syncWriteState = .pending(localWriteCount: 1)
-                        } else if case .pending = self.syncWriteState {
-                            self.syncWriteState = .idle
-                        }
                     }
                 }
         )
@@ -1069,12 +1887,9 @@ private extension TeamFirebaseService {
             .collection(TeamFirebaseSchema.Collection.members)
             .getDocuments()
 
-        return snapshot.documents
-            .compactMap { decodeMember(id: $0.documentID, data: $0.data()) }
-            .sorted { lhs, rhs in
-                if lhs.role != rhs.role { return lhs.role == .owner }
-                return lhs.joinedAt < rhs.joinedAt
-            }
+        return TeamMemberRoster.normalized(
+            snapshot.documents.compactMap { decodeMember(id: $0.documentID, data: $0.data()) }
+        )
     }
 
     func loadTeamLeads(team: TeamWorkspace, member: TeamMember) async throws -> [TeamLead] {
@@ -1088,15 +1903,41 @@ private extension TeamFirebaseService {
     }
 
     func loadDutySessions(team: TeamWorkspace, member: TeamMember) async throws -> [TeamDutySession] {
-        let snapshot = try await dutySessionsQuery(team: team, member: member).getDocuments()
-        return snapshot.documents.compactMap { decodeDutySession(id: $0.documentID, data: $0.data()) }
+        if member.role == .owner {
+            let snapshot = try await dutySessionsQuery(team: team, member: member).getDocuments()
+            return snapshot.documents.compactMap { decodeDutySession(id: $0.documentID, data: $0.data()) }
+        }
+
+        var sessions = try await loadDutySessionsForUser(team: team, userId: member.userId)
+        if team.ownerUserId != member.userId {
+            sessions.append(contentsOf: try await loadDutySessionsForUser(team: team, userId: team.ownerUserId))
+        }
+        return sessions.sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
     }
 
     func loadDutyLocationPoints(team: TeamWorkspace, member: TeamMember) async throws -> [TeamDutyLocationPoint] {
-        let snapshot = try await dutyLocationPointsQuery(team: team, member: member).getDocuments()
-        return snapshot.documents
-            .compactMap { decodeDutyLocationPoint(id: $0.documentID, data: $0.data()) }
-            .sorted { $0.recordedAt < $1.recordedAt }
+        if member.role == .owner {
+            let snapshot = try await dutyLocationPointsQuery(team: team, member: member).getDocuments()
+            return snapshot.documents
+                .compactMap { decodeDutyLocationPoint(id: $0.documentID, data: $0.data()) }
+                .sorted { $0.recordedAt < $1.recordedAt }
+        }
+
+        var points = try await loadDutyLocationPointsForUser(team: team, userId: member.userId)
+        if team.ownerUserId != member.userId {
+            points.append(contentsOf: try await loadDutyLocationPointsForUser(team: team, userId: team.ownerUserId))
+        }
+        return points.sorted { $0.recordedAt < $1.recordedAt }
+    }
+
+    func loadDutySessionsForUser(team: TeamWorkspace, userId: String) async throws -> [TeamDutySession] {
+        let snapshot = try await dutySessionsForUserQuery(team: team, userId: userId).getDocuments()
+        return snapshot.documents.compactMap { decodeDutySession(id: $0.documentID, data: $0.data()) }
+    }
+
+    func loadDutyLocationPointsForUser(team: TeamWorkspace, userId: String) async throws -> [TeamDutyLocationPoint] {
+        let snapshot = try await dutyLocationPointsForUserQuery(team: team, userId: userId).getDocuments()
+        return snapshot.documents.compactMap { decodeDutyLocationPoint(id: $0.documentID, data: $0.data()) }
     }
 
     func loadOwnerNotifications(team: TeamWorkspace) async throws -> [TeamOwnerNotification] {
@@ -1131,13 +1972,25 @@ private extension TeamFirebaseService {
     func dutySessionsQuery(team: TeamWorkspace, member: TeamMember) -> Query {
         let collection = teamRef(team.id).collection(TeamFirebaseSchema.Collection.dutySessions)
         if member.role == .owner { return collection }
-        return collection.whereField(TeamFirebaseSchema.Field.repUserId, isEqualTo: member.userId)
+        return dutySessionsForUserQuery(team: team, userId: member.userId)
     }
 
     func dutyLocationPointsQuery(team: TeamWorkspace, member: TeamMember) -> Query {
         let collection = teamRef(team.id).collection(TeamFirebaseSchema.Collection.dutyLocationPoints)
         if member.role == .owner { return collection }
-        return collection.whereField(TeamFirebaseSchema.Field.repUserId, isEqualTo: member.userId)
+        return dutyLocationPointsForUserQuery(team: team, userId: member.userId)
+    }
+
+    func dutySessionsForUserQuery(team: TeamWorkspace, userId: String) -> Query {
+        teamRef(team.id)
+            .collection(TeamFirebaseSchema.Collection.dutySessions)
+            .whereField(TeamFirebaseSchema.Field.repUserId, isEqualTo: userId)
+    }
+
+    func dutyLocationPointsForUserQuery(team: TeamWorkspace, userId: String) -> Query {
+        teamRef(team.id)
+            .collection(TeamFirebaseSchema.Collection.dutyLocationPoints)
+            .whereField(TeamFirebaseSchema.Field.repUserId, isEqualTo: userId)
     }
 
     func activityLogQuery(team: TeamWorkspace, member: TeamMember) -> Query {
@@ -1201,13 +2054,59 @@ private extension TeamFirebaseService {
 }
 
 private extension TeamFirebaseService {
-    func commitTeamBatch(_ batch: WriteBatch, pendingWriteCount: Int = 1) async throws {
+    func loadOptionalTeamValue<T>(
+        context: String,
+        fallback: T,
+        operation: () async throws -> T
+    ) async -> T {
+        do {
+            return try await operation()
+        } catch {
+            handleNonBlockingTeamError(error, context: "initial \(context) load")
+            return fallback
+        }
+    }
+
+    func handleRealtimeListenerError(_ error: Error, context: String) {
+        handleNonBlockingTeamError(error, context: "\(context) realtime listener")
+    }
+
+    func handleNonBlockingTeamError(_ error: Error, context: String) {
+        if Self.shouldClearMemberSessionAfterPermissionError(
+            error: error,
+            profileRole: nil,
+            cachedRole: currentMember?.role
+        ) {
+            let userId = currentMember?.userId ?? Auth.auth().currentUser?.uid
+            if let userId {
+                Task { await handleRevokedTeamAccess(userId: userId) }
+            } else {
+                clearLocalTeam(removeCachedMembership: true)
+                lastErrorMessage = Self.removedTeamAccessMessage
+            }
+            return
+        }
+
+        let message = Self.userFacingErrorMessage(for: error)
+        print("⚠️ Team non-blocking sync failed (\(context)): \(message)")
+        if activeTeam == nil || currentMember == nil {
+            lastErrorMessage = message
+        }
+    }
+
+    func commitTeamBatch(
+        _ batch: WriteBatch,
+        pendingWriteCount: Int = 1,
+        allowsLocalQueueFallback: Bool = true
+    ) async throws {
         syncWriteState = .pending(localWriteCount: pendingWriteCount)
         do {
-            try await batch.commit()
+            try await performTeamWrite(allowsLocalQueueFallback: allowsLocalQueueFallback) { completion in
+                batch.commit(completion: completion)
+            }
             syncWriteState = .idle
         } catch {
-            syncWriteState = .failed(error.localizedDescription)
+            syncWriteState = .failed(Self.userFacingErrorMessage(for: error))
             throw error
         }
     }
@@ -1215,11 +2114,58 @@ private extension TeamFirebaseService {
     func setTeamData(_ data: [String: Any], forDocument document: DocumentReference, merge: Bool = true) async throws {
         syncWriteState = .pending(localWriteCount: 1)
         do {
-            try await document.setData(data, merge: merge)
+            try await performTeamWrite { completion in
+                document.setData(data, merge: merge, completion: completion)
+            }
             syncWriteState = .idle
         } catch {
-            syncWriteState = .failed(error.localizedDescription)
+            syncWriteState = .failed(Self.userFacingErrorMessage(for: error))
             throw error
+        }
+    }
+
+    func performTeamWrite(
+        updateSyncStateOnLateCompletion: Bool = true,
+        allowsLocalQueueFallback: Bool = true,
+        _ start: (@escaping @Sendable (Error?) -> Void) -> Void
+    ) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let completion = TeamWriteCompletionBox(continuation: continuation) { [weak self] error in
+                Task { @MainActor in
+                    guard updateSyncStateOnLateCompletion else { return }
+                    guard let self else { return }
+                    if let error {
+                        self.syncWriteState = .failed(Self.userFacingErrorMessage(for: error))
+                    } else {
+                        self.syncWriteState = .idle
+                    }
+                }
+            }
+            let timeout = DispatchWorkItem {
+                if allowsLocalQueueFallback {
+                    completion.resumeAfterLocalQueueDelay()
+                } else {
+                    completion.resume(with: TeamFirebaseServiceError.serverConfirmationTimedOut)
+                }
+            }
+            completion.setTimeoutWorkItem(timeout)
+            let waitLimit = allowsLocalQueueFallback ? Self.teamWriteAckWaitLimit : Self.teamServerConfirmationWaitLimit
+            DispatchQueue.main.asyncAfter(deadline: .now() + waitLimit, execute: timeout)
+            start { error in
+                completion.resume(with: error)
+            }
+        }
+    }
+
+    func commitOptionalTeamBatch(_ batch: WriteBatch, context: String) {
+        Task {
+            do {
+                try await performTeamWrite(updateSyncStateOnLateCompletion: false) { completion in
+                    batch.commit(completion: completion)
+                }
+            } catch {
+                print("⚠️ Team optional write failed (\(context)): \(Self.userFacingErrorMessage(for: error))")
+            }
         }
     }
 
@@ -1230,8 +2176,8 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.createdAt: Timestamp(date: team.createdAt),
             TeamFirebaseSchema.Field.updatedAt: Timestamp(date: team.updatedAt),
             TeamFirebaseSchema.Field.planStatus: team.planStatus.rawValue,
-            TeamFirebaseSchema.Field.planExpiresAt: optionalTimestamp(team.planExpiresAt) as Any,
-            TeamFirebaseSchema.Field.graceEndsAt: optionalTimestamp(team.graceEndsAt) as Any,
+            TeamFirebaseSchema.Field.planExpiresAt: TeamFirestoreMergePayloadValue.omittedWhenNil(optionalTimestamp(team.planExpiresAt)),
+            TeamFirebaseSchema.Field.graceEndsAt: TeamFirestoreMergePayloadValue.omittedWhenNil(optionalTimestamp(team.graceEndsAt)),
             TeamFirebaseSchema.Field.memberLimit: team.memberLimit
         ].filterNilValues()
     }
@@ -1241,12 +2187,13 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.teamId: member.teamId,
             TeamFirebaseSchema.Field.userId: member.userId,
             TeamFirebaseSchema.Field.displayName: member.displayName,
-            TeamFirebaseSchema.Field.email: member.email as Any,
+            TeamFirebaseSchema.Field.email: TeamFirestoreMergePayloadValue.omittedWhenNil(member.email),
             TeamFirebaseSchema.Field.role: member.role.rawValue,
             TeamFirebaseSchema.Field.status: member.status.rawValue,
+            TeamFirebaseSchema.Field.workType: member.workType.rawValue,
             TeamFirebaseSchema.Field.joinedAt: Timestamp(date: member.joinedAt),
-            TeamFirebaseSchema.Field.removedAt: optionalTimestamp(member.removedAt) as Any,
-            TeamFirebaseSchema.Field.acceptedInviteId: member.acceptedInviteId as Any,
+            TeamFirebaseSchema.Field.removedAt: TeamFirestoreMergePayloadValue.omittedWhenNil(optionalTimestamp(member.removedAt)),
+            TeamFirebaseSchema.Field.acceptedInviteId: TeamFirestoreMergePayloadValue.omittedWhenNil(member.acceptedInviteId),
             TeamFirebaseSchema.Field.updatedAt: Timestamp(date: updatedAt)
         ].filterNilValues()
     }
@@ -1275,13 +2222,13 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.teamId: lead.teamId,
             TeamFirebaseSchema.Field.name: lead.name,
             TeamFirebaseSchema.Field.address: lead.address,
-            TeamFirebaseSchema.Field.phone: lead.phone as Any,
-            TeamFirebaseSchema.Field.email: lead.email as Any,
+            TeamFirebaseSchema.Field.phone: TeamFirestoreMergePayloadValue.nullable(lead.phone),
+            TeamFirebaseSchema.Field.email: TeamFirestoreMergePayloadValue.nullable(lead.email),
             TeamFirebaseSchema.Field.latitude: lead.latitude,
             TeamFirebaseSchema.Field.longitude: lead.longitude,
             TeamFirebaseSchema.Field.status: lead.status.rawValue,
             TeamFirebaseSchema.Field.notes: lead.notes,
-            TeamFirebaseSchema.Field.serviceCategory: lead.serviceCategory as Any,
+            TeamFirebaseSchema.Field.serviceCategory: TeamFirestoreMergePayloadValue.nullable(lead.serviceCategory),
             TeamFirebaseSchema.Field.price: lead.price,
             TeamFirebaseSchema.Field.estimatedValue: lead.estimatedValue,
             TeamFirebaseSchema.Field.tags: lead.tags,
@@ -1291,7 +2238,7 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.createdAt: Timestamp(date: lead.createdAt),
             TeamFirebaseSchema.Field.updatedAt: Timestamp(date: lead.updatedAt),
             TeamFirebaseSchema.Field.isHighPriority: lead.isHighPriority,
-            TeamFirebaseSchema.Field.highPriorityReason: lead.highPriorityReason as Any
+            TeamFirebaseSchema.Field.highPriorityReason: TeamFirestoreMergePayloadValue.nullable(lead.highPriorityReason)
         ].filterNilValues()
     }
 
@@ -1309,8 +2256,16 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.createdByUserId: booking.createdByUserId,
             TeamFirebaseSchema.Field.updatedByUserId: booking.updatedByUserId,
             TeamFirebaseSchema.Field.createdAt: Timestamp(date: booking.createdAt),
-            TeamFirebaseSchema.Field.updatedAt: Timestamp(date: booking.updatedAt)
-        ]
+            TeamFirebaseSchema.Field.updatedAt: Timestamp(date: booking.updatedAt),
+            TeamFirebaseSchema.Field.customerName: TeamFirestoreMergePayloadValue.nullable(booking.customerName),
+            TeamFirebaseSchema.Field.customerPhone: TeamFirestoreMergePayloadValue.nullable(booking.customerPhone),
+            TeamFirebaseSchema.Field.customerEmail: TeamFirestoreMergePayloadValue.nullable(booking.customerEmail),
+            TeamFirebaseSchema.Field.serviceCategory: TeamFirestoreMergePayloadValue.nullable(booking.serviceCategory),
+            TeamFirebaseSchema.Field.quotedPrice: TeamFirestoreMergePayloadValue.nullable(booking.quotedPrice),
+            TeamFirebaseSchema.Field.latitude: TeamFirestoreMergePayloadValue.nullable(booking.latitude),
+            TeamFirebaseSchema.Field.longitude: TeamFirestoreMergePayloadValue.nullable(booking.longitude),
+            TeamFirebaseSchema.Field.arrivalWindowMinutes: TeamFirestoreMergePayloadValue.nullable(booking.arrivalWindowMinutes)
+        ].filterNilValues()
     }
 
     func ownerNotificationData(
@@ -1383,6 +2338,51 @@ private extension TeamFirebaseService {
         }
     }
 
+    func listenDutySessions(query: Query, replacingUserIds: Set<String>?, currentUserId: String) {
+        teamListenerRegistrations.append(
+            query.addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let error {
+                        self.handleRealtimeListenerError(error, context: "duty sessions")
+                        return
+                    }
+                    let sessions = snapshot?.documents
+                        .compactMap { self.decodeDutySession(id: $0.documentID, data: $0.data()) } ?? []
+                    if let replacingUserIds {
+                        self.replaceDutySessions(for: replacingUserIds, with: sessions)
+                    } else {
+                        self.dutySessions = sessions.sorted {
+                            ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt)
+                        }
+                    }
+                    self.updateActiveDutySession(for: currentUserId)
+                }
+            }
+        )
+    }
+
+    func listenDutyLocationPoints(query: Query, replacingUserIds: Set<String>?) {
+        teamListenerRegistrations.append(
+            query.addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let error {
+                        self.handleRealtimeListenerError(error, context: "duty location points")
+                        return
+                    }
+                    let points = snapshot?.documents
+                        .compactMap { self.decodeDutyLocationPoint(id: $0.documentID, data: $0.data()) } ?? []
+                    if let replacingUserIds {
+                        self.replaceDutyLocationPoints(for: replacingUserIds, with: points)
+                    } else {
+                        self.dutyLocationPoints = points.sorted { $0.recordedAt < $1.recordedAt }
+                    }
+                }
+            }
+        )
+    }
+
     func ownerNotificationMessage(event: TeamOwnerLeadEvent, lead: TeamLead) -> String {
         let base = "\(lead.name) at \(lead.address)"
         switch event {
@@ -1401,12 +2401,12 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.teamId: session.teamId,
             TeamFirebaseSchema.Field.repUserId: session.repUserId,
             TeamFirebaseSchema.Field.startedAt: Timestamp(date: session.startedAt),
-            TeamFirebaseSchema.Field.endedAt: optionalTimestamp(session.endedAt) as Any,
+            TeamFirebaseSchema.Field.endedAt: TeamFirestoreMergePayloadValue.omittedWhenNil(optionalTimestamp(session.endedAt)),
             TeamFirebaseSchema.Field.status: session.status.rawValue,
-            TeamFirebaseSchema.Field.lastLocationAt: optionalTimestamp(session.lastLocationAt) as Any,
+            TeamFirebaseSchema.Field.lastLocationAt: TeamFirestoreMergePayloadValue.omittedWhenNil(optionalTimestamp(session.lastLocationAt)),
             TeamFirebaseSchema.Field.distanceMeters: session.distanceMeters,
             TeamFirebaseSchema.Field.createdAt: Timestamp(date: session.createdAt),
-            TeamFirebaseSchema.Field.deleteAfter: optionalTimestamp(session.deleteAfter) as Any
+            TeamFirebaseSchema.Field.deleteAfter: TeamFirestoreMergePayloadValue.omittedWhenNil(optionalTimestamp(session.deleteAfter))
         ].filterNilValues()
     }
 
@@ -1433,6 +2433,121 @@ private extension TeamFirebaseService {
         } else {
             dutySessions.append(session)
         }
+    }
+
+    func replaceDutySessions(for userIds: Set<String>, with sessions: [TeamDutySession]) {
+        dutySessions.removeAll { userIds.contains($0.repUserId) }
+        dutySessions.append(contentsOf: sessions)
+        dutySessions.sort { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
+    }
+
+    func replaceDutyLocationPoints(for userIds: Set<String>, with points: [TeamDutyLocationPoint]) {
+        dutyLocationPoints.removeAll { userIds.contains($0.repUserId) }
+        dutyLocationPoints.append(contentsOf: points)
+        dutyLocationPoints.sort { $0.recordedAt < $1.recordedAt }
+    }
+
+    func updateActiveDutySession(for userId: String) {
+        activeDutySession = dutySessions.first {
+            $0.repUserId == userId && $0.status == .active
+        }
+    }
+}
+
+private final class TeamWriteCompletionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private let continuation: CheckedContinuation<Void, Error>
+    private let lateCompletion: @Sendable (Error?) -> Void
+    private var didResume = false
+    private var timeoutWorkItem: DispatchWorkItem?
+
+    init(
+        continuation: CheckedContinuation<Void, Error>,
+        lateCompletion: @escaping @Sendable (Error?) -> Void
+    ) {
+        self.continuation = continuation
+        self.lateCompletion = lateCompletion
+    }
+
+    func setTimeoutWorkItem(_ timeoutWorkItem: DispatchWorkItem) {
+        lock.lock()
+        self.timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+    }
+
+    func resumeAfterLocalQueueDelay() {
+        lock.lock()
+        guard !didResume else {
+            lock.unlock()
+            return
+        }
+        didResume = true
+        lock.unlock()
+        continuation.resume()
+    }
+
+    func resume(with error: Error?) {
+        lock.lock()
+        guard !didResume else {
+            lock.unlock()
+            lateCompletion(error)
+            return
+        }
+        didResume = true
+        let timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+
+        timeoutWorkItem?.cancel()
+        if let error {
+            continuation.resume(throwing: error)
+        } else {
+            continuation.resume()
+        }
+    }
+}
+
+private final class TeamDocumentCompletionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private let continuation: CheckedContinuation<DocumentSnapshot, Error>
+    private var didResume = false
+    private var timeoutWorkItem: DispatchWorkItem?
+
+    init(continuation: CheckedContinuation<DocumentSnapshot, Error>) {
+        self.continuation = continuation
+    }
+
+    func setTimeoutWorkItem(_ timeoutWorkItem: DispatchWorkItem) {
+        lock.lock()
+        self.timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+    }
+
+    func resume(returning snapshot: DocumentSnapshot) {
+        lock.lock()
+        guard !didResume else {
+            lock.unlock()
+            return
+        }
+        didResume = true
+        let timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+
+        timeoutWorkItem?.cancel()
+        continuation.resume(returning: snapshot)
+    }
+
+    func resume(throwing error: Error) {
+        lock.lock()
+        guard !didResume else {
+            lock.unlock()
+            return
+        }
+        didResume = true
+        let timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+
+        timeoutWorkItem?.cancel()
+        continuation.resume(throwing: error)
     }
 }
 
@@ -1471,6 +2586,8 @@ private extension TeamFirebaseService {
             return nil
         }
         let userId = data[TeamFirebaseSchema.Field.userId] as? String ?? id
+        let workType = (data[TeamFirebaseSchema.Field.workType] as? String)
+            .flatMap(TeamMemberWorkType.init(rawValue:)) ?? (role == .owner ? .owner : .salesRep)
 
         return TeamMember(
             teamId: teamId,
@@ -1479,6 +2596,7 @@ private extension TeamFirebaseService {
             email: data[TeamFirebaseSchema.Field.email] as? String,
             role: role,
             status: status,
+            workType: workType,
             joinedAt: joinedAt,
             removedAt: Self.dateValue(data[TeamFirebaseSchema.Field.removedAt]),
             acceptedInviteId: data[TeamFirebaseSchema.Field.acceptedInviteId] as? String
@@ -1611,7 +2729,15 @@ private extension TeamFirebaseService {
             createdByUserId: createdByUserId,
             updatedByUserId: updatedByUserId,
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            customerName: data[TeamFirebaseSchema.Field.customerName] as? String,
+            customerPhone: data[TeamFirebaseSchema.Field.customerPhone] as? String,
+            customerEmail: data[TeamFirebaseSchema.Field.customerEmail] as? String,
+            serviceCategory: data[TeamFirebaseSchema.Field.serviceCategory] as? String,
+            quotedPrice: data[TeamFirebaseSchema.Field.quotedPrice] as? Double,
+            latitude: data[TeamFirebaseSchema.Field.latitude] as? Double,
+            longitude: data[TeamFirebaseSchema.Field.longitude] as? Double,
+            arrivalWindowMinutes: data[TeamFirebaseSchema.Field.arrivalWindowMinutes] as? Int
         )
     }
 
@@ -1709,11 +2835,6 @@ extension TeamFirebaseService {
 
 private extension Dictionary where Key == String, Value == Any {
     func filterNilValues() -> [String: Any] {
-        filter { !Self.isNilOptional($0.value) }
-    }
-
-    static func isNilOptional(_ value: Any) -> Bool {
-        let mirror = Mirror(reflecting: value)
-        return mirror.displayStyle == .optional && mirror.children.isEmpty
+        filter { !TeamFirestoreMergePayloadValue.isNilOptional($0.value) }
     }
 }

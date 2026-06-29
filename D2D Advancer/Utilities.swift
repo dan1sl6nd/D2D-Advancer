@@ -115,7 +115,7 @@ struct Utilities {
     /// - Parameter context: The managed object context to operate on
     static func removeDuplicateLeads(from context: NSManagedObjectContext) {
         context.perform {
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: true)]
         
         do {

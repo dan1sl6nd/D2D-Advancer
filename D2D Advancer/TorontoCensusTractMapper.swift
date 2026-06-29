@@ -52,7 +52,7 @@ class TorontoCensusTractMapper {
 
             // Only consider tracts within their radius
             if distance <= tract.radius {
-                if closestTract == nil || distance < closestTract!.distance {
+                if closestTract == nil || distance < (closestTract?.distance ?? .greatestFiniteMagnitude) {
                     closestTract = (tract.id, tract.name, distance)
                 }
             }

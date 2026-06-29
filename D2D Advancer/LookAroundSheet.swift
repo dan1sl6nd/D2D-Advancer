@@ -18,67 +18,16 @@ struct LookAroundSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Street View")
-                    .font(.obsidianSubheadline)
-                    .foregroundColor(.textPrimary)
-                Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.obsidianCaption)
-                        .foregroundColor(.textSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(Color.obsidianElevated)
-                        .clipShape(Circle())
-                }
+            header
+
+            VStack(spacing: 14) {
+                locationSummaryCard
+                providerPicker
+                previewSection
             }
             .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 10)
-
-            // Provider toggle
-            HStack(spacing: 0) {
-                ForEach(StreetViewProvider.allCases, id: \.self) { provider in
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedProvider = provider
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: provider == .apple ? "apple.logo" : "globe")
-                                .font(.obsidianSmall)
-                            Text(provider.rawValue)
-                                .font(.obsidianCaption)
-                        }
-                        .foregroundColor(selectedProvider == provider ? .white : .textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .background(
-                            selectedProvider == provider
-                                ? Color.electricViolet
-                                : Color.clear
-                        )
-                        .cornerRadius(10)
-                    }
-                }
-            }
-            .padding(3)
-            .background(Color.obsidianSurface)
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.obsidianBorder, lineWidth: 0.5)
-            )
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
-
-            // Content
-            if selectedProvider == .apple {
-                appleView
-            } else {
-                googleView
-            }
+            .padding(.bottom, 20)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
         .background(Color.obsidianBlack)
         .presentationBackground(Color.obsidianBlack)
@@ -94,12 +43,135 @@ struct LookAroundSheet: View {
         }
     }
 
+    private var header: some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: "binoculars.fill", tint: Color.statusInterested, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
+
+                Text("Preview the property before you walk up.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            ObsidianCompactIconButton(
+                icon: "xmark",
+                accessibilityLabel: "Close street view",
+                accentColor: Color.textSecondary
+            ) {
+                dismiss()
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 14)
+    }
+
+    private var locationSummaryCard: some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: "mappin.circle.fill", tint: Color.electricViolet, size: 38)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Selected location")
+                    .font(.obsidianCaption)
+                    .foregroundColor(Color.textSecondary)
+
+                Text(coordinateLabel)
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.65), lineWidth: 0.7)
+        )
+    }
+
+    private var providerPicker: some View {
+        HStack(spacing: 4) {
+            ForEach(StreetViewProvider.allCases, id: \.self) { provider in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedProvider = provider
+                    }
+                } label: {
+                    Label(provider.rawValue, systemImage: provider == .apple ? "apple.logo" : "globe")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(selectedProvider == provider ? .white : Color.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(selectedProvider == provider ? Color.electricViolet : Color.clear)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(4)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.65), lineWidth: 0.7)
+        )
+    }
+
+    private var previewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: selectedProvider == .apple ? "viewfinder.circle.fill" : "globe.americas.fill")
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.statusInterested)
+
+                Text(selectedProvider == .apple ? "Apple Look Around" : "Google Street View")
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
+
+                Spacer()
+            }
+
+            Group {
+                if selectedProvider == .apple {
+                    appleView
+                } else {
+                    googleView
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 420)
+        }
+        .padding(16)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.7), lineWidth: 0.7)
+        )
+    }
+
+    private var coordinateLabel: String {
+        String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)
+    }
+
     // MARK: - Apple Look Around
 
     @ViewBuilder
     private var appleView: some View {
         if isAppleLoading {
-            Spacer()
             VStack(spacing: 14) {
                 ProgressView()
                     .controlSize(.large)
@@ -108,35 +180,40 @@ struct LookAroundSheet: View {
                     .font(.obsidianFootnote)
                     .foregroundColor(.textMuted)
             }
-            Spacer()
+            .frame(maxWidth: .infinity, minHeight: 420)
         } else if let scene = scene {
             LookAroundRepresentable(scene: scene)
-                .cornerRadius(16)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 16)
+                .frame(minHeight: 420)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.65), lineWidth: 0.7)
+                )
         } else {
-            Spacer()
             VStack(spacing: 16) {
-                ZStack {
-                    Circle()
-                        .fill(Color.statusNotHome.opacity(0.12))
-                        .frame(width: 56, height: 56)
-                    Image(systemName: "eye.slash")
-                        .font(.system(size: 24))
-                        .foregroundColor(.statusNotHome)
-                }
+                ObsidianIconTile(icon: "eye.slash", tint: Color.statusNotHome, size: 56)
                 Text("No Apple coverage here")
-                    .font(.obsidianBody)
-                    .foregroundColor(.textSecondary)
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
+
+                Text("Google Street View may still have coverage for this pin.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .multilineTextAlignment(.center)
+
                 Button {
                     withAnimation { selectedProvider = .google }
                 } label: {
-                    Text("Switch to Google")
-                        .font(.obsidianFootnote)
-                        .foregroundColor(.electricViolet)
+                    Label("Switch to Google", systemImage: "globe")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+                .padding(.top, 4)
             }
-            Spacer()
+            .frame(maxWidth: .infinity, minHeight: 420)
+            .padding(18)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 
@@ -147,9 +224,12 @@ struct LookAroundSheet: View {
             latitude: coordinate.latitude,
             longitude: coordinate.longitude
         )
-        .cornerRadius(16)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 16)
+        .frame(minHeight: 420)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.65), lineWidth: 0.7)
+        )
     }
 
     // MARK: - Load Apple Scene

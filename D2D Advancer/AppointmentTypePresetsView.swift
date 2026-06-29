@@ -4,84 +4,48 @@ struct AppointmentTypePresetsView: View {
     @ObservedObject private var customTypeManager = CustomAppointmentTypeManager.shared
     @State private var showingCreateView = false
     @State private var editingType: CustomAppointmentType?
+    @State private var deleteErrorMessage: String?
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Default Types Card
-                        defaultTypesCard
-                        
-                        // Custom Types Card
-                        customTypesCard
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
-                }
-                .background(Color.obsidianBlack)
-            }
-            .navigationTitle("Appointment Types")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .safeAreaInset(edge: .top) {
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        showingCreateView = true
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "plus")
-                            Text("New")
-                        }
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.electricViolet)
-                        .cornerRadius(20)
-                    }
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: "Appointment Types",
+                        subtitle: "Manage default and custom job labels.",
+                        icon: "calendar.badge.plus"
+                    )
+
+                    defaultTypesCard
+                    customTypesCard
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.obsidianBlack.opacity(0.95))
+                .padding(.top, 18)
+                .padding(.bottom, 28)
             }
-            .safeAreaInset(edge: .bottom) {
-                // Card-based Done button
-                Button(action: {
-                    dismiss()
-                }) {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title3)
-                        Text("Done")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.electricViolet, Color.electricViolet.opacity(0.8)]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle("Appointment Types")
+            .obsidianInlineNavigation()
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ObsidianCompactIconButton(
+                        icon: "plus",
+                        accessibilityLabel: "Create appointment type",
+                        action: { showingCreateView = true }
                     )
                 }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button(action: { dismiss() }) {
+                    Label("Done", systemImage: "checkmark")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
-                )
+                .background(Color.obsidianBlack)
             }
             .sheet(isPresented: $showingCreateView) {
                 CustomAppointmentTypeCreatorView()
@@ -89,29 +53,27 @@ struct AppointmentTypePresetsView: View {
             .sheet(item: $editingType) { type in
                 CustomAppointmentTypeCreatorView(editingType: type)
             }
+            .alert(
+                "Type not deleted",
+                isPresented: Binding(
+                    get: { deleteErrorMessage != nil },
+                    set: { if !$0 { deleteErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(deleteErrorMessage ?? "Please try again.")
+            }
         }
     }
     
     private var defaultTypesCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "star.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.title2)
-
-                Text("Default Types")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
+        ObsidianSectionCard(
+            title: "Default Types",
+            icon: "star.fill",
+            subtitle: "Built-in appointment types that cannot be modified."
+        ) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("These are the built-in appointment types that cannot be modified.")
-                    .font(.subheadline)
-                    .foregroundColor(Color.textSecondary)
-
                 LazyVGrid(columns: [
                     GridItem(.adaptive(minimum: 140), spacing: 12)
                 ], spacing: 12) {
@@ -121,60 +83,41 @@ struct AppointmentTypePresetsView: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
 
     private var customTypesCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "paintbrush.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.title2)
-                
-                Text("Custom Types")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                Button("Add New") { showingCreateView = true }
-                .font(.caption)
-                .foregroundColor(Color.electricViolet)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.electricViolet.opacity(0.1))
-                .cornerRadius(8)
-            }
-            
+        ObsidianSectionCard(
+            title: "Custom Types",
+            icon: "paintbrush.fill",
+            subtitle: "Create appointment types that fit your business."
+        ) {
             if customTypeManager.customTypes.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "calendar.badge.plus")
                         .font(.system(size: 48))
-                        .foregroundColor(Color.textSecondary)
+                        .foregroundColor(Color.electricViolet)
                     
                     Text("No Custom Types")
-                        .font(.headline)
-                        .fontWeight(.semibold)
+                        .font(.obsidianHeadline)
+                        .foregroundColor(.textPrimary)
                     
                     Text("Create custom appointment types that fit your specific business needs.")
-                        .font(.body)
+                        .font(.obsidianBody)
                         .foregroundColor(Color.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                     
-                    Button("Create First Type") { showingCreateView = true }
-                    .buttonStyle(.borderedProminent)
+                    Button(action: { showingCreateView = true }) {
+                        Label("Create First Type", systemImage: "plus")
+                    }
+                    .buttonStyle(ObsidianPrimaryButtonStyle())
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 32)
             } else {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Tap to edit or swipe to delete custom appointment types.")
-                        .font(.subheadline)
+                        .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
                     
                     LazyVGrid(columns: [
@@ -188,7 +131,10 @@ struct AppointmentTypePresetsView: View {
                                 },
                                 onDelete: {
                                     withAnimation {
-                                        customTypeManager.deleteCustomType(customType)
+                                        let didDelete = customTypeManager.deleteCustomType(customType)
+                                        if !didDelete {
+                                            deleteErrorMessage = customTypeManager.lastErrorMessage ?? "Could not delete this appointment type. Please try again."
+                                        }
                                     }
                                 }
                             )
@@ -197,10 +143,6 @@ struct AppointmentTypePresetsView: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
 
     // No gating; all users can create unlimited custom types
@@ -218,12 +160,11 @@ struct DefaultTypeChip: View {
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(type.rawValue)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textPrimary)
 
                 Text("Built-in")
-                    .font(.caption2)
+                    .font(.nano)
                     .foregroundColor(Color.textSecondary)
             }
             
@@ -232,7 +173,7 @@ struct DefaultTypeChip: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(type.color.opacity(0.1))
-        .cornerRadius(10)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .stroke(type.color.opacity(0.3), lineWidth: 1)
@@ -255,13 +196,12 @@ struct CustomTypeChip: View {
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(customType.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
 
                 Text("Custom")
-                    .font(.caption2)
+                    .font(.nano)
                     .foregroundColor(Color.textSecondary)
             }
             
@@ -282,7 +222,7 @@ struct CustomTypeChip: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(customType.swiftUIColor.opacity(0.1))
-        .cornerRadius(10)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .stroke(customType.swiftUIColor.opacity(0.3), lineWidth: 1)

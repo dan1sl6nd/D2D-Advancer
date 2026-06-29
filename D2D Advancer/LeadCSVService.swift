@@ -65,10 +65,16 @@ enum LeadCSVService {
         return f
     }()
 
+    private static let iso8601WithoutFractionalSeconds: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     // MARK: - Export
 
     static func exportAllLeads(from context: NSManagedObjectContext) throws -> URL {
-        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: false)]
         let leads = try context.fetch(request)
 
@@ -116,6 +122,10 @@ enum LeadCSVService {
     private static func dateToISO(_ date: Date?) -> String {
         guard let date = date else { return "" }
         return iso8601.string(from: date)
+    }
+
+    private static func dateFromISO(_ value: String) -> Date? {
+        iso8601.date(from: value) ?? iso8601WithoutFractionalSeconds.date(from: value)
     }
 
     private static func filenameTimestamp() -> String {
@@ -186,31 +196,65 @@ enum LeadCSVService {
             let rowNum = offset + 2 // header is row 1, first data row is row 2
             guard row.contains(where: { !$0.isEmpty }) else { continue }
 
+            let importedName = field(row, "Name")
+            let importedLatitude = field(row, "Latitude").flatMap(Double.init)
+            let importedLongitude = field(row, "Longitude").flatMap(Double.init)
+
             let lead: Lead
             let isNew: Bool
             if let idStr = field(row, "ID"), let uuid = UUID(uuidString: idStr) {
-                let fetch: NSFetchRequest<Lead> = Lead.fetchRequest()
+                let fetch: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
                 fetch.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
                 fetch.fetchLimit = 1
                 if let existing = try context.fetch(fetch).first {
                     lead = existing
                     isNew = false
                 } else {
-                    lead = Lead(context: context)
+                    guard importedName?.isEmpty == false else {
+                        skipped += 1
+                        errors.append("Row \(rowNum): missing Name, skipped")
+                        continue
+                    }
+                    guard isUsableImportedCoordinate(latitude: importedLatitude, longitude: importedLongitude) else {
+                        skipped += 1
+                        errors.append("Row \(rowNum): missing valid Latitude/Longitude, skipped")
+                        continue
+                    }
+
+                    lead = Lead.create(in: context)
                     lead.id = uuid
                     isNew = true
                 }
             } else {
-                lead = Lead(context: context)
-                lead.id = UUID()
+                guard importedName?.isEmpty == false else {
+                    skipped += 1
+                    errors.append("Row \(rowNum): missing Name, skipped")
+                    continue
+                }
+                guard isUsableImportedCoordinate(latitude: importedLatitude, longitude: importedLongitude) else {
+                    skipped += 1
+                    errors.append("Row \(rowNum): missing valid Latitude/Longitude, skipped")
+                    continue
+                }
+
+                lead = Lead.create(in: context)
                 isNew = true
             }
 
-            if let v = field(row, "Name") { lead.name = v }
+            if let v = importedName { lead.name = v }
             if let v = field(row, "Phone") { lead.phone = v }
             if let v = field(row, "Email") { lead.email = v }
             if let v = field(row, "Address") { lead.address = v }
-            if let v = field(row, "Status") { lead.status = v }
+            if let v = field(row, "Status") {
+                if let normalizedStatus = Lead.Status.normalizedRawValue(from: v),
+                   let importedStatus = Lead.Status(rawValue: normalizedStatus) {
+                    lead.applyLeadStatus(importedStatus, autoSave: false)
+                } else if isNew {
+                    lead.applyLeadStatus(.notContacted, autoSave: false)
+                } else {
+                    errors.append("Row \(rowNum): unknown Status, kept existing status")
+                }
+            }
             if let v = field(row, "Priority"), let i = Int16(v) { lead.priority = i }
             if let v = field(row, "Price"), let d = Double(v) { lead.price = d }
             if let v = field(row, "EstimatedValue"), let d = Double(v) { lead.estimatedValue = d }
@@ -219,12 +263,18 @@ enum LeadCSVService {
             if let v = field(row, "ServiceCategory") { lead.serviceCategory = v }
             if let v = field(row, "Tags") { lead.tags = v }
             if let v = field(row, "Notes") { lead.notes = v }
-            if let v = field(row, "Latitude"), let d = Double(v) { lead.latitude = d }
-            if let v = field(row, "Longitude"), let d = Double(v) { lead.longitude = d }
-            if let v = field(row, "CreatedDate"), let d = iso8601.date(from: v) { lead.createdDate = d }
-            if let v = field(row, "UpdatedDate"), let d = iso8601.date(from: v) { lead.updatedDate = d }
-            if let v = field(row, "FollowUpDate"), let d = iso8601.date(from: v) { lead.followUpDate = d }
-            if let v = field(row, "LastContactDate"), let d = iso8601.date(from: v) { lead.lastContactDate = d }
+            if isUsableImportedCoordinate(latitude: importedLatitude, longitude: importedLongitude),
+               let importedLatitude,
+               let importedLongitude {
+                lead.latitude = importedLatitude
+                lead.longitude = importedLongitude
+            }
+            if let v = field(row, "CreatedDate"), let d = dateFromISO(v) { lead.createdDate = d }
+            if let v = field(row, "UpdatedDate"), let d = dateFromISO(v) { lead.updatedDate = d }
+            if let v = field(row, "FollowUpDate"), let d = dateFromISO(v) {
+                lead.followUpDate = lead.leadStatus.resolvedFollowUpDate(d)
+            }
+            if let v = field(row, "LastContactDate"), let d = dateFromISO(v) { lead.lastContactDate = d }
 
             // Require at least a name
             if (lead.name ?? "").isEmpty {
@@ -250,6 +300,12 @@ enum LeadCSVService {
         }
 
         return LeadImportResult(created: created, updated: updated, skipped: skipped, errors: errors)
+    }
+
+    nonisolated static func isUsableImportedCoordinate(latitude: Double?, longitude: Double?) -> Bool {
+        guard let latitude, let longitude else { return false }
+        guard (-90...90).contains(latitude), (-180...180).contains(longitude) else { return false }
+        return latitude != 0 || longitude != 0
     }
 
     // MARK: - CSV Parser (state machine, handles quoted fields with embedded commas/quotes/newlines)

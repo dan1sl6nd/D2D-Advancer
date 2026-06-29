@@ -20,12 +20,111 @@ final class D2D_AdvancerUITests: XCTestCase {
         return app
     }
 
-    private func makeTeamEmulatorApp() -> XCUIApplication {
+    private func makeTeamEmulatorApp(
+        autoAuthEmail: String? = nil,
+        autoAuthDisplayName: String? = nil,
+        autoAuthPassword: String? = nil,
+        shouldCreateAutoAuthAccount: Bool = false
+    ) -> XCUIApplication {
         let app = makeApp()
         app.launchArguments.append("-useFirebaseEmulators")
         app.launchArguments.append("-resetFirebaseAuthForUITests")
         app.launchArguments.append("-openMoreTabForUITests")
+        if let emulatorHost = ProcessInfo.processInfo.environment["D2D_FIREBASE_EMULATOR_HOST"], !emulatorHost.isEmpty {
+            app.launchEnvironment["D2D_FIREBASE_EMULATOR_HOST"] = emulatorHost
+        }
+        if let autoAuthEmail, let autoAuthPassword {
+            app.launchArguments.append("-teamUITestAutoAuth")
+            app.launchEnvironment["D2D_TEAM_TEST_AUTH_EMAIL"] = autoAuthEmail
+            app.launchEnvironment["D2D_TEAM_TEST_AUTH_PASSWORD"] = autoAuthPassword
+            app.launchEnvironment["D2D_TEAM_TEST_AUTH_CREATE"] = shouldCreateAutoAuthAccount ? "1" : "0"
+            if let autoAuthDisplayName {
+                app.launchEnvironment["D2D_TEAM_TEST_AUTH_DISPLAY_NAME"] = autoAuthDisplayName
+            }
+        }
         return app
+    }
+
+    private struct TeamUITestCredentials {
+        let runId: String
+        let ownerEmail: String
+        let repEmail: String
+        let password: String
+        let leadName: String
+    }
+
+    private func teamTestConfigValue(environmentKey: String, infoKey: String) -> String? {
+        if let value = ProcessInfo.processInfo.environment[environmentKey], !value.isEmpty {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, !trimmed.contains("$(") {
+                return trimmed
+            }
+        }
+
+        if let value = Bundle(for: Self.self).object(forInfoDictionaryKey: infoKey) as? String {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, !trimmed.contains("$(") {
+                return trimmed
+            }
+        }
+
+        return nil
+    }
+
+    private func teamTestConfigBool(environmentKey: String, infoKey: String) -> Bool {
+        guard let value = teamTestConfigValue(environmentKey: environmentKey, infoKey: infoKey) else {
+            return false
+        }
+
+        switch value.lowercased() {
+        case "1", "true", "yes", "y":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func requireTeamEmulatorUITestHarness() throws {
+        guard teamTestConfigBool(
+            environmentKey: "D2D_RUN_TEAM_EMULATOR_UI_TESTS",
+            infoKey: "D2DRunTeamEmulatorUITests"
+        ) else {
+            throw XCTSkip("Team emulator UI flow requires Firebase Auth/Firestore emulators. Run npm run emulators:test:team-ui.")
+        }
+    }
+
+    private func requireTeamPhysicalUITestHarness() throws {
+        guard teamTestConfigBool(
+            environmentKey: "D2D_RUN_TEAM_PHYSICAL_UI_TESTS",
+            infoKey: "D2DRunTeamPhysicalUITests"
+        ) else {
+            throw XCTSkip("Team physical-device UI flow requires the two-phone harness. Run scripts/run_physical_team_flow.sh.")
+        }
+    }
+
+    private func teamUITestCredentials() -> TeamUITestCredentials {
+        let rawRunId = teamTestConfigValue(
+            environmentKey: "D2D_TEAM_UI_RUN_ID",
+            infoKey: "D2DTeamUIRunID"
+        )
+            ?? UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8).lowercased()
+        let runId = rawRunId
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber }
+            .prefix(12)
+        let safeRunId = runId.isEmpty ? "teamui" : String(runId)
+        let password = teamTestConfigValue(
+            environmentKey: "D2D_TEAM_UI_PASSWORD",
+            infoKey: "D2DTeamUIPassword"
+        ) ?? "testpass123"
+
+        return TeamUITestCredentials(
+            runId: safeRunId,
+            ownerEmail: "owner-ui-\(safeRunId)@example.com",
+            repEmail: "rep-ui-\(safeRunId)@example.com",
+            password: password,
+            leadName: "UI Interested \(safeRunId)"
+        )
     }
 
     private func makeOnboardingApp() -> XCUIApplication {
@@ -85,10 +184,57 @@ final class D2D_AdvancerUITests: XCTestCase {
         field.typeText(text)
     }
 
+    private func teamPasswordField(_ app: XCUIApplication) -> XCUIElement {
+        let secureField = app.secureTextFields["teamAccountPasswordField"]
+        if secureField.exists {
+            return secureField
+        }
+        return app.textFields["teamAccountPasswordField"]
+    }
+
     private func dismissTeamKeyboardIfPresent(_ app: XCUIApplication) {
         let doneButton = app.buttons["teamKeyboardDoneButton"]
         if doneButton.waitForExistence(timeout: 2), doneButton.isHittable {
             doneButton.tap()
+        }
+    }
+
+    private func allowLocalNetworkPermissionIfPresented(timeout: TimeInterval = 5) {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allowButton = springboard.buttons["Allow"]
+        if allowButton.waitForExistence(timeout: timeout) {
+            allowButton.tap()
+        }
+    }
+
+    private func dismissErrorAlertIfPresented(_ app: XCUIApplication, timeout: TimeInterval = 3) -> Bool {
+        let alert = app.alerts["Error"]
+        guard alert.waitForExistence(timeout: timeout) else {
+            return false
+        }
+
+        let okButton = alert.buttons["OK"]
+        if okButton.waitForExistence(timeout: 2) {
+            okButton.tap()
+        }
+        return true
+    }
+
+    private func dismissKeychainPromptIfPresented(_ app: XCUIApplication, timeout: TimeInterval = 3) {
+        let alert = app.alerts["Save Password to Keychain"]
+        guard alert.waitForExistence(timeout: timeout) else {
+            return
+        }
+
+        let notNowButton = alert.buttons["Not Now"]
+        if notNowButton.waitForExistence(timeout: 2) {
+            notNowButton.tap()
+            return
+        }
+
+        let neverButton = alert.buttons["Never for This Account"]
+        if neverButton.waitForExistence(timeout: 2) {
+            neverButton.tap()
         }
     }
 
@@ -134,7 +280,34 @@ final class D2D_AdvancerUITests: XCTestCase {
         XCTAssertTrue(element.isHittable, "Expected element to be hittable after scrolling: \(description)")
     }
 
-    private func openTeamWorkspace(_ app: XCUIApplication) {
+    private func scrollToText(
+        _ app: XCUIApplication,
+        _ text: String,
+        direction: ScrollDirection = .down,
+        maxSwipes: Int = 8
+    ) {
+        let label = app.staticTexts[text]
+        for _ in 0..<maxSwipes where !label.exists {
+            dragContent(app, direction: direction)
+        }
+        XCTAssertTrue(label.waitForExistence(timeout: 3), "Expected text to appear after scrolling: \(text)")
+    }
+
+    private func scrollToTextContaining(
+        _ app: XCUIApplication,
+        _ text: String,
+        direction: ScrollDirection = .down,
+        maxSwipes: Int = 8
+    ) {
+        let predicate = NSPredicate(format: "label CONTAINS %@", text)
+        let label = app.staticTexts.matching(predicate).firstMatch
+        for _ in 0..<maxSwipes where !label.exists {
+            dragContent(app, direction: direction)
+        }
+        XCTAssertTrue(label.waitForExistence(timeout: 3), "Expected text containing to appear after scrolling: \(text)")
+    }
+
+    private func openTeamWorkspace(_ app: XCUIApplication, expectedInitialText: String = "Apple Sign-In Required") {
         let teamCard = app.descendants(matching: .any)["teamWorkspaceCard"]
         if !teamCard.waitForExistence(timeout: 3) {
             tapButton(app, "tab_More", timeout: 12)
@@ -145,7 +318,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         let didFindTeamCard = teamCard.waitForExistence(timeout: 8)
         XCTAssertTrue(didFindTeamCard, "Team Workspace card should exist")
         tapElement(app, teamCard, description: "teamWorkspaceCard")
-        waitForText(app, "Apple Sign-In Required", timeout: 12)
+        waitForText(app, expectedInitialText, timeout: 25)
     }
 
     private func createFirebaseAccount(_ app: XCUIApplication, email: String, displayName: String, password: String) {
@@ -155,7 +328,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         typeText(email, into: emailField)
         dismissTeamKeyboardIfPresent(app)
 
-        let passwordField = app.secureTextFields["teamAccountPasswordField"]
+        let passwordField = teamPasswordField(app)
         scrollToElement(passwordField, in: app, direction: .down, description: "team account password")
         typeText(password, into: passwordField)
         dismissTeamKeyboardIfPresent(app)
@@ -165,7 +338,14 @@ final class D2D_AdvancerUITests: XCTestCase {
         typeText(displayName, into: displayNameField)
         dismissTeamKeyboardIfPresent(app)
         scrollToButton(app, "teamCreateAccountButton").tap()
+        allowLocalNetworkPermissionIfPresented()
+        if !app.staticTexts["Create or Accept Team"].waitForExistence(timeout: 8),
+           dismissErrorAlertIfPresented(app) {
+            scrollToButton(app, "teamCreateAccountButton").tap()
+            allowLocalNetworkPermissionIfPresented(timeout: 2)
+        }
         waitForText(app, "Create or Accept Team", timeout: 25)
+        dismissKeychainPromptIfPresented(app, timeout: 1)
     }
 
     private func signInToFirebase(_ app: XCUIApplication, email: String, password: String) {
@@ -174,12 +354,19 @@ final class D2D_AdvancerUITests: XCTestCase {
         typeText(email, into: emailField)
         dismissTeamKeyboardIfPresent(app)
 
-        let passwordField = app.secureTextFields["teamAccountPasswordField"]
+        let passwordField = teamPasswordField(app)
         scrollToElement(passwordField, in: app, direction: .down, description: "team account password")
         typeText(password, into: passwordField)
         dismissTeamKeyboardIfPresent(app)
         scrollToButton(app, "teamSignInButton").tap()
+        allowLocalNetworkPermissionIfPresented()
+        if !app.staticTexts["My Team"].waitForExistence(timeout: 8),
+           dismissErrorAlertIfPresented(app) {
+            scrollToButton(app, "teamSignInButton").tap()
+            allowLocalNetworkPermissionIfPresented(timeout: 2)
+        }
         waitForText(app, "My Team", timeout: 25)
+        dismissKeychainPromptIfPresented(app)
     }
 
     private func signOutFromMore(_ app: XCUIApplication) {
@@ -199,6 +386,18 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     private func readInviteCode(_ app: XCUIApplication) -> String {
+        XCTAssertTrue(
+            app.descendants(matching: .any)["teamCreatedInvitePanel"].waitForExistence(timeout: 12),
+            "Created invite panel should be visible"
+        )
+        XCTAssertTrue(
+            app.buttons["teamCopyInviteCodeButton"].waitForExistence(timeout: 3),
+            "Copy invite code button should be visible"
+        )
+        XCTAssertTrue(
+            app.buttons["teamShareInviteCodeButton"].waitForExistence(timeout: 3),
+            "Share invite code button should be visible"
+        )
         let codePredicate = NSPredicate(format: "label MATCHES %@", "^[A-Z0-9]{8}$")
         let code = app.staticTexts.matching(codePredicate).firstMatch
         XCTAssertTrue(code.waitForExistence(timeout: 12), "Generated invite code should be visible")
@@ -209,7 +408,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         if !app.buttons["addLeadButton"].waitForExistence(timeout: 4) {
             tapButton(app, "tab_Map", timeout: 12)
         }
-        XCTAssertTrue(app.buttons["teamMapShortcut"].waitForExistence(timeout: 15), "Team summary should load before creating a team lead")
+        XCTAssertTrue(app.buttons["addLeadButton"].waitForExistence(timeout: 12), "Map add lead button should be ready before creating a team lead")
         tapButton(app, "addLeadButton", timeout: 12)
         typeText(name, into: app.textFields["addLeadNameField"])
 
@@ -243,31 +442,187 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
-    func testTeamWorkspaceFirebaseAccountInviteJoinLeadAndOwnerAlert() throws {
-        let runId = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8).lowercased()
-        let ownerEmail = "owner-ui-\(runId)@example.com"
-        let repEmail = "rep-ui-\(runId)@example.com"
-        let password = "TestPass123!"
-        let leadName = "UI Interested \(runId)"
-
-        let app = makeTeamEmulatorApp()
+    func testTeamWorkspaceSetupDoesNotShowStalePermissionBanner() throws {
+        let app = makeApp()
+        app.launchArguments.append("-openMoreTabForUITests")
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)
 
-        openTeamWorkspace(app)
-        createFirebaseAccount(app, email: ownerEmail, displayName: "Owner UI", password: password)
+        let teamCard = app.descendants(matching: .any)["teamWorkspaceCard"]
+        if !teamCard.waitForExistence(timeout: 10) {
+            tapButton(app, "tab_More", timeout: 12)
+        }
+        tapElement(app, teamCard, description: "teamWorkspaceCard")
+
+        let setupTitle = app.staticTexts["Create or Accept Team"]
+        let appleSignInTitle = app.staticTexts["Apple Sign-In Required"]
+        let myTeamTitle = app.staticTexts["My Team"]
+        let stalePermissionBanner = app.staticTexts["Team permissions need updating. Refresh Team or sign in again."]
+        let offlineBanner = app.staticTexts["Team is offline. Showing saved team data until the connection returns."]
+        let confirmationBanner = app.staticTexts["Team could not be confirmed with the cloud. Check your connection and try again."]
+
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline,
+              !setupTitle.exists,
+              !appleSignInTitle.exists,
+              !myTeamTitle.exists {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+
+        XCTAssertTrue(
+            setupTitle.exists || appleSignInTitle.exists || myTeamTitle.exists,
+            "Team screen should settle into setup, Apple sign-in, or an active team state"
+        )
+        XCTAssertFalse(stalePermissionBanner.exists, "Team screen should not show a stale permission banner")
+        XCTAssertFalse(offlineBanner.exists, "Team screen should not incorrectly report offline for a stale Firebase session")
+        XCTAssertFalse(confirmationBanner.exists, "Team screen should not show a cloud confirmation failure while recovering stale auth")
+    }
+
+    @MainActor
+    func testTeamWorkspaceFirebaseAccountInviteJoinLeadAndOwnerAlert() throws {
+        try requireTeamEmulatorUITestHarness()
+
+        let credentials = teamUITestCredentials()
+        let ownerEmail = credentials.ownerEmail
+        let repEmail = credentials.repEmail
+        let password = credentials.password
+        let leadName = credentials.leadName
+
+        let ownerApp = makeTeamEmulatorApp(
+            autoAuthEmail: ownerEmail,
+            autoAuthDisplayName: "Owner UI",
+            autoAuthPassword: password,
+            shouldCreateAutoAuthAccount: true
+        )
+        ownerApp.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        openTeamWorkspace(ownerApp, expectedInitialText: "Create or Accept Team")
+        tapButton(ownerApp, "teamCreateTeamButton", timeout: 12)
+        waitForText(ownerApp, "Team plan active", timeout: 25)
+
+        let createInviteButton = scrollToButton(ownerApp, "teamCreateInviteButton", direction: .down)
+        createInviteButton.tap()
+        let inviteCode = readInviteCode(ownerApp)
+        ownerApp.terminate()
+
+        let repApp = makeTeamEmulatorApp(
+            autoAuthEmail: repEmail,
+            autoAuthDisplayName: "Rep UI",
+            autoAuthPassword: password,
+            shouldCreateAutoAuthAccount: true
+        )
+        repApp.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        openTeamWorkspace(repApp, expectedInitialText: "Create or Accept Team")
+        typeText(inviteCode, into: repApp.textFields["teamInviteCodeField"])
+        dismissTeamKeyboardIfPresent(repApp)
+        scrollToButton(repApp, "teamJoinTeamButton").tap()
+        waitForText(repApp, "Joined team.", timeout: 25)
+        waitForText(repApp, "My Team Work", timeout: 12)
+
+        tapButton(repApp, "teamDutyToggleButton", timeout: 8)
+        waitForText(repApp, "Go Off Duty", timeout: 12)
+        tapButton(repApp, "teamDutyToggleButton", timeout: 8)
+        waitForText(repApp, "Go On Duty", timeout: 12)
+
+        relaunch(repApp, opening: "-openMapTabForUITests")
+        createInterestedLead(repApp, name: String(leadName))
+        repApp.terminate()
+
+        let ownerReturnApp = makeTeamEmulatorApp(
+            autoAuthEmail: ownerEmail,
+            autoAuthDisplayName: "Owner UI",
+            autoAuthPassword: password,
+            shouldCreateAutoAuthAccount: false
+        )
+        ownerReturnApp.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        openTeamWorkspace(ownerReturnApp, expectedInitialText: "My Team")
+        scrollToText(ownerReturnApp, "Owner Alerts", direction: .up)
+        waitForText(ownerReturnApp, "Rep marked a lead interested", timeout: 25)
+        waitForTextContaining(ownerReturnApp, String(leadName), timeout: 25)
+        scrollToText(ownerReturnApp, "Seats used", direction: .down)
+        waitForText(ownerReturnApp, "2/3", timeout: 8)
+        scrollToText(ownerReturnApp, "Field Map", direction: .down)
+        XCTAssertTrue(
+            ownerReturnApp.otherElements["teamFieldMapView"].waitForExistence(timeout: 8),
+            "Owner Team Workspace should render the field map for rep work"
+        )
+        waitForTextContaining(ownerReturnApp, String(leadName), timeout: 8)
+
+        relaunch(ownerReturnApp, opening: "-openLeadsTabForUITests")
+        XCTAssertTrue(
+            ownerReturnApp.otherElements["teamWorkInlineSection"].waitForExistence(timeout: 20),
+            "Team work should be visible inside the main Leads tab"
+        )
+        waitForTextContaining(ownerReturnApp, String(leadName), timeout: 12)
+        let teamLeadRow = ownerReturnApp.buttons["teamLeadInlineRow"].firstMatch
+        XCTAssertTrue(teamLeadRow.waitForExistence(timeout: 12), "Team lead row should open detail from the main Leads tab")
+        tapElement(ownerReturnApp, teamLeadRow, description: "teamLeadInlineRow")
+        waitForText(ownerReturnApp, "Team Lead Detail", timeout: 12)
+        waitForTextContaining(ownerReturnApp, String(leadName), timeout: 8)
+        waitForText(ownerReturnApp, "Assigned to", timeout: 8)
+        waitForText(ownerReturnApp, "Rep UI", timeout: 8)
+        tapButton(ownerReturnApp, "teamLeadViewRepButton", timeout: 8)
+        waitForText(ownerReturnApp, "Sales Rep", timeout: 8)
+        waitForText(ownerReturnApp, "Rep UI", timeout: 8)
+        tapButton(ownerReturnApp, "teamRepDetailCloseButton", timeout: 8)
+        tapButton(ownerReturnApp, "teamLeadDetailCloseButton", timeout: 8)
+
+        relaunch(ownerReturnApp, opening: "-openMapTabForUITests")
+        tapButton(ownerReturnApp, "teamMapShortcut", timeout: 12)
+        waitForText(ownerReturnApp, "Team Field Map", timeout: 12)
+    }
+
+    @MainActor
+    func testTeamPhysicalOwnerCreatesTeamAndInvite() throws {
+        try requireTeamPhysicalUITestHarness()
+
+        let credentials = teamUITestCredentials()
+        let app = makeTeamEmulatorApp(
+            autoAuthEmail: credentials.ownerEmail,
+            autoAuthDisplayName: "Owner UI",
+            autoAuthPassword: credentials.password,
+            shouldCreateAutoAuthAccount: true
+        )
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        openTeamWorkspace(app, expectedInitialText: "Create or Accept Team")
         tapButton(app, "teamCreateTeamButton", timeout: 12)
         waitForText(app, "Team plan active", timeout: 25)
 
         let createInviteButton = scrollToButton(app, "teamCreateInviteButton", direction: .down)
         createInviteButton.tap()
-        waitForText(app, "Invite code created.", timeout: 20)
         let inviteCode = readInviteCode(app)
+        print("TEAM_PHYSICAL_INVITE_CODE=\(inviteCode)")
+    }
 
-        signOutFromMore(app)
+    @MainActor
+    func testTeamPhysicalRepJoinsAndCreatesInterestedLead() throws {
+        try requireTeamPhysicalUITestHarness()
 
-        openTeamWorkspace(app)
-        createFirebaseAccount(app, email: repEmail, displayName: "Rep UI", password: password)
+        let credentials = teamUITestCredentials()
+        guard let inviteCode = teamTestConfigValue(
+            environmentKey: "D2D_TEAM_INVITE_CODE",
+            infoKey: "D2DTeamInviteCode"
+        ), !inviteCode.isEmpty else {
+            throw XCTSkip("D2D_TEAM_INVITE_CODE is required for the rep physical-device Team test. Run the owner leg first.")
+        }
+
+        let app = makeTeamEmulatorApp(
+            autoAuthEmail: credentials.repEmail,
+            autoAuthDisplayName: "Rep UI",
+            autoAuthPassword: credentials.password,
+            shouldCreateAutoAuthAccount: true
+        )
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        openTeamWorkspace(app, expectedInitialText: "Create or Accept Team")
         typeText(inviteCode, into: app.textFields["teamInviteCodeField"])
         dismissTeamKeyboardIfPresent(app)
         scrollToButton(app, "teamJoinTeamButton").tap()
@@ -280,48 +635,74 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForText(app, "Go On Duty", timeout: 12)
 
         relaunch(app, opening: "-openMapTabForUITests")
-        createInterestedLead(app, name: String(leadName))
-        relaunch(app, opening: "-openMoreTabForUITests")
-        signOutFromMore(app)
+        createInterestedLead(app, name: credentials.leadName)
+    }
 
-        openTeamWorkspace(app)
-        signInToFirebase(app, email: ownerEmail, password: password)
-        waitForText(app, "Field Map", timeout: 25)
-        waitForText(app, "Rep Work", timeout: 25)
-        waitForText(app, "Owner Alerts", timeout: 25)
+    @MainActor
+    func testTeamPhysicalOwnerSeesRepWork() throws {
+        try requireTeamPhysicalUITestHarness()
+
+        let credentials = teamUITestCredentials()
+        let app = makeTeamEmulatorApp(
+            autoAuthEmail: credentials.ownerEmail,
+            autoAuthDisplayName: "Owner UI",
+            autoAuthPassword: credentials.password,
+            shouldCreateAutoAuthAccount: false
+        )
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        openTeamWorkspace(app, expectedInitialText: "My Team")
+        scrollToText(app, "Owner Alerts", direction: .up)
         waitForText(app, "Rep marked a lead interested", timeout: 25)
-        waitForTextContaining(app, String(leadName), timeout: 25)
-        waitForText(app, "Seats used", timeout: 8)
+        waitForTextContaining(app, credentials.leadName, timeout: 25)
+        scrollToText(app, "Seats used", direction: .down)
         waitForText(app, "2/3", timeout: 8)
+        scrollToText(app, "Field Map", direction: .down)
+        XCTAssertTrue(
+            app.otherElements["teamFieldMapView"].waitForExistence(timeout: 8),
+            "Owner Team Workspace should render the field map for rep work"
+        )
+        waitForTextContaining(app, credentials.leadName, timeout: 8)
 
         relaunch(app, opening: "-openLeadsTabForUITests")
         XCTAssertTrue(
             app.otherElements["teamWorkInlineSection"].waitForExistence(timeout: 20),
             "Team work should be visible inside the main Leads tab"
         )
-        waitForTextContaining(app, String(leadName), timeout: 12)
+        waitForTextContaining(app, credentials.leadName, timeout: 12)
+        let teamLeadRow = app.buttons["teamLeadInlineRow"].firstMatch
+        XCTAssertTrue(teamLeadRow.waitForExistence(timeout: 12), "Team lead row should open detail from the main Leads tab")
+        tapElement(app, teamLeadRow, description: "teamLeadInlineRow")
+        waitForText(app, "Team Lead Detail", timeout: 12)
+        waitForTextContaining(app, credentials.leadName, timeout: 8)
+        waitForText(app, "Assigned to", timeout: 8)
+        waitForText(app, "Rep UI", timeout: 8)
+        tapButton(app, "teamLeadViewRepButton", timeout: 8)
+        waitForText(app, "Sales Rep", timeout: 8)
+        waitForText(app, "Rep UI", timeout: 8)
+        tapButton(app, "teamRepDetailCloseButton", timeout: 8)
+        tapButton(app, "teamLeadDetailCloseButton", timeout: 8)
 
         relaunch(app, opening: "-openMapTabForUITests")
-        XCTAssertTrue(
-            app.buttons["teamMapShortcut"].waitForExistence(timeout: 12),
-            "Team map shortcut should be visible inside the main Map tab"
-        )
+        tapButton(app, "teamMapShortcut", timeout: 12)
+        waitForText(app, "Team Field Map", timeout: 12)
     }
 
     private func chooseRequiredOnboardingPreferences(_ app: XCUIApplication) {
-        waitForText(app, "Set up your field workspace")
+        waitForText(app, "Welcome to D2D Advancer")
         tapButton(app, "onboardingContinueButton")
 
-        waitForText(app, "What are you focused on?")
-        tapButton(app, "Manage my leads")
+        waitForText(app, "What's your main focus?")
+        tapButton(app, "onboardingSalesGoal_organizePipeline")
         tapButton(app, "onboardingContinueButton")
 
-        waitForText(app, "Choose your tools")
-        tapButton(app, "Lead management")
+        waitForText(app, "What features interest you?")
+        tapButton(app, "onboardingFocusArea_leadOrganization")
         tapButton(app, "onboardingContinueButton")
 
-        waitForText(app, "How do you like to work?")
-        tapButton(app, "I like planning ahead")
+        waitForText(app, "How do you work?")
+        tapButton(app, "onboardingWorkflowStyle_structured")
         tapButton(app, "onboardingContinueButton")
     }
 
@@ -341,18 +722,18 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         chooseRequiredOnboardingPreferences(app)
 
-        waitForText(app, "Use your location?")
+        waitForText(app, "Enable location services")
         tapButton(app, "onboardingContinueButton")
         denySystemPermissionIfPresented()
 
-        waitForText(app, "Use reminders?")
+        waitForText(app, "Enable notifications")
         tapButton(app, "onboardingContinueButton")
         denySystemPermissionIfPresented()
 
-        waitForText(app, "You're ready")
+        waitForText(app, "You're all set!")
         tapButton(app, "onboardingContinueButton")
 
-        XCTAssertTrue(app.staticTexts["You're ready"].waitForNonExistence(timeout: 8), "Onboarding should dismiss after completion")
+        XCTAssertTrue(app.staticTexts["You're all set!"].waitForNonExistence(timeout: 8), "Onboarding should dismiss after completion")
         XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 12), "Map search should be available after onboarding")
         XCTAssertTrue(app.buttons["tab_Map"].exists, "Main tab bar should be available after onboarding")
     }
@@ -381,30 +762,21 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         // Step 3: Tap first result
         let firstResult = app.buttons["mapSearchResult_0"]
-        if firstResult.waitForExistence(timeout: 5) {
-            firstResult.tap()
-            sleep(4)
-            screenshot(app, name: "04-PinDropped")
+        XCTAssertTrue(firstResult.waitForExistence(timeout: 8), "Search should return at least one result")
+        firstResult.tap()
+        sleep(4)
+        screenshot(app, name: "04-PinActionsPresented")
 
-            // Step 4: Tap the blue pin on the map (center of screen where pin should be)
-            let mapView = app.maps.firstMatch
-            if mapView.waitForExistence(timeout: 3) {
-                // The pin should be near the center after search zoomed there
-                mapView.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).tap()
-                sleep(3)
-                screenshot(app, name: "05-AfterPinTap")
-
-                // Check if the search pin actions sheet appeared
-                let addLeadBtn = app.buttons["Add New Lead Here"]
-                let doneBtn = app.buttons["Done"]
-                if addLeadBtn.waitForExistence(timeout: 3) {
-                    screenshot(app, name: "06-PinActionsSheet")
-                    XCTAssertTrue(addLeadBtn.exists, "Add New Lead Here button should exist")
-                } else if doneBtn.exists {
-                    screenshot(app, name: "06-PinActionsSheet-Done")
-                }
-            }
-        }
+        // Selecting a result should open actions directly; a tiny pin tap is too brittle for users and tests.
+        XCTAssertTrue(
+            app.staticTexts["searchPinActionsTitle"].waitForExistence(timeout: 8),
+            "Selecting a search result should show the search pin actions sheet"
+        )
+        XCTAssertTrue(
+            app.buttons["searchPinAddLeadButton"].waitForExistence(timeout: 3),
+            "Search pin actions should include Add New Lead Here"
+        )
+        screenshot(app, name: "06-PinActionsSheet")
     }
 
     @MainActor
@@ -421,12 +793,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         screenshot(app, name: "07-LongPressMenu")
 
         // Check for menu items
-        let addLeadBtn = app.staticTexts["Add Lead Here"]
-        let streetViewBtn = app.staticTexts["Street View Here"]
-        if addLeadBtn.waitForExistence(timeout: 3) {
-            screenshot(app, name: "08-LongPressMenuVisible")
-            XCTAssertTrue(streetViewBtn.exists, "Street View Here should exist")
-        }
+        let addLeadBtn = app.buttons["longPressAddLeadButton"]
+        let streetViewBtn = app.buttons["longPressStreetViewButton"]
+        XCTAssertTrue(addLeadBtn.waitForExistence(timeout: 5), "Long press should show the Add Lead action")
+        screenshot(app, name: "08-LongPressMenuVisible")
+        XCTAssertTrue(streetViewBtn.exists, "Street View Here should exist")
     }
 
     @MainActor
@@ -437,9 +808,9 @@ final class D2D_AdvancerUITests: XCTestCase {
         _ = waitForMapReady(app)
         tapButton(app, "quickAction_interest", timeout: 8)
 
-        let cancelButton = app.buttons["Cancel"]
+        let cancelButton = app.buttons["interestedQuickFormCloseButton"]
         let title = app.staticTexts["Interested Lead"]
-        let nameField = app.textFields["Name"]
+        let nameField = app.textFields["interestedQuickFormNameField"]
 
         XCTAssertTrue(cancelButton.waitForExistence(timeout: 8), "Cancel button should appear in interested form")
         XCTAssertTrue(title.waitForExistence(timeout: 8), "Interested form title should appear")
@@ -450,10 +821,10 @@ final class D2D_AdvancerUITests: XCTestCase {
             12,
             "Cancel button should have clear vertical separation from the first field"
         )
-        XCTAssertLessThanOrEqual(
-            cancelButton.frame.maxX + 8,
-            title.frame.minX,
-            "Cancel button should not crowd the centered title"
+        XCTAssertGreaterThanOrEqual(
+            cancelButton.frame.minX - title.frame.maxX,
+            8,
+            "Close button should not crowd the title"
         )
     }
 }

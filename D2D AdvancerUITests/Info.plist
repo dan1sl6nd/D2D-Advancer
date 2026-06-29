@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>D2DTeamInviteCode</key>
+	<string>$(D2D_TEAM_INVITE_CODE)</string>
+	<key>D2DRunTeamEmulatorUITests</key>
+	<string>$(D2D_RUN_TEAM_EMULATOR_UI_TESTS)</string>
+	<key>D2DRunTeamPhysicalUITests</key>
+	<string>$(D2D_RUN_TEAM_PHYSICAL_UI_TESTS)</string>
+	<key>D2DTeamUIPassword</key>
+	<string>$(D2D_TEAM_UI_PASSWORD)</string>
+	<key>D2DTeamUIRunID</key>
+	<string>$(D2D_TEAM_UI_RUN_ID)</string>
+</dict>
+</plist>

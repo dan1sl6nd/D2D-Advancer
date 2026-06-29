@@ -1,6 +1,5 @@
 import SwiftUI
 import CoreData
-import UserNotifications
 
 struct LeadsListView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -11,6 +10,7 @@ struct LeadsListView: View {
     @StateObject private var searchFilterManager = SearchFilterManager()
     @State private var selectedTab: LeadTab = .active
     @State private var showingFilters = false
+    @State private var showingSortOptions = false
     @State private var sortBy: SortOption = .dateUpdated
     @State private var sortAscending = false
     @State private var currentPage = 0
@@ -19,7 +19,9 @@ struct LeadsListView: View {
     @State private var showingOnboarding = false
     @State private var filterUpdateTask: Task<Void, Never>? = nil
     @State private var selectedLead: Lead?
+    @State private var selectedTeamLead: TeamLead?
     @State private var messageLead: Lead?
+    @State private var leadOpenErrorMessage: String?
     @State private var showingTeamFieldMap = false
     @State private var selectedTeamRepUserId: String?
     @ObservedObject private var paywallManager = PaywallManager.shared
@@ -79,14 +81,8 @@ struct LeadsListView: View {
                         .frame(height: geometry.safeAreaInsets.top)
                     ObsidianHeaderView("Leads") {
                         HStack(spacing: 6) {
-                            Menu {
-                                ForEach(SortOption.allCases, id: \.self) { option in
-                                    Button {
-                                        sortBy = option
-                                    } label: {
-                                        Label(option.rawValue, systemImage: sortBy == option ? "checkmark" : "")
-                                    }
-                                }
+                            Button {
+                                showingSortOptions = true
                             } label: {
                                 HStack(spacing: 3) {
                                     Image(systemName: "arrow.up.arrow.down")
@@ -99,7 +95,12 @@ struct LeadsListView: View {
                                 .padding(.vertical, 6)
                                 .background(Color.electricViolet.opacity(0.1))
                                 .clipShape(Capsule())
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("Sort leads")
+                                .accessibilityValue(sortBy.rawValue)
+                                .accessibilityHint("Chooses the lead sort field.")
                             }
+                            .buttonStyle(.plain)
 
                             Button {
                                 sortAscending.toggle()
@@ -109,8 +110,10 @@ struct LeadsListView: View {
                                     .foregroundColor(.textSecondary)
                                     .frame(width: 28, height: 28)
                                     .background(Color.obsidianBorder.opacity(0.2))
-                                    .clipShape(Circle())
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }
+                            .accessibilityLabel(sortAscending ? "Sort ascending" : "Sort descending")
+                            .accessibilityHint("Toggles the lead list sort direction.")
                         }
                     }
                     tabSelectionSection
@@ -124,8 +127,25 @@ struct LeadsListView: View {
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
             }
+            .sheet(item: $selectedTeamLead) { lead in
+                TeamLeadDetailSheet(initialLead: lead)
+            }
             .sheet(item: $messageLead) { lead in
                 MessageSelectionView(lead: lead)
+            }
+            .confirmationDialog(
+                "Sort Leads",
+                isPresented: $showingSortOptions,
+                titleVisibility: .visible
+            ) {
+                ForEach(SortOption.allCases, id: \.self) { option in
+                    Button(option.rawValue) {
+                        sortBy = option
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Choose how the lead list is ordered.")
             }
             .sheet(isPresented: $showingTeamFieldMap) {
                 if let summary = teamSurfaceSummary {
@@ -153,14 +173,14 @@ struct LeadsListView: View {
             }
             .onChange(of: router.targetLeadID) { _, newValue in
                 guard let id = newValue else { return }
-                if let lead = fetchLead(by: id) {
+                if let lead = openLeadTarget(id) {
                     selectedLead = lead
                 }
                 router.targetLeadID = nil
             }
             .onChange(of: router.openMessageForLeadID) { _, newValue in
                 guard let id = newValue else { return }
-                if let lead = fetchLead(by: id) {
+                if let lead = openLeadTarget(id) {
                     messageLead = lead
                 }
                 router.openMessageForLeadID = nil
@@ -237,11 +257,25 @@ struct LeadsListView: View {
     }
     
     private var leadsContentSection: some View {
-        Group {
-            if paginatedLeads.isEmpty && !isLoadingMore && teamSurfaceSummary == nil {
-                emptyStateView
-            } else {
-                leadsScrollView
+        VStack(spacing: 0) {
+            if let leadOpenErrorMessage {
+                ObsidianStatusBanner(
+                    icon: "exclamationmark.triangle.fill",
+                    title: "Lead could not open",
+                    message: leadOpenErrorMessage,
+                    tint: Color.statusNotHome
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+            }
+
+            Group {
+                if paginatedLeads.isEmpty && !isLoadingMore && teamSurfaceSummary == nil {
+                    emptyStateView
+                } else {
+                    leadsScrollView
+                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -300,7 +334,8 @@ struct LeadsListView: View {
                 TeamWorkInlineSection(
                     summary: summary,
                     selectedRepUserId: $selectedTeamRepUserId,
-                    onOpenMap: { showingTeamFieldMap = true }
+                    onOpenMap: { showingTeamFieldMap = true },
+                    onSelectLead: { selectedTeamLead = $0 }
                 )
                 .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 8, trailing: 16))
                 .listRowBackground(Color.obsidianBlack)
@@ -334,7 +369,9 @@ struct LeadsListView: View {
                     guard paywallManager.gateAction() else { return }
                     handleLongPressDelete(lead)
                 }
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                 .listRowBackground(Color.obsidianBlack)
+                .listRowSeparator(.hidden)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Lead: \(lead.displayName)")
                 .accessibilityHint("Double tap to view lead details, long press to delete")
@@ -412,29 +449,36 @@ struct LeadsListView: View {
     }
     
     private func deleteLead(_ lead: Lead) {
+        let leadUUID = lead.id
         let firebaseLeadId = lead.id?.uuidString
 
         withAnimation(.easeInOut(duration: 0.3)) {
             // Remove from paginated leads immediately for UI feedback
             paginatedLeads.removeAll { $0.id == lead.id }
         }
-        
+
+        cancelNotification(for: lead)
+
         // Delete from Core Data
         viewContext.delete(lead)
         
         do {
             try viewContext.save()
+            if let leadUUID {
+                UserDataSyncManager.markLeadDeletedLocally(leadUUID)
+            }
 
             if let firebaseLeadId,
-               UserDataSyncManager.shouldDeleteLeadFromFirebase(
+               UserDataSyncManager.shouldDeleteLeadFromCloud(
                 provider: CloudSyncProvider.current,
                 isAuthenticated: FirebaseService.shared.isAuthenticated
                ) {
                 Task {
                     do {
-                        try await UserDataSyncManager.shared.deleteLeadFromFirebase(leadId: firebaseLeadId)
+                        try await UserDataSyncManager.shared.deleteLeadFromCloud(leadId: firebaseLeadId)
                     } catch {
-                        print("❌ Failed to delete lead \(firebaseLeadId) from Firebase: \(error)")
+                        print("❌ Failed to delete lead \(firebaseLeadId) from cloud: \(error)")
+                        ErrorHandler.shared.handle(error, context: "Delete Lead From Cloud")
                     }
                 }
             }
@@ -520,7 +564,7 @@ struct LeadsListView: View {
         }
         
         // Build fetch request (main actor / main context fetch to avoid Sendable crossing)
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: viewContext)
 
         // Apply search filters from SearchFilterManager
         let filterManager = SearchFilterManager()
@@ -572,11 +616,23 @@ struct LeadsListView: View {
         }
     }
 
-    private func fetchLead(by id: UUID) -> Lead? {
-        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+    private func openLeadTarget(_ id: UUID) -> Lead? {
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: viewContext)
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         request.fetchLimit = 1
-        return (try? viewContext.fetch(request))?.first
+
+        do {
+            guard let lead = try viewContext.fetch(request).first else {
+                leadOpenErrorMessage = "That lead is no longer available on this device."
+                return nil
+            }
+            leadOpenErrorMessage = nil
+            return lead
+        } catch {
+            leadOpenErrorMessage = "Lead data could not be read. Try refreshing the Leads tab."
+            print("❌ Failed to open lead \(id): \(error)")
+            return nil
+        }
     }
 
     private func deleteLeads(offsets: IndexSet) {
@@ -591,8 +647,9 @@ struct LeadsListView: View {
             return true
         }
         
-        // Capture lead IDs for Firebase deletion (before Core Data deletion)
-        let leadsForFirebaseDelete = leadsToDelete.compactMap { lead -> String? in
+        // Capture lead IDs for cloud deletion before removing Core Data objects.
+        let leadUUIDsForTombstone = leadsToDelete.compactMap { $0.id }
+        let leadsForCloudDelete = leadsToDelete.compactMap { lead -> String? in
             return lead.id?.uuidString
         }
         
@@ -609,6 +666,9 @@ struct LeadsListView: View {
             
             do {
                 try viewContext.save()
+                for leadId in leadUUIDsForTombstone {
+                    UserDataSyncManager.markLeadDeletedLocally(leadId)
+                }
                 print("✅ Individual lead deletion completed: \(leadsToDelete.count) leads")
                 
                 // Refresh leads after deletion
@@ -623,15 +683,19 @@ struct LeadsListView: View {
             }
         }
         
-        // STEP 2: Delete from Firebase asynchronously (prevent re-sync)
-        if FirebaseService.shared.isAuthenticated && !leadsForFirebaseDelete.isEmpty {
+        // STEP 2: Delete from the selected cloud provider asynchronously (prevent re-sync)
+        if UserDataSyncManager.shouldDeleteLeadFromCloud(
+            provider: CloudSyncProvider.current,
+            isAuthenticated: FirebaseService.shared.isAuthenticated
+        ) && !leadsForCloudDelete.isEmpty {
             Task {
-                for leadId in leadsForFirebaseDelete {
+                for leadId in leadsForCloudDelete {
                     do {
-                        try await UserDataSyncManager.shared.deleteLeadFromFirebase(leadId: leadId)
-                        print("✅ Lead \(leadId) deleted from Firebase")
+                        try await UserDataSyncManager.shared.deleteLeadFromCloud(leadId: leadId)
+                        print("✅ Lead \(leadId) deleted from cloud")
                     } catch {
-                        print("❌ Failed to delete lead \(leadId) from Firebase: \(error)")
+                        print("❌ Failed to delete lead \(leadId) from cloud: \(error)")
+                        ErrorHandler.shared.handle(error, context: "Delete Lead From Cloud")
                     }
                 }
                 
@@ -643,8 +707,7 @@ struct LeadsListView: View {
 
     private func quickSetFollowUp(for lead: Lead) {
         let defaultDate = AppPreferences.shared.defaultFollowUpDate()
-        lead.followUpDate = defaultDate
-        lead.updatedDate = Date()
+        lead.setFollowUpDate(lead.leadStatus.resolvedFollowUpDate(defaultDate), autoSave: false)
         do {
             try viewContext.save()
             NotificationService.shared.scheduleFollowUpNotification(for: lead)
@@ -658,7 +721,7 @@ struct LeadsListView: View {
             print("❌ Cannot cancel notification: lead has no ID")
             return
         }
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [leadId.uuidString])
+        NotificationService.shared.cancelFollowUpNotification(for: leadId)
     }
     
     private func leadAccessibilityValue(for lead: Lead) -> String {
@@ -722,11 +785,11 @@ struct SearchBar: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 11)
-        .background(Color.obsidianSurface)
-        .clipShape(Capsule())
+        .padding(.vertical, 12)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            Capsule()
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(isSearchFocused ? Color.electricViolet : Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
         )
         .padding(.horizontal, 16)
@@ -764,7 +827,14 @@ struct FilterBar: View {
                     Capsule()
                         .fill(Color.electricViolet.opacity(0.12))
                 )
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Sort leads")
+                .accessibilityValue(sortBy.rawValue)
+                .accessibilityHint("Chooses the lead sort field.")
             }
+            .accessibilityLabel("Sort leads")
+            .accessibilityValue(sortBy.rawValue)
+            .accessibilityHint("Chooses the lead sort field.")
 
             Button(action: {
                 sortAscending.toggle()
@@ -774,11 +844,14 @@ struct FilterBar: View {
                     .foregroundColor(Color.textSecondary)
                     .padding(8)
                     .background(Color.obsidianSurface)
-                    .clipShape(Circle())
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
-                        Circle().stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                     )
             }
+            .accessibilityLabel(sortAscending ? "Sort ascending" : "Sort descending")
+            .accessibilityHint("Toggles the lead list sort direction.")
 
             Spacer()
         }
@@ -806,76 +879,77 @@ struct LeadRowView: View {
     }
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Lead initial
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.electricViolet, Color.electricVioletDeep],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 42, height: 42)
-                .overlay(
-                    Text(leadInitial)
-                        .font(.obsidianCallout)
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(.white)
-                )
-                .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: lead.leadStatus.iconName)
+                    .font(.obsidianCallout)
+                    .foregroundColor(.white)
+                    .frame(width: 46, height: 46)
+                    .background(statusColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(lead.displayName)
-                        .font(.obsidianTitle)
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(Color.textPrimary)
-                        .accessibilityAddTraits(.isHeader)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(lead.displayName)
+                            .font(.themeTitle)
+                            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                            .foregroundColor(Color.textPrimary)
+                            .lineLimit(1)
+                            .accessibilityAddTraits(.isHeader)
 
-                    Spacer()
+                        Spacer(minLength: 6)
 
-                    if let followUpDate = lead.followUpDate {
-                        HStack(spacing: 4) {
-                            Image(systemName: "calendar.badge.clock")
+                        if lead.price > 0 {
+                            Text(lead.price, format: .currency(code: "CAD"))
                                 .font(.micro)
-                                .foregroundColor(Color.statusNotHome)
-                                .accessibilityHidden(true)
-                            Text(followUpDate, format: .dateTime.day().month())
-                                .font(.micro)
-                                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                                .foregroundColor(Color.statusNotHome)
+                                .fontWeight(.semibold)
+                                .foregroundColor(Color.statusConverted)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.statusConverted.opacity(0.12)))
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(Color.statusNotHome.opacity(0.12))
-                        )
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Follow-up scheduled")
-                        .accessibilityValue(DateFormatter.localizedString(from: followUpDate, dateStyle: .medium, timeStyle: .short))
                     }
-                }
 
-                if let address = lead.address, !address.isEmpty {
-                    Text(address)
-                        .font(.obsidianCaption)
+                    Text((lead.address?.isEmpty == false ? lead.address : nil) ?? lead.leadStatus.displayName)
+                        .font(.obsidianFootnote)
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                         .foregroundColor(Color.textSecondary)
-                        .lineLimit(1)
-                        .accessibilityLabel("Address: \(address)")
-                }
-
-                HStack {
-                    ModernStatusBadge(status: lead.leadStatus)
-                    Spacer()
+                        .lineLimit(2)
+                        .accessibilityLabel((lead.address?.isEmpty == false ? "Address: \(lead.address ?? "")" : nil) ?? "Status: \(lead.leadStatus.displayName)")
                 }
             }
+
+            HStack(spacing: 8) {
+                ModernStatusBadge(status: lead.leadStatus)
+
+                if let followUpDate = lead.followUpDate {
+                    leadMetaChip(
+                        icon: "calendar.badge.clock",
+                        text: followUpDate.formatted(.dateTime.day().month()),
+                        color: Color.statusNotHome
+                    )
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Follow-up scheduled")
+                    .accessibilityValue(DateFormatter.localizedString(from: followUpDate, dateStyle: .medium, timeStyle: .short))
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
+                    .accessibilityHidden(true)
+            }
         }
-        .surfaceCard()
-        .padding(.horizontal, 16)
-        .padding(.vertical, 2)
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
         .contentShape(Rectangle())
         .onTapGesture {
             onTap?()
@@ -923,30 +997,21 @@ struct LeadRowView: View {
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             Button {
-                lead.leadStatus = .interested
-                lead.updatedDate = Date()
-                try? viewContext.save()
-                UserDataSyncManager.shared.syncWithServer()
+                updateLeadStatus(.interested, context: viewContext)
             } label: {
                 Label("Interested", systemImage: "star.fill")
             }
             .tint(.statusInterested)
 
             Button {
-                lead.leadStatus = .converted
-                lead.updatedDate = Date()
-                try? viewContext.save()
-                UserDataSyncManager.shared.syncWithServer()
+                updateLeadStatus(.converted, context: viewContext)
             } label: {
                 Label("Sold", systemImage: "checkmark.circle.fill")
             }
             .tint(.statusConverted)
 
             Button {
-                lead.leadStatus = .notInterested
-                lead.updatedDate = Date()
-                try? viewContext.save()
-                UserDataSyncManager.shared.syncWithServer()
+                updateLeadStatus(.notInterested, context: viewContext)
             } label: {
                 Label("No Interest", systemImage: "hand.raised.fill")
             }
@@ -954,9 +1019,50 @@ struct LeadRowView: View {
         }
         .accessibilityElement(children: .combine)
     }
+
+    private func updateLeadStatus(_ status: Lead.Status, context: NSManagedObjectContext) {
+        lead.applyLeadStatus(status, autoSave: false)
+
+        do {
+            try context.save()
+            UserDataSyncManager.shared.syncWithServer()
+        } catch {
+            context.rollback()
+            ErrorHandler.shared.handle(error, context: "Update Lead Status")
+        }
+    }
     
     private var leadInitial: String {
         String(lead.displayName.prefix(1)).uppercased()
+    }
+
+    private var statusColor: Color {
+        switch lead.leadStatus {
+        case .notContacted:
+            return Color.statusNotContacted
+        case .notHome:
+            return Color.statusNotHome
+        case .interested:
+            return Color.statusInterested
+        case .converted:
+            return Color.statusConverted
+        case .notInterested:
+            return Color.statusNotInterested
+        }
+    }
+
+    private func leadMetaChip(icon: String, text: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.micro)
+            Text(text)
+                .font(.micro)
+                .fontWeight(.semibold)
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(color.opacity(0.12)))
     }
     
 }

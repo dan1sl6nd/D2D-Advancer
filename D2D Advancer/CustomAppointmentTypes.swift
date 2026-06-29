@@ -98,21 +98,25 @@ class CustomAppointmentTypeManager: ObservableObject {
     static let shared = CustomAppointmentTypeManager()
     
     @Published var customTypes: [CustomAppointmentType] = []
-    private let userDefaults = UserDefaults.standard
-    private let customTypesKey = "custom_appointment_types"
+    @Published var lastErrorMessage: String?
+    private let userDefaults: UserDefaults
+    private let customTypesKey: String
+    private var hasCorruptStoredTypes = false
     
-    private init() {
+    init(userDefaults: UserDefaults = .standard, customTypesKey: String = "custom_appointment_types") {
+        self.userDefaults = userDefaults
+        self.customTypesKey = customTypesKey
         loadCustomTypes()
     }
     
     var allAppointmentTypes: [AppointmentTypeWrapper] {
         var types: [AppointmentTypeWrapper] = []
-        
+
         // Add default types
         for defaultType in Appointment.AppointmentType.allCases {
             types.append(.defaultType(defaultType))
         }
-        
+
         // Add custom types
         for customType in customTypes {
             types.append(.customType(customType))
@@ -121,7 +125,9 @@ class CustomAppointmentTypeManager: ObservableObject {
         return types
     }
     
-    func addCustomType(_ customType: CustomAppointmentType) {
+    @discardableResult
+    func addCustomType(_ customType: CustomAppointmentType) -> Bool {
+        let previousTypes = customTypes
         var newType = customType
         newType = CustomAppointmentType(
             id: customType.id,
@@ -132,46 +138,99 @@ class CustomAppointmentTypeManager: ObservableObject {
             dateCreated: Date()
         )
         customTypes.append(newType)
-        saveCustomTypes()
-        
+        guard saveCustomTypes() else {
+            customTypes = previousTypes
+            return false
+        }
+
         // Force UI update
         DispatchQueue.main.async {
             self.objectWillChange.send()
         }
+        return true
     }
     
-    func updateCustomType(_ customType: CustomAppointmentType) {
-        if let index = customTypes.firstIndex(where: { $0.id == customType.id }) {
-            customTypes[index] = customType
-            saveCustomTypes()
-            
-            // Force UI update
-            DispatchQueue.main.async {
-                self.objectWillChange.send()
-            }
+    @discardableResult
+    func updateCustomType(_ customType: CustomAppointmentType) -> Bool {
+        guard let index = customTypes.firstIndex(where: { $0.id == customType.id }) else {
+            lastErrorMessage = "Could not update appointment type because it no longer exists."
+            return false
         }
+
+        let previousType = customTypes[index]
+        customTypes[index] = customType
+        guard saveCustomTypes() else {
+            customTypes[index] = previousType
+            return false
+        }
+
+        // Force UI update
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+        }
+        return true
     }
     
-    func deleteCustomType(_ customType: CustomAppointmentType) {
+    @discardableResult
+    func deleteCustomType(_ customType: CustomAppointmentType) -> Bool {
+        guard customTypes.contains(where: { $0.id == customType.id }) else {
+            lastErrorMessage = "Could not delete appointment type because it no longer exists."
+            return false
+        }
+
+        let previousTypes = customTypes
         customTypes.removeAll { $0.id == customType.id }
-        saveCustomTypes()
+        guard saveCustomTypes() else {
+            customTypes = previousTypes
+            return false
+        }
         
         // Force UI update
         DispatchQueue.main.async {
             self.objectWillChange.send()
         }
+        return true
     }
     
-    private func saveCustomTypes() {
-        if let encoded = try? JSONEncoder().encode(customTypes) {
+    @discardableResult
+    private func saveCustomTypes() -> Bool {
+        guard !hasCorruptStoredTypes else {
+            let message = "Could not save appointment types because the saved appointment types could not be loaded. Your existing saved data was left untouched."
+            lastErrorMessage = message
+            print("❌ \(message)")
+            return false
+        }
+
+        do {
+            let encoded = try JSONEncoder().encode(customTypes)
             userDefaults.set(encoded, forKey: customTypesKey)
+            lastErrorMessage = nil
+            hasCorruptStoredTypes = false
+            return true
+        } catch {
+            let message = "Could not save appointment types: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("❌ \(message)")
+            return false
         }
     }
     
     private func loadCustomTypes() {
-        if let data = userDefaults.data(forKey: customTypesKey),
-           let types = try? JSONDecoder().decode([CustomAppointmentType].self, from: data) {
+        guard let data = userDefaults.data(forKey: customTypesKey) else {
+            hasCorruptStoredTypes = false
+            return
+        }
+
+        do {
+            let types = try JSONDecoder().decode([CustomAppointmentType].self, from: data)
             customTypes = types
+            lastErrorMessage = nil
+            hasCorruptStoredTypes = false
+        } catch {
+            let message = "Could not load saved appointment types: \(error.localizedDescription)"
+            lastErrorMessage = message
+            hasCorruptStoredTypes = true
+            print("❌ \(message)")
         }
     }
 }

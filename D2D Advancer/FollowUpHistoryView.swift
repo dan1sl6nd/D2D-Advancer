@@ -20,14 +20,19 @@ struct FollowUpHistoryView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
-                // Lead Summary Header
                 leadSummaryHeader
                 
-                // Check-ins List
                 if checkIns.isEmpty {
-                    emptyStateView
+                    ObsidianEmptyState(
+                        icon: "clock.arrow.circlepath",
+                        title: "No follow-ups recorded",
+                        message: "Record the first check-in to keep this lead history useful.",
+                        actionTitle: "Record Check-in",
+                        actionIcon: "plus",
+                        action: { showingAddCheckIn = true }
+                    )
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 8) {
@@ -41,15 +46,16 @@ struct FollowUpHistoryView: View {
                     }
                 }
             }
+            .background(Color.obsidianBlack)
             .navigationTitle("Follow-up History")
-            .navigationBarTitleDisplayMode(.inline)
+            .obsidianInlineNavigation()
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingAddCheckIn = true
-                    }) {
-                        Image(systemName: "plus")
-                    }
+                    ObsidianCompactIconButton(
+                        icon: "plus",
+                        accessibilityLabel: "Add follow-up check-in",
+                        action: { showingAddCheckIn = true }
+                    )
                 }
             }
             .sheet(isPresented: $showingAddCheckIn) {
@@ -62,16 +68,16 @@ struct FollowUpHistoryView: View {
     }
     
     private var leadSummaryHeader: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(lead.displayName)
-                        .font(.title2)
-                        .fontWeight(.semibold)
+                        .font(.obsidianHeadline)
+                        .foregroundColor(.textPrimary)
                     
                     if let address = lead.address {
                         Text(address)
-                            .font(.caption)
+                            .font(.obsidianFootnote)
                             .foregroundColor(Color.textSecondary)
                     }
                 }
@@ -84,11 +90,10 @@ struct FollowUpHistoryView: View {
             HStack(spacing: 20) {
                 VStack {
                     Text("\(lead.checkInCount)")
-                        .font(.title2)
-                        .fontWeight(.bold)
+                        .font(.obsidianHeadline)
                         .foregroundColor(Color.electricViolet)
                     Text("Check-ins")
-                        .font(.caption)
+                        .font(.obsidianSmall)
                         .foregroundColor(Color.textSecondary)
                 }
                 
@@ -98,56 +103,25 @@ struct FollowUpHistoryView: View {
                 VStack {
                     if let lastCheckIn = lead.lastCheckIn {
                         Text(lastCheckIn.formattedCheckInDate)
-                            .font(.caption)
-                            .fontWeight(.medium)
+                            .font(.obsidianFootnote)
+                            .foregroundColor(.textPrimary)
                     } else {
                         Text("Never")
-                            .font(.caption)
-                            .fontWeight(.medium)
+                            .font(.obsidianFootnote)
+                            .foregroundColor(.textPrimary)
                     }
                     Text("Last Contact")
-                        .font(.caption)
+                        .font(.obsidianSmall)
                         .foregroundColor(Color.textSecondary)
                 }
                 
                 Spacer()
             }
         }
-        .padding()
-        .background(Color.obsidianSurface)
-    }
-    
-    private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 60))
-                .foregroundColor(Color.textSecondary)
-            
-            Text("No Follow-ups Recorded")
-                .font(.title2)
-                .fontWeight(.medium)
-                .foregroundColor(Color.textPrimary)
-            
-            Text("Start tracking your interactions with this lead by recording your first follow-up.")
-                .font(.body)
-                .foregroundColor(Color.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            Button(action: {
-                showingAddCheckIn = true
-            }) {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("Record First Check-in")
-                }
-                .padding()
-                .background(Color.electricViolet)
-                .foregroundColor(.white)
-                .cornerRadius(12)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(16)
+        .surfaceCard()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
     
     private func migrateCheckInOutcomes() {
@@ -198,67 +172,67 @@ struct CheckInInteractiveRowView: View {
     let onDelete: () -> Void
     
     var body: some View {
+        let typeColor = getCheckInColor()
+        let outcomeColor = getOutcomeColor()
+
         VStack(alignment: .leading, spacing: 12) {
-            // Main check-in info
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    // Check-in type with icon
-                    HStack(spacing: 8) {
-                        Image(systemName: getCheckInIcon())
-                            .foregroundColor(getCheckInColor())
-                            .frame(width: 20)
-                        
-                        Text(getCheckInType())
-                            .font(.headline)
-                            .foregroundColor(Color.textPrimary)
-                    }
-                    
-                    // Outcome - simple and always visible
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(getOutcomeColor())
-                            .frame(width: 8, height: 8)
-                        
-                        Text(getOutcomeText())
-                            .font(.subheadline)
-                            .foregroundColor(getOutcomeColor())
-                    }
-                    .padding(.leading, 4)
+            HStack(alignment: .top, spacing: 12) {
+                ObsidianIconTile(icon: getCheckInIcon(), tint: typeColor, size: 42)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(getCheckInType())
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textPrimary)
+
+                    Label(getOutcomeText(), systemImage: "circle.fill")
+                        .font(.micro)
+                        .foregroundColor(outcomeColor)
+                        .labelStyle(.titleAndIcon)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(outcomeColor.opacity(0.12)))
                 }
-                
-                Spacer()
-                
-                // Date and time
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(checkIn.checkInDate?.formatted(.dateTime.day().month()) ?? "")
-                        .font(.caption)
-                        .foregroundColor(Color.textSecondary)
+
+                Spacer(minLength: 8)
+
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(checkIn.checkInDate?.formatted(.dateTime.month().day()) ?? "No date")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textPrimary)
+
                     Text(checkIn.checkInDate?.formatted(.dateTime.hour().minute()) ?? "")
-                        .font(.caption2)
+                        .font(.micro)
                         .foregroundColor(Color.textSecondary)
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.obsidianElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-            
-            // Notes if available
+
             if let notes = checkIn.notes, !notes.isEmpty {
                 Text(notes)
-                    .font(.body)
+                    .font(.obsidianBody)
                     .foregroundColor(Color.textSecondary)
-                    .padding(.top, 4)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                    )
                     .lineLimit(nil)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.obsidianSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.06), radius: 3, x: 0, y: 2)
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
+        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
         .padding(.horizontal, 16)
         .contextMenu {
             Button(role: .destructive) {
@@ -267,6 +241,7 @@ struct CheckInInteractiveRowView: View {
                 Label("Delete Check-in", systemImage: "trash")
             }
         }
+        .accessibilityElement(children: .combine)
     }
     
     private func getCheckInIcon() -> String {
@@ -313,147 +288,97 @@ struct CheckInInteractiveRowView: View {
 struct CheckInRowView: View {
     let checkIn: FollowUpCheckIn
     let onDelete: () -> Void
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Main check-in info
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    // Check-in type with icon
-                    HStack(spacing: 8) {
-                        Image(systemName: getCheckInIcon())
-                            .foregroundColor(getCheckInColor())
-                            .frame(width: 20)
-                        
-                        Text(getCheckInType())
-                            .font(.headline)
-                            .foregroundColor(Color.textPrimary)
-                    }
-                    
-                    // Outcome - simple and always visible
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(getOutcomeColor())
-                            .frame(width: 8, height: 8)
-                        
-                        Text(getOutcomeText())
-                            .font(.subheadline)
-                            .foregroundColor(getOutcomeColor())
-                    }
-                    .padding(.leading, 4)
-                }
-                
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: 4) {
-                    // Date
-                    Text(getFormattedDate())
-                        .font(.caption)
-                        .foregroundColor(Color.textSecondary)
-                    
-                    // Delete button
-                    Button(action: onDelete) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(Color.statusNotInterested)
-                            .font(.title3)
-                    }
-                    .buttonStyle(BorderlessButtonStyle())
-                }
-            }
-            
-            // Notes if available
-            if let notes = checkIn.notes, !notes.isEmpty {
-                Text(notes)
-                    .font(.body)
-                    .foregroundColor(Color.textSecondary)
-                    .padding(.top, 4)
-            }
-        }
-        .padding(.vertical, 8)
-    }
-    
-    // Simple helper functions that will definitely work
-    private func getCheckInType() -> String {
-        let type = checkIn.checkInType ?? "door_knock"
-        
-        switch type {
-        case "phone_call": return "Phone Call"
-        case "email": return "Email"
-        case "sms_message": return "SMS Message"
-        case "in_person_meeting": return "In-Person Meeting"
-        case "virtual_meeting": return "Virtual Meeting"
-        case "door_knock": return "Door Knock"
-        default: return "Door Knock"
-        }
-    }
-    
-    private func getCheckInIcon() -> String {
-        let type = checkIn.checkInType ?? "door_knock"
-        switch type {
-        case "phone_call": return "phone.fill"
-        case "email": return "envelope.fill"
-        case "sms_message": return "message.fill"
-        case "in_person_meeting": return "person.2.fill"
-        case "virtual_meeting": return "video.fill"
-        default: return "door.left.hand.open"
-        }
-    }
-    
-    private func getCheckInColor() -> Color {
-        let type = checkIn.checkInType ?? "door_knock"
-        switch type {
-        case "phone_call": return Color.electricViolet
-        case "email": return Color.electricViolet
-        case "sms_message": return Color.statusInterested
-        case "in_person_meeting": return Color.statusNotInterested
-        case "virtual_meeting": return Color.statusNotHome
-        default: return .brown
-        }
-    }
-    
-    private func getOutcomeText() -> String {
-        let rawOutcome = checkIn.outcome ?? ""
-        
-        if rawOutcome.isEmpty {
-            return "No outcome recorded"
-        }
-        
-        // Simple mapping without complex enum logic
-        switch rawOutcome {
-        case "successful": return "Successful Contact"
-        case "no_answer": return "No Answer"
-        case "not_interested": return "Not Interested"
-        case "interested": return "Showed Interest"
-        case "converted": return "Converted"
-        case "reschedule": return "Reschedule Needed"
-        case "callback": return "Callback Requested"
-        default: return rawOutcome.capitalized
-        }
-    }
-    
-    private func getOutcomeColor() -> Color {
-        let rawOutcome = checkIn.outcome ?? ""
 
-        switch rawOutcome {
-        case "successful", "interested": return Color.statusInterested
-        case "converted": return Color.electricViolet
-        case "no_answer", "reschedule", "callback": return Color.statusNotHome
-        case "not_interested": return Color.statusNotInterested
-        default: return Color.textSecondary
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            ObsidianIconTile(icon: checkInIcon, tint: checkInColor, size: 34)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(checkInType)
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+
+                    Text(outcomeText)
+                        .font(.micro)
+                        .foregroundColor(outcomeColor)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(outcomeColor.opacity(0.12)))
+                }
+
+                Text(checkIn.checkInDate?.formatted(.dateTime.month().day().hour().minute()) ?? "No date saved")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+
+                if let notes = checkIn.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Button(action: onDelete) {
+                Image(systemName: "trash.fill")
+                    .font(.micro)
+                    .foregroundColor(Color.statusNotInterested)
+                    .frame(width: 30, height: 30)
+                    .background(Color.statusNotInterested.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityLabel("Delete check-in")
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var checkInType: String {
+        checkIn.checkInTypeEnum.displayName
+    }
+
+    private var checkInIcon: String {
+        switch checkIn.checkInTypeEnum {
+        case .phoneCall: return "phone.fill"
+        case .email: return "envelope.fill"
+        case .smsMessage: return "message.fill"
+        case .inPersonMeeting: return "person.2.fill"
+        case .virtualMeeting: return "video.fill"
+        case .doorKnock: return "door.left.hand.open"
         }
     }
-    
-    private func getFormattedDate() -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: checkIn.checkInDate ?? Date())
+
+    private var checkInColor: Color {
+        switch checkIn.checkInTypeEnum {
+        case .phoneCall, .email: return Color.electricViolet
+        case .smsMessage: return Color.statusInterested
+        case .inPersonMeeting: return Color.statusNotInterested
+        case .virtualMeeting: return Color.statusNotHome
+        case .doorKnock: return Color.statusConverted
+        }
+    }
+
+    private var outcomeText: String {
+        checkIn.outcomeEnum?.displayName ?? "No outcome"
+    }
+
+    private var outcomeColor: Color {
+        guard let outcome = checkIn.outcomeEnum else { return Color.textSecondary }
+        switch outcome {
+        case .interested, .successful: return Color.statusInterested
+        case .notInterested: return Color.statusNotInterested
+        case .callback, .reschedule, .noAnswer: return Color.statusNotHome
+        case .converted: return Color.electricViolet
+        }
     }
 }
 
 #Preview {
     let context = PersistenceController.preview.container.viewContext
-    let lead = Lead(context: context)
+    let lead = Lead.create(in: context)
     lead.name = "John Doe"
     lead.address = "123 Main St, Toronto, ON"
     lead.leadStatus = .interested
@@ -483,7 +408,7 @@ struct SwipeToDeleteCheckInRow: View {
     @State private var showingDeleteButton = false
     @State private var initialOffset: CGFloat = 0
     
-    private let deleteButtonWidth: CGFloat = 80
+    private let deleteButtonWidth: CGFloat = 88
     private let swipeThreshold: CGFloat = 50
     
     var body: some View {
@@ -500,16 +425,20 @@ struct SwipeToDeleteCheckInRow: View {
                         onDelete()
                     }
                 }) {
-                    VStack {
+                    VStack(spacing: 6) {
                         Image(systemName: "trash.fill")
-                            .font(.title2)
+                            .font(.obsidianCallout)
                         Text("Delete")
-                            .font(.caption2)
+                            .font(.micro)
+                            .fontWeight(.semibold)
                     }
                     .foregroundColor(.white)
                     .frame(width: deleteButtonWidth)
                     .frame(maxHeight: .infinity)
-                    .background(Color.statusNotInterested)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.statusNotInterested)
+                    )
                 }
                 .buttonStyle(PlainButtonStyle())
                 .transition(.move(edge: .trailing).combined(with: .opacity))

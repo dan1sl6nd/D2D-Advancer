@@ -7,45 +7,47 @@ struct ThemeSettingsView: View {
         NavigationView {
             List {
                 Section {
-                    HStack {
+                    HStack(spacing: 12) {
                         Image(systemName: "moon.fill")
                             .foregroundColor(Color.electricViolet)
-                            .frame(width: 28)
+                            .frame(width: 34, height: 34)
+                            .background(Color.electricViolet.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         Text("Dark Mode")
+                            .font(.obsidianBody)
                             .foregroundColor(Color.textPrimary)
                         Spacer()
-                        Toggle("", isOn: $darkModeEnabled)
+                        Toggle("Dark Mode", isOn: $darkModeEnabled)
+                            .labelsHidden()
+                            .accessibilityLabel("Dark Mode")
+                            .accessibilityValue(darkModeEnabled ? "Enabled" : "Disabled")
+                            .accessibilityHint("Toggles dark appearance for the app.")
                     }
                 } header: {
                     Text("APPEARANCE")
-                        .font(.system(size: 11, weight: .medium))
-                        .textCase(.uppercase)
-                        .tracking(0.5)
-                        .foregroundColor(Color.textMuted)
+                        .microLabel()
                 }
+                .obsidianListRow()
 
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Obsidian")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.obsidianTitle)
                             .foregroundColor(Color.textPrimary)
                         Text("Premium dark theme with electric violet accents")
-                            .font(.system(size: 13, weight: .regular))
+                            .font(.obsidianFootnote)
                             .foregroundColor(Color.textSecondary)
                     }
                     .padding(.vertical, 4)
                 } header: {
                     Text("ACTIVE THEME")
-                        .font(.system(size: 11, weight: .medium))
-                        .textCase(.uppercase)
-                        .tracking(0.5)
-                        .foregroundColor(Color.textMuted)
+                        .microLabel()
                 }
+                .obsidianListRow()
             }
             .navigationTitle("Theme")
-            .navigationBarTitleDisplayMode(.inline)
-            .scrollContentBackground(.hidden)
-            .background(Color.obsidianBlack)
+            .obsidianInlineNavigation()
+            .obsidianListScreen()
         }
     }
 }

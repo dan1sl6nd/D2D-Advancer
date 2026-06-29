@@ -14,29 +14,50 @@ import UIKit
 
 @main
 struct D2D_AdvancerApp: App {
-    let persistenceController = PersistenceController.shared
-    @StateObject private var userAccountManager = FirebaseUserAccountManager.shared
-    @StateObject private var firebaseService = FirebaseService.shared
-    @StateObject private var appleSignInManager = AppleSignInManager.shared
+    let persistenceController: PersistenceController
+    @StateObject private var userAccountManager: FirebaseUserAccountManager
+    @StateObject private var firebaseService: FirebaseService
+    @StateObject private var appleSignInManager: AppleSignInManager
     @AppStorage("isDarkMode") private var isDarkMode = false
     init() {
         let launchArguments = ProcessInfo.processInfo.arguments
-        if FirebaseApp.app() == nil {
-            FirebaseApp.configure()
-        }
+        let shouldSkipOnboardingForUITests = launchArguments.contains("-skipOnboardingForUITests")
+        let shouldShowOnboardingForUITests = launchArguments.contains("-showOnboardingForUITests")
+        let shouldResetOnboardingForUITests = launchArguments.contains("-resetOnboardingForUITests")
+        let shouldCompleteOnboardingForLaunchTests = launchArguments.contains("-completeOnboardingForLaunchTests")
+        let isRunningUITests = shouldSkipOnboardingForUITests || shouldShowOnboardingForUITests
+
+        FirebaseBootstrap.configureIfNeeded()
         FirebaseEmulatorConfiguration.applyIfNeeded()
-        let isRunningUITests = launchArguments.contains("-skipOnboardingForUITests")
+
         if launchArguments.contains("-resetFirebaseAuthForUITests") {
             try? Auth.auth().signOut()
             UserDefaults.standard.removeObject(forKey: "isGuestMode")
             print("🧪 Firebase auth reset for UI tests")
         }
-        if isRunningUITests {
+        if shouldResetOnboardingForUITests || shouldShowOnboardingForUITests {
+            UserDefaults.standard.removeObject(forKey: "onboarding_completed")
+            UserDefaults.standard.removeObject(forKey: "onboarding_profile")
+            UserDefaults.standard.removeObject(forKey: "isPremiumUser")
+            print("🧪 Onboarding reset for UI tests")
+        }
+        if shouldSkipOnboardingForUITests || shouldCompleteOnboardingForLaunchTests {
             UserDefaults.standard.set(true, forKey: "onboarding_completed")
         }
         if launchArguments.contains("-unlockPremiumForUITests") {
             UserDefaults.standard.set(true, forKey: "isPremiumUser")
         }
+
+        if shouldShowOnboardingForUITests {
+            OnboardingManager.shared.resetOnboarding(hard: true)
+            OnboardingManager.shared.startOnboarding()
+        }
+
+        persistenceController = PersistenceController.shared
+        _firebaseService = StateObject(wrappedValue: FirebaseService.shared)
+        _userAccountManager = StateObject(wrappedValue: FirebaseUserAccountManager.shared)
+        _appleSignInManager = StateObject(wrappedValue: AppleSignInManager.shared)
+
         if isRunningUITests {
             UIView.setAnimationsEnabled(false)
             if launchArguments.contains("-openMoreTabForUITests") {
@@ -89,6 +110,12 @@ struct D2D_AdvancerApp: App {
             }
 
             let account = FirebaseUserAccountManager.shared
+            #if DEBUG
+            if await account.performTeamUITestAutoAuthIfNeeded() {
+                return
+            }
+            #endif
+
             if !account.hasActiveSession && !account.isGuestMode {
                 account.startGuestMode()
                 print("👤 Auto-started guest mode for new user")
@@ -186,7 +213,7 @@ struct D2D_AdvancerApp: App {
                 } else {
                     print("Notification authorization denied.")
                     if let error = error {
-                        ErrorHandler.shared.handle(error, context: "Notification Authorization")
+                        print("Notification authorization error: \(error.localizedDescription)")
                     }
                 }
             }

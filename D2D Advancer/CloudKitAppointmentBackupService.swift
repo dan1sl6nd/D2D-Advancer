@@ -2,7 +2,10 @@ import Foundation
 import CloudKit
 
 final class CloudKitAppointmentBackupService {
-    static let shared = CloudKitAppointmentBackupService()
+    static let shared: CloudKitAppointmentBackupService? = {
+        guard let container = CloudKitLeadBackupService.makeEntitledContainer() else { return nil }
+        return CloudKitAppointmentBackupService(container: container)
+    }()
 
     private let container: CKContainer
     private let database: CKDatabase
@@ -10,7 +13,7 @@ final class CloudKitAppointmentBackupService {
     private let recordType = "AppointmentBackup"
     private let batchSize = 200
 
-    private init(container: CKContainer = CKContainer(identifier: CloudKitLeadBackupService.containerIdentifier)) {
+    private init(container: CKContainer) {
         self.container = container
         self.database = container.privateCloudDatabase
     }
@@ -39,8 +42,19 @@ final class CloudKitAppointmentBackupService {
     func fetchAppointments(for userId: String) async throws -> [AppointmentSyncPayload] {
         try await ensureCloudKitAccountAvailable()
 
-        let predicate = NSPredicate(format: "userId == %@", userId)
-        let records = try await fetchRecords(predicate: predicate)
+        let records: [CKRecord]
+        do {
+            records = try await fetchRecords(predicate: NSPredicate(value: true))
+                .filter { recordBelongsToUser($0, userId: userId) }
+        } catch {
+            guard CloudKitQueryCompatibility.isRecordNameNotQueryableError(error) else {
+                throw error
+            }
+
+            print("☁️ CloudKit appointment restore scan skipped: recordName is not queryable in this schema. Continuing with direct record-ID backup uploads.")
+            return []
+        }
+
         return records.compactMap(decodePayload(from:))
     }
 
@@ -52,9 +66,14 @@ final class CloudKitAppointmentBackupService {
 
     func deleteAllAppointments(for userId: String) async throws {
         try await ensureCloudKitAccountAvailable()
-        let records = try await fetchRecords(predicate: NSPredicate(format: "userId == %@", userId))
+        let records = try await fetchRecords(predicate: NSPredicate(value: true))
+            .filter { recordBelongsToUser($0, userId: userId) }
         let recordIds = records.map(\.recordID)
         try await deleteRecords(recordIds: recordIds)
+    }
+
+    private func recordBelongsToUser(_ record: CKRecord, userId: String) -> Bool {
+        stringValue(record["userId"]) == userId || record.recordID.recordName.hasPrefix("\(userId)_")
     }
 
     private func ensureCloudKitAccountAvailable() async throws {
@@ -199,7 +218,6 @@ final class CloudKitAppointmentBackupService {
                     operation = CKQueryOperation(cursor: cursor)
                 } else {
                     let query = CKQuery(recordType: recordType, predicate: predicate)
-                    query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
                     operation = CKQueryOperation(query: query)
                 }
 

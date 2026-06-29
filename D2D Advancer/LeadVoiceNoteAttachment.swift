@@ -3,6 +3,14 @@ import AVFoundation
 import Speech
 import CoreData
 
+private func deactivateVoiceNoteAudioSession(context: String) {
+    do {
+        try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+    } catch {
+        print("⚠️ VoiceNote: audio session deactivate failed during \(context): \(error.localizedDescription)")
+    }
+}
+
 // MARK: - Recorder
 
 @MainActor
@@ -37,6 +45,7 @@ final class VoiceNoteRecorder: NSObject, ObservableObject {
             )
             try session.setActive(true)
         } catch {
+            deactivateVoiceNoteAudioSession(context: "recording setup failure")
             lastError = "Audio session setup failed: \(error.localizedDescription)"
             return false
         }
@@ -60,6 +69,7 @@ final class VoiceNoteRecorder: NSObject, ObservableObject {
             newRecorder.prepareToRecord()
             guard newRecorder.record() else {
                 lastError = "Recorder failed to start."
+                deactivateVoiceNoteAudioSession(context: "recorder start failure")
                 return false
             }
             recorder = newRecorder
@@ -69,6 +79,7 @@ final class VoiceNoteRecorder: NSObject, ObservableObject {
             startMeterTimer()
             return true
         } catch {
+            deactivateVoiceNoteAudioSession(context: "recorder creation failure")
             lastError = "Could not start recording: \(error.localizedDescription)"
             return false
         }
@@ -85,7 +96,7 @@ final class VoiceNoteRecorder: NSObject, ObservableObject {
         // Politely release the audio session so background music apps
         // (Spotify, Apple Music) can reclaim the audio route immediately.
         // notifyOthersOnDeactivation tells other apps the route is free.
-        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        deactivateVoiceNoteAudioSession(context: "recording stop")
         return url
     }
 
@@ -151,6 +162,7 @@ final class VoiceNotePlayer: NSObject, ObservableObject {
             isPlaying = true
             startTimer()
         } catch {
+            deactivateVoiceNoteAudioSession(context: "playback failure")
             print("⚠️ VoiceNote: playback failed (\(error.localizedDescription))")
         }
     }
@@ -170,7 +182,7 @@ final class VoiceNotePlayer: NSObject, ObservableObject {
         stopTimer()
         // Same deactivate-with-notify pattern as the recorder — frees the
         // playback route for whatever audio app the user wants to return to.
-        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        deactivateVoiceNoteAudioSession(context: "playback stop")
     }
 
     private func handlePlaybackEnded() {
@@ -181,7 +193,7 @@ final class VoiceNotePlayer: NSObject, ObservableObject {
         isPlaying = false
         elapsed = 0
         stopTimer()
-        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        deactivateVoiceNoteAudioSession(context: "playback finished")
     }
 
     private func startTimer() {
@@ -269,6 +281,7 @@ struct LeadVoiceNoteSection: View {
 
     @State private var showingRecorder = false
     @State private var isProcessing = false
+    @State private var recordingErrorMessage: String?
 
     private var hasVoiceNote: Bool {
         guard let data = lead.voiceNote else { return false }
@@ -304,6 +317,13 @@ struct LeadVoiceNoteSection: View {
                         .foregroundColor(Color.textSecondary)
                 }
                 .padding(.top, 2)
+            }
+
+            if let recordingErrorMessage {
+                Text(recordingErrorMessage)
+                    .font(.obsidianSmall)
+                    .foregroundColor(Color.statusNotInterested)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .sheet(isPresented: $showingRecorder) {
@@ -428,28 +448,40 @@ struct LeadVoiceNoteSection: View {
 
     private func handleNewRecording(url: URL) {
         Task {
-            await MainActor.run { isProcessing = true }
+            await MainActor.run {
+                recordingErrorMessage = nil
+                isProcessing = true
+            }
 
             // Transcribe first while the temp file exists
             let transcript = await VoiceNoteTranscriber.transcribe(fileURL: url)
 
             // Read bytes and persist
-            let audioData = try? Data(contentsOf: url)
+            let audioData: Data
+            do {
+                audioData = try Data(contentsOf: url)
+            } catch {
+                await MainActor.run {
+                    isProcessing = false
+                    recordingErrorMessage = "Could not save voice note. Please record it again."
+                }
+                cleanupTemporaryRecording(at: url)
+                print("❌ Voice note temp file read failed: \(error.localizedDescription)")
+                return
+            }
 
             await MainActor.run {
-                if let audioData = audioData {
-                    lead.voiceNote = audioData
-                    lead.voiceNoteCapturedDate = Date()
-                    lead.voiceNoteTranscript = transcript
-                    lead.updatedDate = Date()
-                    saveContext()
-                    print("🎙 Voice note attached — \(audioData.count / 1024) KB, transcript \(transcript == nil ? "unavailable" : "ready")")
-                }
+                lead.voiceNote = audioData
+                lead.voiceNoteCapturedDate = Date()
+                lead.voiceNoteTranscript = transcript
+                lead.updatedDate = Date()
+                saveContext()
                 isProcessing = false
+                print("🎙 Voice note attached — \(audioData.count / 1024) KB, transcript \(transcript == nil ? "unavailable" : "ready")")
             }
 
             // Clean up temp file
-            try? FileManager.default.removeItem(at: url)
+            cleanupTemporaryRecording(at: url)
         }
     }
 
@@ -468,7 +500,16 @@ struct LeadVoiceNoteSection: View {
             try context.save()
         } catch {
             print("❌ Voice note save failed: \(error.localizedDescription)")
+            recordingErrorMessage = "Could not save voice note. Please try again."
             context.rollback()
+        }
+    }
+
+    private func cleanupTemporaryRecording(at url: URL) {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            print("⚠️ Voice note temp cleanup failed: \(error.localizedDescription)")
         }
     }
 
@@ -538,7 +579,7 @@ struct VoiceRecorderSheet: View {
         .onDisappear {
             if recorder.isRecording {
                 if let url = recorder.stop() {
-                    try? FileManager.default.removeItem(at: url)
+                    discardTemporaryRecording(at: url)
                 }
             }
         }
@@ -553,13 +594,7 @@ struct VoiceRecorderSheet: View {
                 .animation(.easeOut(duration: 0.12), value: recorder.meterLevel)
 
             Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.electricViolet, Color.electricVioletDeep],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(Color.electricViolet)
                 .frame(width: 110, height: 110)
 
             Image(systemName: recorder.isRecording ? "waveform" : "mic.fill")
@@ -579,19 +614,9 @@ struct VoiceRecorderSheet: View {
                     Text("Stop & Save")
                         .font(.obsidianTitle)
                 }
-                .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(
-                    LinearGradient(
-                        colors: [Color.statusNotInterested, Color.statusNotInterested.opacity(0.8)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .clipShape(Capsule())
-                .shadow(color: Color.statusNotInterested.opacity(0.3), radius: 12, x: 0, y: 6)
             }
+            .buttonStyle(ObsidianDangerButtonStyle())
         } else {
             Button(action: start) {
                 HStack(spacing: 8) {
@@ -600,19 +625,9 @@ struct VoiceRecorderSheet: View {
                     Text("Start Recording")
                         .font(.obsidianTitle)
                 }
-                .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(
-                    LinearGradient(
-                        colors: [Color.electricViolet, Color.electricVioletDeep],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .clipShape(Capsule())
-                .shadow(color: Color.electricViolet.opacity(0.3), radius: 12, x: 0, y: 6)
             }
+            .buttonStyle(ObsidianPrimaryButtonStyle())
         }
     }
 
@@ -630,10 +645,18 @@ struct VoiceRecorderSheet: View {
         // Discard any in-progress recording and delete the orphan temp file
         // before reporting cancellation upward.
         if recorder.isRecording, let url = recorder.stop() {
-            try? FileManager.default.removeItem(at: url)
+            discardTemporaryRecording(at: url)
         }
         onComplete(nil)
         dismiss()
+    }
+
+    private func discardTemporaryRecording(at url: URL) {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            print("⚠️ Voice recorder temp cleanup failed: \(error.localizedDescription)")
+        }
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {

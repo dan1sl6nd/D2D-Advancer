@@ -10,6 +10,23 @@ enum TeamMemberStatus: String, Codable, CaseIterable, Sendable {
     case removed
 }
 
+enum TeamMemberWorkType: String, Codable, CaseIterable, Hashable, Sendable {
+    case owner
+    case salesRep = "sales_rep"
+    case technician
+
+    var title: String {
+        switch self {
+        case .owner:
+            return "Owner"
+        case .salesRep:
+            return "Sales Rep"
+        case .technician:
+            return "Technician"
+        }
+    }
+}
+
 enum TeamPlanStatus: String, Codable, CaseIterable, Sendable {
     case active
     case grace
@@ -87,9 +104,13 @@ enum TeamFirebaseSchema {
         static let address = "address"
         static let actorDisplayName = "actorDisplayName"
         static let actorUserId = "actorUserId"
+        static let arrivalWindowMinutes = "arrivalWindowMinutes"
         static let assignedToUserId = "assignedToUserId"
         static let createdAt = "createdAt"
         static let createdByUserId = "createdByUserId"
+        static let customerEmail = "customerEmail"
+        static let customerName = "customerName"
+        static let customerPhone = "customerPhone"
         static let displayName = "displayName"
         static let distanceMeters = "distanceMeters"
         static let email = "email"
@@ -117,6 +138,7 @@ enum TeamFirebaseSchema {
         static let planStatus = "planStatus"
         static let phone = "phone"
         static let price = "price"
+        static let quotedPrice = "quotedPrice"
         static let recordedAt = "recordedAt"
         static let removedAt = "removedAt"
         static let repUserId = "repUserId"
@@ -132,6 +154,7 @@ enum TeamFirebaseSchema {
         static let updatedAt = "updatedAt"
         static let updatedByUserId = "updatedByUserId"
         static let userId = "userId"
+        static let workType = "workType"
         static let deleteAfter = "deleteAfter"
         static let readAt = "readAt"
         static let repNote = "repNote"
@@ -203,12 +226,30 @@ struct TeamMember: Identifiable, Codable, Equatable, Sendable {
     var email: String?
     var role: TeamRole
     var status: TeamMemberStatus
+    var workType: TeamMemberWorkType = .salesRep
     var joinedAt: Date
     var removedAt: Date?
     var acceptedInviteId: String? = nil
 
     var isPendingInvite: Bool {
         userId.hasPrefix(TeamFirebaseSchema.pendingRepUserPrefix)
+    }
+
+    var pendingInviteDisplayCode: String? {
+        guard isPendingInvite else { return nil }
+        return acceptedInviteId?.uppercased()
+    }
+
+    var isSalesRep: Bool {
+        role == .member && workType == .salesRep
+    }
+
+    var isTechnician: Bool {
+        role == .member && workType == .technician
+    }
+
+    var displayRoleTitle: String {
+        role == .owner ? TeamMemberWorkType.owner.title : workType.title
     }
 
     static func owner(
@@ -225,6 +266,7 @@ struct TeamMember: Identifiable, Codable, Equatable, Sendable {
             email: email,
             role: .owner,
             status: .active,
+            workType: .owner,
             joinedAt: joinedAt,
             removedAt: nil,
             acceptedInviteId: nil
@@ -237,6 +279,7 @@ struct TeamMember: Identifiable, Codable, Equatable, Sendable {
         displayName: String,
         email: String?,
         acceptedInviteId: String,
+        workType: TeamMemberWorkType = .salesRep,
         joinedAt: Date = Date()
     ) -> TeamMember {
         TeamMember(
@@ -246,6 +289,7 @@ struct TeamMember: Identifiable, Codable, Equatable, Sendable {
             email: email,
             role: .member,
             status: .active,
+            workType: workType,
             joinedAt: joinedAt,
             removedAt: nil,
             acceptedInviteId: acceptedInviteId
@@ -259,6 +303,42 @@ extension TeamMember {
         removedMember.status = .removed
         removedMember.removedAt = removedAt
         return removedMember
+    }
+}
+
+enum TeamMemberRoster {
+    static func normalized(_ members: [TeamMember]) -> [TeamMember] {
+        var membersByUserId: [String: TeamMember] = [:]
+        for member in members {
+            if let existing = membersByUserId[member.userId] {
+                membersByUserId[member.userId] = preferred(existing, member)
+            } else {
+                membersByUserId[member.userId] = member
+            }
+        }
+
+        return membersByUserId.values.sorted(by: sort)
+    }
+
+    static func upserting(_ member: TeamMember, into members: [TeamMember]) -> [TeamMember] {
+        normalized(members + [member])
+    }
+
+    static func activeSeatCount(_ members: [TeamMember]) -> Int {
+        normalized(members).filter { $0.status == .active }.count
+    }
+
+    private static func preferred(_ lhs: TeamMember, _ rhs: TeamMember) -> TeamMember {
+        if lhs.status != rhs.status {
+            return lhs.status == .active ? lhs : rhs
+        }
+        return lhs.joinedAt >= rhs.joinedAt ? lhs : rhs
+    }
+
+    private static func sort(lhs: TeamMember, rhs: TeamMember) -> Bool {
+        if lhs.role != rhs.role { return lhs.role == .owner }
+        if lhs.joinedAt != rhs.joinedAt { return lhs.joinedAt < rhs.joinedAt }
+        return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
     }
 }
 
@@ -323,12 +403,89 @@ struct TeamLead: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+struct TeamLeadEditableFields: Equatable, Sendable {
+    var name: String
+    var address: String
+    var phone: String
+    var email: String
+    var notes: String
+    var serviceCategory: String
+    var price: Double
+    var estimatedValue: Double
+    var tags: [String]
+
+    static func from(_ lead: TeamLead) -> TeamLeadEditableFields {
+        TeamLeadEditableFields(
+            name: lead.name,
+            address: lead.address,
+            phone: lead.phone ?? "",
+            email: lead.email ?? "",
+            notes: lead.notes,
+            serviceCategory: lead.serviceCategory ?? "",
+            price: lead.price,
+            estimatedValue: lead.estimatedValue,
+            tags: lead.tags
+        )
+    }
+
+    func applying(to lead: TeamLead, updatedByUserId: String, now: Date = Date()) -> TeamLead {
+        var updated = lead
+        updated.name = normalizedRequired(name, fallback: "New Lead")
+        updated.address = normalizedRequired(address, fallback: "No address")
+        updated.phone = normalizedOptional(phone)
+        updated.email = normalizedOptional(email)
+        updated.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.serviceCategory = normalizedOptional(serviceCategory)
+        updated.price = max(0, price)
+        updated.estimatedValue = max(0, estimatedValue)
+        updated.tags = tags
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        updated.updatedByUserId = updatedByUserId
+        updated.updatedAt = now
+        return updated
+    }
+
+    private func normalizedOptional(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func normalizedRequired(_ value: String, fallback: String) -> String {
+        normalizedOptional(value) ?? fallback
+    }
+}
+
 enum TeamBookingStatus: String, Codable, CaseIterable, Sendable {
     case scheduled
     case confirmed
+    case enRoute = "en_route"
+    case inProgress = "in_progress"
     case completed
+    case needsOwnerFollowUp = "needs_owner_follow_up"
     case cancelled
     case rescheduled
+
+    var displayName: String {
+        switch self {
+        case .scheduled:
+            return "Scheduled"
+        case .confirmed:
+            return "Confirmed"
+        case .enRoute:
+            return "On the way"
+        case .inProgress:
+            return "Started"
+        case .completed:
+            return "Completed"
+        case .needsOwnerFollowUp:
+            return "Needs follow-up"
+        case .cancelled:
+            return "Cancelled"
+        case .rescheduled:
+            return "Rescheduled"
+        }
+    }
 }
 
 struct TeamBooking: Identifiable, Codable, Equatable, Sendable {
@@ -346,9 +503,25 @@ struct TeamBooking: Identifiable, Codable, Equatable, Sendable {
     var updatedByUserId: String
     var createdAt: Date
     var updatedAt: Date
+    var customerName: String? = nil
+    var customerPhone: String? = nil
+    var customerEmail: String? = nil
+    var serviceCategory: String? = nil
+    var quotedPrice: Double? = nil
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+    var arrivalWindowMinutes: Int? = nil
 
     var isFutureEditable: Bool {
         status != .completed && status != .cancelled
+    }
+
+    var customerDisplayName: String {
+        if let trimmedName = customerName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !trimmedName.isEmpty {
+            return trimmedName
+        }
+        return title
     }
 }
 
@@ -494,7 +667,7 @@ struct TeamRepWorkspace: Identifiable, Equatable, Sendable {
         dutySessions: [TeamDutySession],
         dutyLocationPoints: [TeamDutyLocationPoint]
     ) -> [TeamRepWorkspace] {
-        let reps = members
+        let reps = TeamMemberRoster.normalized(members)
             .filter { $0.role == .member && $0.status == .active && !$0.isPendingInvite }
             .sorted { lhs, rhs in
                 if lhs.joinedAt != rhs.joinedAt { return lhs.joinedAt < rhs.joinedAt }
@@ -531,6 +704,41 @@ struct TeamRepWorkspace: Identifiable, Equatable, Sendable {
             sessions: dutySessions.filter { $0.repUserId == member.userId },
             pointsBySession: Dictionary(grouping: dutyLocationPoints.filter { $0.repUserId == member.userId }, by: \.sessionId)
         )
+    }
+
+    static func makeVisibleMemberWorkspaces(
+        currentMember: TeamMember,
+        members: [TeamMember],
+        leads: [TeamLead],
+        bookings: [TeamBooking],
+        dutySessions: [TeamDutySession],
+        dutyLocationPoints: [TeamDutyLocationPoint]
+    ) -> [TeamRepWorkspace] {
+        var workspaces = [
+            makeMemberWorkspace(
+                member: currentMember,
+                leads: leads.filter { $0.assignedToUserId == currentMember.userId },
+                bookings: bookings.filter { $0.assignedToUserId == currentMember.userId },
+                dutySessions: dutySessions,
+                dutyLocationPoints: dutyLocationPoints
+            )
+        ]
+
+        if let owner = members.first(where: { $0.role == .owner && $0.status == .active }),
+           owner.userId != currentMember.userId {
+            let ownerWorkspace = makeMemberWorkspace(
+                member: owner,
+                leads: [],
+                bookings: [],
+                dutySessions: dutySessions,
+                dutyLocationPoints: dutyLocationPoints
+            )
+            if ownerWorkspace.latestSession != nil {
+                workspaces.insert(ownerWorkspace, at: 0)
+            }
+        }
+
+        return workspaces
     }
 
     private static func makeWorkspace(
@@ -580,6 +788,7 @@ struct TeamRepWorkspace: Identifiable, Equatable, Sendable {
 
 struct TeamWorkspaceSurfaceSummary: Equatable, Sendable {
     var role: TeamRole
+    var currentMemberWorkType: TeamMemberWorkType?
     var teamName: String
     var workspaces: [TeamRepWorkspace]
     var teamLeadCount: Int
@@ -592,15 +801,26 @@ struct TeamWorkspaceSurfaceSummary: Equatable, Sendable {
         workspaces.contains { !$0.assignedLeads.isEmpty || $0.liveLocation != nil || !$0.routePoints.isEmpty }
     }
 
+    var hasUrgentActivity: Bool {
+        importantLeadCount > 0 || upcomingBookingCount > 0 || unreadNotificationCount > 0
+    }
+
+    var shouldShowMapShortcut: Bool {
+        true
+    }
+
     var headline: String {
         switch role {
         case .owner:
             if activeRepCount > 0 {
-                return "\(activeRepCount) active \(Self.plural("rep", activeRepCount))"
+                return "\(activeRepCount) active \(Self.plural("worker", activeRepCount))"
             }
-            let repCount = workspaces.count
-            return "\(repCount) \(Self.plural("rep", repCount))"
+            let workerCount = workspaces.count
+            return "\(workerCount) \(Self.plural("worker", workerCount))"
         case .member:
+            if currentMemberWorkType == .technician {
+                return "\(upcomingBookingCount) assigned \(Self.plural("job", upcomingBookingCount))"
+            }
             return "\(teamLeadCount) assigned \(Self.plural("lead", teamLeadCount))"
         }
     }
@@ -611,7 +831,8 @@ struct TeamWorkspaceSurfaceSummary: Equatable, Sendable {
             parts.append("\(importantLeadCount) important")
         }
         if upcomingBookingCount > 0 {
-            parts.append("\(upcomingBookingCount) \(Self.plural("booking", upcomingBookingCount))")
+            let workLabel = currentMemberWorkType == .technician ? "job" : "booking"
+            parts.append("\(upcomingBookingCount) \(Self.plural(workLabel, upcomingBookingCount))")
         }
         if unreadNotificationCount > 0 {
             parts.append("\(unreadNotificationCount) \(Self.plural("alert", unreadNotificationCount))")
@@ -650,6 +871,7 @@ struct TeamWorkspaceSurfaceSummary: Equatable, Sendable {
             )
             return TeamWorkspaceSurfaceSummary(
                 role: .owner,
+                currentMemberWorkType: .owner,
                 teamName: team.name,
                 workspaces: workspaces,
                 teamLeadCount: leads.count,
@@ -661,20 +883,22 @@ struct TeamWorkspaceSurfaceSummary: Equatable, Sendable {
         case .member:
             let assignedLeads = leads.filter { $0.assignedToUserId == currentMember.userId }
             let assignedBookings = bookings.filter { $0.assignedToUserId == currentMember.userId }
-            let workspace = TeamRepWorkspace.makeMemberWorkspace(
-                member: currentMember,
-                leads: assignedLeads,
-                bookings: assignedBookings,
+            let workspaces = TeamRepWorkspace.makeVisibleMemberWorkspaces(
+                currentMember: currentMember,
+                members: members,
+                leads: leads,
+                bookings: bookings,
                 dutySessions: dutySessions,
                 dutyLocationPoints: dutyLocationPoints
             )
             return TeamWorkspaceSurfaceSummary(
                 role: .member,
+                currentMemberWorkType: currentMember.workType,
                 teamName: team.name,
-                workspaces: [workspace],
+                workspaces: workspaces,
                 teamLeadCount: assignedLeads.count,
                 importantLeadCount: assignedLeads.filter(Self.isImportantLead).count,
-                activeRepCount: workspace.isOnDuty ? 1 : 0,
+                activeRepCount: workspaces.filter(\.isOnDuty).count,
                 upcomingBookingCount: assignedBookings.filter { Self.isUpcomingBooking($0, now: now) }.count,
                 unreadNotificationCount: 0
             )
@@ -682,7 +906,7 @@ struct TeamWorkspaceSurfaceSummary: Equatable, Sendable {
     }
 
     private static func isImportantLead(_ lead: TeamLead) -> Bool {
-        lead.isHighPriority || TeamLeadImportance.rank(lead.status) >= TeamLeadImportance.rank(.followUp)
+        TeamLeadAttentionPolicy.needsOwnerAttention(lead)
     }
 
     private static func isUpcomingBooking(_ booking: TeamBooking, now: Date) -> Bool {
@@ -709,6 +933,39 @@ enum TeamLeadImportance {
             return 1
         case .notContacted, .notHome, .notInterested:
             return 0
+        }
+    }
+}
+
+enum TeamLeadAttentionPolicy {
+    static func needsOwnerAttention(_ lead: TeamLead) -> Bool {
+        guard isOpenForOwnerAttention(lead.status) else { return false }
+        return lead.isHighPriority || statusNeedsOwnerAttention(lead.status)
+    }
+
+    static func isActionableHighPriority(_ lead: TeamLead) -> Bool {
+        lead.isHighPriority && isOpenForOwnerAttention(lead.status)
+    }
+
+    static func canMarkHighPriority(_ lead: TeamLead) -> Bool {
+        isOpenForOwnerAttention(lead.status)
+    }
+
+    private static func isOpenForOwnerAttention(_ status: TeamLeadStatus) -> Bool {
+        switch status {
+        case .converted, .notInterested:
+            return false
+        case .notContacted, .notHome, .contacted, .interested, .followUp, .booked:
+            return true
+        }
+    }
+
+    private static func statusNeedsOwnerAttention(_ status: TeamLeadStatus) -> Bool {
+        switch status {
+        case .interested, .followUp, .booked:
+            return true
+        case .notContacted, .notHome, .contacted, .converted, .notInterested:
+            return false
         }
     }
 }
@@ -764,14 +1021,20 @@ enum TeamAccessPolicy {
         return assignedToUserId == userId
     }
 
-    static func canViewDutySession(userId: String, role: TeamRole, planStatus: TeamPlanStatus, session: TeamDutySession) -> Bool {
+    static func canViewDutySession(
+        userId: String,
+        role: TeamRole,
+        planStatus: TeamPlanStatus,
+        session: TeamDutySession,
+        ownerUserId: String? = nil
+    ) -> Bool {
         guard planStatus.allowsTeamRead else { return false }
         if role == .owner { return true }
-        return session.repUserId == userId
+        return session.repUserId == userId || session.repUserId == ownerUserId
     }
 
     static func canStartDutySession(planStatus: TeamPlanStatus, role: TeamRole) -> Bool {
-        planStatus.allowsTeamWrite && role == .member
+        planStatus.allowsTeamWrite && (role == .owner || role == .member)
     }
 
     static func canCancelPendingInvite(role: TeamRole, member: TeamMember) -> Bool {
@@ -785,11 +1048,26 @@ enum TeamAccessPolicy {
         guard member.role == .member, member.status == .active, !member.isPendingInvite else { return false }
         return actor.userId != member.userId
     }
+
+    static func canLeaveTeam(member: TeamMember, team: TeamWorkspace) -> Bool {
+        member.teamId == team.id
+            && member.role == .member
+            && member.status == .active
+            && !member.isPendingInvite
+    }
+
+    static func canCloseTeam(owner: TeamMember, team: TeamWorkspace) -> Bool {
+        owner.teamId == team.id
+            && owner.userId == team.ownerUserId
+            && owner.role == .owner
+            && owner.status == .active
+    }
 }
 
 enum TeamAssignmentPolicy {
     static func canAssignLead(actor: TeamMember, team: TeamWorkspace, target: TeamMember, lead: TeamLead) -> Bool {
-        canAssign(
+        guard target.isSalesRep else { return false }
+        return canAssign(
             actor: actor,
             team: team,
             target: target,
@@ -836,6 +1114,89 @@ enum TeamAssignmentPolicy {
     }
 }
 
+enum TeamLeadDispatchPolicy {
+    static let defaultDuration: TimeInterval = 2 * 60 * 60
+
+    static func canDispatchLeadToTechnician(
+        actor: TeamMember,
+        team: TeamWorkspace,
+        technician: TeamMember,
+        lead: TeamLead
+    ) -> Bool {
+        guard team.planStatus.allowsTeamWrite else { return false }
+        guard actor.teamId == team.id, technician.teamId == team.id, lead.teamId == team.id else { return false }
+        guard actor.role == .owner, actor.status == .active else { return false }
+        return technician.isTechnician && technician.status == .active && !technician.isPendingInvite
+    }
+
+    static func soldLead(_ lead: TeamLead, by actor: TeamMember, now: Date = Date()) -> TeamLead {
+        var updated = lead
+        updated.status = .converted
+        updated.updatedByUserId = actor.userId
+        updated.updatedAt = now
+        return updated
+    }
+
+    static func booking(
+        from lead: TeamLead,
+        to technician: TeamMember,
+        by actor: TeamMember,
+        startDate: Date,
+        endDate: Date,
+        now: Date = Date()
+    ) -> TeamBooking {
+        let safeEndDate = endDate > startDate ? endDate : startDate.addingTimeInterval(defaultDuration)
+        return TeamBooking(
+            id: "\(lead.id)-job",
+            teamId: lead.teamId,
+            leadId: lead.id,
+            assignedToUserId: technician.userId,
+            title: jobTitle(for: lead),
+            notes: jobNotes(for: lead),
+            startDate: startDate,
+            endDate: safeEndDate,
+            location: lead.address,
+            status: .scheduled,
+            createdByUserId: actor.userId,
+            updatedByUserId: actor.userId,
+            createdAt: now,
+            updatedAt: now,
+            customerName: lead.name,
+            customerPhone: normalizedOptional(lead.phone),
+            customerEmail: normalizedOptional(lead.email),
+            serviceCategory: normalizedOptional(lead.serviceCategory),
+            quotedPrice: lead.price > 0 ? lead.price : nil,
+            latitude: lead.latitude,
+            longitude: lead.longitude,
+            arrivalWindowMinutes: 30
+        )
+    }
+
+    private static func jobTitle(for lead: TeamLead) -> String {
+        let service = lead.serviceCategory?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let service, !service.isEmpty {
+            return "\(service) - \(lead.name)"
+        }
+        return "Service Job - \(lead.name)"
+    }
+
+    private static func jobNotes(for lead: TeamLead) -> String {
+        var lines: [String] = []
+        if let phone = lead.phone, !phone.isEmpty { lines.append("Phone: \(phone)") }
+        if let email = lead.email, !email.isEmpty { lines.append("Email: \(email)") }
+        if lead.price > 0 { lines.append("Sold price: \(lead.price)") }
+        if !lead.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("Lead notes: \(lead.notes)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func normalizedOptional(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+}
+
 enum TeamRepReplyPolicy {
     static let maxNoteCharacters = 80
 
@@ -856,10 +1217,13 @@ enum TeamActivityLogKind: String, Codable, CaseIterable, Sendable {
     case inviteCreated = "invite_created"
     case inviteAccepted = "invite_accepted"
     case inviteCancelled = "invite_cancelled"
+    case memberLeft = "member_left"
     case memberRemoved = "member_removed"
+    case teamClosed = "team_closed"
     case leadCreated = "lead_created"
     case leadAssigned = "lead_assigned"
     case bookingAssigned = "booking_assigned"
+    case bookingStatusUpdated = "booking_status_updated"
     case leadStatusUpdated = "lead_status_updated"
     case leadHighPriority = "lead_high_priority"
     case repStatusReply = "rep_status_reply"
@@ -877,14 +1241,20 @@ enum TeamActivityLogKind: String, Codable, CaseIterable, Sendable {
             return "accepted invite"
         case .inviteCancelled:
             return "cancelled invite"
+        case .memberLeft:
+            return "left team"
         case .memberRemoved:
-            return "removed rep"
+            return "removed worker"
+        case .teamClosed:
+            return "closed team"
         case .leadCreated:
             return "created lead"
         case .leadAssigned:
             return "assigned lead"
         case .bookingAssigned:
-            return "assigned booking"
+            return "assigned job"
+        case .bookingStatusUpdated:
+            return "updated job"
         case .leadStatusUpdated:
             return "updated lead"
         case .leadHighPriority:
@@ -1111,7 +1481,7 @@ struct TeamTodayWorkSummary: Equatable, Sendable {
         return TeamTodayWorkSummary(
             memberUserId: currentMember.userId,
             leadCount: scopedLeads.count,
-            importantLeadCount: scopedLeads.filter { $0.isHighPriority || TeamLeadImportance.rank($0.status) >= TeamLeadImportance.rank(.followUp) }.count,
+            importantLeadCount: scopedLeads.filter(TeamLeadAttentionPolicy.needsOwnerAttention).count,
             bookingCount: scopedBookings.filter { calendar.isDate($0.startDate, inSameDayAs: now) && $0.isFutureEditable }.count,
             activeDutyCount: scopedDutySessions.filter { $0.status == .active }.count
         )

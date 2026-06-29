@@ -6,9 +6,11 @@ import CoreLocation
 struct TeamWorkspaceView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    @ObservedObject private var firebaseService = FirebaseService.shared
     @ObservedObject private var appleSignInManager = AppleSignInManager.shared
     @ObservedObject private var teamService = TeamFirebaseService.shared
     @ObservedObject private var locationManager = LocationManager.shared
+    @ObservedObject private var appointmentManager = AppointmentManager.shared
     @State private var teamName = "My Team"
     @State private var inviteCode = ""
     #if DEBUG
@@ -18,15 +20,23 @@ struct TeamWorkspaceView: View {
     @State private var isCreatingTeamAccount = false
     #endif
     @State private var createdInvite: TeamInvite?
+    @State private var createdInviteWorkType: TeamMemberWorkType?
     @State private var isWorking = false
     @State private var isUploadingDutyLocation = false
     @State private var selectedRepUserId: String?
+    @State private var selectedTeamLead: TeamLead?
+    @State private var selectedRepWorkspace: TeamRepWorkspace?
+    @State private var ownerLeadQueueFilter: OwnerLeadQueueFilter = .important
+    @State private var ownerLeadQueueExpanded = false
     @State private var lastTeamLocationUploadAt: Date?
     @State private var lastTeamLocationUploadCoordinate: TeamCoordinate?
     @State private var memberPendingRemoval: TeamMember?
     @State private var showingRemoveMemberConfirmation = false
+    @State private var showingLeaveTeamConfirmation = false
+    @State private var showingCloseTeamConfirmation = false
     @State private var statusMessage: String?
     @State private var statusMessageIsError = false
+    @State private var pendingInviteWorkType: TeamMemberWorkType = .salesRep
     @FocusState private var focusedInput: TeamInput?
 
     private enum TeamInput: Hashable {
@@ -35,6 +45,12 @@ struct TeamWorkspaceView: View {
         case accountDisplayName
         case teamName
         case inviteCode
+    }
+
+    private enum OwnerLeadQueueFilter: String, CaseIterable {
+        case important = "Important"
+        case open = "Open"
+        case all = "All"
     }
 
     var body: some View {
@@ -49,7 +65,7 @@ struct TeamWorkspaceView: View {
                     LazyVStack(spacing: 12) {
                         introCard
 
-                        if let statusMessage {
+                        if let statusMessage = visibleStatusMessage {
                             statusCard(
                                 statusMessage,
                                 color: statusMessageIsError ? Color.statusNotInterested : Color.statusInterested
@@ -58,46 +74,54 @@ struct TeamWorkspaceView: View {
 
                         #if DEBUG
                         if FirebaseEmulatorConfiguration.isEnabled {
-                            statusCard("Firebase emulator mode active")
+                            statusCard("Firebase emulator mode active: \(FirebaseEmulatorConfiguration.activeHostDescription)")
                         }
                         #endif
 
-                        if let errorMessage = teamService.lastErrorMessage {
+                        if let errorMessage = visibleTeamErrorMessage {
                             statusCard(errorMessage, color: Color.statusNotInterested)
                         }
 
-                        if let syncMessage = teamSyncStatusMessage {
+                        if let syncMessage = visibleTeamSyncStatusMessage {
                             statusCard(syncMessage, color: teamSyncStatusColor)
                         }
 
-                        if case let .failed(errorMessage) = userAccountManager.authStatus {
+                        if let passiveStatusMessage = passiveTeamStatusMessage {
+                            statusCard(passiveStatusMessage, color: Color.statusNotHome)
+                        }
+
+                        if let errorMessage = visibleUserAuthErrorMessage {
                             statusCard(errorMessage, color: Color.statusNotInterested)
                         }
 
-                        if case let .failed(errorMessage) = appleSignInManager.authStatus {
+                        if let errorMessage = visibleAppleAuthErrorMessage {
                             statusCard(errorMessage, color: Color.statusNotInterested)
                         }
 
-                        if teamService.isLoading || isWorking {
-                            loadingCard
+                        if shouldShowInitialLoadingCard {
+                            loadingCard("Loading team workspace...")
                         }
 
-                        if !TeamAuthPolicy.canUseTeamWorkspace(isFirebaseAuthenticated: userAccountManager.isLoggedIn) {
+                        if !canUseTeamWorkspace {
                             appleSignInRequiredCard
                         } else if let team = teamService.activeTeam, let member = teamService.currentMember {
                             planStateCard(team)
                             if member.role == .owner {
+                                inviteManagementCard(team: team)
                                 ownerNotificationsCard
+                                ownerLeadQueueCard
                                 ownerSummary(team: team)
+                                ownerTechnicianJobsCard
                                 ownerDuplicateWarningsCard
                                 ownerFieldMapCard
                                 ownerRepWorkCard
-                                inviteManagementCard(team: team)
                                 activityLogCard
                                 memberListCard(team: team)
+                                teamAccessCard(team: team, member: member)
                             } else {
                                 repSummary(team: team, member: member)
                                 activityLogCard
+                                teamAccessCard(team: team, member: member)
                             }
                         } else {
                             setupTeamCard
@@ -126,19 +150,44 @@ struct TeamWorkspaceView: View {
         .task {
             await loadTeam()
         }
-        .onChange(of: userAccountManager.isLoggedIn) { _, isLoggedIn in
+        .onChange(of: userAccountManager.isLoggedIn) { _, _ in
+            Task { await loadTeam() }
+        }
+        .onChange(of: firebaseService.isAuthenticated) { _, _ in
             Task { await loadTeam() }
         }
         .onReceive(locationManager.$location.compactMap { $0 }) { location in
             publishDutyLocationIfNeeded(location)
         }
-        .alert("Remove Rep?", isPresented: $showingRemoveMemberConfirmation, presenting: memberPendingRemoval) { member in
+        .alert("Remove Team Member?", isPresented: $showingRemoveMemberConfirmation, presenting: memberPendingRemoval) { member in
             Button("Remove", role: .destructive) {
                 removeMember(member)
             }
             Button("Cancel", role: .cancel) {}
         } message: { member in
             Text("\(member.displayName) will lose team access and the seat will be freed.")
+        }
+        .alert("Leave Team?", isPresented: $showingLeaveTeamConfirmation) {
+            Button("Leave Team", role: .destructive) {
+                leaveTeam()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You will lose access to assigned leads, jobs, Team map, and live sharing. Your seat will be freed for another worker.")
+        }
+        .alert("Close Team Workspace?", isPresented: $showingCloseTeamConfirmation) {
+            Button("Close Team", role: .destructive) {
+                closeTeam()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This pauses the Team Workspace, removes worker access, cancels pending invites, and returns this account to the create or join screen.")
+        }
+        .sheet(item: $selectedTeamLead) { lead in
+            TeamLeadDetailSheet(initialLead: lead)
+        }
+        .sheet(item: $selectedRepWorkspace) { workspace in
+            TeamRepDetailSheet(initialWorkspace: workspace)
         }
     }
 
@@ -148,7 +197,7 @@ struct TeamWorkspaceView: View {
                 .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
 
-            Text("Personal leads stay private. Sign in with Apple for team identity. Reps only receive assigned leads, bookings, and their own active-hours GPS graph.")
+            Text("Personal leads stay private. Sales reps receive assigned leads and jobs. Technicians receive assigned service jobs, navigation, status updates, and their own active-hours GPS graph.")
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -178,19 +227,208 @@ struct TeamWorkspaceView: View {
                 .foregroundColor(Color.textPrimary)
 
             if let todaySummary = teamService.todayWorkSummary() {
-                statRow("Today bookings", "\(todaySummary.bookingCount)")
+                statRow("Today jobs", "\(todaySummary.bookingCount)")
                 statRow("Important work", "\(todaySummary.importantLeadCount)")
             }
             statRow("Team leads", "\(teamService.teamLeads.count)")
-            statRow("Bookings", "\(teamService.teamBookings.count)")
-            statRow("Active reps", "\(teamService.dutySessions.filter { $0.status == .active }.count)")
+            statRow("Jobs", "\(teamService.teamBookings.count)")
+            statRow("Sales reps", "\(activeSalesReps.count)")
+            statRow("Technicians", "\(activeTechnicians.count)")
+            statRow("On duty", "\(ownerRepWorkspaces.filter(\.isOnDuty).count)")
             statRow("Seats used", "\(activeMemberCount)/\(team.memberLimit)")
+            if let member = teamService.currentMember {
+                statRow("Owner sharing", teamService.activeDutySession == nil ? "Off" : "On")
 
-            Text("Generate one invite code per rep. Each code reserves one seat until the rep joins or you cancel the pending invite.")
+                dutySharingButton(
+                    member: member,
+                    team: team,
+                    onTitle: "Share My Location",
+                    offTitle: "Stop Sharing Location",
+                    accessibilityIdentifier: "teamOwnerLocationToggleButton"
+                )
+
+                Text("Team workers can see your live dot only while this is on. Your owner route history is kept for active hours and expires after 30 days.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text("Generate one invite code per worker. Each code reserves one seat until the worker joins or you cancel the pending invite.")
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var ownerLeadQueueCard: some View {
+        TeamInfoCard {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Lead Queue")
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textPrimary)
+
+                    Text(ownerLeadQueueSubtitle)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await teamService.refreshTeamData() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.electricViolet)
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Refresh team leads")
+            }
+
+            ownerLeadQueueFilterStrip
+
+            if let selectedRepUserId,
+               let repName = teamService.teamMembers.first(where: { $0.userId == selectedRepUserId })?.displayName {
+                HStack(spacing: 8) {
+                    Text("Showing \(repName)")
+                        .font(.micro)
+                        .foregroundColor(Color.textSecondary)
+                    Button("Clear") {
+                        self.selectedRepUserId = nil
+                    }
+                    .font(.micro)
+                    .foregroundColor(Color.electricViolet)
+                    .buttonStyle(PlainButtonStyle())
+                    Spacer()
+                }
+            }
+
+            if ownerLeadQueueRows.isEmpty {
+                Text("No team leads match this view.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(ownerLeadQueueRows) { lead in
+                        ownerLeadQueueRow(lead)
+
+                        if lead.id != ownerLeadQueueRows.last?.id {
+                            Divider()
+                                .overlay(Color.obsidianBorder.opacity(0.5))
+                        }
+                    }
+                }
+            }
+
+            if ownerFilteredLeads.count > ownerLeadQueueRows.count {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        ownerLeadQueueExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(ownerLeadQueueExpanded ? "Show less" : "Show \(ownerFilteredLeads.count - ownerLeadQueueRows.count) more")
+                        Image(systemName: ownerLeadQueueExpanded ? "chevron.up" : "chevron.down")
+                    }
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.electricViolet)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("teamLeadQueueShowMoreButton")
+            }
+        }
+        .accessibilityIdentifier("teamLeadQueueCard")
+    }
+
+    private var ownerLeadQueueFilterStrip: some View {
+        HStack(spacing: 8) {
+            ForEach(OwnerLeadQueueFilter.allCases, id: \.self) { filter in
+                Button {
+                    ownerLeadQueueFilter = filter
+                    ownerLeadQueueExpanded = false
+                } label: {
+                    Text(filter.rawValue)
+                        .font(.micro)
+                        .foregroundColor(ownerLeadQueueFilter == filter ? .white : Color.textSecondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(ownerLeadQueueFilter == filter ? Color.electricViolet : Color.obsidianElevated)
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.obsidianBorder.opacity(0.4), lineWidth: 0.5)
+                                )
+                        )
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Show \(filter.rawValue.lowercased()) team leads")
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func ownerLeadQueueRow(_ lead: TeamLead) -> some View {
+        let isActionableHighPriority = TeamLeadAttentionPolicy.isActionableHighPriority(lead)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: isActionableHighPriority ? "star.fill" : leadStatusIcon(lead.status))
+                    .font(.obsidianFootnote)
+                    .foregroundColor(isActionableHighPriority ? Color.statusInterested : leadStatusColor(lead.status))
+                    .frame(width: 22, height: 22)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(lead.name)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+
+                    Text(lead.address)
+                        .font(.micro)
+                        .foregroundColor(Color.textMuted)
+                        .lineLimit(2)
+
+                    HStack(spacing: 6) {
+                        ownerLeadQueuePill(ownerName(for: lead), color: Color.electricViolet)
+                        ownerLeadQueuePill(leadStatusText(lead.status), color: leadStatusColor(lead.status))
+                        if isActionableHighPriority {
+                            ownerLeadQueuePill("High", color: Color.statusInterested)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                leadAssignmentMenu(lead)
+            }
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedTeamLead = lead
+        }
+        .accessibilityIdentifier("teamOwnerLeadQueueRow")
+    }
+
+    private func ownerLeadQueuePill(_ title: String, color: Color) -> some View {
+        Text(title)
+            .font(.nano)
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(color.opacity(0.12))
+            )
     }
 
     private var ownerFieldMapCard: some View {
@@ -218,14 +456,17 @@ struct TeamWorkspaceView: View {
             repFilterChips(workspaces: ownerRepWorkspaces)
 
             if ownerRepWorkspaces.isEmpty {
-                Text("Active reps will appear here after they join the team.")
+                Text("Active workers will appear here after they join the team.")
                     .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 TeamFieldMapView(
                     workspaces: ownerRepWorkspaces,
-                    selectedRepUserId: $selectedRepUserId
+                    selectedRepUserId: $selectedRepUserId,
+                    onLeadTap: { lead in
+                        selectedTeamLead = lead
+                    }
                 )
                 .frame(height: 270)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -236,7 +477,7 @@ struct TeamWorkspaceView: View {
                 .accessibilityIdentifier("teamFieldMapView")
 
                 HStack(spacing: 12) {
-                    mapLegendItem("Live rep", color: .blue, icon: "location.fill")
+                    mapLegendItem("Live team", color: .blue, icon: "location.fill")
                     mapLegendItem("Lead", color: .orange, icon: "mappin.circle.fill")
                     mapLegendItem("Route", color: .blue, icon: "point.topleft.down.curvedto.point.bottomright.up")
                 }
@@ -246,12 +487,12 @@ struct TeamWorkspaceView: View {
 
     private var ownerRepWorkCard: some View {
         TeamInfoCard {
-            Text("Rep Work")
+            Text("Team Work")
                 .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
 
             if ownerRepWorkspaces.isEmpty {
-                Text("Accepted reps will appear here with their assigned leads, bookings, live status, and active-hours route history.")
+                Text("Accepted workers will appear here with assigned leads, jobs, live status, and active-hours route history.")
                     .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -263,44 +504,107 @@ struct TeamWorkspaceView: View {
         }
     }
 
+    private var ownerTechnicianJobsCard: some View {
+        TeamInfoCard {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Technician Jobs")
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textPrimary)
+
+                    Text("Send scheduled appointments to technicians or reassign existing Team jobs.")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await teamService.refreshTeamData() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.electricViolet)
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Refresh technician jobs")
+            }
+
+            if activeTechnicians.isEmpty {
+                Text("Create a Technician invite before sending service jobs.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+            }
+
+            if ownerDispatchAppointments.isEmpty {
+                Text("No upcoming local appointments are ready to send.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(ownerDispatchAppointments.prefix(6)) { appointment in
+                        appointmentDispatchRow(appointment)
+
+                        if appointment.id != ownerDispatchAppointments.prefix(6).last?.id {
+                            Divider()
+                                .overlay(Color.obsidianBorder.opacity(0.5))
+                        }
+                    }
+                }
+            }
+
+            if !ownerTeamJobs.isEmpty {
+                Divider()
+                    .overlay(Color.obsidianBorder.opacity(0.5))
+
+                Text("Team Jobs")
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
+                    .textCase(.uppercase)
+
+                ForEach(ownerTeamJobs.prefix(5)) { booking in
+                    teamBookingRow(booking, allowAssignment: true)
+                }
+            }
+        }
+        .accessibilityIdentifier("teamTechnicianJobsCard")
+    }
+
     private func inviteManagementCard(team: TeamWorkspace) -> some View {
         TeamInfoCard {
-            Text("Invite Rep")
+            Text("Invite Worker")
                 .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
 
-            Text(activeMemberCount >= team.memberLimit ? "The included team seats are full." : "Create an invite code and send it to one rep. The code expires after 7 days and can be used once.")
+            Text(activeMemberCount >= team.memberLimit ? "The included team seats are full." : "Create an invite code for a sales rep or technician. The code expires after 7 days and can be used once.")
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            Picker("Worker type", selection: $pendingInviteWorkType) {
+                Text("Sales Rep").tag(TeamMemberWorkType.salesRep)
+                Text("Technician").tag(TeamMemberWorkType.technician)
+            }
+            .pickerStyle(.segmented)
+            .disabled(activeMemberCount >= team.memberLimit || !team.planStatus.allowsTeamWrite || isWorking || teamService.isLoading)
+            .accessibilityIdentifier("teamInviteWorkerTypePicker")
+
             if let createdInvite {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Invite code")
-                        .font(.micro)
-                        .foregroundColor(Color.textMuted)
-                    Text(createdInvite.displayCode)
-                        .font(.system(.title3, design: .monospaced).weight(.semibold))
-                        .foregroundColor(Color.textPrimary)
-                    Text("Expires \(createdInvite.expiresAt.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.micro)
-                        .foregroundColor(Color.textMuted)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.obsidianElevated)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.obsidianBorder.opacity(0.4), lineWidth: 0.5)
-                        )
+                createdInvitePanel(
+                    invite: createdInvite,
+                    workType: createdInviteWorkType ?? pendingInviteWorkType
                 )
             }
 
             teamActionButton(
-                title: "Create Invite Code",
-                icon: "number.square.fill",
+                title: createdInvite == nil ? "Create Invite Code" : "Create Another Code",
+                icon: createdInvite == nil ? "number.square.fill" : "plus.square.fill",
                 disabled: activeMemberCount >= team.memberLimit || !team.planStatus.allowsTeamWrite,
                 accessibilityIdentifier: "teamCreateInviteButton"
             ) {
@@ -420,131 +724,188 @@ struct TeamWorkspaceView: View {
                 .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
 
-            if teamService.teamMembers.isEmpty {
+            if displayedTeamMembers.isEmpty {
                 Text("Members will appear here after the team loads.")
                     .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
             } else {
-                ForEach(teamService.teamMembers) { member in
-                    HStack(spacing: 12) {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(member.role == .owner ? Color.electricViolet : Color.statusInterested)
-                            .frame(width: 34, height: 34)
-                            .overlay(
-                                Image(systemName: member.role == .owner ? "crown.fill" : "person.fill")
-                                    .font(.obsidianFootnote)
-                                    .foregroundColor(.white)
-                            )
+                ForEach(displayedActiveMembers) { member in
+                    memberRow(member)
+                }
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(member.displayName)
-                                .font(.obsidianFootnote)
-                                .foregroundColor(Color.textPrimary)
+                if !displayedPendingInvites.isEmpty {
+                    Divider()
+                        .overlay(Color.obsidianBorder.opacity(0.6))
 
-                            Text(memberSubtitle(member))
-                                .font(.micro)
-                                .foregroundColor(Color.textMuted)
-                        }
+                    Text("Pending Invites")
+                        .font(.micro)
+                        .foregroundColor(Color.textMuted)
+                        .textCase(.uppercase)
 
-                        Spacer()
-
-                        if TeamAccessPolicy.canCancelPendingInvite(role: .owner, member: member) {
-                            Button {
-                                cancelPendingInvite(member)
-                            } label: {
-                                Label("Cancel", systemImage: "xmark.circle.fill")
-                                    .labelStyle(.iconOnly)
-                                    .font(.obsidianCallout)
-                                    .foregroundColor(Color.statusNotInterested)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .accessibilityLabel("Cancel pending invite")
-                            .disabled(isWorking || teamService.isLoading)
-                        } else if let team = teamService.activeTeam,
-                                  let currentMember = teamService.currentMember,
-                                  TeamAccessPolicy.canRemoveMember(actor: currentMember, team: team, member: member) {
-                            Button {
-                                confirmRemoveMember(member)
-                            } label: {
-                                Image(systemName: "person.crop.circle.badge.minus")
-                                    .font(.obsidianCallout)
-                                    .foregroundColor(Color.statusNotInterested)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .accessibilityLabel("Remove \(member.displayName)")
-                            .disabled(isWorking || teamService.isLoading)
-                        } else {
-                            Text(memberStatusText(member))
-                                .font(.micro)
-                                .foregroundColor(memberStatusColor(member))
-                        }
+                    ForEach(displayedPendingInvites) { member in
+                        memberRow(member)
                     }
                 }
             }
         }
     }
 
+    private func teamAccessCard(team: TeamWorkspace, member: TeamMember) -> some View {
+        TeamInfoCard {
+            Text("Team Access")
+                .font(.obsidianCallout)
+                .foregroundColor(Color.textPrimary)
+
+            if member.role == .owner {
+                Text("Close this Team Workspace when you no longer want workers to access shared leads, jobs, map, or active-hours location history.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                teamActionButton(
+                    title: "Close Team Workspace",
+                    icon: "person.3.sequence.fill",
+                    color: Color.statusNotInterested,
+                    disabled: !TeamAccessPolicy.canCloseTeam(owner: member, team: team),
+                    accessibilityIdentifier: "teamCloseWorkspaceButton"
+                ) {
+                    showingCloseTeamConfirmation = true
+                }
+            } else {
+                Text("Leave the team if you no longer work in this workspace. Assigned team leads, service jobs, and live sharing access will be removed from this account.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                teamActionButton(
+                    title: "Leave Team",
+                    icon: "rectangle.portrait.and.arrow.right",
+                    color: Color.statusNotInterested,
+                    disabled: !TeamAccessPolicy.canLeaveTeam(member: member, team: team),
+                    accessibilityIdentifier: "teamLeaveButton"
+                ) {
+                    showingLeaveTeamConfirmation = true
+                }
+            }
+        }
+        .accessibilityIdentifier("teamAccessCard")
+    }
+
+    private func memberRow(_ member: TeamMember) -> some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(memberWorkTypeColor(member))
+                .frame(width: 34, height: 34)
+                .overlay(
+                    Image(systemName: memberWorkTypeIcon(member))
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.white)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(member.displayName)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
+
+                Text(memberSubtitle(member))
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
+            }
+
+            Spacer()
+
+            if canUpdateMemberWorkType(member) {
+                memberWorkTypeMenu(member)
+            }
+
+            if TeamAccessPolicy.canCancelPendingInvite(role: .owner, member: member) {
+                Button {
+                    cancelPendingInvite(member)
+                } label: {
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                        .labelStyle(.iconOnly)
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.statusNotInterested)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Cancel pending invite")
+                .disabled(isWorking || teamService.isLoading)
+            } else if let team = teamService.activeTeam,
+                      let currentMember = teamService.currentMember,
+                      TeamAccessPolicy.canRemoveMember(actor: currentMember, team: team, member: member) {
+                Button {
+                    confirmRemoveMember(member)
+                } label: {
+                    Image(systemName: "person.crop.circle.badge.minus")
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.statusNotInterested)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Remove \(member.displayName)")
+                .disabled(isWorking || teamService.isLoading)
+            } else {
+                Text(memberStatusText(member))
+                    .font(.micro)
+                    .foregroundColor(memberStatusColor(member))
+            }
+        }
+    }
+
     private func repSummary(team: TeamWorkspace, member: TeamMember) -> some View {
-        let workspace = TeamRepWorkspace.makeMemberWorkspace(
-            member: member,
-            leads: teamService.teamLeads,
-            bookings: teamService.teamBookings,
-            dutySessions: teamService.dutySessions,
-            dutyLocationPoints: teamService.dutyLocationPoints
-        )
+        let visibleWorkspaces = visibleMemberWorkspaces(member: member)
+        let workspace = visibleWorkspaces.first { $0.member.userId == member.userId }
+            ?? TeamRepWorkspace.makeMemberWorkspace(
+                member: member,
+                leads: teamService.teamLeads,
+                bookings: teamService.teamBookings,
+                dutySessions: teamService.dutySessions,
+                dutyLocationPoints: teamService.dutyLocationPoints
+            )
 
         return TeamInfoCard {
-            Text("My Team Work")
+            Text(member.isTechnician ? "My Service Jobs" : "My Team Work")
                 .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
 
             if let todaySummary = teamService.todayWorkSummary() {
-                statRow("Today bookings", "\(todaySummary.bookingCount)")
-                statRow("Important work", "\(todaySummary.importantLeadCount)")
-            }
-            statRow("Assigned leads", "\(teamService.teamLeads.count)")
-            statRow("Assigned bookings", "\(teamService.teamBookings.count)")
-
-            Button {
-                Task {
-                    if teamService.activeDutySession == nil {
-                        locationManager.startLocationUpdates()
-                        locationManager.requestImmediateLocation()
-                        try? await teamService.startDuty(member: member)
-                        if let location = locationManager.location {
-                            publishDutyLocationIfNeeded(location, force: true)
-                        }
-                    } else {
-                        try? await teamService.endDuty()
-                        lastTeamLocationUploadAt = nil
-                        lastTeamLocationUploadCoordinate = nil
-                    }
+                statRow(member.isTechnician ? "Today jobs" : "Today bookings", "\(todaySummary.bookingCount)")
+                if !member.isTechnician {
+                    statRow("Important work", "\(todaySummary.importantLeadCount)")
                 }
-            } label: {
-                Label(teamService.activeDutySession == nil ? "Go On Duty" : "Go Off Duty", systemImage: teamService.activeDutySession == nil ? "location.fill" : "location.slash.fill")
-                    .frame(maxWidth: .infinity)
-                    .font(.obsidianCallout)
-                    .foregroundColor(.white)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.electricViolet)
-                            .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
-                    )
             }
-            .buttonStyle(PlainButtonStyle())
-            .accessibilityIdentifier("teamDutyToggleButton")
-            .disabled(!team.planStatus.allowsTeamWrite)
-            .opacity(team.planStatus.allowsTeamWrite ? 1 : 0.45)
+            if member.isTechnician {
+                statRow("Assigned jobs", "\(workspace.assignedBookings.count)")
+            } else {
+                statRow("Assigned leads", "\(workspace.assignedLeads.count)")
+                statRow("Assigned jobs", "\(workspace.assignedBookings.count)")
+            }
+
+            dutySharingButton(
+                member: member,
+                team: team,
+                onTitle: "Go On Duty",
+                offTitle: "Go Off Duty",
+                accessibilityIdentifier: "teamDutyToggleButton"
+            )
 
             Text("Your active-hours route is visible to the owner while you are on duty. Your live dot disappears when you go off duty.")
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if visibleWorkspaces.contains(where: { $0.member.role == .owner && $0.liveLocation != nil }) {
+                Text("Owner location is visible while the owner is sharing.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             TeamFieldMapView(
-                workspaces: [workspace],
-                selectedRepUserId: constantRepSelection(member.userId)
+                workspaces: visibleWorkspaces,
+                selectedRepUserId: constantRepSelection(nil),
+                onLeadTap: { lead in
+                    selectedTeamLead = lead
+                }
             )
             .frame(height: 220)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -554,10 +915,27 @@ struct TeamWorkspaceView: View {
             )
             .accessibilityIdentifier("teamRepMapView")
 
-            ForEach(workspace.assignedLeads.prefix(4)) { lead in
-                VStack(alignment: .leading, spacing: 8) {
-                    teamLeadRow(lead)
-                    repQuickReplyRow(lead: lead, team: team)
+            if member.isTechnician {
+                if workspace.assignedBookings.isEmpty {
+                    Text("No service jobs assigned yet.")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 6)
+                } else {
+                    ForEach(workspace.assignedBookings.prefix(6)) { booking in
+                        VStack(alignment: .leading, spacing: 8) {
+                            teamBookingRow(booking)
+                            technicianJobStatusButtons(booking)
+                        }
+                    }
+                }
+            } else {
+                ForEach(workspace.assignedLeads.prefix(4)) { lead in
+                    VStack(alignment: .leading, spacing: 8) {
+                        teamLeadRow(lead)
+                        repQuickReplyRow(lead: lead, team: team)
+                    }
                 }
             }
         }
@@ -639,7 +1017,9 @@ struct TeamWorkspaceView: View {
                 Text("Password")
                     .font(.micro)
                     .foregroundColor(Color.textMuted)
-                SecureField("Password", text: $teamAccountPassword)
+                TextField("Password", text: $teamAccountPassword)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                     .focused($focusedInput, equals: .accountPassword)
                     .teamTextField()
                     .accessibilityIdentifier("teamAccountPasswordField")
@@ -678,46 +1058,55 @@ struct TeamWorkspaceView: View {
 
     private var setupTeamCard: some View {
         TeamInfoCard {
-            Text("Create or Accept Team")
-                .font(.obsidianCallout)
-                .foregroundColor(Color.textPrimary)
+            VStack(alignment: .leading, spacing: 5) {
+                Label("Create or Accept Team", systemImage: "person.3.fill")
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
 
-            Text("Create the included Team plan as the owner. Reps join by signing in with Apple and entering your invite code.")
-                .font(.obsidianFootnote)
-                .foregroundColor(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+                Text("Start as the owner, or join an existing crew with a single-use invite code.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Team name")
-                    .font(.micro)
-                    .foregroundColor(Color.textMuted)
-                TextField("My Team", text: $teamName)
-                    .focused($focusedInput, equals: .teamName)
-                    .teamTextField()
-                    .accessibilityIdentifier("teamNameField")
-                teamActionButton(
+            setupOptionPanel(
+                title: "Create owner workspace",
+                icon: "crown.fill",
+                subtitle: "Use this account to manage reps, technicians, leads, jobs, and team location sharing."
+            ) {
+                setupField(title: "Team name", icon: "person.3.fill") {
+                    TextField("My Team", text: $teamName)
+                        .focused($focusedInput, equals: .teamName)
+                        .teamTextField()
+                        .accessibilityIdentifier("teamNameField")
+                }
+
+                setupActionButton(
                     title: "Create Team",
-                    icon: "person.3.fill",
+                    icon: "plus.circle.fill",
                     accessibilityIdentifier: "teamCreateTeamButton"
                 ) {
                     createTeam()
                 }
             }
 
-            Divider()
-                .overlay(Color.obsidianBorder)
+            setupDivider("Or join with code")
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Joining as a rep?")
-                    .font(.micro)
-                    .foregroundColor(Color.textMuted)
-                TextField("Invite code", text: $inviteCode)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .focused($focusedInput, equals: .inviteCode)
-                    .teamTextField()
-                    .accessibilityIdentifier("teamInviteCodeField")
-                teamActionButton(
+            setupOptionPanel(
+                title: "Join as worker",
+                icon: "person.badge.plus",
+                subtitle: "Sales reps and technicians join here after the owner sends an invite code."
+            ) {
+                setupField(title: "Invite code", icon: "number.square.fill") {
+                    TextField("Invite code", text: $inviteCode)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .focused($focusedInput, equals: .inviteCode)
+                        .teamTextField()
+                        .accessibilityIdentifier("teamInviteCodeField")
+                }
+
+                setupActionButton(
                     title: "Join Team",
                     icon: "person.badge.plus",
                     accessibilityIdentifier: "teamJoinTeamButton"
@@ -728,16 +1117,221 @@ struct TeamWorkspaceView: View {
         }
     }
 
-    private var loadingCard: some View {
+    private func setupOptionPanel<Content: View>(
+        title: String,
+        icon: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: icon)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.electricViolet)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        Circle()
+                            .fill(Color.electricViolet.opacity(0.12))
+                    )
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.obsidianFootnote)
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color.textPrimary)
+
+                    Text(subtitle)
+                        .font(.micro)
+                        .foregroundColor(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            content()
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.obsidianElevated.opacity(0.62))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                )
+        )
+    }
+
+    private func setupField<Content: View>(
+        title: String,
+        icon: String,
+        @ViewBuilder field: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: icon)
+                .font(.micro)
+                .foregroundColor(Color.textMuted)
+
+            field()
+        }
+    }
+
+    private func setupDivider(_ title: String) -> some View {
+        HStack(spacing: 10) {
+            Rectangle()
+                .fill(Color.obsidianBorder.opacity(0.75))
+                .frame(height: 0.5)
+
+            Text(title)
+                .font(.micro)
+                .foregroundColor(Color.textMuted)
+                .lineLimit(1)
+
+            Rectangle()
+                .fill(Color.obsidianBorder.opacity(0.75))
+                .frame(height: 0.5)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func setupActionButton(
+        title: String,
+        icon: String,
+        accessibilityIdentifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.obsidianFootnote)
+                    .frame(width: 26, height: 26)
+                    .background(Color.white.opacity(0.16))
+                    .clipShape(Circle())
+
+                Text(title)
+                    .font(.obsidianFootnote)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.micro.weight(.bold))
+                    .opacity(0.75)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .frame(height: 48)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.electricViolet, Color.electricVioletDeep],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: Color.electricViolet.opacity(0.22), radius: 4, x: 0, y: 2)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier(accessibilityIdentifier)
+        .disabled(isWorking || teamService.isLoading)
+        .opacity(isWorking || teamService.isLoading ? 0.55 : 1)
+    }
+
+    private func loadingCard(_ message: String) -> some View {
         TeamInfoCard {
             HStack(spacing: 12) {
                 ProgressView()
                     .tint(Color.electricViolet)
-                Text("Updating team workspace...")
+                Text(message)
                     .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
             }
         }
+    }
+
+    private func createdInvitePanel(invite: TeamInvite, workType: TeamMemberWorkType) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Label("Invite code ready", systemImage: "checkmark.seal.fill")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
+
+                Spacer(minLength: 8)
+
+                Text(workType.title)
+                    .font(.micro)
+                    .foregroundColor(Color.statusNotHome)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(Color.statusNotHome.opacity(0.14))
+                    )
+            }
+
+            Text(invite.displayCode)
+                .font(.system(.largeTitle, design: .monospaced).weight(.heavy))
+                .foregroundColor(Color.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .textSelection(.enabled)
+                .accessibilityIdentifier("teamCreatedInviteCode")
+
+            HStack(spacing: 10) {
+                Button {
+                    copyInviteCode(invite)
+                } label: {
+                    inviteCodeUtilityLabel(title: "Copy Code", icon: "doc.on.doc.fill")
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("teamCopyInviteCodeButton")
+
+                ShareLink(item: inviteShareText(for: invite, workType: workType)) {
+                    inviteCodeUtilityLabel(title: "Share", icon: "square.and.arrow.up.fill")
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("teamShareInviteCodeButton")
+            }
+
+            Text("Expires \(invite.expiresAt.formatted(date: .abbreviated, time: .shortened))")
+                .font(.micro)
+                .foregroundColor(Color.textMuted)
+
+            Text("Reserved in Members as Pending \(workType.title) Invite until the worker joins or you cancel it.")
+                .font(.micro)
+                .foregroundColor(Color.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.statusNotHome.opacity(0.10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.statusNotHome.opacity(0.45), lineWidth: 1)
+                )
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("teamCreatedInvitePanel")
+    }
+
+    private func inviteCodeUtilityLabel(title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.obsidianFootnote)
+            .foregroundColor(Color.textPrimary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.obsidianElevated)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                    )
+            )
     }
 
     private var teamHeader: some View {
@@ -803,14 +1397,86 @@ struct TeamWorkspaceView: View {
         .opacity(disabled ? 0.5 : 1)
     }
 
+    private func dutySharingButton(
+        member: TeamMember,
+        team: TeamWorkspace,
+        onTitle: String,
+        offTitle: String,
+        accessibilityIdentifier: String
+    ) -> some View {
+        let isOnDuty = teamService.activeDutySession != nil
+        let canStartDuty = TeamAccessPolicy.canStartDutySession(planStatus: team.planStatus, role: member.role)
+            && member.status == .active
+        return teamActionButton(
+            title: isOnDuty ? offTitle : onTitle,
+            icon: isOnDuty ? "location.slash.fill" : "location.fill",
+            color: isOnDuty ? Color.statusNotInterested : Color.electricViolet,
+            disabled: !isOnDuty && !canStartDuty,
+            accessibilityIdentifier: accessibilityIdentifier
+        ) {
+            toggleDutySharing(for: member)
+        }
+    }
+
     private var activeMemberCount: Int {
-        teamService.teamMembers.filter { $0.status == .active }.count
+        TeamMemberRoster.activeSeatCount(teamService.teamMembers)
+    }
+
+    private var displayedTeamMembers: [TeamMember] {
+        TeamMemberRoster.normalized(teamService.teamMembers)
+    }
+
+    private var displayedActiveMembers: [TeamMember] {
+        displayedTeamMembers.filter { !$0.isPendingInvite }
+    }
+
+    private var displayedPendingInvites: [TeamMember] {
+        displayedTeamMembers.filter(\.isPendingInvite)
     }
 
     private var activeAssignableReps: [TeamMember] {
-        teamService.teamMembers
-            .filter { $0.role == .member && $0.status == .active && !$0.isPendingInvite }
+        activeSalesReps
+    }
+
+    private var activeSalesReps: [TeamMember] {
+        displayedTeamMembers
+            .filter { $0.isSalesRep && $0.status == .active && !$0.isPendingInvite }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private var activeTechnicians: [TeamMember] {
+        displayedTeamMembers
+            .filter { $0.isTechnician && $0.status == .active && !$0.isPendingInvite }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private var activeAssignableJobWorkers: [TeamMember] {
+        (activeTechnicians + activeSalesReps)
+            .reduce(into: [TeamMember]()) { result, member in
+                if !result.contains(where: { $0.userId == member.userId }) {
+                    result.append(member)
+                }
+            }
+    }
+
+    private var ownerDispatchAppointments: [Appointment] {
+        appointmentManager.appointments
+            .filter { appointment in
+                appointment.status != .cancelled
+                    && appointment.status != .completed
+                    && appointment.endDate >= Date().addingTimeInterval(-60 * 60)
+            }
+            .sorted { $0.startDate < $1.startDate }
+    }
+
+    private var ownerTeamJobs: [TeamBooking] {
+        teamService.teamBookings
+            .sorted {
+                if $0.isFutureEditable != $1.isFutureEditable {
+                    return $0.isFutureEditable && !$1.isFutureEditable
+                }
+                return $0.startDate < $1.startDate
+            }
     }
 
     private var teamSyncStatusMessage: String? {
@@ -822,6 +1488,100 @@ struct TeamWorkspaceView: View {
         case .failed:
             return teamService.syncWriteState.displayText
         }
+    }
+
+    private var visibleStatusMessage: String? {
+        guard let statusMessage else { return nil }
+        if statusMessage == teamSyncStatusMessage {
+            return nil
+        }
+        if statusMessage == teamService.lastErrorMessage {
+            return nil
+        }
+        if isShowingTeamSetup && statusMessageIsError && isStaleSetupErrorMessage(statusMessage) {
+            return nil
+        }
+        return statusMessage
+    }
+
+    private var visibleTeamErrorMessage: String? {
+        guard let errorMessage = teamService.lastErrorMessage else { return nil }
+        if errorMessage == teamSyncStatusMessage { return nil }
+        if isShowingTeamSetup && isStaleSetupErrorMessage(errorMessage) {
+            return nil
+        }
+        if isShowingTeamSetup && errorMessage == TeamFirebaseService.teamOfflineMessage {
+            return hasVisibleSetupActionError ? nil : TeamFirebaseService.teamSetupOfflineMessage
+        }
+        return errorMessage
+    }
+
+    private var visibleTeamSyncStatusMessage: String? {
+        guard let message = teamSyncStatusMessage else { return nil }
+        if isShowingTeamSetup && isStaleSetupErrorMessage(message) {
+            return nil
+        }
+        if isShowingTeamSetup && hasVisibleSetupActionError {
+            return nil
+        }
+        if isShowingTeamSetup && message == TeamFirebaseService.teamOfflineMessage {
+            return TeamFirebaseService.teamSetupOfflineMessage
+        }
+        return message
+    }
+
+    private var visibleUserAuthErrorMessage: String? {
+        guard case let .failed(message) = userAccountManager.authStatus else { return nil }
+        if isShowingTeamSetup && isStaleSetupErrorMessage(message) {
+            return nil
+        }
+        return message
+    }
+
+    private var visibleAppleAuthErrorMessage: String? {
+        guard case let .failed(message) = appleSignInManager.authStatus else { return nil }
+        if isShowingTeamSetup && isStaleSetupErrorMessage(message) {
+            return nil
+        }
+        return message
+    }
+
+    private var isShowingTeamSetup: Bool {
+        canUseTeamWorkspace
+            && teamService.activeTeam == nil
+            && teamService.currentMember == nil
+    }
+
+    private var canUseTeamWorkspace: Bool {
+        TeamAuthPolicy.canUseTeamWorkspace(isFirebaseAuthenticated: firebaseService.isAuthenticated)
+    }
+
+    private var hasVisibleSetupActionError: Bool {
+        guard isShowingTeamSetup,
+              statusMessageIsError,
+              let statusMessage,
+              !isStaleSetupErrorMessage(statusMessage) else {
+            return false
+        }
+        return true
+    }
+
+    private func isStaleSetupErrorMessage(_ message: String) -> Bool {
+        TeamFirebaseService.isStaleNoTeamSetupMessage(message)
+    }
+
+    private var shouldShowInitialLoadingCard: Bool {
+        teamService.isLoading && teamService.activeTeam == nil && teamService.currentMember == nil
+    }
+
+    private var passiveTeamStatusMessage: String? {
+        if teamService.isLoading && !shouldShowInitialLoadingCard {
+            return "Refreshing team..."
+        }
+        if isWorking && teamSyncStatusMessage == nil {
+            return "Saving team edit..."
+        }
+        return nil
     }
 
     private var teamSyncStatusColor: Color {
@@ -845,9 +1605,78 @@ struct TeamWorkspaceView: View {
         )
     }
 
+    private var ownerLeadQueueSubtitle: String {
+        let repScope = selectedRepUserId.flatMap { selectedId in
+            teamService.teamMembers.first(where: { $0.userId == selectedId })?.displayName
+        }
+
+        let scopeText = repScope.map { "\($0)'s leads" } ?? "All reps"
+        switch ownerLeadQueueFilter {
+        case .important:
+            return "\(scopeText) that need owner attention."
+        case .open:
+            return "\(scopeText) still in the active sales pipeline."
+        case .all:
+            return "\(scopeText), newest updates first."
+        }
+    }
+
+    private var ownerFilteredLeads: [TeamLead] {
+        teamService.teamLeads
+            .filter { lead in
+                if let selectedRepUserId, lead.assignedToUserId != selectedRepUserId {
+                    return false
+                }
+                switch ownerLeadQueueFilter {
+                case .important:
+                    return TeamLeadAttentionPolicy.needsOwnerAttention(lead)
+                case .open:
+                    return lead.status != .converted && lead.status != .notInterested
+                case .all:
+                    return true
+                }
+            }
+            .sorted { ownerLeadSort(lhs: $0, rhs: $1) }
+    }
+
+    private var ownerLeadQueueRows: [TeamLead] {
+        ownerLeadQueueExpanded ? ownerFilteredLeads : Array(ownerFilteredLeads.prefix(6))
+    }
+
     private var filteredOwnerRepWorkspaces: [TeamRepWorkspace] {
         guard let selectedRepUserId else { return ownerRepWorkspaces }
         return ownerRepWorkspaces.filter { $0.member.userId == selectedRepUserId }
+    }
+
+    private func visibleMemberWorkspaces(member: TeamMember) -> [TeamRepWorkspace] {
+        TeamRepWorkspace.makeVisibleMemberWorkspaces(
+            currentMember: member,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            dutyLocationPoints: teamService.dutyLocationPoints
+        )
+    }
+
+    private func ownerLeadSort(lhs: TeamLead, rhs: TeamLead) -> Bool {
+        let lhsHighPriority = TeamLeadAttentionPolicy.isActionableHighPriority(lhs)
+        let rhsHighPriority = TeamLeadAttentionPolicy.isActionableHighPriority(rhs)
+        if lhsHighPriority != rhsHighPriority {
+            return lhsHighPriority
+        }
+
+        let lhsRank = TeamLeadImportance.rank(lhs.status)
+        let rhsRank = TeamLeadImportance.rank(rhs.status)
+        if lhsRank != rhsRank {
+            return lhsRank > rhsRank
+        }
+
+        return lhs.updatedAt > rhs.updatedAt
+    }
+
+    private func ownerName(for lead: TeamLead) -> String {
+        teamService.teamMembers.first(where: { $0.userId == lead.assignedToUserId })?.displayName ?? "Unassigned"
     }
 
     private func statRow(_ title: String, _ value: String) -> some View {
@@ -908,10 +1737,79 @@ struct TeamWorkspaceView: View {
         .accessibilityLabel("Show \(title) on team map")
     }
 
+    private func appointmentDispatchRow(_ appointment: Appointment) -> some View {
+        let sentBooking = teamBooking(for: appointment)
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: appointment.displayIcon)
+                .font(.micro)
+                .foregroundColor(appointment.displayColor)
+                .frame(width: 28, height: 28)
+                .background(appointment.displayColor.opacity(0.12))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(appointment.title.isEmpty ? appointment.displayName : appointment.title)
+                    .font(.micro)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(1)
+
+                Text("\(appointment.startDate.formatted(date: .abbreviated, time: .shortened)) - \(appointment.endDate.formatted(date: .omitted, time: .shortened))")
+                    .font(.nano)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(1)
+
+                Text(appointment.location.isEmpty ? "No location" : appointment.location)
+                    .font(.nano)
+                    .foregroundColor(Color.textMuted)
+                    .lineLimit(1)
+
+                if let sentBooking {
+                    Text("Sent to \(memberName(forUserId: sentBooking.assignedToUserId)) • \(sentBooking.status.displayName)")
+                        .font(.nano)
+                        .foregroundColor(Color.statusInterested)
+                        .lineLimit(1)
+                } else {
+                    Text("Not sent to Team yet")
+                        .font(.nano)
+                        .foregroundColor(Color.textMuted)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            appointmentSendMenu(appointment, existingBooking: sentBooking)
+        }
+        .padding(.vertical, 9)
+        .accessibilityIdentifier("teamAppointmentDispatchRow")
+    }
+
+    private func appointmentSendMenu(_ appointment: Appointment, existingBooking: TeamBooking?) -> some View {
+        Menu {
+            if activeAssignableJobWorkers.isEmpty {
+                Text("No technicians or reps available")
+            } else {
+                ForEach(activeAssignableJobWorkers) { worker in
+                    Button("\(worker.displayName) • \(worker.displayRoleTitle)") {
+                        sendAppointment(appointment, to: worker)
+                    }
+                    .disabled(existingBooking?.assignedToUserId == worker.userId)
+                }
+            }
+        } label: {
+            Image(systemName: existingBooking == nil ? "paperplane.fill" : "arrow.triangle.2.circlepath")
+                .font(.micro)
+                .foregroundColor(Color.electricViolet)
+                .frame(width: 30, height: 30)
+        }
+        .disabled(activeAssignableJobWorkers.isEmpty || teamService.activeTeam?.planStatus.allowsTeamWrite != true)
+        .accessibilityLabel(existingBooking == nil ? "Send appointment to worker" : "Reassign sent job")
+    }
+
     private func repWorkspaceRow(_ workspace: TeamRepWorkspace) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
                 selectedRepUserId = workspace.member.userId
+                selectedRepWorkspace = workspace
             } label: {
                 HStack(spacing: 12) {
                     Circle()
@@ -930,19 +1828,34 @@ struct TeamWorkspaceView: View {
                     Spacer()
 
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(workspace.assignedLeads.count) leads")
+                        Text(workspace.member.isTechnician ? "\(workspace.assignedBookings.count) jobs" : "\(workspace.assignedLeads.count) leads")
                             .font(.micro)
                             .foregroundColor(Color.textSecondary)
-                        Text("\(workspace.assignedBookings.count) bookings")
+                        Text(workspace.member.displayRoleTitle)
                             .font(.micro)
                             .foregroundColor(Color.textMuted)
                     }
+
+                    Image(systemName: "chevron.right")
+                        .font(.nano)
+                        .foregroundColor(Color.textMuted)
                 }
             }
             .buttonStyle(PlainButtonStyle())
-            .accessibilityLabel("Show \(workspace.member.displayName) on map")
+            .accessibilityLabel("Open \(workspace.member.displayName)")
+            .accessibilityIdentifier("teamRepDetailButton")
 
-            if workspace.assignedLeads.isEmpty {
+            if workspace.member.isTechnician {
+                if workspace.assignedBookings.isEmpty {
+                    Text("No assigned service jobs yet.")
+                        .font(.micro)
+                        .foregroundColor(Color.textMuted)
+                } else {
+                    ForEach(workspace.assignedBookings.prefix(4)) { booking in
+                        teamBookingRow(booking, allowAssignment: true)
+                    }
+                }
+            } else if workspace.assignedLeads.isEmpty {
                 Text("No assigned team leads yet.")
                     .font(.micro)
                     .foregroundColor(Color.textMuted)
@@ -950,11 +1863,11 @@ struct TeamWorkspaceView: View {
                 ForEach(workspace.assignedLeads.prefix(3)) { lead in
                     teamLeadRow(lead, allowAssignment: true)
                 }
-            }
 
-            if !workspace.assignedBookings.isEmpty {
-                ForEach(workspace.assignedBookings.prefix(2)) { booking in
-                    teamBookingRow(booking, allowAssignment: true)
+                if !workspace.assignedBookings.isEmpty {
+                    ForEach(workspace.assignedBookings.prefix(2)) { booking in
+                        teamBookingRow(booking, allowAssignment: true)
+                    }
                 }
             }
 
@@ -964,8 +1877,10 @@ struct TeamWorkspaceView: View {
     }
 
     private func teamLeadRow(_ lead: TeamLead, allowAssignment: Bool = false) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: lead.isHighPriority ? "star.fill" : leadStatusIcon(lead.status))
+        let isActionableHighPriority = TeamLeadAttentionPolicy.isActionableHighPriority(lead)
+
+        return HStack(spacing: 10) {
+            Image(systemName: isActionableHighPriority ? "star.fill" : leadStatusIcon(lead.status))
                 .font(.micro)
                 .foregroundColor(leadStatusColor(lead.status))
                 .frame(width: 18)
@@ -997,26 +1912,42 @@ struct TeamWorkspaceView: View {
                 leadAssignmentMenu(lead)
             }
         }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedTeamLead = lead
+        }
+        .accessibilityIdentifier("teamLeadDetailRow")
+        .accessibilityLabel("\(lead.name), \(leadStatusText(lead.status))")
     }
 
     private func teamBookingRow(_ booking: TeamBooking, allowAssignment: Bool = false) -> some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: "calendar.badge.clock")
                 .foregroundColor(Color.electricViolet)
             VStack(alignment: .leading, spacing: 2) {
                 Text(booking.title)
                     .font(.micro)
-                    .foregroundColor(Color.textSecondary)
+                    .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
-                Text(booking.startDate.formatted(date: .omitted, time: .shortened))
+                Text("\(booking.startDate.formatted(date: .abbreviated, time: .shortened)) • \(booking.status.displayName)")
+                    .font(.nano)
+                    .foregroundColor(Color.textSecondary)
+                Text(booking.location.isEmpty ? "No location" : booking.location)
+                    .font(.nano)
+                    .foregroundColor(Color.textMuted)
+                    .lineLimit(1)
+                Text("Assigned to \(memberName(forUserId: booking.assignedToUserId))")
                     .font(.nano)
                     .foregroundColor(Color.textMuted)
             }
             Spacer()
+            jobStatusMenu(booking)
             if allowAssignment {
                 bookingAssignmentMenu(booking)
             }
         }
+        .padding(.vertical, 6)
     }
 
     private func leadAssignmentMenu(_ lead: TeamLead) -> some View {
@@ -1039,11 +1970,11 @@ struct TeamWorkspaceView: View {
 
     private func bookingAssignmentMenu(_ booking: TeamBooking) -> some View {
         Menu {
-            ForEach(activeAssignableReps) { rep in
-                Button(rep.displayName) {
-                    assignBooking(booking, to: rep)
+            ForEach(activeAssignableJobWorkers) { worker in
+                Button("\(worker.displayName) • \(worker.displayRoleTitle)") {
+                    assignBooking(booking, to: worker)
                 }
-                .disabled(rep.userId == booking.assignedToUserId)
+                .disabled(worker.userId == booking.assignedToUserId)
             }
         } label: {
             Image(systemName: "person.crop.circle.badge.checkmark")
@@ -1051,8 +1982,26 @@ struct TeamWorkspaceView: View {
                 .foregroundColor(Color.electricViolet)
                 .frame(width: 26, height: 26)
         }
-        .disabled(activeAssignableReps.isEmpty || teamService.activeTeam?.planStatus.allowsTeamWrite != true)
-        .accessibilityLabel("Assign booking")
+        .disabled(activeAssignableJobWorkers.isEmpty || teamService.activeTeam?.planStatus.allowsTeamWrite != true)
+        .accessibilityLabel("Assign job")
+    }
+
+    private func jobStatusMenu(_ booking: TeamBooking) -> some View {
+        Menu {
+            ForEach(TeamBookingStatus.allCases, id: \.rawValue) { status in
+                Button(status.displayName) {
+                    updateBookingStatus(booking, status: status)
+                }
+                .disabled(status == booking.status)
+            }
+        } label: {
+            Image(systemName: "checklist")
+                .font(.micro)
+                .foregroundColor(Color.statusInterested)
+                .frame(width: 26, height: 26)
+        }
+        .disabled(!canUpdateBooking(booking))
+        .accessibilityLabel("Update job status")
     }
 
     private func repQuickReplyRow(lead: TeamLead, team: TeamWorkspace) -> some View {
@@ -1061,6 +2010,36 @@ struct TeamWorkspaceView: View {
             repReplyButton("Not home", status: .customerNotHome, lead: lead, team: team)
             repReplyButton("Owner follow-up", status: .needsOwnerFollowUp, lead: lead, team: team)
         }
+    }
+
+    private func technicianJobStatusButtons(_ booking: TeamBooking) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8)], alignment: .leading, spacing: 8) {
+            jobStatusButton("On way", status: .enRoute, booking: booking)
+            jobStatusButton("Started", status: .inProgress, booking: booking)
+            jobStatusButton("Done", status: .completed, booking: booking)
+            jobStatusButton("Owner follow-up", status: .needsOwnerFollowUp, booking: booking)
+        }
+    }
+
+    private func jobStatusButton(_ title: String, status: TeamBookingStatus, booking: TeamBooking) -> some View {
+        Button {
+            updateBookingStatus(booking, status: status)
+        } label: {
+            Text(title)
+                .font(.nano)
+                .foregroundColor(canUpdateBooking(booking) ? Color.electricViolet : Color.textMuted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule()
+                        .fill(Color.electricViolet.opacity(canUpdateBooking(booking) ? 0.12 : 0.05))
+                )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(!canUpdateBooking(booking) || booking.status == status || isWorking || teamService.isLoading)
     }
 
     private func repReplyButton(_ title: String, status: OwnerInstructionStatus, lead: TeamLead, team: TeamWorkspace) -> some View {
@@ -1167,7 +2146,7 @@ struct TeamWorkspaceView: View {
         }
     }
 
-    private func constantRepSelection(_ userId: String) -> Binding<String?> {
+    private func constantRepSelection(_ userId: String?) -> Binding<String?> {
         Binding<String?>(
             get: { userId },
             set: { _ in }
@@ -1201,21 +2180,38 @@ struct TeamWorkspaceView: View {
     #endif
 
     private func createInvite() {
+        guard !isWorking && !teamService.isLoading else { return }
         isWorking = true
         statusMessage = nil
         statusMessageIsError = false
 
         Task {
             do {
-                createdInvite = try await teamService.createInvite()
-                statusMessage = "Invite code created."
+                let inviteWorkType = pendingInviteWorkType
+                createdInvite = try await teamService.createInvite(workType: inviteWorkType)
+                createdInviteWorkType = inviteWorkType
+                statusMessage = nil
                 statusMessageIsError = false
+                if let createdInvite {
+                    UIAccessibility.post(notification: .announcement, argument: "Invite code \(createdInvite.displayCode) ready")
+                }
             } catch {
-                statusMessage = error.localizedDescription
+                statusMessage = TeamFirebaseService.userFacingErrorMessage(for: error)
                 statusMessageIsError = true
             }
             isWorking = false
         }
+    }
+
+    private func copyInviteCode(_ invite: TeamInvite) {
+        UIPasteboard.general.string = invite.displayCode
+        statusMessage = "Invite code copied."
+        statusMessageIsError = false
+        UIAccessibility.post(notification: .announcement, argument: "Invite code copied")
+    }
+
+    private func inviteShareText(for invite: TeamInvite, workType: TeamMemberWorkType) -> String {
+        "Join my D2D Advancer team as a \(workType.title). Invite code: \(invite.displayCode). Expires \(invite.expiresAt.formatted(date: .abbreviated, time: .shortened))."
     }
 
     private func joinTeam() {
@@ -1246,7 +2242,37 @@ struct TeamWorkspaceView: View {
                 statusMessage = successMessage
                 statusMessageIsError = false
             } catch {
-                statusMessage = error.localizedDescription
+                statusMessage = TeamFirebaseService.userFacingErrorMessage(for: error)
+                statusMessageIsError = true
+            }
+            isWorking = false
+        }
+    }
+
+    private func toggleDutySharing(for member: TeamMember) {
+        isWorking = true
+        statusMessage = nil
+        statusMessageIsError = false
+
+        Task {
+            do {
+                if teamService.activeDutySession == nil {
+                    locationManager.startLocationUpdates()
+                    locationManager.requestImmediateLocation()
+                    try await teamService.startDuty(member: member)
+                    if let location = locationManager.location {
+                        publishDutyLocationIfNeeded(location, force: true)
+                    }
+                    statusMessage = member.role == .owner ? "Owner location sharing is on." : "You are on duty."
+                } else {
+                    try await teamService.endDuty()
+                    lastTeamLocationUploadAt = nil
+                    lastTeamLocationUploadCoordinate = nil
+                    statusMessage = member.role == .owner ? "Owner location sharing is off." : "You are off duty."
+                }
+                statusMessageIsError = false
+            } catch {
+                statusMessage = TeamFirebaseService.userFacingErrorMessage(for: error)
                 statusMessageIsError = true
             }
             isWorking = false
@@ -1258,11 +2284,39 @@ struct TeamWorkspaceView: View {
             displayName: userAccountManager.currentUserDisplayName,
             email: userAccountManager.currentUserEmail
         )
+        clearStaleSetupMessagesIfNeeded()
+    }
+
+    private func clearStaleSetupMessagesIfNeeded() {
+        guard isShowingTeamSetup else { return }
+
+        if let statusMessage,
+           statusMessageIsError,
+           isStaleSetupErrorMessage(statusMessage) {
+            self.statusMessage = nil
+            statusMessageIsError = false
+        }
+
+        if let errorMessage = teamService.lastErrorMessage,
+           isStaleSetupErrorMessage(errorMessage) {
+            teamService.lastErrorMessage = nil
+        }
+
+        teamService.clearStaleNoTeamSetupErrors()
+
+        if case let .failed(message) = userAccountManager.authStatus,
+           isStaleSetupErrorMessage(message) {
+            userAccountManager.authStatus = .idle
+        }
+
+        if case let .failed(message) = appleSignInManager.authStatus,
+           isStaleSetupErrorMessage(message) {
+            appleSignInManager.authStatus = .idle
+        }
     }
 
     private func publishDutyLocationIfNeeded(_ location: CLLocation, force: Bool = false) {
         guard let member = teamService.currentMember,
-              member.role == .member,
               teamService.activeDutySession != nil else {
             return
         }
@@ -1289,7 +2343,7 @@ struct TeamWorkspaceView: View {
                 lastTeamLocationUploadAt = now
                 lastTeamLocationUploadCoordinate = coordinate
             } catch {
-                statusMessage = error.localizedDescription
+                statusMessage = TeamFirebaseService.userFacingErrorMessage(for: error)
                 statusMessageIsError = true
             }
             isUploadingDutyLocation = false
@@ -1297,8 +2351,64 @@ struct TeamWorkspaceView: View {
     }
 
     private func memberSubtitle(_ member: TeamMember) -> String {
-        if member.isPendingInvite { return "Pending Invite" }
-        return member.role == .owner ? "Owner" : "Rep"
+        if member.isPendingInvite {
+            if let code = member.pendingInviteDisplayCode {
+                return "Pending \(member.displayRoleTitle) Invite • \(code)"
+            }
+            return "Pending \(member.displayRoleTitle) Invite"
+        }
+        return member.displayRoleTitle
+    }
+
+    private func memberWorkTypeIcon(_ member: TeamMember) -> String {
+        if member.role == .owner { return "crown.fill" }
+        if member.isTechnician { return "wrench.and.screwdriver.fill" }
+        return "person.fill"
+    }
+
+    private func memberWorkTypeColor(_ member: TeamMember) -> Color {
+        if member.role == .owner { return Color.electricViolet }
+        if member.isTechnician { return Color.statusNotHome }
+        return Color.statusInterested
+    }
+
+    private func memberName(forUserId userId: String) -> String {
+        teamService.teamMembers.first { $0.userId == userId }?.displayName ?? "Unassigned"
+    }
+
+    private func teamBooking(for appointment: Appointment) -> TeamBooking? {
+        teamService.teamBookings.first { $0.id == appointment.id.uuidString }
+    }
+
+    private func canUpdateMemberWorkType(_ member: TeamMember) -> Bool {
+        guard let team = teamService.activeTeam,
+              let currentMember = teamService.currentMember else { return false }
+        return currentMember.role == .owner
+            && currentMember.status == .active
+            && team.planStatus.allowsTeamWrite
+            && member.role == .member
+            && member.status == .active
+            && !member.isPendingInvite
+    }
+
+    private func memberWorkTypeMenu(_ member: TeamMember) -> some View {
+        Menu {
+            Button(TeamMemberWorkType.salesRep.title) {
+                updateMemberWorkType(member, workType: .salesRep)
+            }
+            .disabled(member.workType == .salesRep)
+
+            Button(TeamMemberWorkType.technician.title) {
+                updateMemberWorkType(member, workType: .technician)
+            }
+            .disabled(member.workType == .technician)
+        } label: {
+            Image(systemName: "person.text.rectangle.fill")
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.electricViolet)
+                .frame(width: 28, height: 28)
+        }
+        .accessibilityLabel("Change worker type")
     }
 
     private func memberStatusText(_ member: TeamMember) -> String {
@@ -1332,13 +2442,17 @@ struct TeamWorkspaceView: View {
             return "person.3.fill"
         case .inviteCreated, .inviteAccepted, .inviteCancelled:
             return "number.square.fill"
+        case .memberLeft:
+            return "rectangle.portrait.and.arrow.right"
         case .memberRemoved:
             return "person.crop.circle.badge.minus"
+        case .teamClosed:
+            return "person.3.sequence.fill"
         case .leadCreated:
             return "mappin.circle.fill"
         case .leadAssigned, .bookingAssigned:
             return "person.crop.circle.badge.checkmark"
-        case .leadStatusUpdated, .repStatusReply:
+        case .leadStatusUpdated, .repStatusReply, .bookingStatusUpdated:
             return "bubble.left.and.bubble.right.fill"
         case .leadHighPriority:
             return "star.fill"
@@ -1405,9 +2519,38 @@ struct TeamWorkspaceView: View {
     }
 
     private func assignBooking(_ booking: TeamBooking, to rep: TeamMember) {
-        runTeamAction(successMessage: "Booking assigned to \(rep.displayName).") {
+        runTeamAction(successMessage: "Job assigned to \(rep.displayName).") {
             try await teamService.assignTeamBooking(booking, to: rep)
         }
+    }
+
+    private func sendAppointment(_ appointment: Appointment, to worker: TeamMember) {
+        runTeamAction(successMessage: "Job sent to \(worker.displayName).") {
+            try await teamService.sendAppointmentToTeamBooking(appointment, to: worker)
+        }
+    }
+
+    private func updateBookingStatus(_ booking: TeamBooking, status: TeamBookingStatus) {
+        runTeamAction(successMessage: "Job marked \(status.displayName.lowercased()).") {
+            try await teamService.updateTeamBookingStatus(booking, status: status)
+        }
+    }
+
+    private func updateMemberWorkType(_ member: TeamMember, workType: TeamMemberWorkType) {
+        runTeamAction(successMessage: "\(member.displayName) is now a \(workType.title).") {
+            try await teamService.updateMemberWorkType(member, workType: workType)
+        }
+    }
+
+    private func canUpdateBooking(_ booking: TeamBooking) -> Bool {
+        guard let team = teamService.activeTeam,
+              let currentMember = teamService.currentMember else { return false }
+        return TeamAccessPolicy.canWriteAssignedRecord(
+            userId: currentMember.userId,
+            role: currentMember.role,
+            planStatus: team.planStatus,
+            assignedToUserId: booking.assignedToUserId
+        )
     }
 
     private func submitRepReply(status: OwnerInstructionStatus, lead: TeamLead) {
@@ -1434,6 +2577,18 @@ struct TeamWorkspaceView: View {
     private func removeMember(_ member: TeamMember) {
         runTeamAction(successMessage: "\(member.displayName) removed from team.") {
             try await teamService.removeMember(member)
+        }
+    }
+
+    private func leaveTeam() {
+        runTeamAction(successMessage: "Left team.") {
+            try await teamService.leaveCurrentTeam()
+        }
+    }
+
+    private func closeTeam() {
+        runTeamAction(successMessage: "Team workspace closed.") {
+            try await teamService.closeCurrentTeam()
         }
     }
 }

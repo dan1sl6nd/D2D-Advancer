@@ -43,7 +43,7 @@ struct ScheduleAppointmentView: View {
             lead: lead,
             existingAppointment: nil,
             onSave: {
-                scheduleAppointment()
+                await scheduleAppointment()
             },
             onCancel: {
                 dismiss()
@@ -117,11 +117,13 @@ struct ScheduleAppointmentView: View {
         }
     }
     
-    private func scheduleAppointment() {
+    @MainActor
+    private func scheduleAppointment() async -> Bool {
         print("🗓️ Schedule button pressed - Title: '\(title)', isEmpty: \(title.isEmpty)")
         guard !title.isEmpty else { 
             print("❌ Schedule failed: Title is empty")
-            return 
+            appointmentManager.errorMessage = "Appointment title is required."
+            return false
         }
         
         print("🗓️ Starting appointment scheduling...")
@@ -138,22 +140,22 @@ struct ScheduleAppointmentView: View {
         )
         
         let leadObjectID = lead.objectID
-        Task { @MainActor in
-            // Re-fetch the Lead on main context to avoid capturing non-Sendable NSManagedObject across concurrency
-            let context = PersistenceController.shared.container.viewContext
-            guard let safeLead = try? context.existingObject(with: leadObjectID) as? Lead else {
-                print("❌ Could not refetch lead for scheduling")
-                return
-            }
-            let success = await appointmentManager.scheduleAppointment(for: safeLead, appointment: appointment)
-
-            if success {
-                print("✅ Appointment scheduled successfully")
-                dismiss()
-            } else {
-                print("❌ Appointment scheduling failed")
-            }
+        // Re-fetch the Lead on main context to avoid capturing non-Sendable NSManagedObject across concurrency
+        let context = PersistenceController.shared.container.viewContext
+        guard let safeLead = try? context.existingObject(with: leadObjectID) as? Lead else {
+            print("❌ Could not refetch lead for scheduling")
+            appointmentManager.errorMessage = "Could not schedule appointment because the lead could not be loaded."
+            return false
         }
+
+        let success = await appointmentManager.scheduleAppointment(for: safeLead, appointment: appointment)
+        if success {
+            print("✅ Appointment scheduled successfully")
+            dismiss()
+        } else {
+            print("❌ Appointment scheduling failed")
+        }
+        return success
     }
 }
 
@@ -167,19 +169,19 @@ struct LeadInfoCard: View {
             HStack {
                 Image(systemName: "person.crop.circle.fill")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
 
                 Text("Customer Information")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
 
                 Spacer()
             }
             
             VStack(alignment: .leading, spacing: 8) {
                 Text(lead.displayName)
-                    .font(.title3)
-                    .fontWeight(.medium)
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
                 
                 if let address = lead.address {
                     HStack {
@@ -202,10 +204,7 @@ struct LeadInfoCard: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color.obsidianElevated)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
 }
 
@@ -226,19 +225,19 @@ struct AppointmentDetailsSection: View {
             HStack {
                 Image(systemName: "calendar.badge.plus")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
 
                 Text("Appointment Details")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
 
                 Spacer()
             }
             
             VStack(alignment: .leading, spacing: 12) {
                 Text("Type")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
                 
                 LazyVGrid(columns: [
                     GridItem(.adaptive(minimum: 120), spacing: 12)
@@ -292,35 +291,11 @@ struct AppointmentDetailsSection: View {
                 }
             }
             
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Title")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                TextField("Appointment title", text: $title)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-            }
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Notes")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                TextEditor(text: $notes)
-                    .frame(minHeight: 80)
-                    .padding(8)
-                    .background(Color.obsidianSurface)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
-                    )
-            }
+            LeadFormTextField(title: "Title", placeholder: "Appointment title", text: $title, icon: "text.cursor")
+
+            LeadNotesEditor(title: "Notes", text: $notes, minHeight: 88)
         }
-        .padding(20)
-        .background(Color.obsidianElevated)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
         .sheet(isPresented: $showingCustomTypeCreator) {
             CustomAppointmentTypeCreatorView()
         }
@@ -371,6 +346,7 @@ struct AppointmentTypeWrapperChip: View {
     let onDelete: ((CustomAppointmentType) -> Void)?
     @ObservedObject private var customTypeManager = CustomAppointmentTypeManager.shared
     @State private var showingDeleteConfirmation = false
+    @State private var deleteErrorMessage: String?
     
     init(typeWrapper: AppointmentTypeWrapper, isSelected: Bool, action: @escaping () -> Void, onDelete: ((CustomAppointmentType) -> Void)? = nil) {
         self.typeWrapper = typeWrapper
@@ -383,11 +359,10 @@ struct AppointmentTypeWrapperChip: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: typeWrapper.icon)
-                    .font(.title3)
+                    .font(.obsidianCallout)
                 
                 Text(typeWrapper.name)
-                    .font(.caption)
-                    .fontWeight(.medium)
+                    .font(.obsidianSmall)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
@@ -436,8 +411,12 @@ struct AppointmentTypeWrapperChip: View {
             Button("Delete", role: .destructive) {
                 if case .customType(let customType) = typeWrapper {
                     withAnimation {
-                        customTypeManager.deleteCustomType(customType)
-                        onDelete?(customType)
+                        let didDelete = customTypeManager.deleteCustomType(customType)
+                        if didDelete {
+                            onDelete?(customType)
+                        } else {
+                            deleteErrorMessage = customTypeManager.lastErrorMessage ?? "Could not delete this appointment type. Please try again."
+                        }
                     }
                 }
             }
@@ -445,6 +424,17 @@ struct AppointmentTypeWrapperChip: View {
             if case .customType(let customType) = typeWrapper {
                 Text("Are you sure you want to delete '\(customType.name)'? This action cannot be undone.")
             }
+        }
+        .alert(
+            "Type not deleted",
+            isPresented: Binding(
+                get: { deleteErrorMessage != nil },
+                set: { if !$0 { deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteErrorMessage ?? "Please try again.")
         }
     }
 }
@@ -458,11 +448,10 @@ struct AppointmentTypeChip: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: type.icon)
-                    .font(.title3)
+                    .font(.obsidianCallout)
                 
                 Text(type.rawValue)
-                    .font(.caption)
-                    .fontWeight(.medium)
+                    .font(.obsidianSmall)
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 8)
@@ -492,29 +481,29 @@ struct DateTimeSection: View {
             HStack {
                 Image(systemName: "clock")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
 
                 Text("Date & Time")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
 
                 Spacer()
             }
             
             VStack(alignment: .leading, spacing: 12) {
                 Text("Start Date & Time")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
                 
-                DatePicker("", selection: $selectedDate, displayedComponents: [.date, .hourAndMinute])
+                DatePicker("Start date and time", selection: $selectedDate, displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.compact)
                     .labelsHidden()
             }
             
             VStack(alignment: .leading, spacing: 12) {
                 Text("Duration")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
                 
                 Menu {
                     ForEach(Array(durationOptions.enumerated()), id: \.offset) { _, option in
@@ -546,19 +535,15 @@ struct DateTimeSection: View {
             
             VStack(alignment: .leading, spacing: 8) {
                 Text("End Time")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
 
                 Text(endDate.formatted(.dateTime.day().month().year().hour().minute()))
-                    .font(.body)
+                    .font(.obsidianBody)
                     .foregroundColor(Color.textSecondary)
             }
         }
-        .padding(20)
-        .background(Color.obsidianElevated)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
 }
 
@@ -571,18 +556,17 @@ struct LocationSection: View {
             HStack {
                 Image(systemName: "location")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
 
                 Text("Location")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
 
                 Spacer()
             }
             
             VStack(alignment: .leading, spacing: 8) {
-                TextField("Enter appointment location", text: $location)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                LeadFormTextField(title: "Address", placeholder: "Appointment location", text: $location, icon: "location.fill")
                 
                 if let address = lead.address, location != address {
                     Button(action: {
@@ -606,17 +590,14 @@ struct LocationSection: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color.obsidianElevated)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
 }
 
 
 #Preview {
     let context = PersistenceController.preview.container.viewContext
-    let lead = Lead(context: context)
+    let lead = Lead.create(in: context)
     lead.name = "John Doe"
     lead.address = "123 Main St, Toronto, ON"
     lead.phone = "(555) 123-4567"

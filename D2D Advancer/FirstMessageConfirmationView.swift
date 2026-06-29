@@ -12,6 +12,7 @@ struct FirstMessageConfirmationView: View {
     @State private var customMessage = ""
     @State private var showingCustomTemplateCreator = false
     @State private var templateToEdit: MessageTemplate?
+    @State private var deleteErrorMessage: String?
     
     // Get initial contact templates
     private var initialTemplates: [MessageTemplate] {
@@ -19,26 +20,51 @@ struct FirstMessageConfirmationView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    // Header
+                LazyVStack(spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: "First Message",
+                        subtitle: "Send an initial SMS now, or skip and do it later.",
+                        icon: "message.badge.checkmark.rtl"
+                    )
+
                     headerSection
-                    
-                    // Lead info
                     leadInfoSection
-                    
-                    // Message templates
                     templatesSection
-                    
-                    // Action buttons
-                    actionButtonsSection
+
+                    if let sendWarning {
+                        ObsidianStatusBanner(
+                            icon: "exclamationmark.triangle.fill",
+                            title: sendWarning.title,
+                            message: sendWarning.message,
+                            tint: Color.statusNotInterested
+                        )
+                    }
                 }
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
             }
-            .navigationTitle("Send First Message")
-            .navigationBarTitleDisplayMode(.inline)
-            .background(Color(UIColor.systemGroupedBackground))
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle("First Message")
+            .obsidianInlineNavigation()
+            .safeAreaInset(edge: .bottom) {
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: !canSendMessage,
+                    primaryAction: { showingMessageComposer = true },
+                    secondaryAction: {
+                        dismiss()
+                        onCompletion()
+                    },
+                    primaryLabel: {
+                        Label("Send SMS", systemImage: "message.fill")
+                    },
+                    secondaryLabel: {
+                        Label("Skip", systemImage: "forward.fill")
+                    }
+                )
+            }
         }
         .sheet(isPresented: $showingMessageComposer) {
             if MFMessageComposeViewController.canSendText() {
@@ -56,7 +82,7 @@ struct FirstMessageConfirmationView: View {
                         .font(.system(size: 48))
                         .foregroundColor(Color.textSecondary)
                     Text("SMS not available on this device")
-                        .font(.headline)
+                        .font(.obsidianHeadline)
                         .foregroundColor(Color.textSecondary)
                 }
                 .padding()
@@ -68,27 +94,36 @@ struct FirstMessageConfirmationView: View {
         .onDisappear {
             templateToEdit = nil
         }
+        .alert(
+            "Template not deleted",
+            isPresented: Binding(
+                get: { deleteErrorMessage != nil },
+                set: { if !$0 { deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteErrorMessage ?? "Please try again.")
+        }
+    }
+
+    private var sendWarning: (title: String, message: String)? {
+        if lead.phone?.isEmpty ?? true {
+            return ("No phone number", "Add a phone number before sending an SMS.")
+        }
+        if customMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ("Message is empty", "Choose a template or write a message before sending.")
+        }
+        return nil
     }
     
     private var headerSection: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "message.badge.checkmark.rtl")
-                .font(.system(size: 48))
-                .foregroundColor(Color.electricViolet)
-            
-            Text("Great! Your lead has been saved.")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .multilineTextAlignment(.center)
-            
-            Text("Would you like to send your first message now?")
-                .font(.subheadline)
-                .foregroundColor(Color.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding()
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
+        ObsidianStatusBanner(
+            icon: "checkmark.circle.fill",
+            title: "Lead saved",
+            message: "Send the first message now, or skip and handle it later.",
+            tint: Color.statusInterested
+        )
     }
     
     private var leadInfoSection: some View {
@@ -96,11 +131,11 @@ struct FirstMessageConfirmationView: View {
             HStack {
                 Image(systemName: "person.circle.fill")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
                 
                 Text("Lead Information")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
                 
                 Spacer()
             }
@@ -111,7 +146,8 @@ struct FirstMessageConfirmationView: View {
                         .foregroundColor(Color.textSecondary)
                         .frame(width: 16)
                     Text(lead.displayName)
-                        .font(.headline)
+                        .font(.obsidianTitle)
+                        .foregroundColor(Color.textPrimary)
                 }
                 
                 if let phone = lead.phone, !phone.isEmpty {
@@ -120,7 +156,7 @@ struct FirstMessageConfirmationView: View {
                             .foregroundColor(Color.textSecondary)
                             .frame(width: 16)
                         Text(phone)
-                            .font(.subheadline)
+                            .font(.obsidianFootnote)
                             .foregroundColor(Color.textSecondary)
                     }
                 }
@@ -131,16 +167,14 @@ struct FirstMessageConfirmationView: View {
                             .foregroundColor(Color.textSecondary)
                             .frame(width: 16)
                         Text(address)
-                            .font(.subheadline)
+                            .font(.obsidianFootnote)
                             .foregroundColor(Color.textSecondary)
                             .lineLimit(2)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
+        .surfaceCard()
     }
     
     private var templatesSection: some View {
@@ -148,11 +182,11 @@ struct FirstMessageConfirmationView: View {
             HStack {
                 Image(systemName: "doc.text.fill")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
                 
                 Text("Choose a Template")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
                 
                 Spacer()
                 
@@ -173,14 +207,14 @@ struct FirstMessageConfirmationView: View {
                         .foregroundColor(Color.textSecondary)
                     
                     Text("No SMS templates available")
-                        .font(.headline)
+                        .font(.obsidianTitle)
                         .foregroundColor(Color.textSecondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
             } else {
                 ForEach(initialTemplates, id: \.id) { template in
-                    EnhancedTemplateCard(
+                    TemplateCardView(
                         template: template,
                         isSelected: selectedTemplate?.id == template.id,
                         personalizedMessage: templateManager.personalizeMessage(template, for: lead),
@@ -196,10 +230,12 @@ struct FirstMessageConfirmationView: View {
                         } : nil,
                         onDelete: template.isCustom ? {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                templateManager.deleteCustomTemplate(template)
-                                if selectedTemplate?.id == template.id {
+                                let didDelete = templateManager.deleteCustomTemplate(template)
+                                if didDelete, selectedTemplate?.id == template.id {
                                     selectedTemplate = nil
                                     customMessage = ""
+                                } else if !didDelete {
+                                    deleteErrorMessage = templateManager.lastErrorMessage ?? "Could not delete this template. Please try again."
                                 }
                             }
                         } : nil
@@ -210,32 +246,24 @@ struct FirstMessageConfirmationView: View {
             // Custom message option
             VStack(alignment: .leading, spacing: 8) {
                 Text("Or write a custom message:")
-                    .font(.subheadline)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
                 
                 TextEditor(text: $customMessage)
                     .frame(height: 80)
-                    .padding(8)
-                    .background(Color.obsidianSurface)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
-                    )
+                    .obsidianEditorSurface(cornerRadius: 14)
                     .onChange(of: customMessage) { oldValue, newValue in
                         // Only clear template selection if user manually edited the message
-                        if selectedTemplate != nil && 
+                        if let currentTemplate = selectedTemplate,
                            !newValue.isEmpty && 
                            oldValue != newValue &&
-                           newValue != templateManager.personalizeMessage(selectedTemplate!, for: lead) {
+                           newValue != templateManager.personalizeMessage(currentTemplate, for: lead) {
                             selectedTemplate = nil
                         }
                     }
             }
         }
-        .padding()
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
+        .surfaceCard()
     }
     
     private var actionButtonsSection: some View {
@@ -246,9 +274,9 @@ struct FirstMessageConfirmationView: View {
             }) {
                 HStack {
                     Image(systemName: "message.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.obsidianCallout)
                     Text("Send Message")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.obsidianCallout)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
@@ -267,7 +295,7 @@ struct FirstMessageConfirmationView: View {
                 onCompletion()
             }) {
                 Text("Skip for now")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.obsidianCallout)
                     .foregroundColor(Color.textSecondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -295,20 +323,20 @@ struct TemplateCard: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(template.title)
-                    .font(.headline)
-                    .fontWeight(.medium)
+                    .font(.obsidianCallout)
+                    .fontWeight(.semibold)
                 
                 Spacer()
                 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(Color.electricViolet)
-                        .font(.title3)
+                        .font(.obsidianCallout)
                 }
             }
             
             Text(personalizedMessage)
-                .font(.body)
+                .font(.obsidianBody)
                 .foregroundColor(Color.textSecondary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(3)
@@ -362,9 +390,9 @@ struct EnhancedTemplateCard: View {
                     }) {
                         VStack {
                             Image(systemName: "pencil")
-                                .font(.title2)
+                                .font(.obsidianAction)
                             Text("Edit")
-                                .font(.caption)
+                                .font(.micro)
                         }
                         .foregroundColor(.white)
                         .frame(width: 80)
@@ -380,9 +408,9 @@ struct EnhancedTemplateCard: View {
                     }) {
                         VStack {
                             Image(systemName: "trash")
-                                .font(.title2)
+                                .font(.obsidianAction)
                             Text("Delete")
-                                .font(.caption)
+                                .font(.micro)
                         }
                         .foregroundColor(.white)
                         .frame(width: 80)
@@ -402,15 +430,15 @@ struct EnhancedTemplateCard: View {
                             .font(.system(size: 16, weight: .medium))
                         
                         Text(template.title)
-                            .font(.headline)
-                            .fontWeight(.medium)
+                            .font(.obsidianCallout)
+                            .fontWeight(.semibold)
                     }
                     
                     Spacer()
                     
                     if template.isCustom {
                         Text("CUSTOM")
-                            .font(.caption2)
+                            .font(.micro)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
                             .padding(.horizontal, 6)
@@ -422,12 +450,12 @@ struct EnhancedTemplateCard: View {
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(Color.electricViolet)
-                            .font(.title3)
+                            .font(.obsidianCallout)
                     }
                 }
                 
                 Text(personalizedMessage)
-                    .font(.body)
+                    .font(.obsidianBody)
                     .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(3)
@@ -533,7 +561,7 @@ struct FirstMessageComposeView: UIViewControllerRepresentable {
 
 #Preview {
     let context = PersistenceController.preview.container.viewContext
-    let lead = Lead(context: context)
+    let lead = Lead.create(in: context)
     lead.name = "John Doe"
     lead.phone = "(555) 123-4567"
     lead.address = "123 Main St, Toronto, ON"

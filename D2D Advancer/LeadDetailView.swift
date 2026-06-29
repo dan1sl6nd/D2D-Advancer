@@ -2,7 +2,6 @@ import SwiftUI
 import CoreData
 import MapKit
 import UIKit
-@preconcurrency import UserNotifications
 
 struct LeadDetailView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -19,6 +18,7 @@ struct LeadDetailView: View {
     @State private var editedPrice: Double = 0.0
     @State private var editedStatus = Lead.Status.notContacted
     @State private var editedFollowUpDate: Date?
+    @State private var editedFollowUpCadence = Lead.FollowUpCadence.none
     @State private var editedServiceCategory: ServiceCategory?
     @State private var editedLatitude: Double = 0.0
     @State private var editedLongitude: Double = 0.0
@@ -55,161 +55,44 @@ struct LeadDetailView: View {
     }
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                headerSection
-                
-                if !isEditing {
-                    actionButtonsSection
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    headerSection
+
+                    if !isEditing {
+                        actionButtonsSection
+                    }
+
+                    if isEditing {
+                        editForm
+                    } else {
+                        detailView
+                    }
+
+                    LeadPhotoSection(lead: lead)
+                        .padding(.horizontal, 4)
+
+                    LeadVoiceNoteSection(lead: lead)
+                        .padding(.horizontal, 4)
+
+                    mapSection
+
+                    followUpHistorySection
                 }
-                
-                if isEditing {
-                    editForm
-                } else {
-                    detailView
-                }
-
-                LeadPhotoSection(lead: lead)
-                    .padding(.horizontal, 4)
-
-                LeadVoiceNoteSection(lead: lead)
-                    .padding(.horizontal, 4)
-
-                mapSection
-
-                followUpHistorySection
+                .padding()
+                .padding(.bottom, 16)
             }
-            .padding()
+
+            leadDetailBottomBar
         }
         .navigationTitle(isEditing ? "Edit Lead" : "Lead Details")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(false)
+        .background(Color.obsidianBlack)
         .overlay(alignment: .bottom) {
             copyToastOverlay
                 .padding(.bottom, 96)
-        }
-        .safeAreaInset(edge: .bottom) {
-            // Card-based button design
-            if isEditing {
-                // Show Cancel and Save buttons when editing
-                HStack(spacing: 16) {
-                    Button(action: {
-                        cancelEditing()
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                            Text("Cancel")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(Color.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.obsidianSurface)
-                                .shadow(color: Color.black, radius: 2, x: 0, y: 1)
-                        )
-                    }
-                    
-                    Button(action: {
-                        saveLead()
-                    }) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3)
-                            Text("Save Changes")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.electricViolet, Color.electricVioletDeep]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .shadow(color: Color.black, radius: 8, x: 0, y: -2)
-                )
-            } else {
-                // Show Edit and Delete buttons when not editing
-                HStack(spacing: 16) {
-                    Button(action: {
-                        guard paywallManager.gateAction() else { return }
-                        showingDeleteAlert = true
-                    }) {
-                        HStack {
-                            Image(systemName: "trash.circle.fill")
-                                .font(.title3)
-                            Text("Delete Lead")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.statusNotInterested, Color.statusNotInterested.opacity(0.8)]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: Color.statusNotInterested.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-
-                    Button(action: {
-                        startEditing()
-                    }) {
-                        HStack {
-                            Image(systemName: "pencil.circle.fill")
-                                .font(.title3)
-                            Text("Edit Lead")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.electricViolet, Color.electricVioletDeep]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .shadow(color: Color.black, radius: 8, x: 0, y: -2)
-                )
-            }
         }
         .onAppear {
             loadLeadData()
@@ -222,37 +105,119 @@ struct LeadDetailView: View {
     }
     
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                StatusBadge(status: lead.leadStatus)
-                
-                Spacer()
-                
-            }
-            
-            Text(lead.displayName)
-                .font(.themeLargeTitle)
-                .foregroundColor(Color.textPrimary)
-                .textSelection(.enabled)
-                .contextMenu {
-                    copyMenuButton(title: "Name", value: lead.displayName)
-                }
-                .accessibilityHint("Long press to copy name")
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: lead.leadStatus.iconName)
+                .font(.obsidianAction)
+                .foregroundColor(.white)
+                .frame(width: 46, height: 46)
+                .background(statusColor(for: lead.leadStatus))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityHidden(true)
 
-            HStack {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(lead.displayName)
+                        .font(.themeTitle)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+                        .textSelection(.enabled)
+                        .contextMenu {
+                            copyMenuButton(title: "Name", value: lead.displayName)
+                        }
+                        .accessibilityHint("Long press to copy name")
+
+                    Spacer(minLength: 6)
+
+                    StatusBadge(status: lead.leadStatus)
+                }
+
+                Text(lead.address.flatMap { address in
+                    let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return trimmed.isEmpty ? nil : trimmed
+                } ?? "No address saved")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
+                    .contextMenu {
+                        copyMenuButton(title: "Address", value: lead.address ?? "")
+                    }
+
                 let createdText = lead.createdDate?.formatted(.dateTime.day().month().year().hour().minute()) ?? "Unknown"
-                Text("Created: \(createdText)")
+                Label("Created \(createdText)", systemImage: "clock")
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
                     .contextMenu {
                         copyMenuButton(title: "Created Date", value: createdText)
                     }
                     .accessibilityHint("Long press to copy created date")
-                Spacer()
             }
-            .font(.themeCaption)
-            .foregroundColor(Color.textSecondary)
         }
         .padding()
-        .surfaceCard()
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.6), lineWidth: 0.5)
+        )
+    }
+
+    @ViewBuilder
+    private var leadDetailBottomBar: some View {
+        HStack(spacing: 12) {
+            if isEditing {
+                Button(action: cancelEditing) {
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+
+                Button(action: saveLead) {
+                    Label("Save", systemImage: "checkmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+            } else {
+                Button {
+                    guard paywallManager.gateAction() else { return }
+                    showingDeleteAlert = true
+                } label: {
+                    Label("Delete", systemImage: "trash.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianDangerButtonStyle())
+
+                Button(action: startEditing) {
+                    Label("Edit", systemImage: "pencil.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.obsidianElevated)
+                .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: -3)
+        )
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))
+    }
+
+    private func statusColor(for status: Lead.Status) -> Color {
+        switch status {
+        case .notContacted:
+            return Color.statusNotContacted
+        case .notHome:
+            return Color.statusNotHome
+        case .interested:
+            return Color.statusInterested
+        case .converted:
+            return Color.statusConverted
+        case .notInterested:
+            return Color.statusNotInterested
+        }
     }
     
     private var detailView: some View {
@@ -319,7 +284,7 @@ struct LeadDetailView: View {
             }
             
             // Follow-up & Notes Section
-            if lead.followUpDate != nil || (lead.notes != nil && !lead.notes!.isEmpty) {
+            if lead.followUpDate != nil || !(lead.notes?.isEmpty ?? true) {
                 modernSectionCard(title: "Follow-up & Notes", icon: "calendar.circle.fill") {
                     VStack(spacing: 16) {
                         if let followUpDate = lead.followUpDate {
@@ -346,301 +311,10 @@ struct LeadDetailView: View {
     }
     
     private var editForm: some View {
-        VStack(spacing: 24) {
-            // Contact Information Section
-            modernSectionCard(title: "Contact Information", icon: "person.crop.circle.fill") {
-                VStack(spacing: 16) {
-                    modernTextField(title: "Name", text: $editedName, icon: "person.fill")
-                    
-                    modernTextField(title: "Phone", text: $editedPhone, icon: "phone.fill")
-                        .keyboardType(.phonePad)
-                        .onChange(of: editedPhone) { oldValue, newValue in
-                            DispatchQueue.main.async {
-                                editedPhone = Utilities.formatPhoneNumber(newValue)
-                            }
-                        }
-                    
-                    modernTextField(title: "Email", text: $editedEmail, icon: "envelope.fill")
-                        .keyboardType(.emailAddress)
-                        .autocapitalization(.none)
-                }
-            }
-            
-            // Location & Deal Section
-            modernSectionCard(title: "Location & Deal", icon: "map.circle.fill") {
-                VStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: "location.fill")
-                                .foregroundColor(Color.electricViolet)
-                                .frame(width: 20)
-
-                            Text("Address")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-
-                            Spacer()
-
-                            // Update Address Button
-                            Button(action: {
-                                updateAddressFromCurrentLocation()
-                            }) {
-                                HStack(spacing: 4) {
-                                    if isUpdatingAddress {
-                                        ProgressView()
-                                            .scaleEffect(0.7)
-                                    } else {
-                                        Image(systemName: "arrow.clockwise")
-                                            .font(.obsidianSmall)
-                                    }
-                                    Text("Update")
-                                        .font(.caption)
-                                        .fontWeight(.medium)
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.electricViolet)
-                                )
-                            }
-                            .disabled(isUpdatingAddress)
-                        }
-
-                        TextField("Address", text: $editedAddress)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.obsidianSurface)
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
-                            )
-
-                        // Update status indicator
-                        if isUpdatingAddress {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                Text("Updating address from current location...")
-                                    .font(.caption)
-                                    .foregroundColor(Color.textSecondary)
-                            }
-                            .padding(.leading, 8)
-                        }
-                    }
-
-                    modernTextField(title: "Price", text: Binding(
-                        get: { editedPrice == 0.0 ? "" : String(format: "%.2f", editedPrice) },
-                        set: { editedPrice = Double($0) ?? 0.0 }
-                    ), icon: "dollarsign.circle.fill")
-                        .keyboardType(.decimalPad)
-                }
-            }
-
-            // Service Category Section
-            modernSectionCard(title: "Service Type", icon: "tag.circle.fill") {
-                VStack(spacing: 16) {
-                    HStack {
-                        Image(systemName: "tag.fill")
-                            .foregroundColor(Color.electricViolet)
-                            .frame(width: 20)
-
-                        Text("Service Type")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-
-                        Spacer()
-
-                        Button {
-                            showingServiceCategoryCreator = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.obsidianFootnote)
-                                .foregroundColor(Color.electricViolet)
-                        }
-                        .accessibilityLabel("Add new service category")
-                    }
-
-                    if categoryManager.allCategories.isEmpty {
-                        VStack(spacing: 12) {
-                            Image(systemName: "tag")
-                                .font(.system(size: 24))
-                                .foregroundColor(Color.textSecondary)
-
-                            Text("No service categories available")
-                                .font(.subheadline)
-                                .foregroundColor(Color.textSecondary)
-
-                            Button("Add Service Category") {
-                                showingServiceCategoryCreator = true
-                            }
-                            .font(.caption)
-                            .foregroundColor(Color.electricViolet)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .background(Color.obsidianSurface)
-                        .cornerRadius(16)
-                    } else {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                // None option
-                                ServiceCategoryChip(
-                                    category: nil,
-                                    isSelected: editedServiceCategory == nil
-                                ) {
-                                    editedServiceCategory = nil
-                                }
-
-                                // Available categories
-                                ForEach(categoryManager.allCategories, id: \.id) { category in
-                                    ServiceCategoryChip(
-                                        category: category,
-                                        isSelected: editedServiceCategory?.id == category.id
-                                    ) {
-                                        editedServiceCategory = category
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 4)
-                        }
-                    }
-                }
-            }
-
-            // Lead Status Section
-            modernSectionCard(title: "Lead Status", icon: "chart.bar.fill") {
-                VStack(spacing: 16) {
-                    HStack {
-                        Image(systemName: "flag.fill")
-                            .foregroundColor(Color.electricViolet)
-                            .frame(width: 20)
-                        Text("Status")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                        Spacer()
-                    }
-                    
-                    // Modern Status Grid
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 12) {
-                        ForEach(Lead.Status.allCases, id: \.self) { status in
-                            ModernStatusCard(
-                                status: status,
-                                isSelected: editedStatus == status,
-                                onTap: { editedStatus = status }
-                            )
-                        }
-                    }
-                }
-            }
-            
-            // Follow-up & Notes Section
-            modernSectionCard(title: "Follow-up & Notes", icon: "calendar.circle.fill") {
-                VStack(spacing: 20) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Image(systemName: "clock.fill")
-                                .foregroundColor(Color.statusNotHome)
-                                .frame(width: 20)
-                            Text("Follow Up Date")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-
-                            Spacer()
-
-                            if editedFollowUpDate != nil {
-                                Button("Clear") {
-                                    editedFollowUpDate = nil
-                                }
-                                .font(.caption)
-                                .foregroundColor(Color.statusNotInterested)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.statusNotInterested.opacity(0.1))
-                                .cornerRadius(16)
-                            }
-                        }
-
-                        HStack(spacing: 8) {
-                            quickFollowUpButton("Tomorrow", days: 1)
-                            quickFollowUpButton("+3 Days", days: 3)
-                            quickFollowUpButton("+1 Week", days: 7)
-                        }
-
-                        Button(action: {
-                            showingDatePicker = true
-                        }) {
-                            HStack {
-                                Image(systemName: editedFollowUpDate != nil ? "calendar.badge.clock" : "calendar.badge.plus")
-                                    .foregroundColor(editedFollowUpDate != nil ? Color.electricViolet : Color.textSecondary)
-
-                                Text(editedFollowUpDate?.formatted(.dateTime.day().month().year().hour().minute()) ?? "Set follow up date & time")
-                                    .foregroundColor(editedFollowUpDate != nil ? Color.textPrimary : Color.textSecondary)
-
-                                Spacer()
-
-                                Image(systemName: "chevron.right")
-                                    .foregroundColor(Color.textSecondary)
-                                    .font(.caption)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.obsidianSurface)
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
-                            )
-                        }
-                    }
-
-                    // Cadence picker
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: "repeat")
-                                .foregroundColor(Color.electricViolet)
-                                .frame(width: 20)
-                            Text("Follow-up Cadence")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                        }
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 6) {
-                                ForEach(Lead.FollowUpCadence.allCases, id: \.self) { cadence in
-                                    Button {
-                                        lead.followUpCadence = cadence
-                                    } label: {
-                                        Text(cadence.displayName)
-                                            .font(.micro)
-                                            .foregroundColor(lead.followUpCadence == cadence ? .white : .textSecondary)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(lead.followUpCadence == cadence ? Color.electricViolet : Color.obsidianSurface)
-                                            .cornerRadius(8)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Image(systemName: "note.text")
-                                .foregroundColor(Color.electricViolet)
-                                .frame(width: 20)
-                            Text("Notes")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-
-                        TextEditor(text: $editedNotes)
-                            .frame(minHeight: 100)
-                            .obsidianEditorSurface()
-                    }
-                }
-            }
+        VStack(spacing: 16) {
+            editCustomerSection
+            editWorkSection
+            editNextStepSection
         }
         .sheet(isPresented: $showingDatePicker) {
             DatePicker("Follow-Up Date", selection: Binding(
@@ -651,12 +325,77 @@ struct LeadDetailView: View {
             .presentationDetents([.medium])
         }
     }
+
+    private var editCustomerSection: some View {
+        LeadFormSectionCard(title: "Customer", icon: "person.crop.circle.fill") {
+            VStack(spacing: 12) {
+                LeadFormTextField(title: "Name", placeholder: "Customer name", text: $editedName, icon: "person.fill")
+
+                LeadFormTextField(title: "Phone", placeholder: "Phone number", text: $editedPhone, icon: "phone.fill")
+                    .keyboardType(.phonePad)
+                    .onChange(of: editedPhone) { _, newValue in
+                        DispatchQueue.main.async {
+                            editedPhone = Utilities.formatPhoneNumber(newValue)
+                        }
+                    }
+
+                LeadFormTextField(title: "Email", placeholder: "Email address", text: $editedEmail, icon: "envelope.fill")
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+        }
+    }
+
+    private var editWorkSection: some View {
+        LeadFormSectionCard(title: "Work", icon: "map.circle.fill") {
+            VStack(spacing: 14) {
+                LeadAddressEditor(
+                    address: $editedAddress,
+                    isUpdatingAddress: isUpdatingAddress,
+                    updateAddressAction: updateAddressFromCurrentLocation
+                )
+
+                LeadServiceCategoryPicker(
+                    categories: categoryManager.allCategories,
+                    selectedCategory: $editedServiceCategory,
+                    onAddCategory: {
+                        showingServiceCategoryCreator = true
+                    }
+                )
+
+                LeadFormTextField(
+                    title: "Price",
+                    placeholder: "0.00",
+                    text: Binding(
+                        get: { editedPrice == 0 ? "" : String(format: "%.2f", editedPrice) },
+                        set: { editedPrice = Double($0) ?? 0 }
+                    ),
+                    icon: "dollarsign.circle.fill"
+                )
+                .keyboardType(.decimalPad)
+
+                LeadStatusChipRow(selection: $editedStatus)
+            }
+        }
+    }
+
+    private var editNextStepSection: some View {
+        LeadFormSectionCard(title: "Next Step", icon: "calendar.badge.clock") {
+            VStack(spacing: 14) {
+                LeadFollowUpControls(selectedDate: $editedFollowUpDate) {
+                    showingDatePicker = true
+                }
+
+                LeadFollowUpCadencePicker(cadence: $editedFollowUpCadence)
+
+                LeadNotesEditor(title: "Notes", text: $editedNotes, minHeight: 108)
+            }
+        }
+    }
     
     private var mapSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Location")
-                .font(.themeHeadline)
-
+        LeadFormSectionCard(title: "Location", icon: "map.fill") {
             ZStack(alignment: .bottomTrailing) {
                 Map(initialPosition: .region(MKCoordinateRegion(
                     center: lead.coordinate,
@@ -667,7 +406,11 @@ struct LeadDetailView: View {
                     }
                 }
                 .frame(height: 200)
-                .cornerRadius(16)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                )
 
                 Button {
                     lookAroundCoordinate = lead.coordinate
@@ -682,9 +425,12 @@ struct LeadDetailView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
-                    .background(.ultraThinMaterial.opacity(0.8))
-                    .background(Color.black.opacity(0.4))
+                    .background(Color.obsidianSurface.opacity(0.92))
                     .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
+                    )
                 }
                 .padding(10)
             }
@@ -699,12 +445,13 @@ struct LeadDetailView: View {
     
     
     private var followUpHistorySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        LeadFormSectionCard(title: "Follow-up History", icon: "clock.arrow.circlepath") {
+            VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Follow-up History")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                
+                Text(checkIns.isEmpty ? "No check-ins yet" : "\(checkIns.count) check-ins recorded")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+
                 Spacer()
                 
                 Button(action: {
@@ -714,42 +461,43 @@ struct LeadDetailView: View {
                         Image(systemName: "plus.circle.fill")
                         Text("Record")
                     }
-                    .font(.caption)
-                    .foregroundColor(.white)
+                    .font(.micro)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color.electricViolet)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.electricViolet)
-                    .cornerRadius(16)
+                    .background(Capsule().fill(Color.electricViolet.opacity(0.12)))
                 }
             }
             
             if checkIns.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "clock.arrow.circlepath")
-                        .font(.title2)
+                        .font(.obsidianAction)
                         .foregroundColor(Color.textSecondary)
 
                     Text("No follow-ups recorded yet")
-                        .font(.body)
+                        .font(.obsidianFootnote)
+                        .fontWeight(.semibold)
                         .foregroundColor(Color.textSecondary)
 
                     Text("Start tracking your interactions with this lead")
-                        .font(.caption)
+                        .font(.micro)
                         .foregroundColor(Color.textSecondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
-                .background(Color.obsidianSurface)
-                .cornerRadius(16)
+                .background(Color.obsidianElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                 )
             } else {
                 VStack(spacing: 8) {
                     HStack {
                         Text("\(checkIns.count) check-ins recorded")
-                            .font(.subheadline)
+                            .font(.obsidianFootnote)
                             .foregroundColor(Color.textSecondary)
 
                         Spacer()
@@ -758,7 +506,7 @@ struct LeadDetailView: View {
                             Button("View All") {
                                 showingFullHistory = true
                             }
-                            .font(.caption)
+                            .font(.obsidianFootnote)
                             .foregroundColor(Color.electricViolet)
                         }
                     }
@@ -770,14 +518,15 @@ struct LeadDetailView: View {
                         }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(Color.obsidianSurface)
-                            .cornerRadius(16)
+                            .background(Color.obsidianElevated)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                             )
                     }
                 }
+            }
             }
         }
         .sheet(isPresented: $showingAddCheckIn) {
@@ -818,200 +567,150 @@ struct LeadDetailView: View {
     }
     
     private var actionButtonsSection: some View {
-        VStack(spacing: 12) {
-            // Use LazyVGrid for better button layout with 2 columns
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
-                // Schedule Appointment Button (only for interested, scheduled, or converted leads)
+        VStack(spacing: 16) {
+            LeadFormSectionCard(title: "Quick Actions", icon: "bolt.fill") {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
+                if lead.address?.isEmpty == false {
+                    leadActionButton(
+                        title: "Navigate",
+                        subtitle: "Route",
+                        icon: "location.fill",
+                        color: Color.electricViolet
+                    ) {
+                        openInMaps()
+                    }
+                }
+
                 if shouldShowScheduleButton {
-                    Button(action: {
+                    leadActionButton(
+                        title: "Schedule",
+                        subtitle: "Appointment",
+                        icon: "calendar.badge.plus",
+                        color: Color.electricViolet
+                    ) {
                         guard paywallManager.gateAction() else { return }
                         showingScheduleAppointment = true
-                    }) {
-                        VStack(spacing: 8) {
-                            Image(systemName: "calendar.badge.plus")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                            
-                            VStack(spacing: 4) {
-                                Text("Schedule")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                Text("Appointment")
-                                    .font(.caption2)
-                            }
-                            .foregroundColor(.white)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 80)
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.electricViolet.gradient)
-                        )
-                        .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
-                
-                // Call Button (if phone number exists)
+
                 if let phone = lead.phone, !phone.isEmpty {
-                    Button(action: {
+                    leadActionButton(
+                        title: "Call",
+                        subtitle: "Customer",
+                        icon: "phone.fill",
+                        color: Color.statusInterested
+                    ) {
                         Utilities.makePhoneCall(to: phone)
-                    }) {
-                        VStack(spacing: 8) {
-                            Image(systemName: "phone.fill")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                            
-                            VStack(spacing: 4) {
-                                Text("Call")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                Text("Customer")
-                                    .font(.caption2)
-                            }
-                            .foregroundColor(.white)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 80)
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.statusInterested.gradient)
-                        )
-                        .shadow(color: Color.statusInterested.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
-                
-                // Message Button (if phone number exists)
+
                 if let phone = lead.phone, !phone.isEmpty {
-                    Button(action: {
+                    leadActionButton(
+                        title: "Message",
+                        subtitle: "Customer",
+                        icon: "message.fill",
+                        color: Color.electricViolet
+                    ) {
                         Utilities.sendSMS(to: phone)
-                    }) {
-                        VStack(spacing: 8) {
-                            Image(systemName: "message.fill")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                            
-                            VStack(spacing: 4) {
-                                Text("Message")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                Text("Customer")
-                                    .font(.caption2)
-                            }
-                            .foregroundColor(.white)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 80)
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.electricViolet.gradient)
-                        )
-                        .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
 
                 if LeadContactService.canCreateContactFromLeadDetail(lead) {
-                    Button(action: {
+                    leadActionButton(
+                        title: "Create",
+                        subtitle: "Contact",
+                        icon: "person.crop.circle.badge.plus",
+                        color: Color.statusConverted,
+                        isLoading: isCreatingContact
+                    ) {
                         createContactForLead()
-                    }) {
-                        VStack(spacing: 8) {
-                            if isCreatingContact {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Image(systemName: "person.crop.circle.badge.plus")
-                                    .font(.title2)
-                                    .foregroundColor(.white)
-                            }
-
-                            VStack(spacing: 4) {
-                                Text("Create")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                Text("Contact")
-                                    .font(.caption2)
-                            }
-                            .foregroundColor(.white)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 80)
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.statusConverted.gradient)
-                        )
-                        .shadow(color: Color.statusConverted.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                     .disabled(isCreatingContact)
                 }
-                
-                // Email Button (if email exists)
+
                 if let email = lead.email, !email.isEmpty {
-                    Button(action: {
+                    leadActionButton(
+                        title: "Email",
+                        subtitle: "Customer",
+                        icon: "envelope.fill",
+                        color: Color.dataCyan
+                    ) {
                         Utilities.sendEmail(to: email)
-                    }) {
-                        VStack(spacing: 8) {
-                            Image(systemName: "envelope.fill")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                            
-                            VStack(spacing: 4) {
-                                Text("Email")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                Text("Customer")
-                                    .font(.caption2)
-                            }
-                            .foregroundColor(.white)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 80)
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.dataCyan.gradient)
-                        )
-                        .shadow(color: Color.dataCyan.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                 }
             }
-            
-            // Show current appointments if any exist
-            if !leadAppointments.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "calendar.badge.checkmark")
-                            .foregroundColor(Color.electricViolet)
-                        Text("Upcoming Appointments")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                        Spacer()
-                    }
+            }
 
+            if !leadAppointments.isEmpty {
+                LeadFormSectionCard(title: "Upcoming Appointments", icon: "calendar.badge.checkmark") {
+                    VStack(spacing: 10) {
                     ForEach(leadAppointments.prefix(2), id: \.id) { appointment in
                         AppointmentSummaryRow(appointment: appointment)
                     }
 
                     if leadAppointments.count > 2 {
-                        Button("View all \(leadAppointments.count) appointments") {
-                            // Navigate to appointments view filtered for this lead
-                        }
-                        .font(.caption)
-                        .foregroundColor(Color.electricViolet)
+                Button("View all \(leadAppointments.count) appointments") {
+                    // Navigate to appointments view filtered for this lead
+                }
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.electricViolet)
                     }
                 }
-                .padding(16)
-                .background(Color.obsidianSurface)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
-                )
+                }
             }
         }
-        .padding(.horizontal, 16)
+    }
+
+    private func leadActionButton(
+        title: String,
+        subtitle: String,
+        icon: String,
+        color: Color,
+        isLoading: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                ZStack {
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.72)
+                            .tint(color)
+                    } else {
+                        Image(systemName: icon)
+                            .font(.obsidianCallout)
+                            .foregroundColor(color)
+                    }
+                }
+                .frame(width: 34, height: 34)
+                .background(color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.obsidianFootnote)
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+
+                    Text(subtitle)
+                        .font(.micro)
+                        .foregroundColor(Color.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
     }
     
     private var shouldShowScheduleButton: Bool {
@@ -1091,56 +790,8 @@ struct LeadDetailView: View {
     
     @ViewBuilder
     private func modernSectionCard<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(Color.electricViolet)
-                    .font(.title2)
-
-                Text(title)
-                    .font(.themeTitle)
-                    .foregroundColor(Color.textPrimary)
-
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-
+        LeadFormSectionCard(title: title, icon: icon) {
             content()
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
-        }
-        .background(Color.obsidianSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.obsidianBorder, lineWidth: 0.5)
-        )
-        .shadow(color: Color.black, radius: 8, x: 0, y: 2)
-    }
-    
-    @ViewBuilder
-    private func modernTextField(title: String, text: Binding<String>, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(Color.electricViolet)
-                    .frame(width: 20)
-
-                Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-            }
-
-            TextField(title, text: text)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color.obsidianSurface)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
-                )
         }
     }
     
@@ -1155,35 +806,8 @@ struct LeadDetailView: View {
         editedLongitude = lead.longitude
         editedStatus = lead.leadStatus
         editedFollowUpDate = lead.followUpDate
+        editedFollowUpCadence = lead.followUpCadence
         editedServiceCategory = lead.serviceCategoryObject
-    }
-    
-    private func quickFollowUpButton(_ label: String, days: Int) -> some View {
-        let calendar = Calendar.current
-        let targetDate: Date? = {
-            guard let date = calendar.date(byAdding: .day, value: days, to: Date()),
-                  let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: date) else { return nil }
-            return morning
-        }()
-        let isSelected: Bool = {
-            guard let target = targetDate, let current = editedFollowUpDate else { return false }
-            return calendar.isDate(current, inSameDayAs: target)
-        }()
-
-        return Button {
-            if let date = targetDate {
-                editedFollowUpDate = date
-            }
-        } label: {
-            Text(label)
-                .font(.obsidianSmall)
-                .foregroundColor(isSelected ? .white : .electricViolet)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.electricViolet : Color.obsidianSurface)
-                .cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.obsidianBorder, lineWidth: 0.5))
-        }
     }
 
     private func startEditing() {
@@ -1207,20 +831,20 @@ struct LeadDetailView: View {
         lead.longitude = editedLongitude
         lead.notes = editedNotes.isEmpty ? nil : editedNotes
         lead.price = editedPrice
-        lead.leadStatus = editedStatus
         lead.setServiceCategory(editedServiceCategory)
-        lead.setFollowUpDate(editedFollowUpDate, autoSave: false)
-
-        cancelNotification(for: lead)
-        if let followUpDate = editedFollowUpDate {
-            scheduleNotification(for: lead, on: followUpDate)
-        }
+        lead.applyLeadStatus(
+            editedStatus,
+            followUpDate: editedFollowUpDate,
+            shouldReplaceFollowUpDate: true,
+            autoSave: false
+        )
+        lead.followUpCadence = editedFollowUpCadence
 
         do {
             try viewContext.save()
             print("LeadDetailView: Successfully saved lead with status: \(lead.leadStatus.displayName)")
 
-            // Sync to Firebase after save
+            // Sync to the selected cloud provider after save
             UserDataSyncManager.shared.syncWithServer()
 
             // Force the managed object context to refresh to ensure UI updates
@@ -1294,10 +918,13 @@ struct LeadDetailView: View {
         print("LeadDetailView: Deleting lead: \(lead.displayName)")
         
         // Cancel any scheduled notifications
-        cancelNotification(for: lead)
+        if let leadId = lead.id {
+            NotificationService.shared.cancelFollowUpNotification(for: leadId)
+        }
         
-        // Get lead ID for potential Firebase deletion
-        let leadId = lead.id?.uuidString
+        // Get lead ID for potential cloud deletion
+        let leadUUID = lead.id
+        let leadId = leadUUID?.uuidString
         let leadName = lead.displayName
         
         // Delete from Core Data context
@@ -1306,6 +933,9 @@ struct LeadDetailView: View {
         do {
             try viewContext.save()
             print("✅ Lead '\(leadName)' deleted successfully from Core Data")
+            if let leadUUID {
+                UserDataSyncManager.markLeadDeletedLocally(leadUUID)
+            }
             
             // Force refresh of all contexts to ensure UI updates
             viewContext.refreshAllObjects()
@@ -1313,14 +943,19 @@ struct LeadDetailView: View {
             // Notify other views about lead deletion
             NotificationCenter.default.post(name: NSNotification.Name("LeadDeleted"), object: leadId)
             
-            // Delete from Firebase if authenticated
-            if let leadId = leadId, FirebaseService.shared.isAuthenticated {
+            // Delete from the selected cloud provider so CloudKit backups do not resurrect deleted leads.
+            if let leadId = leadId,
+               UserDataSyncManager.shouldDeleteLeadFromCloud(
+                provider: CloudSyncProvider.current,
+                isAuthenticated: FirebaseService.shared.isAuthenticated
+               ) {
                 Task {
                     do {
-                        try await UserDataSyncManager.shared.deleteLeadFromFirebase(leadId: leadId)
-                        print("✅ Lead \(leadId) deleted from Firebase")
+                        try await UserDataSyncManager.shared.deleteLeadFromCloud(leadId: leadId)
+                        print("✅ Lead \(leadId) deleted from cloud")
                     } catch {
-                        print("❌ Failed to delete lead from Firebase: \(error)")
+                        print("❌ Failed to delete lead from cloud: \(error)")
+                        ErrorHandler.shared.handle(error, context: "Delete Lead From Cloud")
                     }
                 }
             }
@@ -1333,90 +968,6 @@ struct LeadDetailView: View {
         } catch {
             ErrorHandler.shared.handle(error, context: "Delete Lead")
         }
-    }
-
-    private func scheduleNotification(for lead: Lead, on date: Date) {
-        let content = UNMutableNotificationContent()
-        content.title = "Follow up with \(lead.displayName)"
-        
-        // Create comprehensive notification body with key information
-        var bodyParts: [String] = []
-        
-        // Add address if available
-        if let address = lead.address, !address.isEmpty {
-            bodyParts.append("📍 \(address)")
-        }
-        
-        // Add phone if available
-        if let phone = lead.phone, !phone.isEmpty {
-            bodyParts.append("📞 \(phone)")
-        }
-        
-        // Add status
-        bodyParts.append("🏷️ Status: \(lead.leadStatus.displayName)")
-        
-        // Add price if greater than 0
-        if lead.price > 0 {
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .currency
-            if let priceString = formatter.string(from: NSNumber(value: lead.price)) {
-                bodyParts.append("💰 \(priceString)")
-            }
-        }
-        
-        // Add notes if available
-        if let notes = lead.notes, !notes.isEmpty {
-            bodyParts.append("📝 \(notes)")
-        } else {
-            bodyParts.append("📝 Time for a follow-up visit!")
-        }
-        
-        content.body = bodyParts.joined(separator: "\n")
-        content.sound = .default
-        
-        // Add user info for potential actions
-        content.userInfo = [
-            "leadId": lead.id?.uuidString ?? "",
-            "leadName": lead.displayName,
-            "leadPhone": lead.phone ?? "",
-            "leadAddress": lead.address ?? ""
-        ]
-        
-        // Add notification categories for quick actions (iOS 10+)
-        content.categoryIdentifier = "LEAD_FOLLOWUP"
-
-        guard let leadId = lead.id else {
-            print("❌ Cannot schedule notification: lead has no ID")
-            return
-        }
-
-        // Check notification permission first
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            guard NotificationService.isAuthorizationAllowed(settings.authorizationStatus) else {
-                print("❌ Notification permission not granted, status: \(settings.authorizationStatus.rawValue)")
-                return
-            }
-
-            let calendar = Calendar.current
-            let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
-            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-
-            let request = UNNotificationRequest(identifier: leadId.uuidString, content: content, trigger: trigger)
-
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    ErrorHandler.shared.handle(error, context: "Schedule Notification")
-                }
-            }
-        }
-    }
-
-    private func cancelNotification(for lead: Lead) {
-        guard let leadId = lead.id else {
-            print("❌ Cannot cancel notification: Lead ID is nil")
-            return
-        }
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [leadId.uuidString])
     }
 
     private func openInMaps() {
@@ -1474,17 +1025,15 @@ struct LeadDetailView: View {
             Image(systemName: icon)
                 .foregroundColor(iconColor)
                 .frame(width: 24, height: 24)
-                .font(.title3)
+                .font(.obsidianCallout)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.themeCaption)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
-                    .textCase(.uppercase)
 
                 Text(value)
-                    .font(.themeBody)
-                    .fontWeight(.medium)
+                    .font(.obsidianCallout)
                     .foregroundColor(value == "Not provided" ? Color.textSecondary : Color.textPrimary)
             }
 
@@ -1496,7 +1045,7 @@ struct LeadDetailView: View {
                 }) {
                     Image(systemName: "phone.circle.fill")
                         .foregroundColor(Color.statusInterested)
-                        .font(.title2)
+                        .font(.obsidianAction)
                 }
             } else if isEmailable && value != "Not provided" {
                 Button(action: {
@@ -1504,19 +1053,19 @@ struct LeadDetailView: View {
                 }) {
                     Image(systemName: "envelope.circle.fill")
                         .foregroundColor(Color.statusNotHome)
-                        .font(.title2)
+                        .font(.obsidianAction)
                 }
             }
         }
         .padding(.vertical, 12)
-        .padding(.horizontal, 16)
-        .background(Color.obsidianSurface)
-        .cornerRadius(16)
+        .padding(.horizontal, 14)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu {
             copyMenuButton(title: title, value: value)
         }
@@ -1529,17 +1078,15 @@ struct LeadDetailView: View {
             Image(systemName: icon)
                 .foregroundColor(iconColor)
                 .frame(width: 24, height: 24)
-                .font(.title3)
+                .font(.obsidianCallout)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.themeCaption)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
-                    .textCase(.uppercase)
 
                 Text(value)
-                    .font(.themeBody)
-                    .fontWeight(.medium)
+                    .font(.obsidianCallout)
                     .foregroundColor(value == "Not provided" ? Color.textSecondary : Color.textPrimary)
                     .lineLimit(2)
             }
@@ -1554,25 +1101,24 @@ struct LeadDetailView: View {
                         Image(systemName: "location.fill")
                         Text("Navigate")
                     }
-                    .font(.caption)
+                    .font(.micro)
                     .fontWeight(.semibold)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color.electricViolet)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.electricViolet)
-                    .cornerRadius(16)
+                    .background(Capsule().fill(Color.electricViolet.opacity(0.12)))
                 }
             }
         }
         .padding(.vertical, 12)
-        .padding(.horizontal, 16)
-        .background(Color.obsidianSurface)
-        .cornerRadius(16)
+        .padding(.horizontal, 14)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu {
             copyMenuButton(title: title, value: value)
         }
@@ -1585,17 +1131,15 @@ struct LeadDetailView: View {
             Image(systemName: icon)
                 .foregroundColor(iconColor)
                 .frame(width: 24, height: 24)
-                .font(.title3)
+                .font(.obsidianCallout)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.themeCaption)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
-                    .textCase(.uppercase)
 
                 Text(status.displayName)
-                    .font(.themeBody)
-                    .fontWeight(.medium)
+                    .font(.obsidianCallout)
                     .foregroundColor(Color.textPrimary)
             }
 
@@ -1604,14 +1148,14 @@ struct LeadDetailView: View {
             StatusBadge(status: status)
         }
         .padding(.vertical, 12)
-        .padding(.horizontal, 16)
-        .background(Color.obsidianSurface)
-        .cornerRadius(16)
+        .padding(.horizontal, 14)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu {
             copyMenuButton(title: title, value: status.displayName)
         }
@@ -1626,32 +1170,30 @@ struct LeadDetailView: View {
                 Image(systemName: icon)
                     .foregroundColor(iconColor)
                     .frame(width: 24, height: 24)
-                    .font(.title3)
+                    .font(.obsidianCallout)
 
                 Text(title)
-                    .font(.themeCaption)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
-                    .textCase(.uppercase)
 
                 Spacer()
             }
 
             Text(value)
-                .font(.themeBody)
-                .fontWeight(.medium)
+                .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(nil)
         }
         .padding(.vertical, 12)
-        .padding(.horizontal, 16)
-        .background(Color.obsidianSurface)
-        .cornerRadius(16)
+        .padding(.horizontal, 14)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu {
             copyMenuButton(title: title, value: value)
         }
@@ -1682,17 +1224,17 @@ struct AppointmentSummaryRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(appointment.title)
-                    .font(.subheadline)
+                    .font(.obsidianFootnote)
                     .fontWeight(.medium)
                     .lineLimit(1)
                 
                 HStack(spacing: 8) {
                     Image(systemName: appointment.appointmentType.icon)
                         .foregroundColor(appointment.appointmentType.color)
-                        .font(.caption)
+                        .font(.micro)
 
                     Text(appointment.startDate.formatted(.dateTime.day().month().hour().minute()))
-                        .font(.themeCaption)
+                        .font(.micro)
                         .foregroundColor(Color.textSecondary)
                 }
             }
@@ -1704,17 +1246,21 @@ struct AppointmentSummaryRow: View {
 
                 if !appointment.location.isEmpty {
                     Text(appointment.location)
-                        .font(.caption2)
+                        .font(.micro)
                         .foregroundColor(Color.textSecondary)
                         .lineLimit(1)
                         .multilineTextAlignment(.trailing)
                 }
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .padding(.horizontal, 12)
-        .background(Color.obsidianBlack)
-        .cornerRadius(16)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+        )
     }
 }
 
@@ -1723,13 +1269,12 @@ struct AppointmentStatusBadge: View {
     
     var body: some View {
         Text(status.rawValue)
-            .font(.caption2)
+            .font(.micro)
             .fontWeight(.semibold)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(status.color.opacity(0.2))
+            .background(Capsule().fill(status.color.opacity(0.16)))
             .foregroundColor(status.color)
-            .cornerRadius(10)
     }
 }
 
@@ -1743,7 +1288,7 @@ struct ModernStatusCard: View {
             VStack(spacing: 8) {
                 // Status Icon
                 Image(systemName: status.iconName)
-                    .font(.title2)
+                    .font(.obsidianAction)
                     .foregroundColor(isSelected ? .white : status.uiColor)
                     .frame(width: 32, height: 32)
                 
@@ -1804,7 +1349,7 @@ extension Lead.Status {
 
 #Preview {
     let context = PersistenceController.preview.container.viewContext
-    let lead = Lead(context: context)
+    let lead = Lead.create(in: context)
     lead.name = "John Doe"
     lead.phone = "555-1234"
     

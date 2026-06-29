@@ -5,6 +5,7 @@ struct QuickFilterChipsView: View {
     @ObservedObject var searchFilterManager: SearchFilterManager
     @State private var showingSavePreset = false
     @State private var presetName = ""
+    @State private var presetSaveErrorMessage: String?
 
     private let quickStatuses: [LeadStatus] = [.new, .interested, .closed, .notInterested]
 
@@ -65,11 +66,21 @@ struct QuickFilterChipsView: View {
         }
         .sheet(isPresented: $showingSavePreset) {
             SavePresetSheet(presetName: $presetName) {
-                if !presetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    searchFilterManager.savePreset(name: presetName)
+                guard searchFilterManager.savePreset(name: presetName) else {
+                    presetSaveErrorMessage = searchFilterManager.lastErrorMessage ?? "Preset was not saved."
+                    return false
                 }
                 presetName = ""
+                return true
             }
+        }
+        .alert("Preset not saved", isPresented: Binding(
+            get: { presetSaveErrorMessage != nil },
+            set: { if !$0 { presetSaveErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { presetSaveErrorMessage = nil }
+        } message: {
+            Text(presetSaveErrorMessage ?? "Preset was not saved.")
         }
     }
 
@@ -147,26 +158,74 @@ struct QuickFilterChipsView: View {
 
 struct SavePresetSheet: View {
     @Binding var presetName: String
-    var onSave: () -> Void
+    var onSave: () -> Bool
+    @Environment(\.dismiss) private var dismiss
+
+    private var trimmedPresetName: String {
+        presetName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 16) {
-                TextField("Preset name", text: $presetName)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding()
-                Spacer()
-            }
-            .navigationTitle("Save Preset")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { presetName = ""; UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: "Save Preset",
+                        subtitle: "Name this filter setup so you can apply it again fast.",
+                        icon: "bookmark.fill"
+                    )
+
+                    ObsidianSectionCard(
+                        title: "Preset Details",
+                        icon: "tray.full.fill",
+                        subtitle: "Use a short name that describes the route, status, or follow-up view."
+                    ) {
+                        LeadFormTextField(
+                            title: "Preset Name",
+                            placeholder: "Example: Interested today",
+                            text: $presetName,
+                            icon: "text.cursor"
+                        )
+                    }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { onSave() }
-                        .disabled(presetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle("Save Preset")
+            .obsidianInlineNavigation()
+            .safeAreaInset(edge: .bottom) {
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: trimmedPresetName.isEmpty,
+                    primaryAction: {
+                        if onSave() {
+                            dismiss()
+                        }
+                    },
+                    secondaryAction: {
+                        presetName = ""
+                        dismiss()
+                    },
+                    primaryLabel: {
+                        Label("Save", systemImage: "checkmark.circle.fill")
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
+                    }
+                )
+                .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                    .foregroundColor(Color.electricViolet)
                 }
             }
         }
+        .presentationBackground(Color.obsidianBlack)
     }
 }

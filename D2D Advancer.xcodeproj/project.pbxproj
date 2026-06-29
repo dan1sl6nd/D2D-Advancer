@@ -11,7 +11,6 @@
 		E609623B2E55B6CD00950939 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = E609623A2E55B6CD00950939 /* FirebaseCore */; };
 		E609623D2E55B6CD00950939 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = E609623C2E55B6CD00950939 /* FirebaseFirestore */; };
 		E6265C3D2E98ED3A00B4BC85 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6265C3C2E98ED3A00B4BC85 /* StoreKit.framework */; };
-		E690EE9E2EBC1F8B00274435 /* Configuration.storekit in Resources */ = {isa = PBXBuildFile; fileRef = E690EE9D2EBC1F8B00274435 /* Configuration.storekit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,9 +38,29 @@
 		E690EE9D2EBC1F8B00274435 /* Configuration.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Configuration.storekit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E6D2D0012F00000100ABCDEF /* Exceptions for "D2D Advancer" folder in "D2D Advancer" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info-Debug.plist,
+			);
+			target = E631E7D42E51C3F300EAD3D5 /* D2D Advancer */;
+		};
+		E6D2D0022F00000100ABCDEF /* Exceptions for "D2D AdvancerUITests" folder in "D2D AdvancerUITests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E631E7F02E51C3F400EAD3D5 /* D2D AdvancerUITests */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E631E7D72E51C3F300EAD3D5 /* D2D Advancer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E6D2D0012F00000100ABCDEF /* Exceptions for "D2D Advancer" folder in "D2D Advancer" target */,
+			);
 			path = "D2D Advancer";
 			sourceTree = "<group>";
 		};
@@ -52,6 +71,9 @@
 		};
 		E631E7F42E51C3F400EAD3D5 /* D2D AdvancerUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E6D2D0022F00000100ABCDEF /* Exceptions for "D2D AdvancerUITests" folder in "D2D AdvancerUITests" target */,
+			);
 			path = "D2D AdvancerUITests";
 			sourceTree = "<group>";
 		};
@@ -242,7 +264,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E690EE9E2EBC1F8B00274435 /* Configuration.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -399,6 +420,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_CODE_COVERAGE = NO;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -431,11 +453,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = RF247ARQB7;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "D2D Advancer/Info-Debug.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "D2D Advancer";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "D2D Advancer would like access to your Calendar to save scheduled appointments and reminders.";
 				INFOPLIST_KEY_NSContactsUsageDescription = "D2D Advancer would like to save your leads to your Contacts app for easy access and to help you stay organized with your door-to-door sales.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "D2D Advancer uses local network access only in debug UI tests to connect to Firebase emulators on this Mac.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "D2D Advancer needs location access to show your current position on the map and help you navigate to leads.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "D2D Advancer needs location access to show your current position on the map and help you navigate to leads.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -471,8 +495,10 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = RF247ARQB7;
+				ENABLE_CODE_COVERAGE = NO;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "D2D-Advancer-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "D2D Advancer";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "D2D Advancer would like access to your Calendar to save scheduled appointments and reminders.";
@@ -543,7 +569,8 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "D2D AdvancerUITests/Info.plist";
 				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "dan1sland.D2D-AdvancerUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -559,7 +586,8 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "D2D AdvancerUITests/Info.plist";
 				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "dan1sland.D2D-AdvancerUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";

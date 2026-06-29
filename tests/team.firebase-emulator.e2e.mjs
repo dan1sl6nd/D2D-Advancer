@@ -35,6 +35,7 @@ test("created owner and rep Firebase accounts can create and join a team", async
 
   const owner = await createTestAccount("owner", runId, "Owner E2E");
   const rep = await createTestAccount("rep", runId, "Rep E2E");
+  const technician = await createTestAccount("tech", runId, "Technician E2E");
 
   try {
     await createOwnerTeam(owner.db, {
@@ -56,15 +57,38 @@ test("created owner and rep Firebase accounts can create and join a team", async
       inviteCode
     });
 
+    const technicianInviteCode = `${inviteCode}T`;
+    await createInvite(owner.db, {
+      teamId,
+      ownerUserId: owner.uid,
+      inviteCode: technicianInviteCode
+    });
+
+    await joinTeam(technician.db, {
+      teamId,
+      repUserId: technician.uid,
+      repEmail: technician.email,
+      inviteCode: technicianInviteCode,
+      displayName: "Technician E2E"
+    });
+
+    await setWorkerType(owner.db, {
+      teamId,
+      workerUserId: technician.uid,
+      workType: "technician"
+    });
+
     await assertTeamVisibility({
       ownerDb: owner.db,
       repDb: rep.db,
+      technicianDb: technician.db,
       teamId,
       ownerUserId: owner.uid,
-      repUserId: rep.uid
+      repUserId: rep.uid,
+      technicianUserId: technician.uid
     });
   } finally {
-    await Promise.allSettled([deleteApp(owner.app), deleteApp(rep.app)]);
+    await Promise.allSettled([deleteApp(owner.app), deleteApp(rep.app), deleteApp(technician.app)]);
   }
 });
 
@@ -152,7 +176,7 @@ async function createInvite(db, { teamId, ownerUserId, inviteCode }) {
   await batch.commit();
 }
 
-async function joinTeam(db, { teamId, repUserId, repEmail, inviteCode }) {
+async function joinTeam(db, { teamId, repUserId, repEmail, inviteCode, displayName = "Rep E2E" }) {
   const now = Timestamp.now();
   const batch = writeBatch(db);
 
@@ -160,7 +184,7 @@ async function joinTeam(db, { teamId, repUserId, repEmail, inviteCode }) {
   batch.set(doc(db, "teams", teamId, "members", repUserId), {
     teamId,
     userId: repUserId,
-    displayName: "Rep E2E",
+    displayName,
     email: repEmail,
     role: "member",
     status: "active",
@@ -182,7 +206,24 @@ async function joinTeam(db, { teamId, repUserId, repEmail, inviteCode }) {
   await batch.commit();
 }
 
-async function assertTeamVisibility({ ownerDb, repDb, teamId, ownerUserId, repUserId }) {
+async function setWorkerType(db, { teamId, workerUserId, workType }) {
+  await writeBatch(db)
+    .update(doc(db, "teams", teamId, "members", workerUserId), {
+      workType,
+      updatedAt: Timestamp.now()
+    })
+    .commit();
+}
+
+async function assertTeamVisibility({
+  ownerDb,
+  repDb,
+  technicianDb,
+  teamId,
+  ownerUserId,
+  repUserId,
+  technicianUserId
+}) {
   const now = Timestamp.now();
 
   await setDoc(doc(repDb, "teams", teamId, "leads", "rep-created-lead"), {
@@ -223,7 +264,7 @@ async function assertTeamVisibility({ ownerDb, repDb, teamId, ownerUserId, repUs
   });
 
   const ownerMembers = await getDocs(collection(ownerDb, "teams", teamId, "members"));
-  assert.equal(ownerMembers.size, 2, "owner sees active owner and rep member records after invite join");
+  assert.equal(ownerMembers.size, 3, "owner sees owner, sales rep, and technician records after invite joins");
 
   const repProfile = await getDoc(doc(repDb, "users", repUserId, "teamProfile", "current"));
   assert.equal(repProfile.data()?.teamId, teamId, "rep profile points at joined team");
@@ -295,5 +336,101 @@ async function assertTeamVisibility({ ownerDb, repDb, teamId, ownerUserId, repUs
     }),
     /permission|PERMISSION_DENIED/i,
     "rep cannot write another user's duty location point"
+  );
+
+  const jobStart = Timestamp.fromMillis(Date.now() + 2 * 60 * 60 * 1000);
+  const jobEnd = Timestamp.fromMillis(Date.now() + 3 * 60 * 60 * 1000);
+  const jobPayload = {
+    teamId,
+    leadId: "rep-created-lead",
+    assignedToUserId: technicianUserId,
+    title: "Window Cleaning - Rep Lead",
+    notes: "Phone: 555-0100\nETA: 30 minute arrival window",
+    startDate: jobStart,
+    endDate: jobEnd,
+    location: "123 Test St",
+    status: "scheduled",
+    createdByUserId: ownerUserId,
+    updatedByUserId: ownerUserId,
+    createdAt: now,
+    updatedAt: now,
+    customerName: "Rep Lead",
+    customerPhone: "555-0100",
+    customerEmail: "customer@example.com",
+    serviceCategory: "Window Cleaning",
+    quotedPrice: 350,
+    latitude: 43.6,
+    longitude: -79.7,
+    arrivalWindowMinutes: 30
+  };
+
+  await setDoc(doc(ownerDb, "teams", teamId, "bookings", "technician-job"), jobPayload);
+
+  const technicianJob = await getDoc(doc(technicianDb, "teams", teamId, "bookings", "technician-job"));
+  assert.equal(technicianJob.data()?.assignedToUserId, technicianUserId, "technician can read their assigned job");
+  assert.equal(technicianJob.data()?.arrivalWindowMinutes, 30, "technician job includes approximate arrival window");
+  assert.equal(technicianJob.data()?.customerPhone, "555-0100", "technician job includes customer contact details");
+
+  await assert.rejects(
+    () => getDoc(doc(technicianDb, "teams", teamId, "leads", "rep-created-lead")),
+    /permission|PERMISSION_DENIED/i,
+    "technician cannot read an unassigned sales lead directly"
+  );
+
+  await setDoc(doc(technicianDb, "teams", teamId, "bookings", "technician-job"), {
+    ...jobPayload,
+    status: "completed",
+    updatedByUserId: technicianUserId,
+    updatedAt: Timestamp.now()
+  });
+
+  const completedJob = await getDoc(doc(ownerDb, "teams", teamId, "bookings", "technician-job"));
+  assert.equal(completedJob.data()?.status, "completed", "owner sees technician job status update");
+
+  const repLeaveBatch = writeBatch(repDb);
+  repLeaveBatch.update(doc(repDb, "teams", teamId, "members", repUserId), {
+    status: "removed",
+    removedAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
+  });
+  repLeaveBatch.delete(doc(repDb, "users", repUserId, "teamProfile", "current"));
+  repLeaveBatch.set(doc(repDb, "teams", teamId, "activityLog", "rep-left"), {
+    teamId,
+    actorUserId: repUserId,
+    kind: "member_left",
+    subjectId: repUserId,
+    subjectTitle: "E2E Team",
+    targetUserId: repUserId,
+    createdAt: Timestamp.now()
+  });
+  await repLeaveBatch.commit();
+
+  await assert.rejects(
+    () => getDoc(doc(repDb, "teams", teamId)),
+    /permission|PERMISSION_DENIED/i,
+    "sales rep loses team access after leaving"
+  );
+
+  const ownerRemoveTechnicianBatch = writeBatch(ownerDb);
+  ownerRemoveTechnicianBatch.update(doc(ownerDb, "teams", teamId, "members", technicianUserId), {
+    status: "removed",
+    removedAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
+  });
+  ownerRemoveTechnicianBatch.set(doc(ownerDb, "teams", teamId, "activityLog", "technician-removed"), {
+    teamId,
+    actorUserId: ownerUserId,
+    kind: "member_removed",
+    subjectId: technicianUserId,
+    subjectTitle: "Technician E2E",
+    targetUserId: technicianUserId,
+    createdAt: Timestamp.now()
+  });
+  await ownerRemoveTechnicianBatch.commit();
+
+  await assert.rejects(
+    () => getDoc(doc(technicianDb, "teams", teamId)),
+    /permission|PERMISSION_DENIED/i,
+    "technician loses team access after owner removal"
   );
 }

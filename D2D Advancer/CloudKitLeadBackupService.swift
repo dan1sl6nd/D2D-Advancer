@@ -3,18 +3,55 @@ import CloudKit
 
 enum CloudKitLeadBackupError: LocalizedError {
     case accountUnavailable(CKAccountStatus)
+    case containerUnavailable(String)
 
     var errorDescription: String? {
         switch self {
         case .accountUnavailable(let status):
             return "CloudKit account unavailable (\(status.rawValue))."
+        case .containerUnavailable(let identifier):
+            return "CloudKit container unavailable or not entitled (\(identifier))."
+        }
+    }
+}
+
+enum CloudKitQueryCompatibility {
+    static func isRecordNameNotQueryableError(_ error: Error) -> Bool {
+        var messages: [String] = []
+        collectMessages(from: error as NSError, into: &messages)
+
+        let normalized = messages
+            .joined(separator: " ")
+            .lowercased()
+
+        return normalized.contains("recordname") && normalized.contains("queryable")
+    }
+
+    private static func collectMessages(from error: NSError, into messages: inout [String]) {
+        messages.append(error.localizedDescription)
+        collectMessages(from: error.userInfo, into: &messages)
+    }
+
+    private static func collectMessages(from value: Any, into messages: inout [String]) {
+        switch value {
+        case let error as NSError:
+            collectMessages(from: error, into: &messages)
+        case let dictionary as [AnyHashable: Any]:
+            dictionary.values.forEach { collectMessages(from: $0, into: &messages) }
+        case let array as [Any]:
+            array.forEach { collectMessages(from: $0, into: &messages) }
+        default:
+            messages.append(String(describing: value))
         }
     }
 }
 
 final class CloudKitLeadBackupService {
-    static let shared = CloudKitLeadBackupService()
     static let containerIdentifier = "iCloud.com.dan1sland.d2d.advancer"
+    static let shared: CloudKitLeadBackupService? = {
+        guard let container = makeEntitledContainer() else { return nil }
+        return CloudKitLeadBackupService(container: container)
+    }()
 
     private let container: CKContainer
     private let database: CKDatabase
@@ -22,9 +59,26 @@ final class CloudKitLeadBackupService {
     private let recordType = "LeadBackup"
     private let batchSize = 200
 
-    private init(container: CKContainer = CKContainer(identifier: CloudKitLeadBackupService.containerIdentifier)) {
+    private init(container: CKContainer) {
         self.container = container
         self.database = container.privateCloudDatabase
+    }
+
+    static func makeEntitledContainer() -> CKContainer? {
+        guard isContainerEntitled(containerIdentifier) else {
+            print("⚠️ CloudKit container not entitled in this runtime: \(containerIdentifier)")
+            return nil
+        }
+
+        return CKContainer(identifier: containerIdentifier)
+    }
+
+    private static func isContainerEntitled(_ identifier: String) -> Bool {
+        #if targetEnvironment(simulator)
+        return false
+        #else
+        return identifier == containerIdentifier
+        #endif
     }
 
     func uploadLeads(_ payloads: [LeadSyncPayload], for userId: String) async throws -> Int {
@@ -47,8 +101,18 @@ final class CloudKitLeadBackupService {
     func fetchLeads(for userId: String) async throws -> [LeadSyncPayload] {
         try await ensureCloudKitAccountAvailable()
 
-        let predicate = NSPredicate(format: "userId == %@", userId)
-        let records = try await fetchRecords(predicate: predicate)
+        let records: [CKRecord]
+        do {
+            records = try await fetchRecords(predicate: NSPredicate(value: true))
+                .filter { recordBelongsToUser($0, userId: userId) }
+        } catch {
+            guard CloudKitQueryCompatibility.isRecordNameNotQueryableError(error) else {
+                throw error
+            }
+
+            print("☁️ CloudKit lead restore scan skipped: recordName is not queryable in this schema. Continuing with direct record-ID backup uploads.")
+            return []
+        }
 
         return records.compactMap { decodePayload(from: $0) }
     }
@@ -58,6 +122,10 @@ final class CloudKitLeadBackupService {
 
         let recordId = CKRecord.ID(recordName: "\(userId)_\(leadId.uuidString)")
         try await deleteRecords(recordIds: [recordId])
+    }
+
+    private func recordBelongsToUser(_ record: CKRecord, userId: String) -> Bool {
+        stringValue(record["userId"]) == userId || record.recordID.recordName.hasPrefix("\(userId)_")
     }
 
     private func ensureCloudKitAccountAvailable() async throws {
@@ -114,7 +182,12 @@ final class CloudKitLeadBackupService {
             record["followUpDate"] = nil
         }
 
-        record["checkInsJSON"] = encodeCheckInsJSON(payload.checkIns)
+        do {
+            record["checkInsJSON"] = try LeadCheckInJSONCodec.encode(payload.checkIns)
+        } catch {
+            print("⚠️ CloudKit lead backup skipped check-ins for \(payload.id): \(error.localizedDescription)")
+            record["checkInsJSON"] = nil
+        }
 
         return record
     }
@@ -136,8 +209,14 @@ final class CloudKitLeadBackupService {
         let createdDate = (record["createdDate"] as? Date) ?? Date()
         let updatedDate = (record["updatedDate"] as? Date) ?? createdDate
         let checkInsJSON = record["checkInsJSON"] as? String
-        let checkIns = decodeCheckInsJSON(checkInsJSON)
-        let includesCheckInsSchema = checkInsJSON != nil
+        let decodedCheckIns: [LeadCheckInSyncPayload]?
+        do {
+            decodedCheckIns = try LeadCheckInJSONCodec.decode(checkInsJSON)
+        } catch {
+            print("⚠️ CloudKit lead backup ignored invalid check-in JSON for \(leadId): \(error.localizedDescription)")
+            decodedCheckIns = nil
+        }
+        let includesCheckInsSchema = decodedCheckIns != nil
 
         return LeadSyncPayload(
             id: leadId,
@@ -164,7 +243,7 @@ final class CloudKitLeadBackupService {
             neighborhoodId: optionalStringValue(record["neighborhoodId"]),
             lastContactDate: record["lastContactDate"] as? Date,
             followUpDate: record["followUpDate"] as? Date,
-            checkIns: checkIns,
+            checkIns: decodedCheckIns ?? [],
             includesCheckInsSchema: includesCheckInsSchema
         )
     }
@@ -226,7 +305,6 @@ final class CloudKitLeadBackupService {
                     operation = CKQueryOperation(cursor: cursor)
                 } else {
                     let query = CKQuery(recordType: recordType, predicate: predicate)
-                    query.sortDescriptors = [NSSortDescriptor(key: "updatedDate", ascending: false)]
                     operation = CKQueryOperation(query: query)
                 }
 
@@ -312,23 +390,4 @@ final class CloudKitLeadBackupService {
         return 0
     }
 
-    private func encodeCheckInsJSON(_ checkIns: [LeadCheckInSyncPayload]) -> String {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(checkIns),
-              let json = String(data: data, encoding: .utf8) else {
-            return "[]"
-        }
-        return json
-    }
-
-    private func decodeCheckInsJSON(_ json: String?) -> [LeadCheckInSyncPayload] {
-        guard let json, !json.isEmpty, let data = json.data(using: .utf8) else {
-            return []
-        }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode([LeadCheckInSyncPayload].self, from: data)) ?? []
-    }
 }

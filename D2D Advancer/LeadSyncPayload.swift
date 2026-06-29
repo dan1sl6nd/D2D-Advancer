@@ -32,6 +32,40 @@ struct LeadCheckInSyncPayload: Sendable, Codable {
     }
 }
 
+enum LeadCheckInJSONCodecError: LocalizedError {
+    case invalidStringEncoding
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidStringEncoding:
+            return "Check-in JSON could not be converted to UTF-8 data."
+        }
+    }
+}
+
+enum LeadCheckInJSONCodec {
+    static func encode(_ checkIns: [LeadCheckInSyncPayload]) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(checkIns)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw LeadCheckInJSONCodecError.invalidStringEncoding
+        }
+        return json
+    }
+
+    static func decode(_ json: String?) throws -> [LeadCheckInSyncPayload]? {
+        guard let json, !json.isEmpty else { return nil }
+        guard let data = json.data(using: .utf8) else {
+            throw LeadCheckInJSONCodecError.invalidStringEncoding
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode([LeadCheckInSyncPayload].self, from: data)
+    }
+}
+
 /// Canonical lead payload used by all cloud sync providers.
 struct LeadSyncPayload: Sendable {
     let id: UUID
@@ -137,13 +171,10 @@ struct LeadSyncPayload: Sendable {
             "neighborhoodId": neighborhoodId ?? ""
         ]
 
-        if let lastContactDate {
-            data["lastContactDate"] = lastContactDate
-        }
-
-        if let followUpDate {
-            data["followUpDate"] = followUpDate
-        }
+        // Firestore uploads use merge writes, so omitted optional fields would keep
+        // old remote values alive. Store explicit nulls when a date is cleared.
+        data["lastContactDate"] = lastContactDate ?? NSNull()
+        data["followUpDate"] = followUpDate ?? NSNull()
 
         if includesCheckInsSchema {
             data["checkInsSchemaVersion"] = 1

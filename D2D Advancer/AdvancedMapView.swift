@@ -10,11 +10,18 @@ struct AdvancedMapView: UIViewRepresentable {
     @Binding var pitch: Double
     @Binding var animateNextUpdate: Bool
     @Binding var is3DModeEnabled: Bool
+    let launchCenteringResetToken: Int
+    let launchLocationCenterRevision: Int
 
     let leads: [Lead]
     @Binding var searchPin: SearchPin?
     let showsUserLocation: Bool
+    let shouldFollowUserLocationOnLaunch: Bool
+    let needsLaunchLocationCenteringConfirmation: Bool
+    let hasLaunchLocationCandidate: Bool
+    let onLaunchCenteringConfirmed: () -> Void
     let onLeadTap: (Lead) -> Void
+    let onLeadClusterTap: ([Lead], CLLocationCoordinate2D) -> Void
     let onSearchPinTap: (SearchPin) -> Void
     let onLongPress: (CLLocationCoordinate2D?, Lead?) -> Void
 
@@ -30,9 +37,27 @@ struct AdvancedMapView: UIViewRepresentable {
         mapView.isRotateEnabled = true
         mapView.isPitchEnabled = Self.allowsPitch(is3DModeEnabled: is3DModeEnabled)
 
+        let shouldFollowLaunchLocation = Self.shouldCenterUserLocationOnLaunch(
+            showsUserLocation: showsUserLocation,
+            shouldUseUserLocation: shouldFollowUserLocationOnLaunch,
+            needsLaunchLocationCenteringConfirmation: needsLaunchLocationCenteringConfirmation,
+            userHasInteracted: context.coordinator.userHasInteracted
+        )
+        Self.updateUserLocationLayoutMargins(
+            on: mapView,
+            isLaunchCenteringActive: shouldFollowLaunchLocation
+        )
+
         // Set initial region (mark as programmatic to prevent sync-back)
         context.coordinator.isProgrammaticChange = true
-        mapView.setRegion(region, animated: false)
+        Self.applyMapRegion(
+            region,
+            to: mapView,
+            animated: false,
+            respectingVisibleControls: false
+        )
+        context.coordinator.lastAppliedStartupTargetRegion = region
+        context.coordinator.lastAppliedStartupTargetRespectsVisibleControls = false
 
         // Add custom compass button positioned below the overlay controls
         let compassButton = MKCompassButton(mapView: mapView)
@@ -61,6 +86,37 @@ struct AdvancedMapView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.parent = self
 
+        if Self.shouldResetLaunchInteractionLock(
+            previousToken: coordinator.lastLaunchCenteringResetToken,
+            currentToken: launchCenteringResetToken
+        ) {
+            coordinator.lastLaunchCenteringResetToken = launchCenteringResetToken
+            coordinator.userHasInteracted = false
+            coordinator.isUserInteracting = false
+            coordinator.lastAppliedStartupTargetRegion = nil
+            coordinator.lastAppliedStartupTargetRespectsVisibleControls = false
+            coordinator.hasAppliedFirstVisibleUserLocationCenter = false
+            coordinator.resetStartupCenterVerification()
+        }
+
+        if Self.shouldForceStartupRegionUpdate(
+            previousRevision: coordinator.lastLaunchLocationCenterRevision,
+            currentRevision: launchLocationCenterRevision,
+            showsUserLocation: showsUserLocation,
+            shouldUseUserLocation: shouldFollowUserLocationOnLaunch,
+            userHasInteracted: coordinator.userHasInteracted
+        ) {
+            coordinator.lastLaunchLocationCenterRevision = launchLocationCenterRevision
+            coordinator.userHasInteracted = false
+            coordinator.isUserInteracting = false
+            coordinator.lastAppliedStartupTargetRegion = nil
+            coordinator.lastAppliedStartupTargetRespectsVisibleControls = false
+            coordinator.hasAppliedFirstVisibleUserLocationCenter = false
+            coordinator.resetStartupCenterVerification()
+        } else if coordinator.lastLaunchLocationCenterRevision != launchLocationCenterRevision {
+            coordinator.lastLaunchLocationCenterRevision = launchLocationCenterRevision
+        }
+
         let effectiveMapType = Self.renderedMapType(for: mapType, is3DModeEnabled: is3DModeEnabled)
         let didToggle3DMode = coordinator.last3DModeEnabled != nil && coordinator.last3DModeEnabled != is3DModeEnabled
         coordinator.last3DModeEnabled = is3DModeEnabled
@@ -86,6 +142,29 @@ struct AdvancedMapView: UIViewRepresentable {
         if mapView.showsUserLocation != showsUserLocation {
             mapView.showsUserLocation = showsUserLocation
         }
+
+        let shouldFollowUser = Self.shouldCenterUserLocationOnLaunch(
+            showsUserLocation: showsUserLocation,
+            shouldUseUserLocation: shouldFollowUserLocationOnLaunch,
+            needsLaunchLocationCenteringConfirmation: needsLaunchLocationCenteringConfirmation,
+            userHasInteracted: coordinator.userHasInteracted
+        )
+        Self.updateUserLocationLayoutMargins(
+            on: mapView,
+            isLaunchCenteringActive: shouldFollowUser
+        )
+        var didApplyStartupRegionUpdate = false
+        var startupVerificationTargetRegion = region
+        var startupVerificationRespectsVisibleControls = false
+        let shouldRespectVisibleControls = Self.shouldRespectVisibleControlsForStartupCentering(
+            showsUserLocation: showsUserLocation,
+            shouldFollowUserLocationOnLaunch: shouldFollowUser,
+            needsLaunchLocationCenteringConfirmation: needsLaunchLocationCenteringConfirmation
+        )
+        let shouldReapplyStartupRegionForVisibleControls = shouldRespectVisibleControls
+            && !coordinator.lastAppliedStartupTargetRespectsVisibleControls
+            && mapView.bounds.width > 1
+            && mapView.bounds.height > 1
 
         if didToggle3DMode {
             let targetPitch = is3DModeEnabled ? min(max(pitch, 45), Self.maximumPitch(for: effectiveMapType)) : 0
@@ -136,21 +215,60 @@ struct AdvancedMapView: UIViewRepresentable {
                 )
                 mapView.setCamera(camera, animated: true)
             } else {
-                mapView.setRegion(region, animated: true)
+                Self.applyMapRegion(
+                    region,
+                    to: mapView,
+                    animated: true,
+                    respectingVisibleControls: showsUserLocation
+                )
             }
         }
-        // Only auto-update region once at startup before user interacts.
-        // Check center only (not span) — MKMapView normalizes spans on setRegion,
-        // which would cause a false "changed" and prematurely lock out the real
-        // user location update from LocationManager.
-        else if !coordinator.hasSetInitialRegion && !coordinator.userHasInteracted {
-            let centerChanged = !mapView.region.center.isEqual(to: region.center, tolerance: 0.005)
+        // Keep accepting programmatic startup/location regions until the user
+        // actually pans or zooms the map. The first MKMapView region is often a
+        // placeholder, and the real location can arrive after makeUIView.
+        else if Self.shouldApplyStartupRegionUpdate(
+            currentRegion: mapView.region,
+            targetRegion: region,
+            userHasInteracted: coordinator.userHasInteracted,
+            shouldFollowUserLocationOnLaunch: shouldFollowUser,
+            lastAppliedStartupTargetRegion: coordinator.lastAppliedStartupTargetRegion
+        ) || shouldReapplyStartupRegionForVisibleControls {
+            coordinator.isProgrammaticChange = true
+            coordinator.hasSetInitialRegion = true
+            coordinator.lastAppliedStartupTargetRegion = region
+            coordinator.lastAppliedStartupTargetRespectsVisibleControls = shouldRespectVisibleControls
+            Self.applyMapRegion(
+                region,
+                to: mapView,
+                animated: false,
+                respectingVisibleControls: shouldRespectVisibleControls
+            )
+            didApplyStartupRegionUpdate = true
+            startupVerificationTargetRegion = region
+            startupVerificationRespectsVisibleControls = shouldRespectVisibleControls
+        } else if let userRegion = coordinator.applyVisibleUserLocationFallbackIfNeeded(
+            mapView: mapView,
+            shouldFollowUserLocationOnLaunch: shouldFollowUser,
+            allowFirstVisibleUserLocationCenter: showsUserLocation,
+            respectingVisibleControls: true
+        ) {
+            didApplyStartupRegionUpdate = true
+            startupVerificationTargetRegion = userRegion
+            startupVerificationRespectsVisibleControls = true
+        }
 
-            if centerChanged {
-                coordinator.isProgrammaticChange = true
-                coordinator.hasSetInitialRegion = true
-                mapView.setRegion(region, animated: false)
-            }
+        if mapView.userTrackingMode == .follow {
+            mapView.setUserTrackingMode(.none, animated: false)
+        }
+
+        if didApplyStartupRegionUpdate || shouldFollowUser {
+            coordinator.scheduleStartupCenterVerification(
+                mapView: mapView,
+                targetRegion: startupVerificationTargetRegion,
+                shouldFollowUserLocationOnLaunch: shouldFollowUser,
+                targetHasUserLocation: hasLaunchLocationCandidate,
+                respectingVisibleControls: startupVerificationRespectsVisibleControls
+            )
         }
 
         coordinator.updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
@@ -171,6 +289,294 @@ struct AdvancedMapView: UIViewRepresentable {
         )
         let distance = center.distance(from: edge) * 2.5 // Multiply by 2.5 for better viewing distance
         return max(distance, 1000) // Minimum 1km distance
+    }
+
+    private static func updateUserLocationLayoutMargins(on mapView: MKMapView, isLaunchCenteringActive: Bool) {
+        let margins = mapKitLayoutMargins(
+            forHeight: max(mapView.bounds.height, UIScreen.main.bounds.height),
+            isLaunchCenteringActive: isLaunchCenteringActive
+        )
+        guard mapView.layoutMargins != margins else { return }
+        mapView.layoutMargins = margins
+    }
+
+    private static func applyMapRegion(
+        _ region: MKCoordinateRegion,
+        to mapView: MKMapView,
+        animated: Bool,
+        respectingVisibleControls: Bool
+    ) {
+        guard respectingVisibleControls else {
+            mapView.setRegion(region, animated: animated)
+            return
+        }
+
+        mapView.setRegion(
+            visibleControlAdjustedRegion(
+                for: region,
+                in: mapView.bounds,
+                padding: userLocationViewportPadding(for: mapView)
+            ),
+            animated: animated
+        )
+    }
+
+    private static func userLocationViewportPadding(for mapView: MKMapView) -> UIEdgeInsets {
+        userLocationViewportPadding(
+            forHeight: max(mapView.bounds.height, UIScreen.main.bounds.height),
+            isLaunchCenteringActive: false
+        )
+    }
+
+    nonisolated static func userLocationViewportPadding(
+        forHeight height: CGFloat,
+        isLaunchCenteringActive: Bool
+    ) -> UIEdgeInsets {
+        if isLaunchCenteringActive {
+            return UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        }
+
+        let top = min(max(height * 0.14, 122), 176)
+        let bottom = min(max(height * 0.27, 230), 300)
+
+        return UIEdgeInsets(top: top, left: 20, bottom: bottom, right: 96)
+    }
+
+    nonisolated static func mapKitLayoutMargins(
+        forHeight _: CGFloat,
+        isLaunchCenteringActive _: Bool
+    ) -> UIEdgeInsets {
+        UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+    }
+
+    nonisolated static func shouldRespectVisibleControlsForStartupCentering(
+        showsUserLocation: Bool,
+        shouldFollowUserLocationOnLaunch: Bool,
+        needsLaunchLocationCenteringConfirmation: Bool
+    ) -> Bool {
+        showsUserLocation
+            && (shouldFollowUserLocationOnLaunch || needsLaunchLocationCenteringConfirmation)
+    }
+
+    nonisolated static func usableViewportCenter(
+        bounds: CGRect,
+        padding: UIEdgeInsets
+    ) -> CGPoint {
+        let verticalOffset = (padding.top - padding.bottom) / 4
+
+        return CGPoint(
+            x: bounds.midX,
+            y: bounds.midY + verticalOffset
+        )
+    }
+
+    nonisolated static func isScreenPointCenteredInUsableViewport(
+        _ point: CGPoint,
+        bounds: CGRect,
+        padding: UIEdgeInsets,
+        tolerance: CGFloat = 44
+    ) -> Bool {
+        let target = usableViewportCenter(bounds: bounds, padding: padding)
+        return abs(point.x - target.x) <= tolerance
+            && abs(point.y - target.y) <= tolerance
+    }
+
+    nonisolated static func visibleControlAdjustedRegion(
+        for region: MKCoordinateRegion,
+        in bounds: CGRect,
+        padding: UIEdgeInsets
+    ) -> MKCoordinateRegion {
+        guard bounds.width > 1, bounds.height > 1 else { return region }
+
+        let target = usableViewportCenter(bounds: bounds, padding: padding)
+        let horizontalOffsetRatio = (target.x / bounds.width) - 0.5
+        let verticalOffsetRatio = (target.y / bounds.height) - 0.5
+        let adjustedCenter = CLLocationCoordinate2D(
+            latitude: max(
+                min(region.center.latitude + verticalOffsetRatio * region.span.latitudeDelta, 85),
+                -85
+            ),
+            longitude: region.center.longitude - horizontalOffsetRatio * region.span.longitudeDelta
+        )
+
+        return MKCoordinateRegion(center: adjustedCenter, span: region.span)
+    }
+
+    private nonisolated static func isMeaningfullyDifferent(
+        _ lhs: CLLocationCoordinate2D,
+        from rhs: CLLocationCoordinate2D,
+        threshold: CLLocationDistance = 8
+    ) -> Bool {
+        CLLocation(latitude: lhs.latitude, longitude: lhs.longitude)
+            .distance(from: CLLocation(latitude: rhs.latitude, longitude: rhs.longitude)) > threshold
+    }
+
+    private nonisolated static func isSpanMeaningfullyDifferent(
+        _ lhs: MKCoordinateSpan,
+        from rhs: MKCoordinateSpan
+    ) -> Bool {
+        let latitudeThreshold = max(abs(rhs.latitudeDelta) * 0.08, 0.0001)
+        let longitudeThreshold = max(abs(rhs.longitudeDelta) * 0.08, 0.0001)
+
+        return abs(lhs.latitudeDelta - rhs.latitudeDelta) > latitudeThreshold
+            || abs(lhs.longitudeDelta - rhs.longitudeDelta) > longitudeThreshold
+    }
+
+    nonisolated static func shouldFollowUserLocationOnLaunch(
+        showsUserLocation: Bool,
+        shouldUseUserLocation: Bool,
+        userHasInteracted: Bool
+    ) -> Bool {
+        showsUserLocation && shouldUseUserLocation && !userHasInteracted
+    }
+
+    nonisolated static func shouldCenterUserLocationOnLaunch(
+        showsUserLocation: Bool,
+        shouldUseUserLocation: Bool,
+        needsLaunchLocationCenteringConfirmation: Bool,
+        userHasInteracted: Bool
+    ) -> Bool {
+        showsUserLocation
+            && !userHasInteracted
+            && (shouldUseUserLocation || needsLaunchLocationCenteringConfirmation)
+    }
+
+    nonisolated static func shouldResetLaunchInteractionLock(
+        previousToken: Int?,
+        currentToken: Int
+    ) -> Bool {
+        previousToken != currentToken
+    }
+
+    nonisolated static func shouldForceStartupRegionUpdate(
+        previousRevision: Int?,
+        currentRevision: Int,
+        showsUserLocation _: Bool,
+        shouldUseUserLocation _: Bool,
+        userHasInteracted: Bool
+    ) -> Bool {
+        guard currentRevision > 0 else { return false }
+        guard !userHasInteracted else { return false }
+        return previousRevision != currentRevision
+    }
+
+    nonisolated static func shouldApplyStartupRegionUpdate(
+        currentRegion: MKCoordinateRegion,
+        targetRegion: MKCoordinateRegion,
+        userHasInteracted: Bool,
+        shouldFollowUserLocationOnLaunch: Bool,
+        lastAppliedStartupTargetRegion: MKCoordinateRegion?
+    ) -> Bool {
+        guard !userHasInteracted else { return false }
+
+        let targetChangedSinceLastApply = lastAppliedStartupTargetRegion.map {
+            isMeaningfullyDifferent($0.center, from: targetRegion.center)
+                || isSpanMeaningfullyDifferent($0.span, from: targetRegion.span)
+        } ?? true
+
+        guard shouldFollowUserLocationOnLaunch || targetChangedSinceLastApply else {
+            return false
+        }
+
+        if targetChangedSinceLastApply {
+            return true
+        }
+
+        if isMeaningfullyDifferent(currentRegion.center, from: targetRegion.center)
+            || isSpanMeaningfullyDifferent(currentRegion.span, from: targetRegion.span) {
+            return true
+        }
+
+        return false
+    }
+
+    nonisolated static func shouldApplyVisibleUserLocationFallback(
+        currentRegion: MKCoordinateRegion,
+        userLocation: CLLocation?,
+        userHasInteracted: Bool,
+        shouldFollowUserLocationOnLaunch: Bool
+    ) -> Bool {
+        guard shouldFollowUserLocationOnLaunch else { return false }
+        guard !userHasInteracted else { return false }
+        guard let userLocation else { return false }
+        guard CLLocationCoordinate2DIsValid(userLocation.coordinate) else { return false }
+        guard LocationManager.isUsableForInitialMapCenter(userLocation)
+                || LocationManager.isUsableForProvisionalInitialMapCenter(userLocation) else {
+            return false
+        }
+
+        let targetRegion = LocationManager.initialMapCenterRegion(for: userLocation)
+        return !isStartupMapCentered(currentRegion: currentRegion, targetRegion: targetRegion)
+    }
+
+    nonisolated static func shouldApplyFirstVisibleUserLocationCenter(
+        currentRegion: MKCoordinateRegion,
+        userLocation: CLLocation?,
+        userHasInteracted: Bool,
+        hasAppliedFirstVisibleUserLocationCenter: Bool,
+        showsUserLocation: Bool
+    ) -> Bool {
+        guard showsUserLocation else { return false }
+        guard !userHasInteracted else { return false }
+        guard !hasAppliedFirstVisibleUserLocationCenter else { return false }
+        guard let userLocation else { return false }
+        guard CLLocationCoordinate2DIsValid(userLocation.coordinate) else { return false }
+        guard LocationManager.isUsableForInitialMapCenter(userLocation) else { return false }
+
+        let targetRegion = LocationManager.initialMapCenterRegion(for: userLocation)
+        return !isStartupMapCentered(currentRegion: currentRegion, targetRegion: targetRegion)
+    }
+
+    nonisolated static func isStartupMapCentered(
+        currentRegion: MKCoordinateRegion,
+        targetRegion: MKCoordinateRegion
+    ) -> Bool {
+        !isMeaningfullyDifferent(currentRegion.center, from: targetRegion.center)
+            && !isSpanMeaningfullyDifferent(currentRegion.span, from: targetRegion.span)
+    }
+
+    nonisolated static func shouldReapplyUserFollowModeAfterStartupRegionUpdate(
+        shouldFollowUserLocationOnLaunch _: Bool,
+        didApplyStartupRegionUpdate _: Bool
+    ) -> Bool {
+        false
+    }
+
+    nonisolated static func shouldRetryStartupMapCenter(
+        currentRegion: MKCoordinateRegion,
+        targetRegion: MKCoordinateRegion,
+        userHasInteracted: Bool,
+        attempt: Int,
+        maxAttempts: Int
+    ) -> Bool {
+        guard attempt < maxAttempts else { return false }
+        guard !userHasInteracted else { return false }
+
+        return isMeaningfullyDifferent(currentRegion.center, from: targetRegion.center)
+            || isSpanMeaningfullyDifferent(currentRegion.span, from: targetRegion.span)
+    }
+
+    nonisolated static func startupConfirmationTarget(
+        lastAppliedStartupTargetRegion: MKCoordinateRegion?,
+        parentRegion: MKCoordinateRegion
+    ) -> MKCoordinateRegion {
+        lastAppliedStartupTargetRegion ?? parentRegion
+    }
+
+    nonisolated static func shouldSyncVisibleRegionBackToBinding(
+        changeWasProgrammatic: Bool,
+        needsLaunchLocationCenteringConfirmation: Bool,
+        userHasInteracted: Bool,
+        currentRegion: MKCoordinateRegion,
+        targetRegion: MKCoordinateRegion
+    ) -> Bool {
+        guard !changeWasProgrammatic else { return false }
+
+        if needsLaunchLocationCenteringConfirmation && !userHasInteracted {
+            return isStartupMapCentered(currentRegion: currentRegion, targetRegion: targetRegion)
+        }
+
+        return true
     }
 
     private static func renderedMapType(for mapType: MKMapType, is3DModeEnabled: Bool) -> MKMapType {
@@ -216,7 +622,15 @@ struct AdvancedMapView: UIViewRepresentable {
         var hasSetInitialRegion = false
         var lastEffectiveMapType: MKMapType?
         var last3DModeEnabled: Bool?
+        var lastLaunchCenteringResetToken: Int?
+        var lastLaunchLocationCenterRevision: Int?
+        var lastAppliedStartupTargetRegion: MKCoordinateRegion?
+        var lastAppliedStartupTargetRespectsVisibleControls = false
+        var hasAppliedFirstVisibleUserLocationCenter = false
         private var updateTimer: Timer?
+        private var startupCenterVerificationWorkItem: DispatchWorkItem?
+        private var startupCenterVerificationAttempt = 0
+        private let maxStartupCenterVerificationAttempts = 4
         
         init(_ parent: AdvancedMapView) {
             self.parent = parent
@@ -224,6 +638,148 @@ struct AdvancedMapView: UIViewRepresentable {
 
         deinit {
             updateTimer?.invalidate()
+            startupCenterVerificationWorkItem?.cancel()
+        }
+
+        func resetStartupCenterVerification() {
+            startupCenterVerificationWorkItem?.cancel()
+            startupCenterVerificationWorkItem = nil
+            startupCenterVerificationAttempt = 0
+        }
+
+        func scheduleStartupCenterVerification(
+            mapView: MKMapView,
+            targetRegion: MKCoordinateRegion,
+            shouldFollowUserLocationOnLaunch: Bool,
+            targetHasUserLocation: Bool,
+            respectingVisibleControls: Bool
+        ) {
+            startupCenterVerificationWorkItem?.cancel()
+
+            let attempt = startupCenterVerificationAttempt
+            let workItem = DispatchWorkItem { [weak self, weak mapView] in
+                guard let self, let mapView else { return }
+
+                let startupCenterSatisfied = self.isStartupCenterSatisfied(
+                    mapView: mapView,
+                    currentRegion: mapView.region,
+                    targetRegion: targetRegion,
+                    targetHasUserLocation: targetHasUserLocation,
+                    respectingVisibleControls: respectingVisibleControls
+                )
+
+                guard !startupCenterSatisfied else {
+                    if targetHasUserLocation {
+                        DispatchQueue.main.async {
+                            self.parent.onLaunchCenteringConfirmed()
+                        }
+                    }
+                    return
+                }
+
+                let shouldRetry = respectingVisibleControls
+                    ? attempt < self.maxStartupCenterVerificationAttempts && !self.userHasInteracted
+                    : AdvancedMapView.shouldRetryStartupMapCenter(
+                        currentRegion: mapView.region,
+                        targetRegion: targetRegion,
+                        userHasInteracted: self.userHasInteracted,
+                        attempt: attempt,
+                        maxAttempts: self.maxStartupCenterVerificationAttempts
+                    )
+                guard shouldRetry else { return }
+
+                self.startupCenterVerificationAttempt = attempt + 1
+                self.isProgrammaticChange = true
+                self.hasSetInitialRegion = true
+                self.lastAppliedStartupTargetRegion = targetRegion
+                self.lastAppliedStartupTargetRespectsVisibleControls = respectingVisibleControls
+                AdvancedMapView.applyMapRegion(
+                    targetRegion,
+                    to: mapView,
+                    animated: false,
+                    respectingVisibleControls: respectingVisibleControls
+                )
+
+                self.scheduleStartupCenterVerification(
+                    mapView: mapView,
+                    targetRegion: targetRegion,
+                    shouldFollowUserLocationOnLaunch: shouldFollowUserLocationOnLaunch,
+                    targetHasUserLocation: targetHasUserLocation,
+                    respectingVisibleControls: respectingVisibleControls
+                )
+            }
+
+            startupCenterVerificationWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: workItem)
+        }
+
+        @discardableResult
+        func applyVisibleUserLocationFallbackIfNeeded(
+            mapView: MKMapView,
+            shouldFollowUserLocationOnLaunch: Bool,
+            allowFirstVisibleUserLocationCenter: Bool,
+            respectingVisibleControls: Bool
+        ) -> MKCoordinateRegion? {
+            guard let visibleUserLocation = mapView.userLocation.location else {
+                return nil
+            }
+
+            let shouldApplyFollowFallback = AdvancedMapView.shouldApplyVisibleUserLocationFallback(
+                currentRegion: mapView.region,
+                userLocation: visibleUserLocation,
+                userHasInteracted: userHasInteracted,
+                shouldFollowUserLocationOnLaunch: shouldFollowUserLocationOnLaunch
+            )
+            let shouldApplyFirstVisibleCenter = AdvancedMapView.shouldApplyFirstVisibleUserLocationCenter(
+                currentRegion: mapView.region,
+                userLocation: visibleUserLocation,
+                userHasInteracted: userHasInteracted,
+                hasAppliedFirstVisibleUserLocationCenter: hasAppliedFirstVisibleUserLocationCenter,
+                showsUserLocation: allowFirstVisibleUserLocationCenter
+            )
+
+            guard shouldApplyFollowFallback || shouldApplyFirstVisibleCenter else { return nil }
+
+            let userRegion = LocationManager.initialMapCenterRegion(for: visibleUserLocation)
+            isProgrammaticChange = true
+            hasSetInitialRegion = true
+            lastAppliedStartupTargetRegion = userRegion
+            lastAppliedStartupTargetRespectsVisibleControls = respectingVisibleControls
+            hasAppliedFirstVisibleUserLocationCenter = true
+            AdvancedMapView.applyMapRegion(
+                userRegion,
+                to: mapView,
+                animated: false,
+                respectingVisibleControls: respectingVisibleControls
+            )
+
+            DispatchQueue.main.async { [weak self] in
+                self?.parent.region = userRegion
+            }
+
+            return userRegion
+        }
+
+        private func isStartupCenterSatisfied(
+            mapView: MKMapView,
+            currentRegion: MKCoordinateRegion,
+            targetRegion: MKCoordinateRegion,
+            targetHasUserLocation: Bool,
+            respectingVisibleControls: Bool
+        ) -> Bool {
+            guard respectingVisibleControls, targetHasUserLocation else {
+                return AdvancedMapView.isStartupMapCentered(
+                    currentRegion: currentRegion,
+                    targetRegion: targetRegion
+                )
+            }
+
+            let point = mapView.convert(targetRegion.center, toPointTo: mapView)
+            return AdvancedMapView.isScreenPointCenteredInUsableViewport(
+                point,
+                bounds: mapView.bounds,
+                padding: AdvancedMapView.userLocationViewportPadding(for: mapView)
+            )
         }
         
         func updateAnnotationsIfNeeded(mapView: MKMapView, leads: [Lead]) {
@@ -274,6 +830,10 @@ struct AdvancedMapView: UIViewRepresentable {
             let status: String
             let name: String
             let address: String
+            let priority: Int16
+            let followUpDate: TimeInterval
+            let price: Double
+            let estimatedValue: Double
 
             init(lead: Lead) {
                 self.id = lead.objectID.uriRepresentation().absoluteString
@@ -282,6 +842,10 @@ struct AdvancedMapView: UIViewRepresentable {
                 self.status = lead.status ?? ""
                 self.name = lead.name ?? ""
                 self.address = lead.address ?? ""
+                self.priority = lead.priority
+                self.followUpDate = lead.followUpDate?.timeIntervalSince1970 ?? 0
+                self.price = lead.price
+                self.estimatedValue = lead.estimatedValue
             }
         }
 
@@ -332,14 +896,13 @@ struct AdvancedMapView: UIViewRepresentable {
                 let clusterID = "LeadCluster"
                 let clusterView = mapView.dequeueReusableAnnotationView(withIdentifier: clusterID) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(annotation: cluster, reuseIdentifier: clusterID)
                 clusterView.annotation = cluster
-                clusterView.glyphText = "\(cluster.memberAnnotations.count)"
-
-                // Color cluster by the status of its members (all same status)
-                if let firstLead = (cluster.memberAnnotations.first as? LeadMapAnnotation)?.lead {
-                    clusterView.markerTintColor = uiColor(for: firstLead.leadStatus)
-                } else {
-                    clusterView.markerTintColor = .systemPurple
-                }
+                let leads = cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.lead }
+                let summary = LeadClusterSummary(leads: leads)
+                clusterView.glyphText = summary.glyphText
+                clusterView.markerTintColor = summary.uiColor
+                clusterView.glyphTintColor = .white
+                clusterView.displayPriority = summary.isUrgent ? .required : .defaultHigh
+                clusterView.collisionMode = .circle
                 return clusterView
             }
 
@@ -353,7 +916,8 @@ struct AdvancedMapView: UIViewRepresentable {
 
             annotationView.annotation = annotation
             annotationView.canShowCallout = true
-            annotationView.clusteringIdentifier = "LeadCluster_\(lead.status ?? "unknown")"
+            annotationView.clusteringIdentifier = "LeadCluster"
+            annotationView.displayPriority = displayPriority(for: lead)
 
             // Customize based on lead status
             switch lead.leadStatus {
@@ -386,9 +950,31 @@ struct AdvancedMapView: UIViewRepresentable {
             case .notHome: return .brown
             }
         }
+
+        private func displayPriority(for lead: Lead) -> MKFeatureDisplayPriority {
+            if LeadClusterSummary.isUrgent(lead) {
+                return .required
+            }
+            if lead.leadStatus == .interested || lead.leadStatus == .converted {
+                return .defaultHigh
+            }
+            return .defaultLow
+        }
         
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
-            if let leadAnnotation = view.annotation as? LeadMapAnnotation {
+            if let cluster = view.annotation as? MKClusterAnnotation {
+                let leads = LeadClusterSummary.sortedLeads(
+                    cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.lead }
+                )
+                guard !leads.isEmpty else { return }
+                mapView.deselectAnnotation(cluster, animated: false)
+
+                if shouldOpenClusterSheet(mapView: mapView, cluster: cluster) {
+                    parent.onLeadClusterTap(leads, cluster.coordinate)
+                } else {
+                    zoomIntoCluster(cluster, on: mapView)
+                }
+            } else if let leadAnnotation = view.annotation as? LeadMapAnnotation {
                 parent.onLeadTap(leadAnnotation.lead)
             } else if view.annotation is MKPointAnnotation,
                       let pin = parent.searchPin {
@@ -396,19 +982,116 @@ struct AdvancedMapView: UIViewRepresentable {
                 parent.onSearchPinTap(pin)
             }
         }
+
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            let shouldFollowUser = AdvancedMapView.shouldCenterUserLocationOnLaunch(
+                showsUserLocation: parent.showsUserLocation,
+                shouldUseUserLocation: parent.shouldFollowUserLocationOnLaunch,
+                needsLaunchLocationCenteringConfirmation: parent.needsLaunchLocationCenteringConfirmation,
+                userHasInteracted: userHasInteracted
+            )
+
+            if let userRegion = applyVisibleUserLocationFallbackIfNeeded(
+                mapView: mapView,
+                shouldFollowUserLocationOnLaunch: shouldFollowUser,
+                allowFirstVisibleUserLocationCenter: parent.showsUserLocation,
+                respectingVisibleControls: true
+            ) {
+                scheduleStartupCenterVerification(
+                    mapView: mapView,
+                    targetRegion: userRegion,
+                    shouldFollowUserLocationOnLaunch: shouldFollowUser,
+                    targetHasUserLocation: true,
+                    respectingVisibleControls: true
+                )
+            }
+        }
+
+        private func shouldOpenClusterSheet(mapView: MKMapView, cluster: MKClusterAnnotation) -> Bool {
+            let maxSpan = max(mapView.region.span.latitudeDelta, mapView.region.span.longitudeDelta)
+            return maxSpan <= 0.012 || coordinateSpread(for: cluster) <= 0.0012
+        }
+
+        private func zoomIntoCluster(_ cluster: MKClusterAnnotation, on mapView: MKMapView) {
+            let coordinates = cluster.memberAnnotations.map(\.coordinate)
+            guard let region = paddedRegion(containing: coordinates, currentRegion: mapView.region) else { return }
+            isProgrammaticChange = true
+            mapView.setRegion(region, animated: true)
+        }
+
+        private func paddedRegion(
+            containing coordinates: [CLLocationCoordinate2D],
+            currentRegion: MKCoordinateRegion
+        ) -> MKCoordinateRegion? {
+            guard let first = coordinates.first else { return nil }
+            var minLatitude = first.latitude
+            var maxLatitude = first.latitude
+            var minLongitude = first.longitude
+            var maxLongitude = first.longitude
+
+            for coordinate in coordinates.dropFirst() {
+                minLatitude = min(minLatitude, coordinate.latitude)
+                maxLatitude = max(maxLatitude, coordinate.latitude)
+                minLongitude = min(minLongitude, coordinate.longitude)
+                maxLongitude = max(maxLongitude, coordinate.longitude)
+            }
+
+            let nextLatitudeDelta = max((maxLatitude - minLatitude) * 2.2, 0.0025)
+            let nextLongitudeDelta = max((maxLongitude - minLongitude) * 2.2, 0.0025)
+            let currentLatitudeDelta = currentRegion.span.latitudeDelta
+            let currentLongitudeDelta = currentRegion.span.longitudeDelta
+
+            return MKCoordinateRegion(
+                center: CLLocationCoordinate2D(
+                    latitude: (minLatitude + maxLatitude) / 2,
+                    longitude: (minLongitude + maxLongitude) / 2
+                ),
+                span: MKCoordinateSpan(
+                    latitudeDelta: min(nextLatitudeDelta, currentLatitudeDelta * 0.55),
+                    longitudeDelta: min(nextLongitudeDelta, currentLongitudeDelta * 0.55)
+                )
+            )
+        }
+
+        private func coordinateSpread(for cluster: MKClusterAnnotation) -> CLLocationDegrees {
+            let coordinates = cluster.memberAnnotations.map(\.coordinate)
+            guard let first = coordinates.first else { return 0 }
+
+            var minLatitude = first.latitude
+            var maxLatitude = first.latitude
+            var minLongitude = first.longitude
+            var maxLongitude = first.longitude
+
+            for coordinate in coordinates.dropFirst() {
+                minLatitude = min(minLatitude, coordinate.latitude)
+                maxLatitude = max(maxLatitude, coordinate.latitude)
+                minLongitude = min(minLongitude, coordinate.longitude)
+                maxLongitude = max(maxLongitude, coordinate.longitude)
+            }
+
+            return max(maxLatitude - minLatitude, maxLongitude - minLongitude)
+        }
         
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
-            isUserInteracting = true
+            let userGesture = isUserDrivenRegionGesture(in: mapView)
+            isUserInteracting = userGesture
             updateTimer?.invalidate()
+            guard !isProgrammaticChange else { return }
 
-            // Detect if this region change was caused by a user gesture (not programmatic)
-            if let gestureRecognizers = mapView.subviews.first?.gestureRecognizers {
-                for recognizer in gestureRecognizers {
-                    if recognizer.state == .began || recognizer.state == .changed || recognizer.state == .ended {
-                        userHasInteracted = true
-                        break
-                    }
-                }
+            if userGesture {
+                userHasInteracted = true
+            }
+        }
+
+        private func isUserDrivenRegionGesture(in mapView: MKMapView) -> Bool {
+            guard let gestureRecognizers = mapView.subviews.first?.gestureRecognizers else { return false }
+
+            return gestureRecognizers.contains { recognizer in
+                let isMapMovementGesture = recognizer is UIPanGestureRecognizer
+                    || recognizer is UIPinchGestureRecognizer
+                    || recognizer is UIRotationGestureRecognizer
+                guard isMapMovementGesture else { return false }
+                return recognizer.state == .began || recognizer.state == .changed
             }
         }
         
@@ -417,16 +1100,54 @@ struct AdvancedMapView: UIViewRepresentable {
 
             let currentRegion = mapView.region
             let currentCamera = mapView.camera
+            let changeWasProgrammatic = isProgrammaticChange
 
-            updateTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { [weak self] _ in
-                Task { @MainActor [weak self] in
+            updateTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { [weak self, weak mapView] _ in
+                Task { @MainActor [weak self, weak mapView] in
                     guard let self = self else { return }
                     self.isUserInteracting = false
 
-                    // If this was a programmatic change, don't sync back to binding
-                    if self.isProgrammaticChange {
-                        self.isProgrammaticChange = false
+                    let startupTargetRegion = AdvancedMapView.startupConfirmationTarget(
+                        lastAppliedStartupTargetRegion: self.lastAppliedStartupTargetRegion,
+                        parentRegion: self.parent.region
+                    )
+                    let startupCenterSatisfied = mapView.map {
+                        self.isStartupCenterSatisfied(
+                            mapView: $0,
+                            currentRegion: currentRegion,
+                            targetRegion: startupTargetRegion,
+                            targetHasUserLocation: self.parent.hasLaunchLocationCandidate,
+                            respectingVisibleControls: self.lastAppliedStartupTargetRespectsVisibleControls
+                        )
+                    } ?? AdvancedMapView.isStartupMapCentered(
+                        currentRegion: currentRegion,
+                        targetRegion: startupTargetRegion
+                    )
+
+                    if self.parent.hasLaunchLocationCandidate,
+                       self.parent.needsLaunchLocationCenteringConfirmation,
+                       startupCenterSatisfied {
+                        self.parent.onLaunchCenteringConfirmed()
+                    }
+
+                    // During startup, MapKit can emit passive region changes while
+                    // it is still settling. Do not let those stale visible regions
+                    // overwrite the launch target before the map actually centers.
+                    guard AdvancedMapView.shouldSyncVisibleRegionBackToBinding(
+                        changeWasProgrammatic: changeWasProgrammatic,
+                        needsLaunchLocationCenteringConfirmation: self.parent.needsLaunchLocationCenteringConfirmation,
+                        userHasInteracted: self.userHasInteracted,
+                        currentRegion: currentRegion,
+                        targetRegion: startupTargetRegion
+                    ) else {
+                        if changeWasProgrammatic {
+                            self.isProgrammaticChange = false
+                        }
                         return
+                    }
+
+                    if changeWasProgrammatic {
+                        self.isProgrammaticChange = false
                     }
 
                     // Sync camera rotation and pitch
@@ -441,7 +1162,7 @@ struct AdvancedMapView: UIViewRepresentable {
                     // MKMapView "normalizes" spans on setRegion, returning slightly
                     // different values. Syncing span back triggers updateUIView →
                     // setRegion → regionDidChange → repeat, causing gradual zoom-out.
-                    if !currentRegion.center.isEqual(to: self.parent.region.center, tolerance: 0.001) {
+                    if AdvancedMapView.isMeaningfullyDifferent(currentRegion.center, from: self.parent.region.center) {
                         var updatedRegion = self.parent.region
                         updatedRegion.center = currentRegion.center
                         self.parent.region = updatedRegion
@@ -483,6 +1204,183 @@ class LeadMapAnnotation: NSObject, MKAnnotation {
         }
         self.cachedSubtitle = lead.leadStatus.displayName
         super.init()
+    }
+}
+
+struct LeadClusterSummary {
+    let leads: [Lead]
+    private let now: Date
+
+    init(leads: [Lead], now: Date = Date()) {
+        self.leads = leads
+        self.now = now
+    }
+
+    var count: Int {
+        leads.count
+    }
+
+    var glyphText: String {
+        count > 99 ? "99+" : "\(count)"
+    }
+
+    var isUrgent: Bool {
+        leads.contains(where: Self.isUrgent)
+    }
+
+    var dueFollowUpCount: Int {
+        leads.filter { Self.isFollowUpDue($0, now: now) }.count
+    }
+
+    var hotLeadCount: Int {
+        leads.filter { Self.isHotLead($0, now: now) }.count
+    }
+
+    var soldCount: Int {
+        leads.filter { $0.leadStatus == .converted }.count
+    }
+
+    var totalValue: Double {
+        leads.reduce(0) { partial, lead in
+            partial + max(lead.price, lead.estimatedValue)
+        }
+    }
+
+    var statusCounts: [(status: Lead.Status, count: Int)] {
+        Lead.Status.allCases
+            .map { status in (status, leads.filter { $0.leadStatus == status }.count) }
+            .filter { $0.count > 0 }
+            .sorted { lhs, rhs in
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                return Self.statusRank(lhs.status) > Self.statusRank(rhs.status)
+            }
+    }
+
+    var headline: String {
+        if dueFollowUpCount > 0 {
+            return "\(dueFollowUpCount) follow-up due"
+        }
+        if hotLeadCount > 0 {
+            return "\(hotLeadCount) hot \(hotLeadCount == 1 ? "lead" : "leads")"
+        }
+        if soldCount > 0 && soldCount == count {
+            return "Sold cluster"
+        }
+        if let dominant = statusCounts.first {
+            return dominant.status.displayName
+        }
+        return "Lead cluster"
+    }
+
+    var detailLine: String {
+        var parts: [String] = ["\(count) \(count == 1 ? "lead" : "leads")"]
+        if totalValue > 0 {
+            parts.append(totalValue.formatted(.currency(code: Locale.current.currency?.identifier ?? "USD").precision(.fractionLength(0))))
+        }
+        if let dominant = statusCounts.first {
+            parts.append(dominant.status.displayName)
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    var uiColor: UIColor {
+        if dueFollowUpCount > 0 || leads.contains(where: { Self.isPriorityActionable($0) }) {
+            return .systemPink
+        }
+        if hotLeadCount > 0 {
+            return .systemOrange
+        }
+        if soldCount > 0 && soldCount >= max(1, count / 2) {
+            return .systemGreen
+        }
+        guard let dominant = statusCounts.first?.status else {
+            return .systemPurple
+        }
+        switch dominant {
+        case .notContacted:
+            return .systemGray
+        case .notHome:
+            return .brown
+        case .interested:
+            return .systemOrange
+        case .converted:
+            return .systemGreen
+        case .notInterested:
+            return .systemRed
+        }
+    }
+
+    var color: Color {
+        Color(uiColor)
+    }
+
+    var sortedLeads: [Lead] {
+        Self.sortedLeads(leads, now: now)
+    }
+
+    static func sortedLeads(_ leads: [Lead], now: Date = Date()) -> [Lead] {
+        leads.sorted { lhs, rhs in
+            let lhsScore = priorityScore(for: lhs, now: now)
+            let rhsScore = priorityScore(for: rhs, now: now)
+            if lhsScore != rhsScore { return lhsScore > rhsScore }
+            return (lhs.updatedDate ?? lhs.createdDate ?? .distantPast) > (rhs.updatedDate ?? rhs.createdDate ?? .distantPast)
+        }
+    }
+
+    static func isUrgent(_ lead: Lead) -> Bool {
+        isHotLead(lead, now: Date())
+    }
+
+    static func isFollowUpDue(_ lead: Lead, now: Date) -> Bool {
+        guard let followUpDate = lead.followUpDate else { return false }
+        guard lead.leadStatus != .converted && lead.leadStatus != .notInterested else { return false }
+        return followUpDate <= now
+    }
+
+    private static func isHotLead(_ lead: Lead, now: Date) -> Bool {
+        guard lead.leadStatus.allowsActiveFollowUp else { return false }
+        return isPriorityActionable(lead) || lead.leadStatus == .interested || isFollowUpDue(lead, now: now)
+    }
+
+    private static func isPriorityActionable(_ lead: Lead) -> Bool {
+        lead.leadStatus.allowsActiveFollowUp && lead.priority > 0
+    }
+
+    private static func priorityScore(for lead: Lead, now: Date) -> Int {
+        var score = 0
+        if isPriorityActionable(lead) { score += 600 + Int(lead.priority) }
+        if isFollowUpDue(lead, now: now) { score += 520 }
+        switch lead.leadStatus {
+        case .interested:
+            score += 500
+        case .converted:
+            score += 420
+        case .notHome:
+            score += 260
+        case .notContacted:
+            score += 180
+        case .notInterested:
+            score += 20
+        }
+        if max(lead.price, lead.estimatedValue) > 0 {
+            score += min(120, Int(max(lead.price, lead.estimatedValue) / 100))
+        }
+        return score
+    }
+
+    private static func statusRank(_ status: Lead.Status) -> Int {
+        switch status {
+        case .converted:
+            return 5
+        case .interested:
+            return 4
+        case .notHome:
+            return 3
+        case .notContacted:
+            return 2
+        case .notInterested:
+            return 1
+        }
     }
 }
 

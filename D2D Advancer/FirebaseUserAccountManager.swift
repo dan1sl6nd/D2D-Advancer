@@ -4,6 +4,12 @@ import FirebaseAuth
 import Combine
 import CoreData
 
+enum SignOutWorkspaceCleanupPolicy {
+    static func shouldClearLocalWorkspaceData(provider: CloudSyncProvider) -> Bool {
+        provider == .firebase
+    }
+}
+
 @MainActor
 class FirebaseUserAccountManager: ObservableObject {
     static let shared = FirebaseUserAccountManager()
@@ -175,19 +181,74 @@ class FirebaseUserAccountManager: ObservableObject {
             }
         }
     }
+
+    #if DEBUG
+    func performTeamUITestAutoAuthIfNeeded() async -> Bool {
+        let environment = ProcessInfo.processInfo.environment
+        let arguments = ProcessInfo.processInfo.arguments
+        guard FirebaseEmulatorConfiguration.isEnabled,
+              arguments.contains("-teamUITestAutoAuth"),
+              let email = environment["D2D_TEAM_TEST_AUTH_EMAIL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !email.isEmpty,
+              let password = environment["D2D_TEAM_TEST_AUTH_PASSWORD"],
+              !password.isEmpty else {
+            return false
+        }
+
+        let displayName = environment["D2D_TEAM_TEST_AUTH_DISPLAY_NAME"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let shouldCreateAccount = environment["D2D_TEAM_TEST_AUTH_CREATE"] == "1"
+
+        authStatus = .loading
+        do {
+            try? firebaseService.signOut()
+
+            if shouldCreateAccount {
+                do {
+                    try await firebaseService.signUp(email: email, password: password, displayName: displayName)
+                } catch {
+                    print("🧪 Team UI test auto-auth create fell back to sign-in: \(error.localizedDescription)")
+                    try await firebaseService.signIn(email: email, password: password)
+                }
+            } else {
+                try await firebaseService.signIn(email: email, password: password)
+            }
+
+            isGuestMode = false
+            UserDefaults.standard.set(false, forKey: "isGuestMode")
+            shouldShowPasswordSavePrompt = false
+            shouldShowEmailVerification = false
+            pendingEmail = nil
+            pendingPassword = nil
+            authStatus = .success
+            print("🧪 Team UI test auto-authenticated: \(Utilities.redactedEmail(email))")
+        } catch {
+            authStatus = .failed(parseAuthError(error))
+            print("❌ Team UI test auto-auth failed: \(error.localizedDescription)")
+        }
+
+        return true
+    }
+    #endif
     
     func signOut() {
         Task {
             do {
+                let syncProvider = CloudSyncProvider.current
+                let shouldClearLocalWorkspaceData = SignOutWorkspaceCleanupPolicy.shouldClearLocalWorkspaceData(provider: syncProvider)
+
                 print("🚪 Starting sign-out process...")
+                print("🚪 Sign-out workspace cleanup policy: provider=\(syncProvider.displayName), clearLocalWorkspaceData=\(shouldClearLocalWorkspaceData)")
                 print("🗓️ Current appointments before sign-out: \(AppointmentManager.shared.appointments.count)")
 
                 // Ensure local appointment changes are uploaded before clearing local data.
                 await syncAppointmentsBeforeSignOut()
 
-                // Stop listener and clear appointments locally after the sign-out sync.
+                // Stop listener after sign-out sync. Only Firebase-mode sign-out
+                // clears local workspace data; iCloud/local-only data must remain
+                // on this device.
                 AppointmentManager.shared.stopFirebaseListener()
-                await MainActor.run {
+                if shouldClearLocalWorkspaceData {
                     AppointmentManager.shared.clearAppointmentsLocalOnly()
                     print("🗓️ Appointments after clearing: \(AppointmentManager.shared.appointments.count)")
                 }
@@ -195,8 +256,9 @@ class FirebaseUserAccountManager: ObservableObject {
                 // Then sync all other non-appointment data to Firebase/CloudKit.
                 await performPreSignOutSync()
                 
-                // Clear all remaining local app data after sync is complete
-                await clearAllLocalData()
+                // Clear session state after sync is complete. Preserve local
+                // workspace data for iCloud/local-only modes.
+                await clearAllLocalData(clearWorkspaceData: shouldClearLocalWorkspaceData)
                 
                 // Sign out from Firebase
                 try firebaseService.signOut()
@@ -862,14 +924,18 @@ class FirebaseUserAccountManager: ObservableObject {
     
     // MARK: - Data Cleanup Methods
     
-    private func clearAllLocalData() async {
-        print("🧹 Clearing all local app data...")
+    private func clearAllLocalData(clearWorkspaceData: Bool = true) async {
+        print(clearWorkspaceData ? "🧹 Clearing all local app data..." : "🧹 Clearing account session state while preserving local workspace data...")
         
-        // Clear Core Data
-        clearCoreData()
-        
-        // Clear UserDefaults
-        clearUserDefaults()
+        if clearWorkspaceData {
+            // Clear Core Data
+            clearCoreData()
+
+            // Clear UserDefaults
+            clearUserDefaults()
+        } else {
+            clearSessionOnlyState()
+        }
         
         // Clear Keychain
         clearKeychain()
@@ -886,7 +952,18 @@ class FirebaseUserAccountManager: ObservableObject {
         // Clear location manager state
         LocationManager.shared.clearLocationState()
         
-        print("✅ All local app data cleared (Firebase data preserved)")
+        print(clearWorkspaceData ? "✅ All local app data cleared (cloud data preserved)" : "✅ Account session state cleared (local workspace data preserved)")
+    }
+
+    private func clearSessionOnlyState() {
+        print("🧹 Clearing account-only session flags...")
+        shouldShowPasswordSavePrompt = false
+        shouldShowEmailVerification = false
+        pendingEmail = nil
+        pendingPassword = nil
+        isGuestMode = false
+        UserDefaults.standard.set(false, forKey: "isGuestMode")
+        print("✅ Account-only session flags cleared")
     }
     
     private func clearCoreData() {

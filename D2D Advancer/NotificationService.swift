@@ -2,11 +2,24 @@ import SwiftUI
 @preconcurrency import UserNotifications
 import CoreData
 
+enum NotificationSettingsLocalStore {
+    static func loadSettings(from userDefaults: UserDefaults, key: String) throws -> NotificationSettings? {
+        guard let data = userDefaults.data(forKey: key) else { return nil }
+        return try JSONDecoder().decode(NotificationSettings.self, from: data)
+    }
+
+    static func save(_ settings: NotificationSettings, to userDefaults: UserDefaults, key: String) throws {
+        let encoded = try JSONEncoder().encode(settings)
+        userDefaults.set(encoded, forKey: key)
+    }
+}
+
 @MainActor
 class NotificationService: NSObject, ObservableObject {
     static let shared = NotificationService()
 
     @Published var notificationSettings = NotificationSettings()
+    @Published var lastErrorMessage: String?
 
     private let userDefaults = UserDefaults.standard
     private let settingsKey = "notification_settings"
@@ -22,21 +35,35 @@ class NotificationService: NSObject, ObservableObject {
     }
 
     private func loadSettings() {
-        if let data = userDefaults.data(forKey: settingsKey),
-           let decoded = try? JSONDecoder().decode(NotificationSettings.self, from: data) {
+        do {
+            guard let decoded = try NotificationSettingsLocalStore.loadSettings(from: userDefaults, key: settingsKey) else { return }
             notificationSettings = decoded
+            lastErrorMessage = nil
+        } catch {
+            let message = "Notification settings could not be loaded: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("❌ \(message)")
         }
     }
 
-    private func saveSettings() {
-        if let encoded = try? JSONEncoder().encode(notificationSettings) {
-            userDefaults.set(encoded, forKey: settingsKey)
+    @discardableResult
+    private func saveSettings() -> Bool {
+        do {
+            try NotificationSettingsLocalStore.save(notificationSettings, to: userDefaults, key: settingsKey)
+            lastErrorMessage = nil
+            return true
+        } catch {
+            let message = "Notification settings could not be saved: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("❌ \(message)")
+            return false
         }
     }
 
-    func updateSettings(_ settings: NotificationSettings) {
+    @discardableResult
+    func updateSettings(_ settings: NotificationSettings) -> Bool {
         notificationSettings = settings
-        saveSettings()
+        return saveSettings()
     }
 
     func reloadSettingsFromUserDefaults() {
@@ -45,20 +72,67 @@ class NotificationService: NSObject, ObservableObject {
 
     // MARK: - Follow-up Notifications
 
+    nonisolated static func followUpNotificationIdentifier(for leadId: UUID) -> String {
+        "followup_\(leadId.uuidString)"
+    }
+
+    nonisolated static func legacyFollowUpNotificationIdentifier(for leadId: UUID) -> String {
+        leadId.uuidString
+    }
+
+    nonisolated static func followUpNotificationIdentifiersToCancel(for leadId: UUID) -> [String] {
+        [
+            followUpNotificationIdentifier(for: leadId),
+            legacyFollowUpNotificationIdentifier(for: leadId)
+        ]
+    }
+
+    nonisolated static func shouldScheduleFollowUpNotification(
+        status: Lead.Status,
+        followUpDate: Date?
+    ) -> Bool {
+        guard followUpDate != nil else { return false }
+        return status.allowsActiveFollowUp
+    }
+
+    nonisolated static func shouldRefreshNotificationsAfterLeadDataMutation(
+        inserted: Int,
+        updated: Int
+    ) -> Bool {
+        inserted > 0 || updated > 0
+    }
+
+    nonisolated static func shouldRefreshNotificationsAfterFollowUpRestore(restoredCount: Int) -> Bool {
+        restoredCount > 0
+    }
+
     func scheduleFollowUpNotification(for lead: Lead) {
-        guard let followUpDate = lead.followUpDate,
-              notificationSettings.followUpReminders.isEnabled else { return }
+        scheduleFollowUpNotification(for: lead, completion: nil)
+    }
+
+    private func scheduleFollowUpNotification(for lead: Lead, completion: (() -> Void)?) {
+        let finish: () -> Void = {
+            completion?()
+        }
 
         guard let leadId = lead.id else {
             print("❌ Cannot schedule follow-up notification: lead has no ID")
+            finish()
             return
         }
+
+        cancelFollowUpNotification(for: leadId)
+
+        guard Self.shouldScheduleFollowUpNotification(status: lead.leadStatus, followUpDate: lead.followUpDate),
+              let followUpDate = lead.followUpDate,
+              notificationSettings.followUpReminders.isEnabled else {
+            finish()
+            return
+        }
+
         let leadName = lead.displayName
         let leadAddress = lead.address ?? ""
-        let identifier = "followup_\(leadId.uuidString)"
-
-        // Cancel existing notification first
-        cancelNotification(withIdentifier: identifier)
+        let identifier = Self.followUpNotificationIdentifier(for: leadId)
 
         // Calculate notification time based on settings
         let notificationDate = calculateNotificationDate(
@@ -66,7 +140,10 @@ class NotificationService: NSObject, ObservableObject {
             reminderTime: notificationSettings.followUpReminders.reminderTime
         )
 
-        guard notificationDate > Date() else { return }
+        guard notificationDate > Date() else {
+            finish()
+            return
+        }
 
         let content = UNMutableNotificationContent()
         content.title = "Follow-up Reminder"
@@ -98,6 +175,7 @@ class NotificationService: NSObject, ObservableObject {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             guard Self.isAuthorizationAllowed(settings.authorizationStatus) else {
                 print("❌ Notification permission not granted for follow-up, status: \(settings.authorizationStatus.rawValue)")
+                finish()
                 return
             }
 
@@ -107,6 +185,7 @@ class NotificationService: NSObject, ObservableObject {
                 } else {
                     print("Scheduled follow-up notification for \(leadName) at \(notificationDate)")
                 }
+                finish()
             }
         }
     }
@@ -114,12 +193,13 @@ class NotificationService: NSObject, ObservableObject {
     // MARK: - Appointment Notifications
 
     func scheduleAppointmentNotifications(for appointment: Appointment) {
-        guard notificationSettings.appointmentReminders.isEnabled else { return }
-
-        let baseIdentifier = "appointment_\(appointment.id.uuidString)"
-
         // Cancel existing notifications for this appointment
         cancelNotificationsForAppointment(appointment.id)
+
+        guard notificationSettings.appointmentReminders.isEnabled else { return }
+        guard Self.shouldScheduleAppointmentNotifications(for: appointment.status) else { return }
+
+        let baseIdentifier = "appointment_\(appointment.id.uuidString)"
 
         // Schedule multiple reminders based on settings
         for reminderOffset in notificationSettings.appointmentReminders.reminderTimes {
@@ -246,8 +326,9 @@ class NotificationService: NSObject, ObservableObject {
     }
 
     func cancelFollowUpNotification(for leadId: UUID) {
-        let identifier = "followup_\(leadId.uuidString)"
-        cancelNotification(withIdentifier: identifier)
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: Self.followUpNotificationIdentifiersToCancel(for: leadId)
+        )
     }
 
     func cancelDailySummaryNotification() {
@@ -268,15 +349,15 @@ class NotificationService: NSObject, ObservableObject {
         // Reschedule all appointment notifications
         let appointmentManager = AppointmentManager.shared
         for appointment in appointmentManager.appointments {
-            if appointment.status == .scheduled || appointment.status == .confirmed {
+            if Self.shouldScheduleAppointmentNotifications(for: appointment.status) {
                 scheduleAppointmentNotifications(for: appointment)
             }
         }
 
         // Reschedule all follow-up notifications
         let context = PersistenceController.shared.container.viewContext
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "followUpDate != nil")
+        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+        fetchRequest.predicate = Lead.Status.activeFollowUpPredicate
 
         do {
             let leads = try context.fetch(fetchRequest)
@@ -317,6 +398,16 @@ class NotificationService: NSObject, ObservableObject {
             return false
         }
     }
+
+    nonisolated static func shouldScheduleAppointmentNotifications(for status: Appointment.AppointmentStatus) -> Bool {
+        status == .scheduled || status == .confirmed
+    }
+
+    nonisolated static func appointmentMarkedComplete(_ appointment: Appointment) -> Appointment {
+        var updatedAppointment = appointment
+        updatedAppointment.status = .completed
+        return updatedAppointment
+    }
 }
 
 // MARK: - UNUserNotificationCenterDelegate
@@ -336,13 +427,16 @@ extension NotificationService: @preconcurrency UNUserNotificationCenterDelegate 
         case "MESSAGE_LEAD":
             handleMessageAction(userInfo: userInfo)
         case "MARK_VISITED":
-            handleMarkVisitedAction(userInfo: userInfo)
+            handleMarkVisitedAction(userInfo: userInfo, completionHandler: completionHandler)
+            return
         case "SNOOZE_FOLLOWUP":
-            handleSnoozeAction(userInfo: userInfo)
+            handleSnoozeAction(userInfo: userInfo, completionHandler: completionHandler)
+            return
         case "VIEW_APPOINTMENT":
             handleViewAppointmentAction(userInfo: userInfo)
         case "MARK_COMPLETE":
-            handleMarkCompleteAction(userInfo: userInfo)
+            handleMarkCompleteAction(userInfo: userInfo, completionHandler: completionHandler)
+            return
         case UNNotificationDefaultActionIdentifier:
             handleDefaultAction(userInfo: userInfo)
         default:
@@ -359,7 +453,7 @@ extension NotificationService: @preconcurrency UNUserNotificationCenterDelegate 
         // Get lead and make phone call
         let context = PersistenceController.shared.container.viewContext
         context.perform {
-            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
             fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
 
             do {
@@ -386,59 +480,91 @@ extension NotificationService: @preconcurrency UNUserNotificationCenterDelegate 
         }
     }
 
-    private func handleMarkVisitedAction(userInfo: [AnyHashable: Any]) {
+    private func handleMarkVisitedAction(
+        userInfo: [AnyHashable: Any],
+        completionHandler: @escaping () -> Void
+    ) {
         guard let leadId = userInfo["leadId"] as? String,
-              let uuid = UUID(uuidString: leadId) else { return }
+              let uuid = UUID(uuidString: leadId) else {
+            completionHandler()
+            return
+        }
 
         // Mark lead as visited and clear follow-up
         let context = PersistenceController.shared.container.viewContext
         context.perform {
-            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
             fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
 
             do {
                 let leads = try context.fetch(fetchRequest)
-                if let lead = leads.first {
-                    lead.visitCount += 1
-                    lead.lastContactDate = Date()
-                    lead.followUpDate = nil
-
-                    try context.save()
-
-                    // Cancel the follow-up notification
-                    Task { @MainActor in
-                        self.cancelFollowUpNotification(for: uuid)
+                guard let lead = leads.first else {
+                    DispatchQueue.main.async {
+                        completionHandler()
                     }
+                    return
+                }
+
+                lead.visitCount += 1
+                lead.lastContactDate = Date()
+                lead.setFollowUpDate(nil, autoSave: false)
+
+                try context.save()
+
+                Task { @MainActor in
+                    self.cancelFollowUpNotification(for: uuid)
+                    completionHandler()
                 }
             } catch {
                 print("Failed to mark lead as visited: \(error)")
+                DispatchQueue.main.async {
+                    completionHandler()
+                }
             }
         }
     }
 
-    private func handleSnoozeAction(userInfo: [AnyHashable: Any]) {
+    private func handleSnoozeAction(
+        userInfo: [AnyHashable: Any],
+        completionHandler: @escaping () -> Void
+    ) {
         guard let leadId = userInfo["leadId"] as? String,
-              let uuid = UUID(uuidString: leadId) else { return }
+              let uuid = UUID(uuidString: leadId) else {
+            completionHandler()
+            return
+        }
 
         // Snooze follow-up by 1 hour
         let context = PersistenceController.shared.container.viewContext
         context.perform {
-            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
             fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
 
             do {
                 let leads = try context.fetch(fetchRequest)
-                if let lead = leads.first {
-                    lead.followUpDate = Date().addingTimeInterval(3600) // 1 hour
-                    try context.save()
+                guard let lead = leads.first else {
+                    DispatchQueue.main.async {
+                        completionHandler()
+                    }
+                    return
+                }
 
-                    // Reschedule notification
-                    Task { @MainActor in
-                        self.scheduleFollowUpNotification(for: lead)
+                lead.setFollowUpDate(
+                    lead.leadStatus.resolvedFollowUpDate(Date().addingTimeInterval(3600)),
+                    autoSave: false
+                )
+                try context.save()
+
+                Task { @MainActor in
+                    self.scheduleFollowUpNotification(for: lead) {
+                        completionHandler()
                     }
                 }
             } catch {
                 print("Failed to snooze follow-up: \(error)")
+                DispatchQueue.main.async {
+                    completionHandler()
+                }
             }
         }
     }
@@ -451,22 +577,29 @@ extension NotificationService: @preconcurrency UNUserNotificationCenterDelegate 
         }
     }
 
-    private func handleMarkCompleteAction(userInfo: [AnyHashable: Any]) {
+    private func handleMarkCompleteAction(
+        userInfo: [AnyHashable: Any],
+        completionHandler: @escaping () -> Void
+    ) {
         guard let appointmentId = userInfo["appointmentId"] as? String,
-              let uuid = UUID(uuidString: appointmentId) else { return }
+              let uuid = UUID(uuidString: appointmentId) else {
+            completionHandler()
+            return
+        }
 
         // Mark appointment as completed
         let appointmentManager = AppointmentManager.shared
-        if let appointment = appointmentManager.appointments.first(where: { $0.id == uuid }) {
-            var updatedAppointment = appointment
-            updatedAppointment.status = .completed
+        guard let appointment = appointmentManager.appointments.first(where: { $0.id == uuid }) else {
+            completionHandler()
+            return
+        }
 
-            Task {
-                await appointmentManager.updateAppointment(updatedAppointment)
-            }
+        let updatedAppointment = Self.appointmentMarkedComplete(appointment)
 
-            // Cancel any remaining notifications for this appointment
-            cancelNotificationsForAppointment(uuid)
+        Task {
+            _ = await appointmentManager.updateAppointment(updatedAppointment)
+            self.cancelNotificationsForAppointment(uuid)
+            completionHandler()
         }
     }
 

@@ -8,7 +8,7 @@ struct MainTabView: View {
 
     @FetchRequest(
         sortDescriptors: [],
-        predicate: NSPredicate(format: "followUpDate != nil AND followUpDate < %@", Date() as NSDate)
+        predicate: Lead.Status.activeFollowUpPredicate(dueBefore: Date())
     ) private var overdueLeads: FetchedResults<Lead>
 
     private var isRunningUITests: Bool {
@@ -129,6 +129,7 @@ struct MainTabView: View {
 
             // Initialize location services immediately when app launches
             print("📱 MainTabView: App launched, initializing location services")
+            UserDataSyncManager.shared.activateAutoSyncTimerIfNeeded()
             initializeLocationServices()
 
             // Refresh daily notifications with fresh stats
@@ -136,9 +137,6 @@ struct MainTabView: View {
 
             // Clean up any duplicate appointments first
             AppointmentManager.shared.removeDuplicateAppointments()
-
-            // Fix any cancelled appointments so they appear in the UI
-            AppointmentManager.shared.fixCancelledAppointments()
 
             // Start Firebase appointment listener when main app loads
             AppointmentManager.shared.restartFirebaseSync()
@@ -167,6 +165,8 @@ struct MainTabView: View {
 
     private func initializeLocationServices() {
         print("📍 MainTabView: Initializing location services for immediate map centering")
+        locationManager.refreshAuthorizationStatusFromSystem(startIfAuthorized: false)
+
         // Check the live onboarding state before requesting permissions.
         let canRequestLocationOutsideOnboarding = OnboardingManager.shared.isCompleted && !OnboardingManager.shared.showOnboarding
 
@@ -180,16 +180,7 @@ struct MainTabView: View {
             }
         case .authorizedWhenInUse, .authorizedAlways:
             print("📍 MainTabView: Permission already granted, starting location updates")
-            locationManager.startLocationUpdates()
-
-            // If we have a cached location, immediately center on it
-            if locationManager.location != nil {
-                print("📍 MainTabView: Found cached location, centering map immediately")
-                locationManager.forceInitialLocationCenter()
-            } else {
-                print("📍 MainTabView: No cached location, requesting immediate update")
-                locationManager.requestImmediateLocation()
-            }
+            locationManager.startLaunchLocationCentering()
         case .denied, .restricted:
             print("📍 MainTabView: Location permission denied/restricted")
         @unknown default:

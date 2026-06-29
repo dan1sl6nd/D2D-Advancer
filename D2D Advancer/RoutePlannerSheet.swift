@@ -62,11 +62,19 @@ struct RoutePlannerSheet: View {
     ) private var candidateLeads: FetchedResults<Lead>
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color.obsidianBlack.ignoresSafeArea()
 
                 VStack(spacing: 0) {
+                    ObsidianScreenTitle(
+                        title: "Route Planner",
+                        subtitle: "Order today's stops or leads in the visible map area.",
+                        icon: "point.topleft.down.curvedto.point.bottomright.up"
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+
                     filterPicker
 
                     if let plan = plan, !plan.isEmpty {
@@ -79,7 +87,7 @@ struct RoutePlannerSheet: View {
                 }
             }
             .navigationTitle("Route Planner")
-            .navigationBarTitleDisplayMode(.inline)
+            .obsidianInlineNavigation()
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button { dismiss() } label: {
@@ -131,17 +139,7 @@ struct RoutePlannerSheet: View {
                     .foregroundColor(filter == option ? .white : Color.textSecondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
-                    .background(
-                        filter == option
-                            ? AnyShapeStyle(
-                                LinearGradient(
-                                    colors: [Color.electricViolet, Color.electricVioletDeep],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            : AnyShapeStyle(Color.clear)
-                    )
+                    .background(filter == option ? Color.electricViolet : Color.clear)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -352,20 +350,10 @@ struct RoutePlannerSheet: View {
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(
-                    LinearGradient(
-                        colors: firstUnvisited == nil
-                            ? [Color.statusInterested.opacity(0.85), Color.statusInterested]
-                            : [Color.electricViolet, Color.electricVioletDeep],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .clipShape(Capsule())
-                .shadow(color: Color.electricViolet.opacity(0.25), radius: 12, x: 0, y: 6)
             }
+            .buttonStyle(ObsidianPrimaryButtonStyle())
             .disabled(firstUnvisited == nil)
+            .opacity(firstUnvisited == nil ? 0.6 : 1)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)

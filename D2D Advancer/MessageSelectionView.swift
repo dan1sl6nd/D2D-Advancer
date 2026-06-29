@@ -14,6 +14,7 @@ struct MessageSelectionView: View {
     @State private var showingCustomTemplateCreator = false
     @State private var showingTemplateOptions = false
     @State private var templateToEdit: MessageTemplate?
+    @State private var deleteErrorMessage: String?
     
     enum MessageType: String, CaseIterable {
         case sms = "SMS"
@@ -33,63 +34,49 @@ struct MessageSelectionView: View {
     }
     
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Lead Info Header Card
-                        leadInfoHeader
-                        
-                        // Message Type Selector Card
-                        messageTypeSelector
-                        
-                        // Category Selector Card
-                        categorySelector
-                        
-                        // Templates List Card
-                        templatesList
-                        
-                        // Custom Message Section Card
-                        customMessageSection
-                        
-                        // Send Button
-                        sendButton
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
-                }
-                .background(Color(UIColor.systemGroupedBackground))
-            }
-            .navigationTitle("Send Follow-up")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .safeAreaInset(edge: .bottom) {
-                // Card-based cancel button design
-                Button(action: {
-                    dismiss()
-                }) {
-                    HStack {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                        Text("Cancel")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(Color.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(UIColor.secondarySystemBackground))
-                            .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: "Send Follow-up",
+                        subtitle: "Choose a saved template or write a custom message.",
+                        icon: messageType.icon
                     )
+
+                    leadInfoHeader
+                    messageTypeSelector
+                    categorySelector
+                    templatesList
+                    customMessageSection
+
+                    if let sendWarning {
+                        ObsidianStatusBanner(
+                            icon: "exclamationmark.triangle.fill",
+                            title: sendWarning.title,
+                            message: sendWarning.message,
+                            tint: Color.statusNotInterested
+                        )
+                    }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle("Send Follow-up")
+            .obsidianInlineNavigation()
+            .navigationBarBackButtonHidden(true)
+            .safeAreaInset(edge: .bottom) {
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: !canSendMessage,
+                    primaryAction: sendMessage,
+                    secondaryAction: { dismiss() },
+                    primaryLabel: {
+                        Label("Send \(messageType.rawValue)", systemImage: messageType.icon)
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
+                    }
                 )
             }
         }
@@ -120,6 +107,30 @@ struct MessageSelectionView: View {
         .onDisappear {
             templateToEdit = nil
         }
+        .alert(
+            "Template not deleted",
+            isPresented: Binding(
+                get: { deleteErrorMessage != nil },
+                set: { if !$0 { deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteErrorMessage ?? "Please try again.")
+        }
+    }
+
+    private var sendWarning: (title: String, message: String)? {
+        if messageType == .sms && (lead.phone?.isEmpty ?? true) {
+            return ("No phone number", "Add a phone number to this lead before sending SMS.")
+        }
+        if messageType == .email && (lead.email?.isEmpty ?? true) {
+            return ("No email address", "Add an email address to this lead before sending email.")
+        }
+        if customMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ("Message is empty", "Choose a template or write a message before sending.")
+        }
+        return nil
     }
     
     private var leadInfoHeader: some View {
@@ -127,11 +138,11 @@ struct MessageSelectionView: View {
             HStack {
                 Image(systemName: "person.circle.fill")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
 
                 Text("Customer Information")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
                 
                 Spacer()
             }
@@ -144,7 +155,7 @@ struct MessageSelectionView: View {
                                 .foregroundColor(Color.textSecondary)
                                 .frame(width: 16)
                             Text(lead.displayName)
-                                .font(.headline)
+                                .font(.obsidianTitle)
                                 .foregroundColor(Color.textPrimary)
                         }
                         
@@ -154,7 +165,7 @@ struct MessageSelectionView: View {
                                     .foregroundColor(Color.textSecondary)
                                     .frame(width: 16)
                                 Text(address)
-                                    .font(.subheadline)
+                                    .font(.obsidianFootnote)
                                     .foregroundColor(Color.textSecondary)
                                     .lineLimit(2)
                             }
@@ -167,7 +178,7 @@ struct MessageSelectionView: View {
                                         .foregroundColor(Color.textSecondary)
                                         .frame(width: 16)
                                     Text(phone)
-                                        .font(.subheadline)
+                                        .font(.obsidianFootnote)
                                         .foregroundColor(Color.textSecondary)
                                 }
                             }
@@ -178,7 +189,7 @@ struct MessageSelectionView: View {
                                         .foregroundColor(Color.textSecondary)
                                         .frame(width: 16)
                                     Text(email)
-                                        .font(.subheadline)
+                                        .font(.obsidianFootnote)
                                         .foregroundColor(Color.textSecondary)
                                         .lineLimit(1)
                                 }
@@ -192,10 +203,7 @@ struct MessageSelectionView: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
     
     private var messageTypeSelector: some View {
@@ -203,11 +211,11 @@ struct MessageSelectionView: View {
             HStack {
                 Image(systemName: "message.circle.fill")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
                 
                 Text("Message Type")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
                 
                 Spacer()
             }
@@ -225,8 +233,8 @@ struct MessageSelectionView: View {
                                 .font(.system(size: 16, weight: .medium))
                             
                             Text(type.rawValue)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(messageType == type ? .white : .primary)
+                                .font(.obsidianCallout)
+                                .foregroundColor(messageType == type ? .white : Color.textPrimary)
                         }
                         .padding(.vertical, 12)
                         .padding(.horizontal, 20)
@@ -244,10 +252,7 @@ struct MessageSelectionView: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
     
     private var categorySelector: some View {
@@ -255,11 +260,11 @@ struct MessageSelectionView: View {
             HStack {
                 Image(systemName: "tag.circle.fill")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
                 
                 Text("Message Category")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
                 
                 Spacer()
             }
@@ -279,10 +284,7 @@ struct MessageSelectionView: View {
                 .padding(.horizontal, 4)
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
     
     private var templatesList: some View {
@@ -290,17 +292,17 @@ struct MessageSelectionView: View {
             HStack {
                 Image(systemName: "doc.text.fill")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
                 
                 Text("Message Templates")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
                 
                 Spacer()
                 
                 if !availableTemplates.isEmpty {
                     Text("\(availableTemplates.count) templates")
-                        .font(.caption)
+                        .font(.micro)
                         .foregroundColor(Color.textSecondary)
                 }
                 
@@ -321,11 +323,11 @@ struct MessageSelectionView: View {
                         .foregroundColor(Color.textSecondary)
                     
                     Text("No templates available")
-                        .font(.headline)
+                        .font(.obsidianTitle)
                         .foregroundColor(Color.textSecondary)
                     
                     Text("Switch to a different category or create a custom template.")
-                        .font(.subheadline)
+                        .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
                         .multilineTextAlignment(.center)
                 }
@@ -349,10 +351,12 @@ struct MessageSelectionView: View {
                         } : nil,
                         onDelete: template.isCustom ? {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                templateManager.deleteCustomTemplate(template)
-                                if selectedTemplate?.id == template.id {
+                                let didDelete = templateManager.deleteCustomTemplate(template)
+                                if didDelete, selectedTemplate?.id == template.id {
                                     selectedTemplate = nil
                                     customMessage = ""
+                                } else if !didDelete {
+                                    deleteErrorMessage = templateManager.lastErrorMessage ?? "Could not delete this template. Please try again."
                                 }
                             }
                         } : nil
@@ -360,10 +364,7 @@ struct MessageSelectionView: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
     
     private var customMessageSection: some View {
@@ -371,29 +372,23 @@ struct MessageSelectionView: View {
             HStack {
                 Image(systemName: "pencil.circle.fill")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
                 
                 Text("Custom Message")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
                 
                 Spacer()
             }
             
             VStack(alignment: .leading, spacing: 8) {
                 Text("Edit or write your own message")
-                    .font(.subheadline)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
                 
                 TextEditor(text: $customMessage)
                     .frame(minHeight: 100)
-                    .padding(12)
-                    .background(Color.obsidianSurface)
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
-                    )
+                    .obsidianEditorSurface(cornerRadius: 14)
                     .overlay(
                         Group {
                             if customMessage.isEmpty {
@@ -412,10 +407,7 @@ struct MessageSelectionView: View {
                     )
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
     
     private var sendButton: some View {
@@ -425,7 +417,7 @@ struct MessageSelectionView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(Color.statusNotInterested)
                     Text("No phone number available for SMS")
-                        .font(.subheadline)
+                        .font(.obsidianFootnote)
                         .foregroundColor(Color.statusNotInterested)
                 }
                 .padding(.horizontal, 16)
@@ -437,7 +429,7 @@ struct MessageSelectionView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(Color.statusNotInterested)
                     Text("No email address available")
-                        .font(.subheadline)
+                        .font(.obsidianFootnote)
                         .foregroundColor(Color.statusNotInterested)
                 }
                 .padding(.horizontal, 16)
@@ -449,14 +441,14 @@ struct MessageSelectionView: View {
             Button(action: sendMessage) {
                 HStack(spacing: 12) {
                     Image(systemName: messageType.icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.obsidianAction)
                     Text("Send \(messageType.rawValue)")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.obsidianAction)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
                 .background(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(canSendMessage ? Color.electricViolet : Color.textSecondary)
                         .shadow(color: canSendMessage ? Color.electricViolet.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
                 )
@@ -494,16 +486,17 @@ struct CategoryButton: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: category.icon)
-                    .font(.caption)
+                    .font(.micro)
                 Text(category.rawValue)
-                    .font(.caption)
+                    .font(.obsidianSmall)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(isSelected ? Color.electricViolet : Color.obsidianSurface)
-            .foregroundColor(isSelected ? .white : .primary)
-            .cornerRadius(16)
+            .padding(.vertical, 7)
+            .background(isSelected ? Color.electricViolet : Color.obsidianElevated)
+            .foregroundColor(isSelected ? .white : Color.textPrimary)
+            .clipShape(Capsule())
         }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
@@ -540,9 +533,9 @@ struct TemplateCardView: View {
                     }) {
                         VStack {
                             Image(systemName: "pencil")
-                                .font(.title2)
+                                .font(.obsidianAction)
                             Text("Edit")
-                                .font(.caption)
+                                .font(.micro)
                         }
                         .foregroundColor(.white)
                         .frame(width: 80)
@@ -558,9 +551,9 @@ struct TemplateCardView: View {
                     }) {
                         VStack {
                             Image(systemName: "trash")
-                                .font(.title2)
+                                .font(.obsidianAction)
                             Text("Delete")
-                                .font(.caption)
+                                .font(.micro)
                         }
                         .foregroundColor(.white)
                         .frame(width: 80)
@@ -577,11 +570,10 @@ struct TemplateCardView: View {
                     HStack(spacing: 8) {
                         Image(systemName: template.category.icon)
                             .foregroundColor(template.category == .urgent ? Color.statusNotInterested : Color.electricViolet)
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.obsidianCallout)
                         
                         Text(template.title)
-                            .font(.headline)
-                            .fontWeight(.semibold)
+                            .font(.obsidianTitle)
                             .foregroundColor(Color.textPrimary)
                     }
                     
@@ -589,7 +581,7 @@ struct TemplateCardView: View {
                     
                     if template.isCustom {
                         Text("CUSTOM")
-                            .font(.caption2)
+                            .font(.micro)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
                             .padding(.horizontal, 8)
@@ -601,12 +593,12 @@ struct TemplateCardView: View {
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(Color.electricViolet)
-                            .font(.title3)
+                            .font(.obsidianCallout)
                     }
                 }
                 
                 Text(personalizedMessage)
-                    .font(.body)
+                    .font(.obsidianBody)
                     .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(3)
@@ -614,12 +606,12 @@ struct TemplateCardView: View {
             }
             .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.electricViolet.opacity(0.1) : Color.obsidianSurface)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? Color.electricViolet.opacity(0.14) : Color.obsidianElevated)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.electricViolet : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? Color.electricViolet : Color.obsidianBorder.opacity(0.45), lineWidth: isSelected ? 1.5 : 0.5)
             )
             .offset(x: offset, y: 0)
             .onTapGesture {
@@ -749,7 +741,7 @@ struct EmailComposeView: UIViewControllerRepresentable {
 
 #Preview {
     let context = PersistenceController.preview.container.viewContext
-    let lead = Lead(context: context)
+    let lead = Lead.create(in: context)
     lead.name = "John Doe"
     lead.phone = "(555) 123-4567"
     lead.email = "john@example.com"

@@ -34,9 +34,7 @@ struct CalendarEventEditView: UIViewControllerRepresentable {
         return controller
     }
 
-    func updateUIViewController(_ uiViewController: EKEventEditViewController, context: Context) {
-        // No-op
-    }
+    func updateUIViewController(_ uiViewController: EKEventEditViewController, context: Context) {}
 
     class Coordinator: NSObject, EKEventEditViewDelegate {
         let parent: CalendarEventEditView
@@ -59,4 +57,3 @@ struct CalendarEventEditView: UIViewControllerRepresentable {
         }
     }
 }
-

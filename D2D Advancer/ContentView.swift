@@ -11,7 +11,13 @@ import CoreData
 struct ContentView: View {
     @StateObject private var onboardingManager = OnboardingManager.shared
     @StateObject private var paywallManager = PaywallManager.shared
-    @State private var isOnboardingPresented = false
+
+    private var onboardingBinding: Binding<Bool> {
+        Binding(
+            get: { onboardingManager.showOnboarding },
+            set: { onboardingManager.showOnboarding = $0 }
+        )
+    }
     
     private var paywallBinding: Binding<Bool> {
         Binding(
@@ -22,23 +28,18 @@ struct ContentView: View {
 
     var body: some View {
         MainTabView()
-            .fullScreenCover(isPresented: $isOnboardingPresented) {
-                OnboardingView(isPresented: $isOnboardingPresented)
+            .fullScreenCover(isPresented: onboardingBinding) {
+                OnboardingView(isPresented: onboardingBinding)
                     .interactiveDismissDisabled()
             }
             .sheet(isPresented: paywallBinding) {
                 PaywallView()
             }
             .onAppear {
-                isOnboardingPresented = onboardingManager.showOnboarding
-
                 // Check subscription status when app launches
                 Task {
                     await paywallManager.checkSubscriptionStatus()
                 }
-            }
-            .onChangeCompat(of: onboardingManager.showOnboarding) { shouldShow in
-                isOnboardingPresented = shouldShow
             }
     }
 }

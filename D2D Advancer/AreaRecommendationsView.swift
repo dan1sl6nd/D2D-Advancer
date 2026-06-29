@@ -13,22 +13,30 @@ struct AreaRecommendationsView: View {
     @State private var selectedNeighborhood: Neighborhood?
 
     var body: some View {
-        GeometryReader { geometry in
+        NavigationStack {
             VStack(spacing: 0) {
-                // Header
-                headerSection(geometry: geometry)
-
                 if isLoading {
                     loadingView
                 } else if topNeighborhoods.isEmpty {
-                    emptyStateView
+                    ObsidianEmptyState(
+                        icon: "map.circle",
+                        title: "No areas found",
+                        message: "Add leads to start analyzing neighborhoods, or adjust your target demographics.",
+                        actionTitle: "Adjust Preferences",
+                        actionIcon: "slider.horizontal.3",
+                        action: { showingPreferences = true }
+                    )
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 12) {
-                            // Current preferences card
+                        LazyVStack(spacing: 16) {
+                            ObsidianScreenTitle(
+                                title: "Best Areas",
+                                subtitle: "Recommended neighborhoods for door-to-door.",
+                                icon: "map.circle.fill"
+                            )
+
                             currentPreferencesCard
 
-                            // Top recommendations
                             ForEach(topNeighborhoods.indices, id: \.self) { index in
                                 NeighborhoodRecommendationCard(
                                     neighborhood: topNeighborhoods[index],
@@ -40,14 +48,32 @@ struct AreaRecommendationsView: View {
                             }
                         }
                         .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                        .padding(.top, 18)
+                        .padding(.bottom, 28)
                     }
                 }
             }
-            .navigationBarHidden(true)
-            .ignoresSafeArea(.all, edges: .top)
-            .safeAreaInset(edge: .bottom) {
-                backButton
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle("Best Areas")
+            .obsidianInlineNavigation()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    ObsidianCompactIconButton(
+                        icon: "xmark",
+                        accessibilityLabel: "Close area recommendations",
+                        accentColor: Color.textSecondary
+                    ) {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    ObsidianCompactIconButton(
+                        icon: "slider.horizontal.3",
+                        accessibilityLabel: "Adjust target demographics",
+                        action: { showingPreferences = true }
+                    )
+                }
             }
         }
         .sheet(isPresented: $showingPreferences) {
@@ -61,88 +87,16 @@ struct AreaRecommendationsView: View {
         }
     }
 
-    // MARK: - Header
-
-    private func headerSection(geometry: GeometryProxy) -> some View {
-        VStack(spacing: 0) {
-            Rectangle()
-                .fill(Color.obsidianBlack)
-                .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
-
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Best Areas")
-                        .font(.title)
-                        .fontWeight(.bold)
-
-                    Text("Recommended neighborhoods for door-to-door")
-                        .font(.subheadline)
-                        .foregroundColor(Color.textSecondary)
-                }
-
-                Spacer()
-
-                Button(action: {
-                    showingPreferences = true
-                }) {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(Color.electricViolet)
-                        .padding(10)
-                        .background(Color.electricViolet.opacity(0.1))
-                        .clipShape(Circle())
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-        }
-    }
-
     // MARK: - Loading & Empty States
 
     private var loadingView: some View {
         VStack(spacing: 16) {
             ProgressView()
+                .tint(.electricViolet)
                 .scaleEffect(1.2)
             Text("Analyzing neighborhoods...")
-                .font(.subheadline)
+                .font(.obsidianBody)
                 .foregroundColor(Color.textSecondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Circle()
-                .fill(Color.electricViolet.opacity(0.2))
-                .frame(width: 80, height: 80)
-                .overlay(
-                    Image(systemName: "map.circle")
-                        .font(.system(size: 32))
-                        .foregroundColor(Color.electricViolet)
-                )
-
-            VStack(spacing: 8) {
-                Text("No Areas Found")
-                    .font(.title2)
-                    .fontWeight(.bold)
-
-                Text("Add some leads to start analyzing neighborhoods, or adjust your target demographics.")
-                    .font(.body)
-                    .foregroundColor(Color.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-            }
-
-            Button("Adjust Preferences") {
-                showingPreferences = true
-            }
-            .font(.headline)
-            .foregroundColor(.white)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-            .background(Color.electricViolet)
-            .cornerRadius(12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -150,61 +104,16 @@ struct AreaRecommendationsView: View {
     // MARK: - Current Preferences Card
 
     private var currentPreferencesCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "target")
-                    .foregroundColor(Color.electricViolet)
-                Text("Target Demographics")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                Spacer()
-            }
-
+        ObsidianSectionCard(
+            title: "Target Demographics",
+            icon: "target",
+            subtitle: preferences.selectedProfile.rawValue
+        ) {
             VStack(spacing: 8) {
                 PreferenceRow(icon: "dollarsign.circle", label: "Income", value: preferences.formattedIncomeRange)
                 PreferenceRow(icon: "house.circle", label: "Home Value", value: preferences.formattedHomeValueRange)
-                PreferenceRow(icon: "person.3.circle", label: "Profile", value: preferences.selectedProfile.rawValue)
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.obsidianSurface)
-                .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-    }
-
-    // MARK: - Back Button
-
-    private var backButton: some View {
-        Button(action: {
-            dismiss()
-        }) {
-            HStack {
-                Image(systemName: "chevron.left.circle.fill")
-                    .font(.title3)
-                Text("Back")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.electricViolet)
-                    .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
-            )
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            Rectangle()
-                .fill(Color.obsidianBlack)
-                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
-        )
     }
 
     // MARK: - Data Loading
@@ -232,7 +141,7 @@ struct AreaRecommendationsView: View {
     }
 
     private func scanLeadLocations() async {
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: viewContext)
         fetchRequest.fetchLimit = 50 // Sample first 50 leads
 
         do {
@@ -276,14 +185,13 @@ struct PreferenceRow: View {
                 .frame(width: 24)
 
             Text(label)
-                .font(.subheadline)
+                .font(.obsidianFootnote)
                 .foregroundColor(Color.textSecondary)
 
             Spacer()
 
             Text(value)
-                .font(.subheadline)
-                .fontWeight(.medium)
+                .font(.obsidianFootnote)
                 .foregroundColor(Color.textPrimary)
         }
     }
@@ -304,13 +212,13 @@ struct NeighborhoodRecommendationCard: View {
                         .frame(width: 48, height: 48)
 
                     Text("#\(rank)")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.obsidianCallout)
                         .foregroundColor(.white)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(neighborhood.name ?? "Unknown")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.obsidianTitle)
                         .foregroundColor(Color.textPrimary)
                         .lineLimit(1)
 
@@ -318,12 +226,12 @@ struct NeighborhoodRecommendationCard: View {
                         ScoreBadge(score: neighborhood.score)
 
                         Text(neighborhood.formattedIncome)
-                            .font(.caption)
+                            .font(.obsidianSmall)
                             .foregroundColor(Color.textSecondary)
                     }
 
                     Text("\(neighborhood.cityName ?? ""), \(neighborhood.state ?? "")")
-                        .font(.caption)
+                        .font(.obsidianSmall)
                         .foregroundColor(Color.textSecondary)
                 }
 
@@ -331,13 +239,16 @@ struct NeighborhoodRecommendationCard: View {
 
                 Image(systemName: "chevron.right")
                     .foregroundColor(Color.textSecondary)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.obsidianCaption)
             }
             .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color.obsidianSurface)
-                    .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -363,11 +274,11 @@ struct ScoreBadge: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "star.fill")
-                .font(.system(size: 10))
+                .font(.nano)
                 .foregroundColor(scoreColor)
 
             Text(String(format: "%.0f", score))
-                .font(.system(size: 12, weight: .semibold))
+                .font(.obsidianSmall)
                 .foregroundColor(scoreColor)
         }
         .padding(.horizontal, 8)

@@ -2,6 +2,44 @@ import SwiftUI
 import CoreData
 import UniformTypeIdentifiers
 
+enum SyncStatusSummaryPolicy {
+    static func shortText(
+        for status: UserDataSyncManager.SyncStatus,
+        autoSyncEnabled: Bool,
+        intervalShortName: String
+    ) -> String {
+        switch status {
+        case .idle:
+            return autoSyncEnabled ? intervalShortName : "Manual"
+        case .syncing:
+            return "Preparing..."
+        case .uploading(let current, let total):
+            return "Uploading \(current)/\(total)"
+        case .downloading:
+            return "Downloading..."
+        case .completed:
+            return "Done"
+        case .failed(let message):
+            return failedShortText(message)
+        }
+    }
+
+    static func failedShortText(_ message: String) -> String {
+        let normalized = message.lowercased()
+        if normalized.contains("cloudkit container unavailable")
+            || normalized.contains("not entitled")
+            || normalized.contains("container unavailable") {
+            return "iCloud unavailable"
+        }
+
+        if normalized.contains("offline") || normalized.contains("network") {
+            return "Offline"
+        }
+
+        return "Failed"
+    }
+}
+
 struct MoreView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var preferences = AppPreferences.shared
@@ -46,7 +84,7 @@ struct MoreView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             GeometryReader { geometry in
                 VStack(spacing: 0) {
                     Rectangle()
@@ -55,203 +93,16 @@ struct MoreView: View {
                     ObsidianHeaderView("More")
 
                     ScrollView {
-                        LazyVStack(spacing: 12) {
-                            // Daily Activity Summary
+                        LazyVStack(spacing: 16) {
+                            accountHeroCard
                             todayActivityCard
-
-                            // Overview Card
-                            NavigationLink(destination: OverviewContentView()) {
-                                MoreCardView(
-                                    icon: "chart.bar.fill",
-                                    iconColor: Color.electricViolet,
-                                    title: "Overview",
-                                    subtitle: "View statistics and performance metrics",
-                                    showChevron: true
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-
-                            // Export Leads Card
-                            Button(action: {
-                                exportLeadsToCSV()
-                            }) {
-                                MoreCardView(
-                                    icon: "square.and.arrow.up",
-                                    iconColor: Color.electricViolet,
-                                    title: "Export Leads",
-                                    subtitle: "\(allLeads.count) leads",
-                                    showChevron: false
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .disabled(allLeads.isEmpty)
-
-                            // Import Leads Card
-                            Button(action: {
-                                showingImportPicker = true
-                            }) {
-                                MoreCardView(
-                                    icon: "square.and.arrow.down",
-                                    iconColor: Color.electricViolet,
-                                    title: "Import Leads",
-                                    subtitle: "Load leads from a CSV file",
-                                    showChevron: false
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-
-                            // Message Templates Card
-                            NavigationLink(destination: MessageTemplatesManagerView()) {
-                                MoreCardView(
-                                    icon: "text.bubble.fill",
-                                    iconColor: Color.electricViolet,
-                                    title: "Message Templates",
-                                    subtitle: "Create and edit first-contact messages",
-                                    showChevron: true
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-
-                            // Team Workspace Card
-                            NavigationLink(destination: TeamWorkspaceView()) {
-                                MoreCardView(
-                                    icon: "person.3.fill",
-                                    iconColor: Color.electricViolet,
-                                    title: "Team Workspace",
-                                    subtitle: teamWorkspaceSubtitle,
-                                    showChevron: false,
-                                    trailingContent: {
-                                        HStack(spacing: 8) {
-                                            if let badgeCount = teamWorkspaceBadgeCount {
-                                                Text("\(badgeCount)")
-                                                    .font(.micro)
-                                                    .foregroundColor(.white)
-                                                    .padding(.horizontal, 7)
-                                                    .padding(.vertical, 4)
-                                                    .background(Color.statusNotInterested)
-                                                    .clipShape(Capsule())
-                                            }
-
-                                            Image(systemName: "chevron.right")
-                                                .font(.obsidianFootnote)
-                                                .foregroundColor(Color.textSecondary)
-                                        }
-                                    }
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .accessibilityIdentifier("teamWorkspaceCard")
-
-                            // Cloud Storage Card
-                            Button {
-                                showingCloudProviderSheet = true
-                            } label: {
-                                MoreCardView(
-                                    icon: CloudSyncProvider.current.icon,
-                                    iconColor: CloudSyncProvider.current == .icloud ? Color.statusConverted : Color.electricViolet,
-                                    title: "Cloud Storage",
-                                    subtitle: CloudSyncProvider.current == .off ? "Off — local only" : CloudSyncProvider.current.displayName,
-                                    trailingContent: {
-                                        Image(systemName: "chevron.right")
-                                            .font(.obsidianSmall)
-                                            .foregroundColor(Color.textMuted)
-                                    }
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-
-                            // Data Management Card — visible for any active session (Firebase or Apple).
-                            // In iCloud mode the action runs `performICloudSync`, which flushes
-                            // pending Core Data saves and nudges NSUbiquitousKeyValueStore.
-                            if userAccountManager.hasActiveSession || CloudSyncProvider.current == .icloud {
-                                Button(action: {
-                                    if !syncManager.syncStatus.isBusy {
-                                        syncManager.syncWithServer()
-                                    }
-                                }) {
-                                    MoreCardView(
-                                        icon: syncStatusIcon,
-                                        iconColor: syncStatusColor,
-                                        title: "Sync Data",
-                                        subtitle: syncStatusText,
-                                        trailingContent: {
-                                            HStack(spacing: 8) {
-                                                if syncManager.syncStatus.isBusy {
-                                                    ProgressView()
-                                                        .scaleEffect(0.8)
-                                                } else {
-                                                    Image(systemName: "arrow.clockwise")
-                                                        .font(.obsidianFootnote)
-                                                        .foregroundColor(Color.electricViolet)
-                                                }
-
-                                                Button(action: {
-                                                    showingSyncSettings = true
-                                                }) {
-                                                    Image(systemName: "gear")
-                                                        .font(.obsidianFootnote)
-                                                        .foregroundColor(Color.textSecondary)
-                                                }
-                                                .buttonStyle(PlainButtonStyle())
-                                            }
-                                        }
-                                    )
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                .disabled(syncManager.syncStatus.isBusy)
-                            }
-                            
-                            // Account Info Card - tappable to manage account or login
-                            if userAccountManager.isLoggedIn {
-                                NavigationLink(destination: AccountManagementView(userAccountManager: userAccountManager)) {
-                                    UserInfoCardView(userAccountManager: userAccountManager, showChevron: true)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            } else if userAccountManager.isAppleAuthed {
-                                UserInfoCardView(userAccountManager: userAccountManager, showChevron: false)
-                            } else if CloudSyncProvider.current == .firebase {
-                                Button(action: {
-                                    showingAuthentication = true
-                                }) {
-                                    UserInfoCardView(userAccountManager: userAccountManager, showChevron: true)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            } else {
-                                UserInfoCardView(userAccountManager: userAccountManager, showChevron: false)
-                            }
-
-                            // Dark Mode Card
-                            MoreCardView(
-                                icon: "moon.fill",
-                                iconColor: Color.electricViolet,
-                                title: "Dark Mode",
-                                subtitle: nil,
-                                trailingContent: {
-                                    Toggle("", isOn: $darkModeEnabled)
-                                }
-                            )
-
-                            
-                            // Version Card
-                            MoreCardView(
-                                icon: "info.circle",
-                                iconColor: Color.electricViolet,
-                                title: "Version",
-                                subtitle: nil,
-                                trailingContent: {
-                                    Text("1.1")
-                                        .font(.subheadline)
-                                        .foregroundColor(Color.textSecondary)
-                                }
-                            )
-
-                            // Sign Out Card (shown when signed in via any provider)
-                            if userAccountManager.hasActiveSession {
-                                SignOutCardView(userAccountManager: userAccountManager)
-                            }
+                            workspaceSection
+                            dataSyncSection
+                            accountSection
                         }
                         .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                        .padding(.top, 8)
+                        .padding(.bottom, 28)
                     }
                 }
                 .navigationBarHidden(true)
@@ -300,6 +151,407 @@ struct MoreView: View {
         }
     }
 
+    private var accountHeroCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                ObsidianIconTile(icon: accountHeroIcon, tint: accountHeroColor, size: 48, filled: true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(accountHeadline)
+                        .font(.obsidianHeadline)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+
+                    Text(accountDetail)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 8) {
+                moreStatusPill(
+                    icon: CloudSyncProvider.current.icon,
+                    text: CloudSyncProvider.current == .off ? "Local only" : CloudSyncProvider.current.displayName,
+                    color: cloudProviderColor
+                )
+
+                moreStatusPill(
+                    icon: "mappin.and.ellipse",
+                    text: "\(allLeads.count) leads",
+                    color: Color.electricViolet
+                )
+
+                if let badgeCount = teamWorkspaceBadgeCount {
+                    moreStatusPill(
+                        icon: "bell.badge.fill",
+                        text: "\(badgeCount) team",
+                        color: Color.statusNotInterested
+                    )
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+    }
+
+    private var workspaceSection: some View {
+        MoreSectionGroup(
+            title: "Workspace",
+            icon: "square.grid.2x2.fill",
+            subtitle: "Reports, team work, and customer messaging.",
+            accentColor: Color.electricViolet
+        ) {
+            NavigationLink(destination: OverviewContentView()) {
+                MoreCardView(
+                    icon: "chart.bar.fill",
+                    iconColor: Color.electricViolet,
+                    title: "Overview",
+                    subtitle: "Statistics and performance metrics",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            moreDivider
+
+            NavigationLink(destination: TeamWorkspaceView()) {
+                MoreCardView(
+                    icon: "person.3.fill",
+                    iconColor: Color.electricViolet,
+                    title: "Team Workspace",
+                    subtitle: teamWorkspaceSubtitle,
+                    showChevron: false,
+                    trailingContent: {
+                        HStack(spacing: 8) {
+                            if let badgeCount = teamWorkspaceBadgeCount {
+                                Text("\(badgeCount)")
+                                    .font(.micro)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 4)
+                                    .background(Color.statusNotInterested)
+                                    .clipShape(Capsule())
+                            }
+
+                            Image(systemName: "chevron.right")
+                                .font(.obsidianFootnote)
+                                .foregroundColor(Color.textSecondary)
+                        }
+                    }
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("teamWorkspaceCard")
+
+            moreDivider
+
+            NavigationLink(destination: MessageTemplatesManagerView()) {
+                MoreCardView(
+                    icon: "text.bubble.fill",
+                    iconColor: Color.electricViolet,
+                    title: "Message Templates",
+                    subtitle: "First-contact messages and replies",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+    }
+
+    private var dataSyncSection: some View {
+        MoreSectionGroup(
+            title: "Data & Sync",
+            icon: "externaldrive.connected.to.line.below.fill",
+            subtitle: "Backups, imports, exports, and cloud controls.",
+            accentColor: cloudProviderColor
+        ) {
+            Button {
+                showingCloudProviderSheet = true
+            } label: {
+                MoreCardView(
+                    icon: CloudSyncProvider.current.icon,
+                    iconColor: cloudProviderColor,
+                    title: "Cloud Storage",
+                    subtitle: CloudSyncProvider.current == .off ? "Off, local only" : CloudSyncProvider.current.displayName,
+                    showChevron: true
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            if userAccountManager.hasActiveSession || CloudSyncProvider.current == .icloud {
+                moreDivider
+
+                Button {
+                    if !syncManager.syncStatus.isBusy {
+                        syncManager.syncWithServer()
+                    }
+                } label: {
+                    MoreCardView(
+                        icon: syncStatusIcon,
+                        iconColor: syncStatusColor,
+                        title: "Sync Data",
+                        subtitle: syncStatusText,
+                        trailingContent: {
+                            if syncManager.syncStatus.isBusy {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.obsidianFootnote)
+                                    .foregroundColor(Color.electricViolet)
+                            }
+                        }
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(syncManager.syncStatus.isBusy)
+
+                moreDivider
+
+                Button {
+                    showingSyncSettings = true
+                } label: {
+                    MoreCardView(
+                        icon: "gearshape.fill",
+                        iconColor: Color.electricViolet,
+                        title: "Sync Settings",
+                        subtitle: syncManager.isAutoSyncEnabled ? "Auto-sync \(syncManager.syncInterval.shortDisplayName)" : "Manual sync only",
+                        showChevron: true
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+
+            moreDivider
+
+            Button(action: exportLeadsToCSV) {
+                MoreCardView(
+                    icon: "square.and.arrow.up",
+                    iconColor: allLeads.isEmpty ? Color.textMuted : Color.electricViolet,
+                    title: "Export Leads",
+                    subtitle: allLeads.isEmpty ? "No leads to export" : "\(allLeads.count) leads",
+                    trailingContent: {
+                        Image(systemName: "arrow.up.doc")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(allLeads.isEmpty ? Color.textMuted : Color.electricViolet)
+                    }
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .disabled(allLeads.isEmpty)
+
+            moreDivider
+
+            Button {
+                showingImportPicker = true
+            } label: {
+                MoreCardView(
+                    icon: "square.and.arrow.down",
+                    iconColor: Color.electricViolet,
+                    title: "Import Leads",
+                    subtitle: "Load leads from a CSV file",
+                    trailingContent: {
+                        Image(systemName: "arrow.down.doc")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.electricViolet)
+                    }
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+    }
+
+    private var accountSection: some View {
+        MoreSectionGroup(
+            title: "Account & App",
+            icon: "person.crop.circle.fill",
+            subtitle: "Profile, appearance, and app info.",
+            accentColor: accountHeroColor
+        ) {
+            accountManagementRow
+
+            moreDivider
+
+            MoreCardView(
+                icon: "moon.fill",
+                iconColor: Color.electricViolet,
+                title: "Dark Mode",
+                subtitle: darkModeEnabled ? "Enabled" : "Disabled",
+                trailingContent: {
+                    Toggle("Dark Mode", isOn: $darkModeEnabled)
+                        .labelsHidden()
+                        .accessibilityLabel("Dark Mode")
+                        .accessibilityValue(darkModeEnabled ? "Enabled" : "Disabled")
+                        .accessibilityHint("Toggles dark appearance for the app.")
+                }
+            )
+
+            moreDivider
+
+            MoreCardView(
+                icon: "info.circle",
+                iconColor: Color.electricViolet,
+                title: "Version",
+                subtitle: "D2D Advancer",
+                trailingContent: {
+                    Text("1.1")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                }
+            )
+
+            if userAccountManager.hasActiveSession {
+                moreDivider
+                SignOutCardView(userAccountManager: userAccountManager)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var accountManagementRow: some View {
+        if userAccountManager.isLoggedIn {
+            NavigationLink(destination: AccountManagementView(userAccountManager: userAccountManager)) {
+                accountRow(showChevron: true)
+            }
+            .buttonStyle(PlainButtonStyle())
+        } else if userAccountManager.isAppleAuthed {
+            accountRow(showChevron: false)
+        } else if CloudSyncProvider.current == .firebase {
+            Button {
+                showingAuthentication = true
+            } label: {
+                accountRow(showChevron: true)
+            }
+            .buttonStyle(PlainButtonStyle())
+        } else {
+            accountRow(showChevron: false)
+        }
+    }
+
+    private func accountRow(showChevron: Bool) -> some View {
+        MoreCardView(
+            icon: accountHeroIcon,
+            iconColor: accountHeroColor,
+            title: accountHeadline,
+            subtitle: accountDetail,
+            showChevron: showChevron
+        )
+    }
+
+    private var moreDivider: some View {
+        Rectangle()
+            .fill(Color.obsidianBorder.opacity(0.5))
+            .frame(height: 0.5)
+            .padding(.leading, 68)
+    }
+
+    private func moreStatusPill(icon: String, text: String, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.micro)
+            Text(text)
+                .font(.micro)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(color.opacity(0.12))
+        .clipShape(Capsule())
+    }
+
+    private var accountHeadline: String {
+        if isICloudGuest {
+            return "iCloud Sync"
+        }
+        if isLocalOnlyGuest {
+            return "Local Data"
+        }
+        if let firebaseName = userAccountManager.currentUser?.displayName, !firebaseName.isEmpty {
+            return firebaseName
+        }
+        if let appleName = userAccountManager.appleUserFullName, !appleName.isEmpty {
+            return appleName
+        }
+        return isGuestAccount ? "Guest Account" : "Signed in"
+    }
+
+    private var accountDetail: String {
+        if isICloudGuest {
+            return "Using the Apple ID on this device"
+        }
+        if isLocalOnlyGuest {
+            return "Stored only on this device"
+        }
+        if let firebaseEmail = userAccountManager.currentUser?.email, !firebaseEmail.isEmpty {
+            return firebaseEmail
+        }
+        if let appleEmail = userAccountManager.appleUserEmail, !appleEmail.isEmpty {
+            return appleEmail
+        }
+        if userAccountManager.isAppleAuthed && !userAccountManager.isLoggedIn {
+            return "Signed in with Apple"
+        }
+        return isGuestAccount ? "Sign in to sync with Firebase" : "No email"
+    }
+
+    private var accountHeroIcon: String {
+        if isICloudGuest {
+            return "icloud.fill"
+        }
+        if isLocalOnlyGuest {
+            return "iphone"
+        }
+        if userAccountManager.isAppleAuthed && !userAccountManager.isLoggedIn {
+            return "applelogo"
+        }
+        return isGuestAccount ? "person.crop.circle.badge.questionmark" : "person.fill"
+    }
+
+    private var accountHeroColor: Color {
+        if isICloudGuest {
+            return Color.statusConverted
+        }
+        if isLocalOnlyGuest {
+            return Color.textSecondary
+        }
+        return isGuestAccount ? Color.statusNotHome : Color.electricViolet
+    }
+
+    private var cloudProviderColor: Color {
+        switch CloudSyncProvider.current {
+        case .off:
+            return Color.textSecondary
+        case .firebase:
+            return Color.electricViolet
+        case .icloud:
+            return Color.statusConverted
+        }
+    }
+
+    private var isGuestAccount: Bool {
+        !userAccountManager.hasActiveSession
+    }
+
+    private var isICloudGuest: Bool {
+        isGuestAccount && CloudSyncProvider.current == .icloud
+    }
+
+    private var isLocalOnlyGuest: Bool {
+        isGuestAccount && CloudSyncProvider.current == .off
+    }
+
     private var teamWorkspaceSubtitle: String {
         guard let summary = teamSurfaceSummary else {
             return "Create or manage your team workspace"
@@ -327,7 +579,14 @@ struct MoreView: View {
         case .success(let urls):
             guard let url = urls.first else { return }
             do {
-                self.importResult = try LeadCSVService.importLeads(from: url, into: viewContext)
+                let result = try LeadCSVService.importLeads(from: url, into: viewContext)
+                if NotificationService.shouldRefreshNotificationsAfterLeadDataMutation(
+                    inserted: result.created,
+                    updated: result.updated
+                ) {
+                    NotificationService.shared.refreshAllNotifications()
+                }
+                self.importResult = result
             } catch {
                 self.importFailure = LeadImportFailure(message: error.localizedDescription)
             }
@@ -345,65 +604,89 @@ struct MoreView: View {
         let interested = todayLeads.filter { $0.status == "interested" }.count
         let notHome = todayLeads.filter { $0.status == "not_home" }.count
         let sold = todayLeads.filter { $0.status == "converted" }.count
+        let followUpsDue = allLeads.filter {
+            $0.leadStatus.allowsActiveFollowUp && $0.followUpDate != nil && ($0.followUpDate ?? .distantFuture) <= Date()
+        }.count
+        let followUpsTotal = allLeads.filter {
+            $0.leadStatus.allowsActiveFollowUp && $0.followUpDate != nil
+        }.count
+        let statColumns = [
+            GridItem(.flexible(), spacing: 10),
+            GridItem(.flexible(), spacing: 10)
+        ]
 
-        return VStack(spacing: 12) {
-            HStack {
-                Image(systemName: "flame.fill")
-                    .foregroundColor(.electricViolet)
-                Text("Today's Activity")
-                    .font(.obsidianCallout)
-                    .foregroundColor(.textPrimary)
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                ObsidianIconTile(icon: "flame.fill", tint: Color.electricViolet, size: 36)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Today's Activity")
+                        .font(.obsidianTitle)
+                        .foregroundColor(.textPrimary)
+
+                    Text(Date().formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.textSecondary)
+                }
+
                 Spacer()
-                Text(Date().formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                    .font(.obsidianSmall)
-                    .foregroundColor(.textMuted)
             }
 
-            HStack(spacing: 0) {
+            LazyVGrid(columns: statColumns, spacing: 10) {
                 activityStat(value: doorsKnocked, label: "Doors", color: .electricViolet)
                 activityStat(value: interested, label: "Interested", color: .statusInterested)
                 activityStat(value: notHome, label: "Not Home", color: .statusNotHome)
                 activityStat(value: sold, label: "Sold", color: .statusConverted)
             }
 
-            // Follow-up stats
-            let followUpsDue = allLeads.filter { $0.followUpDate != nil && ($0.followUpDate ?? .distantFuture) <= Date() }.count
-            let followUpsTotal = allLeads.filter { $0.followUpDate != nil }.count
             if followUpsTotal > 0 {
-                Divider().padding(.vertical, 4)
-                HStack {
+                HStack(spacing: 10) {
                     Image(systemName: "bell.badge")
-                        .font(.obsidianSmall)
+                        .font(.obsidianFootnote)
                         .foregroundColor(.statusNotHome)
+
                     Text("\(followUpsDue) overdue")
-                        .font(.obsidianSmall)
+                        .font(.obsidianFootnote)
                         .foregroundColor(.statusNotHome)
+
                     Spacer()
+
                     Text("\(followUpsTotal) total follow-ups")
-                        .font(.obsidianSmall)
-                        .foregroundColor(.textMuted)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.textSecondary)
                 }
+                .padding(12)
+                .background(Color.obsidianElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }
         .padding(16)
         .background(Color.obsidianSurface)
-        .cornerRadius(16)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.obsidianBorder, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
     }
 
     private func activityStat(value: Int, label: String, color: Color) -> some View {
-        VStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("\(value)")
                 .font(.obsidianHeadline)
                 .foregroundColor(color)
+
             Text(label)
                 .font(.micro)
                 .foregroundColor(.textMuted)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+        )
     }
 
     private var syncStatusIcon: String {
@@ -435,24 +718,11 @@ struct MoreView: View {
     }
 
     private var syncStatusText: String {
-        switch syncManager.syncStatus {
-        case .idle:
-            if syncManager.isAutoSyncEnabled {
-                return syncManager.syncInterval.shortDisplayName
-            } else {
-                return "Manual"
-            }
-        case .syncing:
-            return "Preparing..."
-        case .uploading(let current, let total):
-            return "Uploading \(current)/\(total)"
-        case .downloading:
-            return "Downloading..."
-        case .completed:
-            return "Done"
-        case .failed:
-            return "Failed"
-        }
+        SyncStatusSummaryPolicy.shortText(
+            for: syncManager.syncStatus,
+            autoSyncEnabled: syncManager.isAutoSyncEnabled,
+            intervalShortName: syncManager.syncInterval.shortDisplayName
+        )
     }
 
     // MARK: - CSV Export
@@ -472,75 +742,49 @@ struct MoreView: View {
 
 struct OverviewContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
-    @Environment(\.dismiss) private var dismiss
     @State private var statistics: LeadStatistics = LeadStatistics()
     @State private var isLoading = true
+    @State private var statisticsErrorMessage: String?
     
     var body: some View {
-        GeometryReader { geometry in
-                VStack(spacing: 0) {
-                    // Dynamic safe area spacer that adapts to device
-                    Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ObsidianScreenTitle(
+                    title: "Overview",
+                    subtitle: "Lead volume, conversion health, and current follow-up pressure.",
+                    icon: "chart.bar.fill"
+                )
+                .padding(.horizontal, 4)
 
-                    if isLoading {
-                        VStack {
-                            ProgressView()
-                                .scaleEffect(1.2)
-                            Text("Loading statistics...")
-                                .font(.caption)
-                                .foregroundColor(Color.textSecondary)
-                                .padding(.top, 8)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 12) {
-                                overviewSection
-                                statusBreakdownSection
-                                activitySection
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .refreshable {
-                                await loadStatistics()
-                            }
-                        }
-                    }
-                }
-                .navigationBarHidden(true)
-                .navigationBarBackButtonHidden(true)
-                .ignoresSafeArea(.all, edges: .top)
-                .safeAreaInset(edge: .bottom) {
-                    // Card-based back button at bottom
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack {
-                            Image(systemName: "chevron.left.circle.fill")
-                                .font(.title3)
-                            Text("Back to More")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.electricViolet)
-                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        Rectangle()
-                            .fill(Color.obsidianBlack)
-                            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                if isLoading {
+                    ObsidianStatusBanner(
+                        icon: "arrow.clockwise",
+                        title: "Loading statistics...",
+                        message: "Checking your current lead and follow-up totals.",
+                        tint: Color.electricViolet
                     )
+                } else if let statisticsErrorMessage {
+                    ObsidianStatusBanner(
+                        icon: "exclamationmark.triangle.fill",
+                        title: "Overview could not load",
+                        message: statisticsErrorMessage,
+                        tint: Color.statusNotHome
+                    )
+                } else {
+                    overviewSection
+                    statusBreakdownSection
+                    activitySection
                 }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 28)
+        }
+        .background(Color.obsidianBlack.ignoresSafeArea())
+        .navigationTitle("Overview")
+        .obsidianInlineNavigation()
+        .refreshable {
+            await loadStatistics()
         }
         .onAppear {
             Task {
@@ -552,81 +796,95 @@ struct OverviewContentView: View {
     @MainActor
     private func loadStatistics() async {
         isLoading = true
-        
-        let newStatistics = await Task.detached { [weak viewContext = viewContext] in
-            guard let context = viewContext else { return LeadStatistics() }
-            
-            return await context.perform {
-                var stats = LeadStatistics()
 
-                // Active leads count - only leads where we received information
-                // Includes: notContacted, interested, converted
-                // Excludes: notHome (no info collected), notInterested (no info collected)
-                let activeLeadsRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-                activeLeadsRequest.predicate = NSPredicate(format: "status IN %@", [
-                    Lead.Status.notContacted.rawValue,
-                    Lead.Status.interested.rawValue,
-                    Lead.Status.converted.rawValue
-                ])
-                stats.activeLeadsCount = (try? context.count(for: activeLeadsRequest)) ?? 0
+        let result: Result<LeadStatistics, Error> = await Task.detached { [weak viewContext = viewContext] in
+            guard let context = viewContext else { return .success(LeadStatistics()) }
 
-                // Status-specific counts
-                for status in Lead.Status.allCases {
-                    let statusRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-                    statusRequest.predicate = NSPredicate(format: "status == %@", status.rawValue)
-                    let count = (try? context.count(for: statusRequest)) ?? 0
-                    stats.statusCounts[status] = count
+            do {
+                let statistics = try await context.perform {
+                    var stats = LeadStatistics()
 
-                    switch status {
-                    case .converted:
-                        stats.convertedCount = count
-                    case .interested:
-                        stats.interestedCount = count
-                    case .notContacted:
-                        stats.notContactedCount = count
-                    default:
-                        break
+                    // Active leads count - only leads where we received information
+                    // Includes: notContacted, interested, converted
+                    // Excludes: notHome (no info collected), notInterested (no info collected)
+                    let activeLeadsRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+                    activeLeadsRequest.predicate = NSPredicate(format: "status IN %@", [
+                        Lead.Status.notContacted.rawValue,
+                        Lead.Status.interested.rawValue,
+                        Lead.Status.converted.rawValue
+                    ])
+                    stats.activeLeadsCount = try context.count(for: activeLeadsRequest)
+
+                    // Status-specific counts
+                    for status in Lead.Status.allCases {
+                        let statusRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+                        statusRequest.predicate = NSPredicate(format: "status == %@", status.rawValue)
+                        let count = try context.count(for: statusRequest)
+                        stats.statusCounts[status] = count
+
+                        switch status {
+                        case .converted:
+                            stats.convertedCount = count
+                        case .interested:
+                            stats.interestedCount = count
+                        case .notContacted:
+                            stats.notContactedCount = count
+                        default:
+                            break
+                        }
                     }
+
+                    // Leads added today (exclude notHome and notInterested - no info collected)
+                    let now = Date()
+                    let today = Calendar.current.startOfDay(for: Date())
+                    let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today.addingTimeInterval(86_400)
+                    let todayRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+                    todayRequest.predicate = NSPredicate(format: "createdDate >= %@ AND createdDate < %@ AND NOT (status IN %@)",
+                        today as NSDate,
+                        tomorrow as NSDate,
+                        [Lead.Status.notHome.rawValue, Lead.Status.notInterested.rawValue])
+                    stats.leadsAddedToday = try context.count(for: todayRequest)
+
+                    // Leads updated this week (exclude notHome and notInterested - no info collected)
+                    let weekAgo = Calendar.current.date(byAdding: .weekOfYear, value: -1, to: now) ?? now.addingTimeInterval(-604_800)
+                    let weekRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+                    weekRequest.predicate = NSPredicate(format: "updatedDate >= %@ AND NOT (status IN %@)",
+                        weekAgo as NSDate,
+                        [Lead.Status.notHome.rawValue, Lead.Status.notInterested.rawValue])
+                    stats.leadsUpdatedThisWeek = try context.count(for: weekRequest)
+
+                    // Follow-ups due this week
+                    let weekFromNow = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: now) ?? now.addingTimeInterval(604_800)
+                    let followUpRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+                    followUpRequest.predicate = Lead.Status.activeFollowUpPredicate(dueFrom: now, through: weekFromNow)
+                    stats.followUpsDueThisWeek = try context.count(for: followUpRequest)
+
+                    print("📊 Loaded statistics: \(stats.activeLeadsCount) active leads, \(stats.convertedCount) converted")
+                    return stats
                 }
-                
-                // Leads added today (exclude notHome and notInterested - no info collected)
-                let today = Calendar.current.startOfDay(for: Date())
-                let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
-                let todayRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-                todayRequest.predicate = NSPredicate(format: "createdDate >= %@ AND createdDate < %@ AND NOT (status IN %@)",
-                    today as NSDate,
-                    tomorrow as NSDate,
-                    [Lead.Status.notHome.rawValue, Lead.Status.notInterested.rawValue])
-                stats.leadsAddedToday = (try? context.count(for: todayRequest)) ?? 0
-
-                // Leads updated this week (exclude notHome and notInterested - no info collected)
-                let weekAgo = Calendar.current.date(byAdding: .weekOfYear, value: -1, to: Date())!
-                let weekRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-                weekRequest.predicate = NSPredicate(format: "updatedDate >= %@ AND NOT (status IN %@)",
-                    weekAgo as NSDate,
-                    [Lead.Status.notHome.rawValue, Lead.Status.notInterested.rawValue])
-                stats.leadsUpdatedThisWeek = (try? context.count(for: weekRequest)) ?? 0
-
-                // Follow-ups due this week (exclude notHome and notInterested - no info collected)
-                let weekFromNow = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: Date())!
-                let followUpRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-                followUpRequest.predicate = NSPredicate(format: "followUpDate >= %@ AND followUpDate <= %@ AND NOT (status IN %@)",
-                    Date() as NSDate,
-                    weekFromNow as NSDate,
-                    [Lead.Status.notHome.rawValue, Lead.Status.notInterested.rawValue])
-                stats.followUpsDueThisWeek = (try? context.count(for: followUpRequest)) ?? 0
-                
-                print("📊 Loaded statistics: \(stats.activeLeadsCount) active leads, \(stats.convertedCount) converted")
-                return stats
+                return .success(statistics)
+            } catch {
+                return .failure(error)
             }
         }.value
-        
-        statistics = newStatistics
+
+        switch result {
+        case .success(let newStatistics):
+            statistics = newStatistics
+            statisticsErrorMessage = nil
+        case .failure(let error):
+            statisticsErrorMessage = "Your lead counts could not be read: \(error.localizedDescription)"
+        }
         isLoading = false
     }
     
     private var overviewSection: some View {
-        VStack(spacing: 12) {
+        MoreSectionGroup(
+            title: "Pipeline",
+            icon: "chart.bar.fill",
+            subtitle: "Active sales work by outcome.",
+            accentColor: Color.electricViolet
+        ) {
             StatCardView(
                 title: "Active Leads",
                 value: "\(statistics.activeLeadsCount)",
@@ -653,7 +911,12 @@ struct OverviewContentView: View {
     }
     
     private var statusBreakdownSection: some View {
-        VStack(spacing: 12) {
+        MoreSectionGroup(
+            title: "Status Breakdown",
+            icon: "slider.horizontal.3",
+            subtitle: "Only statuses with useful customer information.",
+            accentColor: Color.statusInterested
+        ) {
             // Show only statuses where we have lead information
             // Includes: notContacted, interested, converted
             // Excludes: notHome (no info), notInterested (no info)
@@ -670,7 +933,12 @@ struct OverviewContentView: View {
     }
     
     private var activitySection: some View {
-        VStack(spacing: 12) {
+        MoreSectionGroup(
+            title: "Activity",
+            icon: "clock.arrow.circlepath",
+            subtitle: "Recent work that needs attention.",
+            accentColor: Color.statusNotHome
+        ) {
             RecentActivityCardView(
                 title: "Leads added today",
                 count: statistics.leadsAddedToday,
@@ -699,11 +967,72 @@ struct OverviewContentView: View {
 
 // MARK: - Card Components
 
+struct MoreSectionGroup<Content: View>: View {
+    let title: String
+    let icon: String
+    let subtitle: String?
+    let accentColor: Color
+    @ViewBuilder var content: Content
+
+    init(
+        title: String,
+        icon: String,
+        subtitle: String? = nil,
+        accentColor: Color = .electricViolet,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.icon = icon
+        self.subtitle = subtitle
+        self.accentColor = accentColor
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                ObsidianIconTile(icon: icon, tint: accentColor, size: 36)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.obsidianTitle)
+                        .foregroundColor(Color.textPrimary)
+
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+
+            VStack(spacing: 0) {
+                content
+            }
+        }
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+    }
+}
+
 struct MoreCardView<TrailingContent: View>: View {
     let icon: String
     let iconColor: Color
     let title: String
     let subtitle: String?
+    let titleColor: Color
+    let subtitleColor: Color
     let showChevron: Bool
     let trailingContent: (() -> TrailingContent)?
     
@@ -712,6 +1041,8 @@ struct MoreCardView<TrailingContent: View>: View {
         iconColor: Color,
         title: String,
         subtitle: String? = nil,
+        titleColor: Color = Color.textPrimary,
+        subtitleColor: Color = Color.textSecondary,
         showChevron: Bool = false,
         @ViewBuilder trailingContent: @escaping () -> TrailingContent
     ) {
@@ -719,6 +1050,8 @@ struct MoreCardView<TrailingContent: View>: View {
         self.iconColor = iconColor
         self.title = title
         self.subtitle = subtitle
+        self.titleColor = titleColor
+        self.subtitleColor = subtitleColor
         self.showChevron = showChevron
         self.trailingContent = trailingContent
     }
@@ -728,38 +1061,35 @@ struct MoreCardView<TrailingContent: View>: View {
         iconColor: Color,
         title: String,
         subtitle: String? = nil,
+        titleColor: Color = Color.textPrimary,
+        subtitleColor: Color = Color.textSecondary,
         showChevron: Bool = false
     ) where TrailingContent == EmptyView {
         self.icon = icon
         self.iconColor = iconColor
         self.title = title
         self.subtitle = subtitle
+        self.titleColor = titleColor
+        self.subtitleColor = subtitleColor
         self.showChevron = showChevron
         self.trailingContent = nil
     }
     
     var body: some View {
         HStack(spacing: 16) {
-            // Icon
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(iconColor)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.obsidianAction)
-                        .foregroundColor(.white)
-                )
+            ObsidianIconTile(icon: icon, tint: iconColor, size: 42)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.obsidianCallout)
-                    .foregroundColor(Color.textPrimary)
+                    .foregroundColor(titleColor)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
                 if let subtitle = subtitle {
                     Text(subtitle)
                         .font(.obsidianFootnote)
-                        .foregroundColor(Color.textSecondary)
+                        .foregroundColor(subtitleColor)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -776,18 +1106,8 @@ struct MoreCardView<TrailingContent: View>: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.obsidianSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
+        .padding(.vertical, 13)
+        .contentShape(Rectangle())
     }
 }
 
@@ -873,15 +1193,7 @@ struct UserInfoCardView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // User Avatar
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(avatarColor)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Image(systemName: avatarIcon)
-                        .font(.obsidianAction)
-                        .foregroundColor(.white)
-                )
+            ObsidianIconTile(icon: avatarIcon, tint: avatarColor, size: 42)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(displayName)
@@ -902,19 +1214,14 @@ struct UserInfoCardView: View {
                     .font(.obsidianFootnote)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.obsidianSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
+        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
     }
 }
 
@@ -926,36 +1233,19 @@ struct SignOutCardView: View {
         Button(action: {
             showingSignOutAlert = true
         }) {
-            HStack(spacing: 16) {
-                // Sign Out Icon
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.statusNotInterested)
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .font(.obsidianAction)
-                            .foregroundColor(.white)
-                    )
-
-                Text("Sign Out")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.statusNotInterested)
-
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.obsidianSurface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.statusNotInterested.opacity(0.3), lineWidth: 0.5)
-                    )
-                    .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+            MoreCardView(
+                icon: "rectangle.portrait.and.arrow.right",
+                iconColor: Color.statusNotInterested,
+                title: "Sign Out",
+                subtitle: "End this device session",
+                titleColor: Color.statusNotInterested,
+                subtitleColor: Color.statusNotInterested.opacity(0.72),
+                trailingContent: {
+                    Image(systemName: "chevron.right")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.statusNotInterested.opacity(0.75))
+                }
             )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityIdentifier("signOutButton")
@@ -980,15 +1270,7 @@ struct StatCardView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // Icon
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(color)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.obsidianAction)
-                        .foregroundColor(.white)
-                )
+            ObsidianIconTile(icon: icon, tint: color, size: 42)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
@@ -1002,19 +1284,14 @@ struct StatCardView: View {
 
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.obsidianSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
+        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
     }
 }
 
@@ -1040,15 +1317,7 @@ struct StatusProgressCardView: View {
     
     var body: some View {
         HStack(spacing: 16) {
-            // Icon
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(statusColor)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Image(systemName: statusIcon)
-                        .font(.obsidianAction)
-                        .foregroundColor(.white)
-                )
+            ObsidianIconTile(icon: statusIcon, tint: statusColor, size: 42)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -1066,11 +1335,11 @@ struct StatusProgressCardView: View {
                 // Progress bar
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.obsidianSurface)
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.obsidianElevated)
                             .frame(height: 6)
 
-                        RoundedRectangle(cornerRadius: 4)
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
                             .fill(statusColor)
                             .frame(width: geometry.size.width * percentage, height: 6)
                     }
@@ -1078,19 +1347,14 @@ struct StatusProgressCardView: View {
                 .frame(height: 6)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.obsidianSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
+        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
     }
 
     private var statusIcon: String {
@@ -1112,15 +1376,7 @@ struct RecentActivityCardView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // Icon
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(color)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.obsidianAction)
-                        .foregroundColor(.white)
-                )
+            ObsidianIconTile(icon: icon, tint: color, size: 42)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
@@ -1134,19 +1390,14 @@ struct RecentActivityCardView: View {
 
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.obsidianSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
+        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
     }
 }
 
@@ -1161,31 +1412,44 @@ struct CloudProviderSheet: View {
     @ObservedObject private var syncManager = UserDataSyncManager.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
 
-    private var leadsCount: Int {
-        let request = Lead.fetchRequest()
-        return (try? viewContext.count(for: request)) ?? 0
+    private var localLeadCount: Int? {
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: viewContext)
+        do {
+            return try viewContext.count(for: request)
+        } catch {
+            return nil
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Cloud Storage")
-                    .font(.obsidianSubheadline)
-                    .foregroundColor(.textPrimary)
-                Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.obsidianCaption)
+            HStack(alignment: .top, spacing: 12) {
+                ObsidianIconTile(icon: "externaldrive.connected.to.line.below.fill", tint: Color.electricViolet, size: 42)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Cloud Storage")
+                        .font(.obsidianHeadline)
+                        .foregroundColor(.textPrimary)
+
+                    Text("Choose where your lead data syncs and backs up.")
+                        .font(.obsidianFootnote)
                         .foregroundColor(.textSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(Color.obsidianElevated)
-                        .clipShape(Circle())
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+
+                ObsidianCompactIconButton(
+                    icon: "xmark",
+                    accessibilityLabel: "Close cloud storage",
+                    accentColor: Color.textSecondary
+                ) {
+                    dismiss()
                 }
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
-            .padding(.bottom, 16)
+            .padding(.bottom, 18)
 
             // Provider options
             VStack(spacing: 0) {
@@ -1197,14 +1461,11 @@ struct CloudProviderSheet: View {
                         }
                     } label: {
                         HStack(spacing: 14) {
-                            ZStack {
-                                Circle()
-                                    .fill(providerColor(provider).opacity(0.12))
-                                    .frame(width: 40, height: 40)
-                                Image(systemName: provider.icon)
-                                    .font(.obsidianTitle)
-                                    .foregroundColor(providerColor(provider))
-                            }
+                            ObsidianIconTile(
+                                icon: provider.icon,
+                                tint: providerColor(provider),
+                                size: 40
+                            )
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(provider.displayName)
                                     .font(.obsidianCallout)
@@ -1229,9 +1490,9 @@ struct CloudProviderSheet: View {
                 }
             }
             .background(Color.obsidianSurface)
-            .cornerRadius(14)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.obsidianBorder, lineWidth: 0.5)
             )
             .padding(.horizontal, 20)
@@ -1263,9 +1524,9 @@ struct CloudProviderSheet: View {
             }
         } message: {
             if CloudSyncProvider.current == .firebase && selectedProvider == .icloud {
-                Text("A final Firebase sync will run first. All \(leadsCount) leads will then sync automatically via iCloud. Firebase will be kept as a backup.")
+                Text("\(LeadCountDisplay.firebaseToICloudMessage(for: localLeadCount)) Firebase will be kept as a backup.")
             } else if selectedProvider == .icloud {
-                Text("All \(leadsCount) leads will sync automatically via iCloud using your Apple ID.")
+                Text(LeadCountDisplay.iCloudSyncMessage(for: localLeadCount))
             } else if selectedProvider == .firebase {
                 Text("Switching to Firebase. Requires account sign-in for cloud sync.")
             } else {
@@ -1327,26 +1588,35 @@ struct SyncSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
-                // Header
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Sync Settings")
-                                .font(.title)
-                                .fontWeight(.bold)
-                            
-                            Text("Choose how often your data syncs automatically")
-                                .font(.subheadline)
-                                .foregroundColor(Color.textSecondary)
-                        }
-                        Spacer()
+                HStack(alignment: .top, spacing: 12) {
+                    ObsidianIconTile(icon: "arrow.triangle.2.circlepath", tint: Color.electricViolet, size: 42)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Sync Settings")
+                            .font(.obsidianHeadline)
+                            .foregroundColor(Color.textPrimary)
+
+                        Text("Choose how often your data syncs automatically.")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    ObsidianCompactIconButton(
+                        icon: "xmark",
+                        accessibilityLabel: "Close sync settings",
+                        accentColor: Color.textSecondary
+                    ) {
+                        dismiss()
                     }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
-                .padding(.bottom, 24)
+                .padding(.bottom, 18)
                 .background(Color.obsidianBlack)
                 
                 ScrollView {
@@ -1357,22 +1627,26 @@ struct SyncSettingsView: View {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("Enable Auto-sync")
-                                            .font(.body)
-                                            .fontWeight(.medium)
+                                            .font(.obsidianCallout)
+                                            .foregroundColor(Color.textPrimary)
                                         
                                         Text("Automatically sync your data at regular intervals")
-                                            .font(.caption)
+                                            .font(.obsidianFootnote)
                                             .foregroundColor(Color.textSecondary)
                                     }
                                     
                                     Spacer()
                                     
-                                    Toggle("", isOn: Binding(
+                                    Toggle("Automatic Sync", isOn: Binding(
                                         get: { syncManager.isAutoSyncEnabled },
                                         set: { newValue in
                                             syncManager.toggleAutoSync(newValue)
                                         }
                                     ))
+                                    .labelsHidden()
+                                    .accessibilityLabel("Automatic Sync")
+                                    .accessibilityValue(syncManager.isAutoSyncEnabled ? "Enabled" : "Disabled")
+                                    .accessibilityHint("Toggles automatic data sync.")
                                 }
                             }
                         }
@@ -1403,7 +1677,8 @@ struct SyncSettingsView: View {
             .background(Color.obsidianBlack)
             .navigationBarHidden(true)
         }
-        .presentationDetents([.height(600)])
+        .presentationDetents([.large])
+        .presentationBackground(Color.obsidianBlack)
     }
     
     private func syncIntervalRow(interval: UserDataSyncManager.SyncInterval) -> some View {
@@ -1413,8 +1688,7 @@ struct SyncSettingsView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(interval.displayName)
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.obsidianCallout)
                         .foregroundColor(Color.textPrimary)
                 }
 
@@ -1440,11 +1714,11 @@ struct SyncSettingsView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.body)
-                    .fontWeight(.medium)
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
 
                 Text(description)
-                    .font(.caption)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
             }
 
@@ -1455,27 +1729,25 @@ struct SyncSettingsView: View {
     
     private func modernSectionCard<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+            HStack(alignment: .top, spacing: 12) {
+                ObsidianIconTile(icon: icon, tint: Color.electricViolet, size: 34)
 
                 Text(title)
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    .font(.themeTitle)
                     .foregroundColor(Color.textPrimary)
 
                 Spacer()
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
 
             content()
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
         }
+        .padding(16)
         .background(Color.obsidianSurface)
-        .cornerRadius(16)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
     }
 }
 

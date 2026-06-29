@@ -7,6 +7,7 @@ import {
 } from "@firebase/rules-unit-testing";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -59,6 +60,63 @@ describe("D2D team Firestore rules", () => {
     await assertSucceeds(batch.commit());
   });
 
+  it("blocks orphan team documents without the owner member batch", async () => {
+    const db = testEnv.authenticatedContext("owner-1", { email: "owner@example.com" }).firestore();
+    const now = Timestamp.now();
+
+    await assertFails(setDoc(doc(db, "teams/orphan-team"), teamData("owner-1", now)));
+    await assertFails(setDoc(doc(db, "teams/bad-limit-team"), {
+      ...teamData("owner-1", now),
+      memberLimit: 10
+    }));
+  });
+
+  it("blocks owner edits to protected team plan fields outside close-team", async () => {
+    await seedOwnerTeam();
+
+    const ownerDb = testEnv.authenticatedContext("owner-1", { email: "owner@example.com" }).firestore();
+    const now = Timestamp.now();
+
+    await assertFails(updateDoc(doc(ownerDb, "teams/team-1"), {
+      memberLimit: 10,
+      updatedAt: now
+    }));
+    await assertFails(updateDoc(doc(ownerDb, "teams/team-1"), {
+      ownerUserId: "rep-1",
+      updatedAt: now
+    }));
+    await assertFails(updateDoc(doc(ownerDb, "teams/team-1"), {
+      planStatus: "paused",
+      updatedAt: now
+    }));
+  });
+
+  it("keeps owner member management limited to work type and removal", async () => {
+    await seedTeamWithTwoRepsAndWork();
+
+    const ownerDb = testEnv.authenticatedContext("owner-1", { email: "owner@example.com" }).firestore();
+    const now = Timestamp.now();
+
+    await assertSucceeds(updateDoc(doc(ownerDb, "teams/team-1/members/rep-1"), {
+      workType: "technician",
+      updatedAt: now
+    }));
+    await assertSucceeds(updateDoc(doc(ownerDb, "teams/team-1/members/rep-2"), {
+      status: "removed",
+      removedAt: now,
+      updatedAt: now
+    }));
+    await assertFails(updateDoc(doc(ownerDb, "teams/team-1/members/rep-1"), {
+      role: "owner",
+      updatedAt: now
+    }));
+    await assertFails(updateDoc(doc(ownerDb, "teams/team-1/members/owner-1"), {
+      status: "removed",
+      removedAt: now,
+      updatedAt: now
+    }));
+  });
+
   it("allows owner invite creation and a rep single-use join batch", async () => {
     await seedOwnerTeam();
 
@@ -82,6 +140,9 @@ describe("D2D team Firestore rules", () => {
     await assertSucceeds(inviteBatch.commit());
 
     const repDb = testEnv.authenticatedContext("rep-1", { email: "rep@example.com" }).firestore();
+    await assertSucceeds(getDoc(doc(repDb, "teamInvites/INVITE01")));
+    await assertFails(getDocs(collection(repDb, "teamInvites")));
+
     const joinBatch = writeBatch(repDb);
     joinBatch.delete(doc(repDb, "teams/team-1/members/pending-rep-INVITE01"));
     joinBatch.set(doc(repDb, "teams/team-1/members/rep-1"), repMemberData("rep-1", now));
@@ -103,6 +164,74 @@ describe("D2D team Firestore rules", () => {
     await assertSucceeds(joinBatch.commit());
   });
 
+  it("blocks workers from accepting invites outside the join batch", async () => {
+    await seedOwnerTeam();
+    const now = Timestamp.now();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "teamInvites/INVITE02"), inviteData(now));
+      await setDoc(doc(db, "teamInvites/INVITE03"), inviteData(now));
+      await setDoc(doc(db, "teams/team-1/members/pending-rep-INVITE02"), {
+        ...pendingMemberData(now),
+        userId: "pending-rep-INVITE02",
+        acceptedInviteId: "INVITE02"
+      });
+      await setDoc(doc(db, "teamInvites/EXPIRED1"), {
+        ...inviteData(now),
+        expiresAt: Timestamp.fromMillis(Date.now() - 60_000)
+      });
+    });
+
+    const repDb = testEnv.authenticatedContext("rep-1", { email: "rep@example.com" }).firestore();
+
+    await assertFails(updateDoc(doc(repDb, "teamInvites/INVITE02"), {
+      status: "accepted",
+      acceptedByUserId: "rep-1",
+      acceptedAt: now
+    }));
+    await assertFails(updateDoc(doc(repDb, "teamInvites/INVITE02"), {
+      status: "accepted",
+      acceptedByUserId: "rep-1",
+      acceptedAt: now,
+      createdByUserId: "rep-1"
+    }));
+    await assertFails(setDoc(doc(repDb, "teams/team-1/members/rep-1"), {
+      ...repMemberData("rep-1", now),
+      acceptedInviteId: "INVITE02"
+    }));
+    await assertFails(deleteDoc(doc(repDb, "teams/team-1/members/pending-rep-INVITE02")));
+
+    const tamperedJoinBatch = writeBatch(repDb);
+    tamperedJoinBatch.set(doc(repDb, "teams/team-1/members/rep-1"), {
+      ...repMemberData("rep-1", now),
+      acceptedInviteId: "INVITE03"
+    });
+    tamperedJoinBatch.update(doc(repDb, "teamInvites/INVITE03"), {
+      status: "accepted",
+      acceptedByUserId: "rep-1",
+      acceptedAt: now,
+      createdByUserId: "rep-1"
+    });
+    tamperedJoinBatch.set(doc(repDb, "users/rep-1/teamProfile/current"), teamProfileData("team-1", "member", now));
+
+    await assertFails(tamperedJoinBatch.commit());
+
+    const expiredJoinBatch = writeBatch(repDb);
+    expiredJoinBatch.set(doc(repDb, "teams/team-1/members/rep-1"), {
+      ...repMemberData("rep-1", now),
+      acceptedInviteId: "EXPIRED1"
+    });
+    expiredJoinBatch.update(doc(repDb, "teamInvites/EXPIRED1"), {
+      status: "accepted",
+      acceptedByUserId: "rep-1",
+      acceptedAt: now
+    });
+    expiredJoinBatch.set(doc(repDb, "users/rep-1/teamProfile/current"), teamProfileData("team-1", "member", now));
+
+    await assertFails(expiredJoinBatch.commit());
+  });
+
   it("keeps reps limited to their assigned leads and bookings", async () => {
     await seedTeamWithTwoRepsAndWork();
 
@@ -122,6 +251,98 @@ describe("D2D team Firestore rules", () => {
       getDocs(query(collection(repTwoDb, "teams/team-1/leads"), where("assignedToUserId", "==", "rep-2")))
     );
     await assertFails(getDocs(collection(repTwoDb, "teams/team-1/leads")));
+  });
+
+  it("keeps rep-created lead and booking payloads scoped to the team path", async () => {
+    await seedTeamWithTwoRepsAndWork();
+
+    const repDb = testEnv.authenticatedContext("rep-1").firestore();
+    const now = Timestamp.now();
+    const validLead = leadData("rep-1", now);
+    const validBooking = bookingData("rep-1", now);
+
+    await assertSucceeds(setDoc(doc(repDb, "teams/team-1/leads/new-lead-rep-1"), validLead));
+    await assertSucceeds(setDoc(doc(repDb, "teams/team-1/bookings/new-booking-rep-1"), validBooking));
+
+    await assertFails(setDoc(doc(repDb, "teams/team-1/leads/wrong-team-lead"), {
+      ...validLead,
+      teamId: "other-team"
+    }));
+    await assertFails(setDoc(doc(repDb, "teams/team-1/leads/wrong-assignee-lead"), {
+      ...validLead,
+      assignedToUserId: "rep-2"
+    }));
+    await assertFails(updateDoc(doc(repDb, "teams/team-1/leads/lead-rep-1"), {
+      teamId: "other-team",
+      updatedByUserId: "rep-1",
+      updatedAt: now
+    }));
+    await assertFails(updateDoc(doc(repDb, "teams/team-1/leads/lead-rep-1"), {
+      createdByUserId: "owner-1",
+      updatedByUserId: "rep-1",
+      updatedAt: now
+    }));
+
+    await assertFails(setDoc(doc(repDb, "teams/team-1/bookings/wrong-team-booking"), {
+      ...validBooking,
+      teamId: "other-team"
+    }));
+    await assertFails(updateDoc(doc(repDb, "teams/team-1/bookings/booking-rep-1"), {
+      assignedToUserId: "rep-2",
+      updatedByUserId: "rep-1",
+      updatedAt: now
+    }));
+  });
+
+  it("allows assigned reps to clear optional lead and booking fields with null merge payloads", async () => {
+    await seedTeamWithTwoRepsAndWork();
+
+    const repDb = testEnv.authenticatedContext("rep-1").firestore();
+    const now = Timestamp.now();
+
+    await assertSucceeds(updateDoc(doc(repDb, "teams/team-1/leads/lead-rep-1"), {
+      phone: null,
+      email: null,
+      serviceCategory: null,
+      highPriorityReason: null,
+      updatedByUserId: "rep-1",
+      updatedAt: now
+    }));
+    await assertSucceeds(updateDoc(doc(repDb, "teams/team-1/bookings/booking-rep-1"), {
+      customerName: null,
+      customerPhone: null,
+      customerEmail: null,
+      serviceCategory: null,
+      quotedPrice: null,
+      latitude: null,
+      longitude: null,
+      arrivalWindowMinutes: null,
+      updatedByUserId: "rep-1",
+      updatedAt: now
+    }));
+  });
+
+  it("keeps owner lead and booking writes scoped to the team path", async () => {
+    await seedTeamWithTwoRepsAndWork();
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+    const now = Timestamp.now();
+
+    await assertSucceeds(setDoc(doc(ownerDb, "teams/team-1/leads/owner-good-lead"), leadData("rep-1", now)));
+    await assertSucceeds(setDoc(doc(ownerDb, "teams/team-1/bookings/owner-good-booking"), bookingData("rep-1", now)));
+    await assertFails(setDoc(doc(ownerDb, "teams/team-1/leads/owner-wrong-team-lead"), {
+      ...leadData("rep-1", now),
+      teamId: "other-team"
+    }));
+    await assertFails(setDoc(doc(ownerDb, "teams/team-1/bookings/owner-wrong-team-booking"), {
+      ...bookingData("rep-1", now),
+      teamId: "other-team"
+    }));
+    await assertFails(updateDoc(doc(ownerDb, "teams/team-1/leads/lead-rep-1"), {
+      teamId: "other-team",
+      updatedByUserId: "owner-1",
+      updatedAt: now
+    }));
   });
 
   it("lets reps manage only their own active-hour sessions", async () => {
@@ -152,9 +373,34 @@ describe("D2D team Firestore rules", () => {
         distanceMeters: 0
       })
     );
+    await assertFails(
+      setDoc(doc(repOneDb, "teams/team-1/dutySessions/session-wrong-team"), {
+        teamId: "other-team",
+        repUserId: "rep-1",
+        startedAt: now,
+        status: "active",
+        createdAt: now,
+        distanceMeters: 0
+      })
+    );
+    await assertFails(
+      setDoc(doc(repOneDb, "teams/team-1/dutyLocationPoints/point-wrong-team"), {
+        ...dutyLocationPointData("rep-1", "session-rep-1", now),
+        teamId: "other-team"
+      })
+    );
 
     await assertFails(getDoc(doc(repOneDb, "teams/team-1/dutySessions/seeded-session-rep-2")));
     await assertSucceeds(getDoc(doc(repTwoDb, "teams/team-1/dutySessions/seeded-session-rep-2")));
+    await assertSucceeds(getDoc(doc(repOneDb, "teams/team-1/members/owner-1")));
+    await assertFails(getDoc(doc(repOneDb, "teams/team-1/members/rep-2")));
+    await assertSucceeds(
+      getDocs(query(collection(repOneDb, "teams/team-1/dutySessions"), where("repUserId", "==", "owner-1")))
+    );
+    await assertSucceeds(
+      getDocs(query(collection(repOneDb, "teams/team-1/dutyLocationPoints"), where("repUserId", "==", "owner-1")))
+    );
+    await assertFails(getDoc(doc(repOneDb, "teams/team-1/dutyLocationPoints/seeded-point-rep-2")));
   });
 
   it("lets reps create owner alerts but keeps the alert inbox owner-only", async () => {
@@ -170,8 +416,59 @@ describe("D2D team Firestore rules", () => {
         ownerNotificationData("rep-1", now)
       )
     );
+    await assertFails(
+      setDoc(
+        doc(repOneDb, "teams/team-1/ownerNotifications/alert-rep-2"),
+        ownerNotificationData("rep-2", now)
+      )
+    );
+    await assertFails(
+      setDoc(
+        doc(repOneDb, "teams/team-1/ownerNotifications/alert-wrong-team"),
+        {
+          ...ownerNotificationData("rep-1", now),
+          teamId: "other-team"
+        }
+      )
+    );
     await assertSucceeds(getDocs(collection(ownerDb, "teams/team-1/ownerNotifications")));
     await assertFails(getDocs(collection(repOneDb, "teams/team-1/ownerNotifications")));
+  });
+
+  it("lets owners mark owner alerts read and write the audit log", async () => {
+    await seedTeamWithTwoRepsAndWork();
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+    const repOneDb = testEnv.authenticatedContext("rep-1").firestore();
+    const now = Timestamp.now();
+
+    await assertSucceeds(
+      setDoc(
+        doc(repOneDb, "teams/team-1/ownerNotifications/alert-rep-1"),
+        ownerNotificationData("rep-1", now)
+      )
+    );
+
+    const readBatch = writeBatch(ownerDb);
+    readBatch.update(doc(ownerDb, "teams/team-1/ownerNotifications/alert-rep-1"), {
+      readAt: now
+    });
+    readBatch.set(doc(ownerDb, "teams/team-1/activityLog/owner-read-alert"), activityLogData({
+      actorUserId: "owner-1",
+      kind: "owner_alert_read",
+      subjectId: "alert-rep-1",
+      subjectTitle: "Rep marked a lead interested",
+      targetUserId: "rep-1",
+      now
+    }));
+
+    await assertSucceeds(readBatch.commit());
+    await assertSucceeds(getDoc(doc(ownerDb, "teams/team-1/ownerNotifications/alert-rep-1")));
+    await assertFails(
+      updateDoc(doc(repOneDb, "teams/team-1/ownerNotifications/alert-rep-1"), {
+        readAt: now
+      })
+    );
   });
 
   it("keeps activity log visible to owner and scoped reps only", async () => {
@@ -200,6 +497,185 @@ describe("D2D team Firestore rules", () => {
     await assertFails(getDoc(doc(repTwoDb, "teams/team-1/activityLog/rep-1-entry")));
   });
 
+  it("blocks workers from editing their own team privileges", async () => {
+    await seedTeamWithTwoRepsAndWork();
+
+    const repDb = testEnv.authenticatedContext("rep-1").firestore();
+    const now = Timestamp.now();
+    const memberRef = doc(repDb, "teams/team-1/members/rep-1");
+
+    await assertFails(updateDoc(memberRef, {
+      role: "owner",
+      updatedAt: now
+    }));
+    await assertFails(updateDoc(memberRef, {
+      workType: "technician",
+      updatedAt: now
+    }));
+    await assertFails(updateDoc(memberRef, {
+      role: "owner",
+      status: "removed",
+      removedAt: now,
+      updatedAt: now
+    }));
+  });
+
+  it("allows a worker to leave their own team and lose team access", async () => {
+    await seedTeamWithTwoRepsAndWork();
+
+    const repDb = testEnv.authenticatedContext("rep-1").firestore();
+    const now = Timestamp.now();
+    const batch = writeBatch(repDb);
+
+    batch.update(doc(repDb, "teams/team-1/members/rep-1"), {
+      status: "removed",
+      removedAt: now,
+      updatedAt: now
+    });
+    batch.delete(doc(repDb, "users/rep-1/teamProfile/current"));
+    batch.set(doc(repDb, "teams/team-1/activityLog/rep-left"), activityLogData({
+      actorUserId: "rep-1",
+      kind: "member_left",
+      subjectId: "rep-1",
+      subjectTitle: "Test Team",
+      targetUserId: "rep-1",
+      now
+    }));
+
+    await assertSucceeds(batch.commit());
+    await assertFails(getDoc(doc(repDb, "teams/team-1")));
+  });
+
+  it("allows the owner to close the team workspace and remove members", async () => {
+    await seedTeamWithTwoRepsAndWork();
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+    const now = Timestamp.now();
+    const batch = writeBatch(ownerDb);
+
+    batch.update(doc(ownerDb, "teams/team-1"), {
+      planStatus: "paused",
+      updatedAt: now
+    });
+    for (const userId of ["owner-1", "rep-1", "rep-2"]) {
+      batch.update(doc(ownerDb, `teams/team-1/members/${userId}`), {
+        status: "removed",
+        removedAt: now,
+        updatedAt: now
+      });
+    }
+    for (const sessionId of ["seeded-session-owner", "seeded-session-rep-2"]) {
+      batch.update(doc(ownerDb, `teams/team-1/dutySessions/${sessionId}`), {
+        status: "ended",
+        endedAt: now,
+        lastLocationAt: now,
+        deleteAfter: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      });
+    }
+    batch.delete(doc(ownerDb, "users/owner-1/teamProfile/current"));
+    batch.set(doc(ownerDb, "teams/team-1/activityLog/team-closed"), activityLogData({
+      actorUserId: "owner-1",
+      kind: "team_closed",
+      subjectId: "team-1",
+      subjectTitle: "Test Team",
+      targetUserId: "owner-1",
+      now
+    }));
+
+    await assertSucceeds(batch.commit());
+  });
+
+  it("keeps grace teams read-only and blocks normal team edits", async () => {
+    await seedTeamWithTwoRepsAndWork("grace");
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+    const repDb = testEnv.authenticatedContext("rep-1").firestore();
+    const now = Timestamp.now();
+
+    await assertSucceeds(getDoc(doc(ownerDb, "teams/team-1")));
+    await assertSucceeds(getDoc(doc(repDb, "teams/team-1/leads/lead-rep-1")));
+
+    await assertFails(setDoc(doc(ownerDb, "teamInvites/GRACE01"), inviteData(now)));
+    await assertFails(updateDoc(doc(ownerDb, "teams/team-1/members/rep-1"), {
+      workType: "technician",
+      updatedAt: now
+    }));
+    await assertFails(setDoc(doc(repDb, "teams/team-1/leads/grace-rep-lead"), leadData("rep-1", now)));
+    await assertFails(setDoc(doc(ownerDb, "teams/team-1/bookings/grace-owner-booking"), bookingData("rep-1", now)));
+    await assertFails(setDoc(doc(repDb, "teams/team-1/ownerNotifications/grace-alert"), ownerNotificationData("rep-1", now)));
+    await assertFails(setDoc(doc(repDb, "teams/team-1/dutySessions/grace-session"), dutySessionData("rep-1", now)));
+    await assertFails(setDoc(doc(repDb, "teams/team-1/dutyLocationPoints/grace-point"), dutyLocationPointData("rep-1", "seeded-session-rep-2", now)));
+  });
+
+  it("blocks paused team reads but still lets workers leave", async () => {
+    await seedTeamWithTwoRepsAndWork("paused");
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+    const repDb = testEnv.authenticatedContext("rep-1").firestore();
+    const now = Timestamp.now();
+
+    await assertFails(getDoc(doc(ownerDb, "teams/team-1")));
+    await assertFails(getDoc(doc(repDb, "teams/team-1/leads/lead-rep-1")));
+    await assertFails(setDoc(doc(ownerDb, "teams/team-1/leads/paused-owner-lead"), leadData("rep-1", now)));
+
+    const leaveBatch = writeBatch(repDb);
+    leaveBatch.update(doc(repDb, "teams/team-1/members/rep-1"), {
+      status: "removed",
+      removedAt: now,
+      updatedAt: now
+    });
+    leaveBatch.delete(doc(repDb, "users/rep-1/teamProfile/current"));
+    leaveBatch.set(doc(repDb, "teams/team-1/activityLog/paused-rep-left"), activityLogData({
+      actorUserId: "rep-1",
+      kind: "member_left",
+      subjectId: "rep-1",
+      subjectTitle: "Test Team",
+      targetUserId: "rep-1",
+      now
+    }));
+
+    await assertSucceeds(leaveBatch.commit());
+  });
+
+  it("lets owners close a grace team without reopening edits", async () => {
+    await seedTeamWithTwoRepsAndWork("grace");
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+    const now = Timestamp.now();
+    const batch = writeBatch(ownerDb);
+
+    batch.update(doc(ownerDb, "teams/team-1"), {
+      planStatus: "paused",
+      updatedAt: now
+    });
+    for (const userId of ["owner-1", "rep-1", "rep-2"]) {
+      batch.update(doc(ownerDb, `teams/team-1/members/${userId}`), {
+        status: "removed",
+        removedAt: now,
+        updatedAt: now
+      });
+    }
+    for (const sessionId of ["seeded-session-owner", "seeded-session-rep-2"]) {
+      batch.update(doc(ownerDb, `teams/team-1/dutySessions/${sessionId}`), {
+        status: "ended",
+        endedAt: now,
+        lastLocationAt: now,
+        deleteAfter: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      });
+    }
+    batch.delete(doc(ownerDb, "users/owner-1/teamProfile/current"));
+    batch.set(doc(ownerDb, "teams/team-1/activityLog/grace-team-closed"), activityLogData({
+      actorUserId: "owner-1",
+      kind: "team_closed",
+      subjectId: "team-1",
+      subjectTitle: "Test Team",
+      targetUserId: "owner-1",
+      now
+    }));
+
+    await assertSucceeds(batch.commit());
+  });
+
   it("blocks unauthenticated team access", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
 
@@ -208,21 +684,21 @@ describe("D2D team Firestore rules", () => {
   });
 });
 
-async function seedOwnerTeam() {
+async function seedOwnerTeam(planStatus = "active") {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     const now = Timestamp.now();
-    await setDoc(doc(db, "teams/team-1"), teamData("owner-1", now));
+    await setDoc(doc(db, "teams/team-1"), teamData("owner-1", now, planStatus));
     await setDoc(doc(db, "teams/team-1/members/owner-1"), ownerMemberData("owner-1", now));
   });
 }
 
-async function seedTeamWithTwoRepsAndWork() {
+async function seedTeamWithTwoRepsAndWork(planStatus = "active") {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     const now = Timestamp.now();
 
-    await setDoc(doc(db, "teams/team-1"), teamData("owner-1", now));
+    await setDoc(doc(db, "teams/team-1"), teamData("owner-1", now, planStatus));
     await setDoc(doc(db, "teams/team-1/members/owner-1"), ownerMemberData("owner-1", now));
     await setDoc(doc(db, "teams/team-1/members/rep-1"), repMemberData("rep-1", now));
     await setDoc(doc(db, "teams/team-1/members/rep-2"), repMemberData("rep-2", now));
@@ -231,17 +707,20 @@ async function seedTeamWithTwoRepsAndWork() {
     await setDoc(doc(db, "teams/team-1/leads/lead-rep-2"), leadData("rep-2", now));
     await setDoc(doc(db, "teams/team-1/bookings/booking-rep-1"), bookingData("rep-1", now));
     await setDoc(doc(db, "teams/team-1/bookings/booking-rep-2"), bookingData("rep-2", now));
+    await setDoc(doc(db, "teams/team-1/dutySessions/seeded-session-owner"), dutySessionData("owner-1", now));
     await setDoc(doc(db, "teams/team-1/dutySessions/seeded-session-rep-2"), dutySessionData("rep-2", now));
+    await setDoc(doc(db, "teams/team-1/dutyLocationPoints/seeded-point-owner"), dutyLocationPointData("owner-1", "seeded-session-owner", now));
+    await setDoc(doc(db, "teams/team-1/dutyLocationPoints/seeded-point-rep-2"), dutyLocationPointData("rep-2", "seeded-session-rep-2", now));
   });
 }
 
-function teamData(ownerUserId, now) {
+function teamData(ownerUserId, now, planStatus = "active") {
   return {
     name: "Test Team",
     ownerUserId,
     createdAt: now,
     updatedAt: now,
-    planStatus: "active",
+    planStatus,
     memberLimit: 3
   };
 }
@@ -345,6 +824,19 @@ function dutySessionData(repUserId, now) {
     status: "active",
     createdAt: now,
     distanceMeters: 0
+  };
+}
+
+function dutyLocationPointData(repUserId, sessionId, now) {
+  return {
+    teamId: "team-1",
+    sessionId,
+    repUserId,
+    latitude: 43.6,
+    longitude: -79.7,
+    horizontalAccuracy: 12,
+    recordedAt: now,
+    deleteAfter: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000)
   };
 }
 

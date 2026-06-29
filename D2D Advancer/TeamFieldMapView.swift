@@ -5,6 +5,8 @@ import UIKit
 struct TeamFieldMapView: UIViewRepresentable {
     let workspaces: [TeamRepWorkspace]
     @Binding var selectedRepUserId: String?
+    var onLeadTap: (TeamLead) -> Void = { _ in }
+    var onLeadClusterTap: ([TeamLeadClusterItem], CLLocationCoordinate2D) -> Void = { _, _ in }
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -78,7 +80,7 @@ struct TeamFieldMapView: UIViewRepresentable {
     private func annotationSignature(for workspaces: [TeamRepWorkspace]) -> String {
         workspaces.map { workspace in
             let live = workspace.liveLocation.map { "\($0.id):\($0.latitude):\($0.longitude)" } ?? "off"
-            let leads = workspace.assignedLeads.map { "\($0.id):\($0.latitude):\($0.longitude):\($0.status.rawValue):\($0.isHighPriority)" }.joined(separator: ",")
+            let leads = workspace.assignedLeads.map { "\($0.id):\($0.latitude):\($0.longitude):\($0.status.rawValue):\($0.isHighPriority):\($0.price):\($0.estimatedValue):\($0.updatedAt.timeIntervalSince1970)" }.joined(separator: ",")
             let route = workspace.routePoints.map { "\($0.id):\($0.latitude):\($0.longitude)" }.joined(separator: ",")
             return "\(workspace.member.userId)|\(live)|\(leads)|\(route)"
         }
@@ -124,8 +126,22 @@ struct TeamFieldMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
-            if let repAnnotation = view.annotation as? TeamRepLiveAnnotation {
+            if let cluster = view.annotation as? MKClusterAnnotation {
+                let items = TeamLeadClusterSummary.sortedItems(
+                    cluster.memberAnnotations.compactMap { ($0 as? TeamLeadMapItemAnnotation)?.clusterItem }
+                )
+                guard !items.isEmpty else { return }
+                mapView.deselectAnnotation(cluster, animated: false)
+
+                if shouldOpenClusterSheet(mapView: mapView, cluster: cluster) {
+                    parent.onLeadClusterTap(items, cluster.coordinate)
+                } else {
+                    zoomIntoCluster(cluster, on: mapView)
+                }
+            } else if let repAnnotation = view.annotation as? TeamRepLiveAnnotation {
                 parent.selectedRepUserId = repAnnotation.repUserId
+            } else if let leadAnnotation = view.annotation as? TeamLeadMapItemAnnotation {
+                parent.onLeadTap(leadAnnotation.lead)
             }
         }
 
@@ -141,6 +157,22 @@ struct TeamFieldMapView: UIViewRepresentable {
                 view.markerTintColor = .systemBlue
                 view.glyphImage = UIImage(systemName: "location.fill")
                 view.displayPriority = .required
+                view.clusteringIdentifier = nil
+                return view
+            }
+
+            if let cluster = annotation as? MKClusterAnnotation {
+                let identifier = "TeamLeadClusterAnnotation"
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+                    ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                let items = cluster.memberAnnotations.compactMap { ($0 as? TeamLeadMapItemAnnotation)?.clusterItem }
+                let summary = TeamLeadClusterSummary(items: items)
+                view.annotation = cluster
+                view.glyphText = summary.glyphText
+                view.markerTintColor = summary.uiColor
+                view.glyphTintColor = .white
+                view.displayPriority = summary.isImportant ? .required : .defaultHigh
+                view.collisionMode = .circle
                 return view
             }
 
@@ -151,8 +183,69 @@ struct TeamFieldMapView: UIViewRepresentable {
             view.annotation = leadAnnotation
             view.canShowCallout = true
             view.markerTintColor = uiColor(for: leadAnnotation.lead.status)
-            view.glyphImage = UIImage(systemName: leadAnnotation.lead.isHighPriority ? "star.fill" : glyphName(for: leadAnnotation.lead.status))
+            view.glyphImage = UIImage(systemName: TeamLeadAttentionPolicy.isActionableHighPriority(leadAnnotation.lead) ? "star.fill" : glyphName(for: leadAnnotation.lead.status))
+            view.clusteringIdentifier = "TeamLeadCluster"
+            view.displayPriority = TeamLeadAttentionPolicy.needsOwnerAttention(leadAnnotation.lead) ? .required : .defaultHigh
             return view
+        }
+
+        private func shouldOpenClusterSheet(mapView: MKMapView, cluster: MKClusterAnnotation) -> Bool {
+            let maxSpan = max(mapView.region.span.latitudeDelta, mapView.region.span.longitudeDelta)
+            return maxSpan <= 0.012 || coordinateSpread(for: cluster) <= 0.0012
+        }
+
+        private func zoomIntoCluster(_ cluster: MKClusterAnnotation, on mapView: MKMapView) {
+            let coordinates = cluster.memberAnnotations.map(\.coordinate)
+            guard let region = paddedRegion(containing: coordinates, currentRegion: mapView.region) else { return }
+            mapView.setRegion(region, animated: true)
+        }
+
+        private func paddedRegion(
+            containing coordinates: [CLLocationCoordinate2D],
+            currentRegion: MKCoordinateRegion
+        ) -> MKCoordinateRegion? {
+            guard let first = coordinates.first else { return nil }
+            var minLatitude = first.latitude
+            var maxLatitude = first.latitude
+            var minLongitude = first.longitude
+            var maxLongitude = first.longitude
+
+            for coordinate in coordinates.dropFirst() {
+                minLatitude = min(minLatitude, coordinate.latitude)
+                maxLatitude = max(maxLatitude, coordinate.latitude)
+                minLongitude = min(minLongitude, coordinate.longitude)
+                maxLongitude = max(maxLongitude, coordinate.longitude)
+            }
+
+            return MKCoordinateRegion(
+                center: CLLocationCoordinate2D(
+                    latitude: (minLatitude + maxLatitude) / 2,
+                    longitude: (minLongitude + maxLongitude) / 2
+                ),
+                span: MKCoordinateSpan(
+                    latitudeDelta: min(max((maxLatitude - minLatitude) * 2.2, 0.0025), currentRegion.span.latitudeDelta * 0.55),
+                    longitudeDelta: min(max((maxLongitude - minLongitude) * 2.2, 0.0025), currentRegion.span.longitudeDelta * 0.55)
+                )
+            )
+        }
+
+        private func coordinateSpread(for cluster: MKClusterAnnotation) -> CLLocationDegrees {
+            let coordinates = cluster.memberAnnotations.map(\.coordinate)
+            guard let first = coordinates.first else { return 0 }
+
+            var minLatitude = first.latitude
+            var maxLatitude = first.latitude
+            var minLongitude = first.longitude
+            var maxLongitude = first.longitude
+
+            for coordinate in coordinates.dropFirst() {
+                minLatitude = min(minLatitude, coordinate.latitude)
+                maxLatitude = max(maxLatitude, coordinate.latitude)
+                minLongitude = min(minLongitude, coordinate.longitude)
+                maxLongitude = max(maxLongitude, coordinate.longitude)
+            }
+
+            return max(maxLatitude - minLatitude, maxLongitude - minLongitude)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -212,6 +305,9 @@ struct TeamFieldMapView: UIViewRepresentable {
 private final class TeamLeadMapItemAnnotation: NSObject, MKAnnotation {
     let lead: TeamLead
     let repName: String
+    var clusterItem: TeamLeadClusterItem {
+        TeamLeadClusterItem(lead: lead, repName: repName)
+    }
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: lead.latitude, longitude: lead.longitude)
@@ -229,6 +325,147 @@ private final class TeamLeadMapItemAnnotation: NSObject, MKAnnotation {
         self.lead = lead
         self.repName = repName
         super.init()
+    }
+}
+
+struct TeamLeadClusterItem: Identifiable, Equatable {
+    var id: String { lead.id }
+    let lead: TeamLead
+    let repName: String
+}
+
+struct TeamLeadClusterSummary {
+    let items: [TeamLeadClusterItem]
+
+    var count: Int {
+        items.count
+    }
+
+    var glyphText: String {
+        count > 99 ? "99+" : "\(count)"
+    }
+
+    var isImportant: Bool {
+        items.contains { item in
+            TeamLeadAttentionPolicy.needsOwnerAttention(item.lead)
+        }
+    }
+
+    var highPriorityCount: Int {
+        items.filter { TeamLeadAttentionPolicy.isActionableHighPriority($0.lead) }.count
+    }
+
+    var bookedCount: Int {
+        items.filter { $0.lead.status == .booked }.count
+    }
+
+    var hotLeadCount: Int {
+        items.filter { item in
+            TeamLeadAttentionPolicy.needsOwnerAttention(item.lead)
+        }.count
+    }
+
+    var convertedCount: Int {
+        items.filter { $0.lead.status == .converted }.count
+    }
+
+    var repCount: Int {
+        Set(items.map(\.repName)).count
+    }
+
+    var statusCounts: [(status: TeamLeadStatus, count: Int)] {
+        TeamLeadStatus.allCases
+            .map { status in (status, items.filter { $0.lead.status == status }.count) }
+            .filter { $0.count > 0 }
+            .sorted { lhs, rhs in
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                return TeamLeadImportance.rank(lhs.status) > TeamLeadImportance.rank(rhs.status)
+            }
+    }
+
+    var headline: String {
+        if highPriorityCount > 0 {
+            return "\(highPriorityCount) high priority"
+        }
+        if bookedCount > 0 {
+            return "\(bookedCount) booked"
+        }
+        if hotLeadCount > 0 {
+            return "\(hotLeadCount) important"
+        }
+        return "Team lead cluster"
+    }
+
+    var detailLine: String {
+        var parts = ["\(count) \(count == 1 ? "lead" : "leads")"]
+        parts.append("\(repCount) \(repCount == 1 ? "worker" : "workers")")
+        if let dominant = statusCounts.first {
+            parts.append(dominant.status.teamDisplayName)
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    var uiColor: UIColor {
+        if highPriorityCount > 0 {
+            return .systemPink
+        }
+        if bookedCount > 0 {
+            return .systemIndigo
+        }
+        if hotLeadCount > 0 {
+            return .systemOrange
+        }
+        if convertedCount > 0 && convertedCount >= max(1, count / 2) {
+            return .systemGreen
+        }
+        guard let dominant = statusCounts.first?.status else {
+            return .systemPurple
+        }
+        switch dominant {
+        case .notContacted:
+            return .systemGray
+        case .notHome:
+            return .brown
+        case .contacted:
+            return .systemTeal
+        case .interested:
+            return .systemOrange
+        case .followUp:
+            return .systemPurple
+        case .booked:
+            return .systemIndigo
+        case .converted:
+            return .systemGreen
+        case .notInterested:
+            return .systemRed
+        }
+    }
+
+    var color: Color {
+        Color(uiColor)
+    }
+
+    var sortedItems: [TeamLeadClusterItem] {
+        Self.sortedItems(items)
+    }
+
+    static func sortedItems(_ items: [TeamLeadClusterItem]) -> [TeamLeadClusterItem] {
+        items.sorted { lhs, rhs in
+            let lhsScore = priorityScore(for: lhs.lead)
+            let rhsScore = priorityScore(for: rhs.lead)
+            if lhsScore != rhsScore { return lhsScore > rhsScore }
+            return lhs.lead.updatedAt > rhs.lead.updatedAt
+        }
+    }
+
+    private static func priorityScore(for lead: TeamLead) -> Int {
+        var score = 0
+        if TeamLeadAttentionPolicy.isActionableHighPriority(lead) { score += 700 }
+        score += TeamLeadImportance.rank(lead.status) * 120
+        if max(lead.price, lead.estimatedValue) > 0 {
+            score += min(120, Int(max(lead.price, lead.estimatedValue) / 100))
+        }
+        return score
     }
 }
 

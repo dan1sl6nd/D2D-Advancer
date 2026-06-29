@@ -26,7 +26,7 @@ struct SelectableLeadRow: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text(lead.displayName)
-                            .font(.themeHeadline)
+                            .font(.obsidianTitle)
                             .foregroundColor(Color.textPrimary)
                             .lineLimit(1)
 
@@ -39,10 +39,10 @@ struct SelectableLeadRow: View {
                         HStack {
                             Image(systemName: "location.fill")
                                 .foregroundColor(Color.textSecondary)
-                                .font(.caption)
+                                .font(.obsidianSmall)
 
                             Text(address)
-                                .font(.subheadline)
+                                .font(.obsidianFootnote)
                                 .foregroundColor(Color.textSecondary)
                                 .lineLimit(1)
                         }
@@ -53,10 +53,10 @@ struct SelectableLeadRow: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "phone.fill")
                                     .foregroundColor(Color.electricViolet)
-                                    .font(.caption)
+                                    .font(.obsidianSmall)
 
                                 Text(phone)
-                                    .font(.caption)
+                                    .font(.obsidianSmall)
                                     .foregroundColor(Color.electricViolet)
                             }
                         }
@@ -65,10 +65,10 @@ struct SelectableLeadRow: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "envelope.fill")
                                     .foregroundColor(Color.statusInterested)
-                                    .font(.caption)
+                                    .font(.obsidianSmall)
 
                                 Text(email)
-                                    .font(.caption)
+                                    .font(.obsidianSmall)
                                     .foregroundColor(Color.statusInterested)
                                     .lineLimit(1)
                             }
@@ -80,10 +80,10 @@ struct SelectableLeadRow: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "clock.badge")
                                     .foregroundColor(Color.statusNotHome)
-                                    .font(.caption)
+                                    .font(.obsidianSmall)
 
                                 Text(followUpDate, style: .date)
-                                    .font(.caption)
+                                    .font(.obsidianSmall)
                                     .foregroundColor(Color.statusNotHome)
                             }
                         }
@@ -132,8 +132,7 @@ struct StatusBadge: View {
                 .frame(width: 8, height: 8)
             
             Text(displayName)
-                .font(.caption)
-                .fontWeight(.medium)
+                .font(.obsidianSmall)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)

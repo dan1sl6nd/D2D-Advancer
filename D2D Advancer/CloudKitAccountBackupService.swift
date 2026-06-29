@@ -2,14 +2,17 @@ import Foundation
 import CloudKit
 
 final class CloudKitAccountBackupService {
-    static let shared = CloudKitAccountBackupService()
+    static let shared: CloudKitAccountBackupService? = {
+        guard let container = CloudKitLeadBackupService.makeEntitledContainer() else { return nil }
+        return CloudKitAccountBackupService(container: container)
+    }()
 
     private let container: CKContainer
     private let database: CKDatabase
 
     private let recordType = "AccountProfileBackup"
 
-    private init(container: CKContainer = CKContainer(identifier: CloudKitLeadBackupService.containerIdentifier)) {
+    private init(container: CKContainer) {
         self.container = container
         self.database = container.privateCloudDatabase
     }

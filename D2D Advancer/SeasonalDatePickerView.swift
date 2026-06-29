@@ -26,86 +26,38 @@ struct SeasonalDatePickerView: View {
     }
     
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Header explanation
-                        headerSection
-                        
-                        // Seasonal Presets
-                        seasonalPresetsSection
-                        
-                        // Custom Date Option
-                        customDateSection
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
-                }
-                .background(Color(UIColor.systemGroupedBackground))
-            }
-            .navigationTitle("Follow Up Date")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .safeAreaInset(edge: .bottom) {
-                // Card-based button design
-                HStack(spacing: 16) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                            Text("Cancel")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(Color.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(UIColor.secondarySystemBackground))
-                                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        )
-                    }
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: "Follow Up Date",
+                        subtitle: "Pick a seasonal preset or set an exact follow-up time.",
+                        icon: "calendar.badge.clock"
+                    )
 
-                    Button(action: {
-                        saveDate()
-                    }) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3)
-                            Text("Set Date")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            hasSelection ? Color.electricViolet : Color.textSecondary,
-                                            hasSelection ? Color.electricViolet.opacity(0.8) : Color.textSecondary.opacity(0.8)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: hasSelection ? Color.electricViolet.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
-                        )
-                    }
-                    .disabled(!hasSelection)
+                    headerSection
+                    seasonalPresetsSection
+                    customDateSection
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle("Follow Up Date")
+            .obsidianInlineNavigation()
+            .navigationBarBackButtonHidden(true)
+            .safeAreaInset(edge: .bottom) {
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: !hasSelection,
+                    primaryAction: saveDate,
+                    secondaryAction: { dismiss() },
+                    primaryLabel: {
+                        Label("Set Date", systemImage: "checkmark.circle.fill")
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
+                    }
                 )
             }
         }
@@ -120,18 +72,18 @@ struct SeasonalDatePickerView: View {
             HStack {
                 Image(systemName: "calendar.badge.clock")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
 
                 Text("Choose Follow-Up Time")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
 
                 Spacer()
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Select a seasonal period for your follow-up, and we'll automatically choose a date that matches today's date.")
-                    .font(.subheadline)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
 
                 HStack {
@@ -140,15 +92,12 @@ struct SeasonalDatePickerView: View {
                         .font(.caption)
 
                     Text("Dates are calculated to match \(formattedCurrentDay())")
-                        .font(.caption)
+                        .font(.obsidianSmall)
                         .foregroundColor(Color.electricViolet)
                 }
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
     
     private var seasonalPresetsSection: some View {
@@ -156,11 +105,11 @@ struct SeasonalDatePickerView: View {
             HStack {
                 Image(systemName: "leaf.fill")
                     .foregroundColor(Color.statusInterested)
-                    .font(.title2)
+                    .font(.obsidianCallout)
 
                 Text("Seasonal Presets")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
 
                 Spacer()
             }
@@ -178,10 +127,7 @@ struct SeasonalDatePickerView: View {
             }
             .clipped()
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
 
     private var customDateSection: some View {
@@ -189,16 +135,20 @@ struct SeasonalDatePickerView: View {
             HStack {
                 Image(systemName: "calendar")
                     .foregroundColor(Color.electricViolet)
-                    .font(.title2)
+                    .font(.obsidianCallout)
 
                 Text("Custom Date")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
 
                 Spacer()
 
-                Toggle("", isOn: $useCustomDate)
+                Toggle("Use custom follow-up date", isOn: $useCustomDate)
                     .toggleStyle(SwitchToggleStyle(tint: Color.electricViolet))
+                    .labelsHidden()
+                    .accessibilityLabel("Use custom follow-up date")
+                    .accessibilityValue(useCustomDate ? "Enabled" : "Disabled")
+                    .accessibilityHint("Shows an exact date and time picker.")
                     .onChange(of: useCustomDate) { _, newValue in
                         if newValue {
                             selectedPreset = nil
@@ -212,10 +162,7 @@ struct SeasonalDatePickerView: View {
                     .padding(.horizontal, 8)
             }
         }
-        .padding(20)
-        .background(Color.obsidianBlack)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .surfaceCard()
     }
 
     private func saveDate() {
@@ -245,32 +192,30 @@ struct SeasonalPresetCard: View {
             VStack(spacing: 8) {
                 // Season Icon
                 Image(systemName: preset.season.icon)
-                    .font(.title2)
+                    .font(.obsidianCallout)
                     .foregroundColor(isSelected ? .white : colorForSeason(preset.season))
                 
                 // Season Title
                 VStack(spacing: 2) {
                     Text(preset.season.rawValue)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
+                        .font(.obsidianFootnote)
                         .foregroundColor(isSelected ? .white : Color.textPrimary)
                         .lineLimit(1)
 
                     Text("\(preset.year)")
-                        .font(.caption)
+                        .font(.obsidianSmall)
                         .foregroundColor(isSelected ? .white.opacity(0.8) : Color.textSecondary)
                 }
                 
                 // Calculated Date
                 VStack(spacing: 1) {
                     Text(formattedDate(preset.calculatedDate))
-                        .font(.caption2)
-                        .fontWeight(.medium)
+                        .font(.micro)
                         .foregroundColor(isSelected ? .white.opacity(0.9) : Color.textSecondary)
                         .lineLimit(1)
 
                     Text(formattedTime(preset.calculatedDate))
-                        .font(.caption2)
+                        .font(.micro)
                         .foregroundColor(isSelected ? .white.opacity(0.7) : Color.textSecondary)
                         .lineLimit(1)
                 }

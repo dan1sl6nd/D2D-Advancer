@@ -12,6 +12,64 @@ struct TeamWorkspaceTests {
         #expect(!TeamPlanStatus.paused.allowsTeamWrite)
     }
 
+    @Test func currentTeamLoadCoalescingKeepsLatestQueuedRequest() {
+        let first = TeamCurrentTeamLoadRequest(displayName: "Owner", email: "owner@example.com")
+        let latest = TeamCurrentTeamLoadRequest(displayName: "Rep", email: "rep@example.com")
+
+        #expect(
+            TeamCurrentTeamLoadCoalescingPolicy.queuedRequest(current: nil, incoming: first) == first
+        )
+        #expect(
+            TeamCurrentTeamLoadCoalescingPolicy.queuedRequest(current: first, incoming: latest) == latest
+        )
+    }
+
+    @Test func teamFirestoreMergePayloadUsesExplicitNullsForClearedFields() {
+        #expect(TeamFirestoreMergePayloadValue.nullable(nil as String?) is NSNull)
+        #expect(TeamFirestoreMergePayloadValue.nullable(nil as Double?) is NSNull)
+        #expect(TeamFirestoreMergePayloadValue.nullable(nil as Date?) is NSNull)
+        #expect(TeamFirestoreMergePayloadValue.nullable("rep@example.com") as? String == "rep@example.com")
+        #expect(TeamFirestoreMergePayloadValue.nullable(125.0) as? Double == 125.0)
+    }
+
+    @Test func firestoreRESTProbeLogLabelsPublicRulesDenialsAsExpected() {
+        let summary = TeamFirestoreRESTProbeLogPolicy.summary(
+            label: "Firestore public REST probe",
+            statusCode: 403,
+            body: #"{"error":{"message":"Missing or insufficient permissions."}}"#,
+            publicProbe: true
+        )
+
+        #expect(summary.contains("status: 403"))
+        #expect(summary.contains("expected if Firestore rules block public reads"))
+        #expect(summary.contains("Missing or insufficient permissions"))
+    }
+
+    @Test func firestoreRESTProbeLogDoesNotHideAuthenticatedForbiddenResponses() {
+        let summary = TeamFirestoreRESTProbeLogPolicy.summary(
+            label: "Firestore authenticated REST probe",
+            statusCode: 403,
+            body: #"{"error":{"message":"App Check token required."}}"#,
+            publicProbe: false
+        )
+
+        #expect(summary.contains("status: 403"))
+        #expect(!summary.contains("expected if Firestore rules block public reads"))
+        #expect(summary.contains("App Check token required"))
+    }
+
+    @Test func teamRuleRestrictedPayloadsDoNotAddNullFieldsForLegacyDocuments() {
+        let omittedString = TeamFirestoreMergePayloadValue.omittedWhenNil(nil as String?)
+        let omittedDouble = TeamFirestoreMergePayloadValue.omittedWhenNil(nil as Double?)
+        let omittedDate = TeamFirestoreMergePayloadValue.omittedWhenNil(nil as Date?)
+
+        #expect(TeamFirestoreMergePayloadValue.isNilOptional(omittedString))
+        #expect(TeamFirestoreMergePayloadValue.isNilOptional(omittedDouble))
+        #expect(TeamFirestoreMergePayloadValue.isNilOptional(omittedDate))
+        #expect(!TeamFirestoreMergePayloadValue.isNilOptional(TeamFirestoreMergePayloadValue.nullable(nil as String?)))
+        #expect(TeamFirestoreMergePayloadValue.omittedWhenNil("rep@example.com") as? String == "rep@example.com")
+    }
+
     @Test func ownerTeamDefaultsToIncludedThreeSeats() {
         let now = Date(timeIntervalSince1970: 1_000)
         let team = TeamWorkspace.newOwnerTeam(
@@ -50,9 +108,15 @@ struct TeamWorkspaceTests {
 
         #expect(owner.role == .owner)
         #expect(owner.status == .active)
+        #expect(owner.workType == .owner)
+        #expect(owner.displayRoleTitle == "Owner")
         #expect(owner.acceptedInviteId == nil)
         #expect(rep.role == .member)
         #expect(rep.status == .active)
+        #expect(rep.workType == .salesRep)
+        #expect(rep.isSalesRep)
+        #expect(!rep.isTechnician)
+        #expect(rep.displayRoleTitle == "Sales Rep")
         #expect(rep.acceptedInviteId == "ABC12345")
     }
 
@@ -81,6 +145,31 @@ struct TeamWorkspaceTests {
         #expect(!TeamAccessPolicy.canCancelPendingInvite(role: .member, member: pending))
     }
 
+    @Test func pendingInviteRosterDeduplicatesOptimisticLocalAndRealtimeRows() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let owner = TeamMember.owner(
+            teamId: "team-1",
+            userId: "owner-1",
+            displayName: "Owner",
+            email: nil,
+            joinedAt: now
+        )
+        let pending = TeamMember.rep(
+            teamId: "team-1",
+            userId: "\(TeamFirebaseSchema.pendingRepUserPrefix)-AB12CD34",
+            displayName: "Pending Rep",
+            email: nil,
+            acceptedInviteId: "AB12CD34",
+            joinedAt: now.addingTimeInterval(10)
+        )
+
+        let normalized = TeamMemberRoster.normalized([pending, owner, pending])
+
+        #expect(normalized.map(\.userId) == [owner.userId, pending.userId])
+        #expect(TeamMemberRoster.activeSeatCount([pending, owner, pending]) == 2)
+        #expect(pending.pendingInviteDisplayCode == "AB12CD34")
+    }
+
     @Test func teamWorkspaceRequiresAuthenticatedBackendIdentity() {
         #expect(TeamAuthPolicy.canUseTeamWorkspace(isFirebaseAuthenticated: true))
         #expect(!TeamAuthPolicy.canUseTeamWorkspace(isFirebaseAuthenticated: false))
@@ -91,6 +180,64 @@ struct TeamWorkspaceTests {
         #expect(TeamAuthPolicy.backendIdentityProvider == .firebase)
         #expect(TeamAuthPolicy.signInButtonTitle == "Continue with Apple")
         #expect(TeamAuthPolicy.signInRequiredTitle == "Apple Sign-In Required")
+    }
+
+    @Test func teamCachedMembershipLocalStoreDistinguishesValidExpiredAndCorruptData() throws {
+        let suiteName = "TeamCachedMembershipLocalStoreTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let key = "team_cached_membership_test"
+        let now = Date(timeIntervalSince1970: 50_000)
+        let team = TeamWorkspace.newOwnerTeam(
+            id: "team-cache",
+            name: "Cached Team",
+            ownerUserId: "owner-cache",
+            now: now
+        )
+        let member = TeamMember.owner(
+            teamId: team.id,
+            userId: team.ownerUserId,
+            displayName: "Owner",
+            email: "owner@example.com",
+            joinedAt: now
+        )
+        let snapshot = TeamCachedMembershipSnapshot(team: team, member: member, savedAt: now)
+
+        #expect(try TeamCachedMembershipLocalStore.loadFreshSnapshot(
+            from: defaults,
+            key: key,
+            now: now,
+            maxAge: 14 * 24 * 60 * 60
+        ) == nil)
+
+        try TeamCachedMembershipLocalStore.save(snapshot, to: defaults, key: key)
+        let loaded = try #require(try TeamCachedMembershipLocalStore.loadFreshSnapshot(
+            from: defaults,
+            key: key,
+            now: now.addingTimeInterval(60),
+            maxAge: 14 * 24 * 60 * 60
+        ))
+        #expect(loaded.team.id == team.id)
+        #expect(loaded.member.userId == member.userId)
+
+        #expect(try TeamCachedMembershipLocalStore.loadFreshSnapshot(
+            from: defaults,
+            key: key,
+            now: now.addingTimeInterval(15 * 24 * 60 * 60),
+            maxAge: 14 * 24 * 60 * 60
+        ) == nil)
+
+        defaults.set(Data("not-json".utf8), forKey: key)
+        #expect(throws: Error.self) {
+            try TeamCachedMembershipLocalStore.loadFreshSnapshot(
+                from: defaults,
+                key: key,
+                now: now,
+                maxAge: 14 * 24 * 60 * 60
+            )
+        }
     }
 
     @Test func firebaseTeamInvitesUseSingleUseCodesAndAssignedRecords() {
@@ -217,6 +364,56 @@ struct TeamWorkspaceTests {
         #expect(!TeamAccessPolicy.canViewDutySession(userId: repBUserId, role: .member, planStatus: .active, session: repASession))
     }
 
+    @Test func repsCanViewOwnerDutyLocationButNotOtherReps() {
+        let now = Date(timeIntervalSince1970: 4_500)
+        let ownerSession = TeamDutySession(
+            id: "owner-session",
+            teamId: "team-placeholder",
+            repUserId: "owner-placeholder",
+            startedAt: now,
+            endedAt: nil,
+            status: .active,
+            lastLocationAt: now,
+            distanceMeters: 0,
+            createdAt: now,
+            deleteAfter: nil
+        )
+        let otherRepSession = TeamDutySession(
+            id: "rep-b-session",
+            teamId: "team-placeholder",
+            repUserId: "rep-b-placeholder",
+            startedAt: now,
+            endedAt: nil,
+            status: .active,
+            lastLocationAt: now,
+            distanceMeters: 0,
+            createdAt: now,
+            deleteAfter: nil
+        )
+
+        #expect(TeamAccessPolicy.canViewDutySession(
+            userId: "rep-a-placeholder",
+            role: .member,
+            planStatus: .active,
+            session: ownerSession,
+            ownerUserId: "owner-placeholder"
+        ))
+        #expect(!TeamAccessPolicy.canViewDutySession(
+            userId: "rep-a-placeholder",
+            role: .member,
+            planStatus: .active,
+            session: otherRepSession,
+            ownerUserId: "owner-placeholder"
+        ))
+        #expect(!TeamAccessPolicy.canViewDutySession(
+            userId: "rep-a-placeholder",
+            role: .member,
+            planStatus: .paused,
+            session: ownerSession,
+            ownerUserId: "owner-placeholder"
+        ))
+    }
+
     @Test func repCreatedLeadIsAssignedToRepAtCreation() {
         let lead = TeamLead.newRepLead(
             teamId: "team-1",
@@ -308,9 +505,9 @@ struct TeamWorkspaceTests {
 
     @Test func onlyActivePlanCanStartDutySession() {
         #expect(TeamAccessPolicy.canStartDutySession(planStatus: .active, role: .member))
+        #expect(TeamAccessPolicy.canStartDutySession(planStatus: .active, role: .owner))
         #expect(!TeamAccessPolicy.canStartDutySession(planStatus: .grace, role: .member))
         #expect(!TeamAccessPolicy.canStartDutySession(planStatus: .paused, role: .member))
-        #expect(!TeamAccessPolicy.canStartDutySession(planStatus: .active, role: .owner))
     }
 
     @Test func ownerRepWorkspacesShowAssignedWorkAndOnlyActiveLiveLocations() {
@@ -589,7 +786,135 @@ struct TeamWorkspaceTests {
         #expect(summary?.importantLeadCount == 2)
         #expect(summary?.upcomingBookingCount == 1)
         #expect(summary?.unreadNotificationCount == 1)
-        #expect(summary?.headline == "1 active rep")
+        #expect(summary?.shouldShowMapShortcut == true)
+        #expect(summary?.headline == "1 active worker")
+    }
+
+    @Test func closedTeamLeadsDoNotInflateOwnerAttentionOrHotClusterCounts() throws {
+        let now = Date(timeIntervalSince1970: 40_500)
+        let team = TeamWorkspace.newOwnerTeam(
+            id: "team-closed-attention",
+            name: "Closed Attention",
+            ownerUserId: "owner-1",
+            now: now
+        )
+        let owner = TeamMember.owner(
+            teamId: team.id,
+            userId: "owner-1",
+            displayName: "Owner",
+            email: nil,
+            joinedAt: now
+        )
+        let rep = TeamMember.rep(
+            teamId: team.id,
+            userId: "rep-1",
+            displayName: "Mike",
+            email: nil,
+            acceptedInviteId: "INVITE1",
+            joinedAt: now
+        )
+
+        var interestedLead = TeamLead.newRepLead(
+            teamId: team.id,
+            creatorUserId: rep.userId,
+            name: "Interested",
+            address: "10 King St",
+            coordinate: TeamCoordinate(latitude: 43.65, longitude: -79.38),
+            now: now
+        )
+        interestedLead.status = .interested
+
+        var convertedLead = TeamLead.newRepLead(
+            teamId: team.id,
+            creatorUserId: rep.userId,
+            name: "Converted",
+            address: "20 Queen St",
+            coordinate: TeamCoordinate(latitude: 43.6501, longitude: -79.3801),
+            now: now.addingTimeInterval(10)
+        )
+        convertedLead.status = .converted
+        convertedLead.isHighPriority = true
+        convertedLead.price = 900
+
+        var rejectedLead = TeamLead.newRepLead(
+            teamId: team.id,
+            creatorUserId: rep.userId,
+            name: "Rejected",
+            address: "30 Queen St",
+            coordinate: TeamCoordinate(latitude: 43.6502, longitude: -79.3802),
+            now: now.addingTimeInterval(20)
+        )
+        rejectedLead.status = .notInterested
+        rejectedLead.isHighPriority = true
+
+        let leads = [interestedLead, convertedLead, rejectedLead]
+        let summary = try #require(
+            TeamWorkspaceSurfaceSummary.make(
+                team: team,
+                currentMember: owner,
+                members: [owner, rep],
+                leads: leads,
+                bookings: [],
+                dutySessions: [],
+                dutyLocationPoints: [],
+                ownerNotifications: [],
+                now: now
+            )
+        )
+        let today = TeamTodayWorkSummary.make(
+            currentMember: owner,
+            leads: leads,
+            bookings: [],
+            dutySessions: [],
+            now: now
+        )
+        let closedCluster = TeamLeadClusterSummary(
+            items: [convertedLead, rejectedLead].map {
+                TeamLeadClusterItem(lead: $0, repName: rep.displayName)
+            }
+        )
+
+        #expect(summary.importantLeadCount == 1)
+        #expect(summary.badgeCount == 1)
+        #expect(today.importantLeadCount == 1)
+        #expect(!closedCluster.isImportant)
+        #expect(closedCluster.highPriorityCount == 0)
+        #expect(closedCluster.hotLeadCount == 0)
+    }
+
+    @Test func ownerEmptyTeamStillShowsMapShortcut() {
+        let now = Date(timeIntervalSince1970: 49_000)
+        let team = TeamWorkspace.newOwnerTeam(
+            id: "team-empty-map",
+            name: "Empty Map Team",
+            ownerUserId: "owner-1",
+            now: now
+        )
+        let owner = TeamMember.owner(
+            teamId: team.id,
+            userId: "owner-1",
+            displayName: "Owner",
+            email: nil,
+            joinedAt: now
+        )
+
+        let summary = TeamWorkspaceSurfaceSummary.make(
+            team: team,
+            currentMember: owner,
+            members: [owner],
+            leads: [],
+            bookings: [],
+            dutySessions: [],
+            dutyLocationPoints: [],
+            ownerNotifications: [],
+            now: now
+        )
+
+        #expect(summary?.headline == "0 workers")
+        #expect(summary?.detailLine == "No urgent team activity")
+        #expect(summary?.hasMapContent == false)
+        #expect(summary?.hasUrgentActivity == false)
+        #expect(summary?.shouldShowMapShortcut == true)
     }
 
     @Test func memberSurfaceSummaryOnlyShowsAssignedWork() {
@@ -636,14 +961,71 @@ struct TeamWorkspaceTests {
         #expect(summary?.teamLeadCount == 1)
         #expect(summary?.importantLeadCount == 1)
         #expect(summary?.unreadNotificationCount == 0)
+        #expect(summary?.shouldShowMapShortcut == true)
         #expect(summary?.headline == "1 assigned lead")
     }
 
-    @Test func ownerCanAssignLeadAndBookingOnlyToActiveReps() {
+    @Test func technicianSurfaceSummaryShowsAssignedJobsInsteadOfSalesLeads() {
+        let now = Date(timeIntervalSince1970: 55_000)
+        let team = TeamWorkspace.newOwnerTeam(
+            id: "team-tech-surface",
+            name: "Tech Surface Team",
+            ownerUserId: "owner-1",
+            now: now
+        )
+        let technician = TeamMember.rep(
+            teamId: team.id,
+            userId: "tech-1",
+            displayName: "Alex",
+            email: nil,
+            acceptedInviteId: "TECH1",
+            workType: .technician,
+            joinedAt: now
+        )
+        let booking = TeamBooking(
+            id: "job-1",
+            teamId: team.id,
+            leadId: "lead-1",
+            assignedToUserId: technician.userId,
+            title: "Service Job",
+            notes: "",
+            startDate: now.addingTimeInterval(3_600),
+            endDate: now.addingTimeInterval(5_400),
+            location: "10 King St",
+            status: .scheduled,
+            createdByUserId: team.ownerUserId,
+            updatedByUserId: team.ownerUserId,
+            createdAt: now,
+            updatedAt: now
+        )
+
+        let summary = TeamWorkspaceSurfaceSummary.make(
+            team: team,
+            currentMember: technician,
+            members: [technician],
+            leads: [],
+            bookings: [booking],
+            dutySessions: [],
+            dutyLocationPoints: [],
+            ownerNotifications: [],
+            now: now
+        )
+
+        #expect(technician.isTechnician)
+        #expect(technician.displayRoleTitle == "Technician")
+        #expect(summary?.role == .member)
+        #expect(summary?.currentMemberWorkType == .technician)
+        #expect(summary?.teamLeadCount == 0)
+        #expect(summary?.upcomingBookingCount == 1)
+        #expect(summary?.headline == "1 assigned job")
+    }
+
+    @Test func ownerCanAssignLeadsOnlyToSalesRepsAndJobsToActiveWorkers() {
         let now = Date(timeIntervalSince1970: 60_000)
         let team = TeamWorkspace.newOwnerTeam(id: "team-ops", name: "Ops", ownerUserId: "owner-1", now: now)
         let owner = TeamMember.owner(teamId: team.id, userId: "owner-1", displayName: "Owner", email: nil, joinedAt: now)
         let rep = TeamMember.rep(teamId: team.id, userId: "rep-1", displayName: "Mike", email: nil, acceptedInviteId: "INVITE1", joinedAt: now)
+        let technician = TeamMember.rep(teamId: team.id, userId: "tech-1", displayName: "Alex", email: nil, acceptedInviteId: "INVITET", workType: .technician, joinedAt: now)
         var removedRep = TeamMember.rep(teamId: team.id, userId: "rep-2", displayName: "Sarah", email: nil, acceptedInviteId: "INVITE2", joinedAt: now)
         removedRep.status = .removed
 
@@ -673,15 +1055,88 @@ struct TeamWorkspaceTests {
         )
 
         #expect(TeamAssignmentPolicy.canAssignLead(actor: owner, team: team, target: rep, lead: lead))
+        #expect(!TeamAssignmentPolicy.canAssignLead(actor: owner, team: team, target: technician, lead: lead))
         #expect(!TeamAssignmentPolicy.canAssignLead(actor: rep, team: team, target: removedRep, lead: lead))
         #expect(!TeamAssignmentPolicy.canAssignLead(actor: owner, team: team, target: removedRep, lead: lead))
+        #expect(TeamAssignmentPolicy.canAssignBooking(actor: owner, team: team, target: rep, booking: booking))
+        #expect(TeamAssignmentPolicy.canAssignBooking(actor: owner, team: team, target: technician, booking: booking))
+        #expect(!TeamAssignmentPolicy.canAssignBooking(actor: owner, team: team, target: removedRep, booking: booking))
 
         let assignedLead = TeamAssignmentPolicy.assign(lead, to: rep, by: owner, now: now.addingTimeInterval(10))
-        let assignedBooking = TeamAssignmentPolicy.assign(booking, to: rep, by: owner, now: now.addingTimeInterval(10))
+        let assignedBooking = TeamAssignmentPolicy.assign(booking, to: technician, by: owner, now: now.addingTimeInterval(10))
         #expect(assignedLead.assignedToUserId == rep.userId)
         #expect(assignedLead.updatedByUserId == owner.userId)
-        #expect(assignedBooking.assignedToUserId == rep.userId)
+        #expect(assignedBooking.assignedToUserId == technician.userId)
         #expect(assignedBooking.updatedByUserId == owner.userId)
+    }
+
+    @Test func ownerCanEditTeamLeadFieldsAndDispatchSoldLeadToTechnician() {
+        let now = Date(timeIntervalSince1970: 60_500)
+        let team = TeamWorkspace.newOwnerTeam(id: "team-dispatch", name: "Dispatch", ownerUserId: "owner-1", now: now)
+        let owner = TeamMember.owner(teamId: team.id, userId: "owner-1", displayName: "Owner", email: nil, joinedAt: now)
+        let technician = TeamMember.rep(
+            teamId: team.id,
+            userId: "tech-1",
+            displayName: "Alex",
+            email: nil,
+            acceptedInviteId: "TECH1",
+            workType: .technician,
+            joinedAt: now
+        )
+        var lead = TeamLead.newRepLead(
+            teamId: team.id,
+            creatorUserId: "rep-1",
+            name: "Old Name",
+            address: "10 King St",
+            coordinate: TeamCoordinate(latitude: 43.65, longitude: -79.38),
+            now: now
+        )
+        lead.status = .interested
+
+        let fields = TeamLeadEditableFields(
+            name: "  Hula  ",
+            address: "4908 Forest Hill Dr",
+            phone: " 555-1212 ",
+            email: " customer@example.com ",
+            notes: " Sold exterior package ",
+            serviceCategory: " Window Cleaning ",
+            price: 350,
+            estimatedValue: 500,
+            tags: [" sold ", "", " exterior "]
+        )
+        let edited = fields.applying(to: lead, updatedByUserId: owner.userId, now: now.addingTimeInterval(10))
+        let sold = TeamLeadDispatchPolicy.soldLead(edited, by: owner, now: now.addingTimeInterval(20))
+        let booking = TeamLeadDispatchPolicy.booking(
+            from: sold,
+            to: technician,
+            by: owner,
+            startDate: now.addingTimeInterval(3_600),
+            endDate: now.addingTimeInterval(7_200),
+            now: now.addingTimeInterval(20)
+        )
+
+        #expect(edited.name == "Hula")
+        #expect(edited.phone == "555-1212")
+        #expect(edited.email == "customer@example.com")
+        #expect(edited.serviceCategory == "Window Cleaning")
+        #expect(edited.tags == ["sold", "exterior"])
+        #expect(TeamLeadDispatchPolicy.canDispatchLeadToTechnician(actor: owner, team: team, technician: technician, lead: edited))
+        #expect(sold.status == .converted)
+        #expect(booking.id == "\(lead.id)-job")
+        #expect(booking.leadId == lead.id)
+        #expect(booking.assignedToUserId == technician.userId)
+        #expect(booking.title == "Window Cleaning - Hula")
+        #expect(booking.location == "4908 Forest Hill Dr")
+        #expect(booking.customerName == "Hula")
+        #expect(booking.customerPhone == "555-1212")
+        #expect(booking.customerEmail == "customer@example.com")
+        #expect(booking.serviceCategory == "Window Cleaning")
+        #expect(booking.quotedPrice == 350)
+        #expect(booking.latitude == 43.65)
+        #expect(booking.longitude == -79.38)
+        #expect(booking.arrivalWindowMinutes == 30)
+        #expect(booking.customerDisplayName == "Hula")
+        #expect(booking.notes.contains("Phone: 555-1212"))
     }
 
     @Test func teamWritesAreBlockedInGraceAndPausedAcrossOperations() {
@@ -738,11 +1193,45 @@ struct TeamWorkspaceTests {
             targetUserId: "rep-2",
             createdAt: now.addingTimeInterval(10)
         )
+        let jobUpdated = TeamActivityLogEntry.make(
+            teamId: lead.teamId,
+            actorUserId: "tech-1",
+            actorDisplayName: "Alex",
+            kind: .bookingStatusUpdated,
+            subjectId: "job-1",
+            subjectTitle: "Service Job completed",
+            targetUserId: "tech-1",
+            createdAt: now.addingTimeInterval(20)
+        )
+        let leftTeam = TeamActivityLogEntry.make(
+            teamId: lead.teamId,
+            actorUserId: "rep-1",
+            actorDisplayName: "Mike",
+            kind: .memberLeft,
+            subjectId: "rep-1",
+            subjectTitle: "Team",
+            targetUserId: "rep-1",
+            createdAt: now.addingTimeInterval(30)
+        )
+        let closedTeam = TeamActivityLogEntry.make(
+            teamId: lead.teamId,
+            actorUserId: "owner-1",
+            actorDisplayName: "Owner",
+            kind: .teamClosed,
+            subjectId: lead.teamId,
+            subjectTitle: "Team",
+            targetUserId: "owner-1",
+            createdAt: now.addingTimeInterval(40)
+        )
 
         #expect(created.summary == "Mike created lead High Value Home")
         #expect(assigned.summary == "Owner assigned lead High Value Home")
+        #expect(jobUpdated.summary == "Alex updated job Service Job completed")
+        #expect(leftTeam.summary == "Mike left team Team")
+        #expect(closedTeam.summary == "Owner closed team Team")
         #expect(created.targetUserId == "rep-1")
         #expect(assigned.kind == .leadAssigned)
+        #expect(jobUpdated.kind == .bookingStatusUpdated)
     }
 
     @Test func duplicateDetectorFindsPhoneAddressAndNearbyMatches() {
@@ -809,6 +1298,11 @@ struct TeamWorkspaceTests {
         #expect(!TeamAccessPolicy.canRemoveMember(actor: rep, team: team, member: owner))
         #expect(!TeamAccessPolicy.canRemoveMember(actor: owner, team: team, member: owner))
         #expect(!TeamAccessPolicy.canRemoveMember(actor: owner, team: team, member: pending))
+        #expect(TeamAccessPolicy.canLeaveTeam(member: rep, team: team))
+        #expect(!TeamAccessPolicy.canLeaveTeam(member: owner, team: team))
+        #expect(!TeamAccessPolicy.canLeaveTeam(member: pending, team: team))
+        #expect(TeamAccessPolicy.canCloseTeam(owner: owner, team: team))
+        #expect(!TeamAccessPolicy.canCloseTeam(owner: rep, team: team))
 
         let removed = TeamMember.removed(rep, removedAt: now.addingTimeInterval(10))
         #expect(removed.status == .removed)
@@ -835,5 +1329,55 @@ struct TeamWorkspaceTests {
         #expect(TeamSyncWriteState.idle.displayText == "Synced")
         #expect(TeamSyncWriteState.pending(localWriteCount: 2).displayText == "2 pending team edits")
         #expect(TeamSyncWriteState.failed("Network unavailable").displayText == "Network unavailable")
+
+        let permissionError = NSError(
+            domain: "FIRFirestoreErrorDomain",
+            code: 7,
+            userInfo: [NSLocalizedDescriptionKey: "Missing or insufficient permissions."]
+        )
+        #expect(
+            TeamFirebaseService.userFacingErrorMessage(for: permissionError)
+                == "Team permissions need updating. Refresh Team or sign in again."
+        )
+
+        let firestoreOfflineError = NSError(
+            domain: "FIRFirestoreErrorDomain",
+            code: 14,
+            userInfo: [NSLocalizedDescriptionKey: "Failed to get document because the client is offline."]
+        )
+        #expect(TeamFirebaseService.isOfflineError(firestoreOfflineError))
+        #expect(
+            TeamFirebaseService.userFacingErrorMessage(for: firestoreOfflineError)
+                == TeamFirebaseService.teamOfflineMessage
+        )
+        #expect(
+            TeamFirebaseService.teamSetupOfflineMessage
+                == "Team is offline. Connect to the internet to create or join a team."
+        )
+
+        #expect(
+            TeamFirebaseServiceError.serverConfirmationTimedOut.errorDescription
+                == "Team could not be confirmed with the cloud. Check your connection and try again."
+        )
+    }
+
+    @Test func removedRepPermissionErrorClearsMemberSessionButNotOwnerSession() {
+        let permissionError = NSError(
+            domain: "FIRFirestoreErrorDomain",
+            code: 7,
+            userInfo: [NSLocalizedDescriptionKey: "Missing or insufficient permissions."]
+        )
+        let networkError = NSError(
+            domain: NSURLErrorDomain,
+            code: NSURLErrorNotConnectedToInternet,
+            userInfo: [NSLocalizedDescriptionKey: "The Internet connection appears to be offline."]
+        )
+
+        #expect(TeamFirebaseService.removedTeamAccessMessage == "You no longer have access to this team. Ask the owner for a new invite if needed.")
+        #expect(TeamFirebaseService.shouldClearMemberSessionAfterPermissionError(error: permissionError, profileRole: .member, cachedRole: nil))
+        #expect(TeamFirebaseService.shouldClearMemberSessionAfterPermissionError(error: permissionError, profileRole: nil, cachedRole: .member))
+        #expect(!TeamFirebaseService.shouldClearMemberSessionAfterPermissionError(error: permissionError, profileRole: .owner, cachedRole: .owner))
+        #expect(!TeamFirebaseService.shouldClearMemberSessionAfterPermissionError(error: permissionError, profileRole: nil, cachedRole: nil))
+        #expect(!TeamFirebaseService.shouldClearMemberSessionAfterPermissionError(error: networkError, profileRole: .member, cachedRole: .member))
     }
 }

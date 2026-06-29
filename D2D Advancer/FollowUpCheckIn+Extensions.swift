@@ -103,6 +103,29 @@ extension FollowUpCheckIn {
             }
         }
     }
+
+    nonisolated static func resolvedLeadStatus(
+        after outcome: Outcome,
+        currentStatus: Lead.Status
+    ) -> Lead.Status {
+        switch outcome {
+        case .converted:
+            return .converted
+        case .interested:
+            return currentStatus == .converted ? .converted : .interested
+        case .notInterested:
+            return .notInterested
+        case .successful, .noAnswer, .reschedule, .callback:
+            return currentStatus
+        }
+    }
+
+    nonisolated static func effectiveScheduledNextFollowUp(
+        _ scheduledNextFollowUp: Date?,
+        resultingStatus: Lead.Status
+    ) -> Date? {
+        resultingStatus.allowsActiveFollowUp ? scheduledNextFollowUp : nil
+    }
     
     var checkInTypeEnum: CheckInType {
         get {

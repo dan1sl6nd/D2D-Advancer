@@ -2,6 +2,18 @@ import Foundation
 import EventKit
 import SwiftUI
 
+enum CalendarSettingsLocalStore {
+    static func loadSettings(from userDefaults: UserDefaults, key: String) throws -> CalendarIntegrationSettings? {
+        guard let data = userDefaults.data(forKey: key) else { return nil }
+        return try JSONDecoder().decode(CalendarIntegrationSettings.self, from: data)
+    }
+
+    static func save(_ settings: CalendarIntegrationSettings, to userDefaults: UserDefaults, key: String) throws {
+        let encoded = try JSONEncoder().encode(settings)
+        userDefaults.set(encoded, forKey: key)
+    }
+}
+
 // Calendar integration for Apple Calendar (EventKit)
 final class CalendarService: ObservableObject {
     static let shared = CalendarService()
@@ -10,9 +22,8 @@ final class CalendarService: ObservableObject {
     private let settingsKey = "calendar_integration_settings"
 
     @Published private(set) var authorizationStatus: EKAuthorizationStatus = .notDetermined
-    @Published var settings: CalendarIntegrationSettings = CalendarIntegrationSettings() {
-        didSet { saveSettings() }
-    }
+    @Published private(set) var settings: CalendarIntegrationSettings = CalendarIntegrationSettings()
+    @Published var lastErrorMessage: String?
 
     private init() {
         self.authorizationStatus = EKEventStore.authorizationStatus(for: .event)
@@ -69,7 +80,9 @@ final class CalendarService: ObservableObject {
     }
 
     func setSelectedCalendar(_ calendar: EKCalendar?) {
-        settings.selectedCalendarIdentifier = calendar?.calendarIdentifier
+        var updated = settings
+        updated.selectedCalendarIdentifier = calendar?.calendarIdentifier
+        _ = updateSettings(updated)
     }
 
     func reloadSettingsFromUserDefaults() {
@@ -80,6 +93,7 @@ final class CalendarService: ObservableObject {
     @discardableResult
     func createOrUpdateEvent(for appointment: Appointment) -> String? {
         guard settings.isEnabled else { return nil }
+        guard appointment.status.shouldKeepLinkedCalendarEvent else { return nil }
 
         let calendar = selectedCalendar() ?? eventStore.defaultCalendarForNewEvents
 
@@ -128,15 +142,29 @@ final class CalendarService: ObservableObject {
 
     // MARK: - Settings Persistence
     private func loadSettings() {
-        if let data = UserDefaults.standard.data(forKey: settingsKey),
-           let decoded = try? JSONDecoder().decode(CalendarIntegrationSettings.self, from: data) {
-            self.settings = decoded
+        do {
+            guard let decoded = try CalendarSettingsLocalStore.loadSettings(from: .standard, key: settingsKey) else { return }
+            settings = decoded
+            lastErrorMessage = nil
+        } catch {
+            let message = "Calendar settings could not be loaded: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("⚠️ \(message)")
         }
     }
 
-    private func saveSettings() {
-        if let encoded = try? JSONEncoder().encode(settings) {
-            UserDefaults.standard.set(encoded, forKey: settingsKey)
+    @discardableResult
+    func updateSettings(_ updatedSettings: CalendarIntegrationSettings) -> Bool {
+        do {
+            try CalendarSettingsLocalStore.save(updatedSettings, to: .standard, key: settingsKey)
+            settings = updatedSettings
+            lastErrorMessage = nil
+            return true
+        } catch {
+            let message = "Calendar settings could not be saved: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("⚠️ \(message)")
+            return false
         }
     }
 }

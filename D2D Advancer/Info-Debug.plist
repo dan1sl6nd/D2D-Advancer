@@ -10,8 +10,6 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleIconName</key>
-	<string>AppIcon</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -20,6 +18,10 @@
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -33,18 +35,25 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>D2DFirebaseEmulatorHost</key>
+	<string>$(D2D_DEFAULT_FIREBASE_EMULATOR_HOST)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.business</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSCalendarsUsageDescription</key>
 	<string>D2D Advancer would like access to your Calendar to save scheduled appointments and reminders.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>D2D Advancer would like to save your leads to your Contacts app for easy access and to help you stay organized with your door-to-door sales.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>D2D Advancer uses local network access only in debug UI tests to connect to Firebase emulators on this Mac.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>D2D Advancer needs location access to show your current position on the map and help you navigate to leads.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

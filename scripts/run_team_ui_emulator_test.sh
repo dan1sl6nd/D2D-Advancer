@@ -20,6 +20,7 @@ else
   fi
 fi
 
+D2D_RUN_TEAM_EMULATOR_UI_TESTS=1 \
 xcodebuild test \
   -project "${PROJECT_PATH}" \
   -scheme "${SCHEME}" \

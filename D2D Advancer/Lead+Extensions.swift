@@ -61,18 +61,100 @@ extension Lead {
             case .notInterested: return .statusNotInterested
             }
         }
+
+        static func normalizedRawValue(from rawStatus: String?) -> String? {
+            guard let rawStatus else { return nil }
+            let normalized = rawStatus
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "_")
+                .replacingOccurrences(of: " ", with: "_")
+            guard !normalized.isEmpty else { return nil }
+
+            switch normalized {
+            case converted.rawValue, "sold", "closed", "close", "won":
+                return converted.rawValue
+            case notInterested.rawValue, "notinterested", "no_interest", "nointerest", "lost":
+                return notInterested.rawValue
+            case notHome.rawValue, "nothome", "no_answer", "noanswer", "customer_not_home":
+                return notHome.rawValue
+            case interested.rawValue, "prospect", "booked", "scheduled":
+                return interested.rawValue
+            case notContacted.rawValue, "notcontacted", "new", "cold":
+                return notContacted.rawValue
+            default:
+                return nil
+            }
+        }
+
+        static func normalizedRawValueOrDefault(from rawStatus: String?) -> String {
+            normalizedRawValue(from: rawStatus) ?? notContacted.rawValue
+        }
+
+        var allowsActiveFollowUp: Bool {
+            self != .converted && self != .notInterested
+        }
+
+        func resolvedFollowUpDate(_ proposedDate: Date?) -> Date? {
+            allowsActiveFollowUp ? proposedDate : nil
+        }
+
+        static var activeFollowUpRawValues: [String] {
+            allCases
+                .filter(\.allowsActiveFollowUp)
+                .map(\.rawValue)
+        }
+
+        static var activeFollowUpPredicate: NSPredicate {
+            NSPredicate(
+                format: "followUpDate != nil AND (status == nil OR status IN %@)",
+                activeFollowUpRawValues
+            )
+        }
+
+        static func activeFollowUpPredicate(dueBefore date: Date) -> NSPredicate {
+            NSPredicate(
+                format: "followUpDate != nil AND followUpDate < %@ AND (status == nil OR status IN %@)",
+                date as NSDate,
+                activeFollowUpRawValues
+            )
+        }
+
+        static func activeFollowUpPredicate(dueFrom startDate: Date, through endDate: Date) -> NSPredicate {
+            NSPredicate(
+                format: "followUpDate >= %@ AND followUpDate <= %@ AND (status == nil OR status IN %@)",
+                startDate as NSDate,
+                endDate as NSDate,
+                activeFollowUpRawValues
+            )
+        }
     }
     
     
     var leadStatus: Status {
         get {
-            return Status(rawValue: status ?? "not_contacted") ?? .notContacted
+            return Status(rawValue: Status.normalizedRawValueOrDefault(from: status)) ?? .notContacted
         }
         set {
             willChangeValue(forKey: "status")
             status = newValue.rawValue
             updatedDate = Date()
             didChangeValue(forKey: "status")
+        }
+    }
+
+    func applyLeadStatus(
+        _ newStatus: Status,
+        followUpDate proposedFollowUpDate: Date? = nil,
+        shouldReplaceFollowUpDate: Bool = false,
+        autoSave: Bool = true
+    ) {
+        leadStatus = newStatus
+
+        if shouldReplaceFollowUpDate {
+            setFollowUpDate(newStatus.resolvedFollowUpDate(proposedFollowUpDate), autoSave: autoSave)
+        } else if !newStatus.allowsActiveFollowUp {
+            setFollowUpDate(nil, autoSave: autoSave)
         }
     }
     
@@ -173,9 +255,26 @@ extension Lead {
     var location: CLLocation {
         return CLLocation(latitude: latitude, longitude: longitude)
     }
+
+    static func entityDescription(in context: NSManagedObjectContext) -> NSEntityDescription {
+        if let entity = context.persistentStoreCoordinator?.managedObjectModel.entitiesByName["Lead"] {
+            return entity
+        }
+
+        guard let entity = NSEntityDescription.entity(forEntityName: "Lead", in: context) else {
+            preconditionFailure("Lead entity not found in managed object context")
+        }
+        return entity
+    }
+
+    static func fetchRequest(in context: NSManagedObjectContext) -> NSFetchRequest<Lead> {
+        let request = NSFetchRequest<Lead>()
+        request.entity = entityDescription(in: context)
+        return request
+    }
     
     static func create(in context: NSManagedObjectContext) -> Lead {
-        let lead = Lead(context: context)
+        let lead = Lead(entity: entityDescription(in: context), insertInto: context)
         lead.id = UUID()
         lead.createdDate = Date()
         lead.updatedDate = Date()

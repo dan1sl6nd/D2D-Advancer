@@ -1,6 +1,5 @@
 import SwiftUI
 import CoreData
-import UserNotifications
 
 struct FollowUpView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -11,19 +10,20 @@ struct FollowUpView: View {
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Lead.followUpDate, ascending: true)],
-        predicate: NSPredicate(format: "followUpDate != nil"),
+        predicate: Lead.Status.activeFollowUpPredicate,
         animation: .default
     )
     private var followUpLeads: FetchedResults<Lead>
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             GeometryReader { geometry in
                 VStack(spacing: 0) {
-                    // Dynamic safe area spacer that adapts to device
                     Rectangle()
                         .fill(Color.obsidianBlack)
-                        .frame(height: max((geometry.safeAreaInsets.top.isNaN ? 0 : geometry.safeAreaInsets.top) + 10, 60))
+                        .frame(height: geometry.safeAreaInsets.top)
+
+                    ObsidianHeaderView("Follow Up")
 
                     if followUpLeads.isEmpty {
                         emptyStateView
@@ -55,6 +55,7 @@ struct FollowUpView: View {
                                 }
                             }
                             .padding(.vertical, 8)
+                            .padding(.bottom, 12)
                         }
                     }
                 }
@@ -115,16 +116,16 @@ struct FollowUpView: View {
 
     private func followUpSectionHeader(_ title: String, color: Color, count: Int) -> some View {
         HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 2)
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(color)
                 .frame(width: 3, height: 14)
             Text(title)
-                .font(.system(size: 12, weight: .bold))
+                .font(.micro)
                 .textCase(.uppercase)
                 .tracking(0.8)
                 .foregroundColor(color)
             Text("\(count)")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.micro)
                 .foregroundColor(color.opacity(0.7))
             Spacer()
         }
@@ -181,54 +182,13 @@ struct FollowUpView: View {
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Spacer()
-
-            Circle()
-                .fill(Color.electricViolet.opacity(0.15))
-                .frame(width: 80, height: 80)
-                .overlay(
-                    Image(systemName: "calendar.badge.clock")
-                        .font(.system(size: 28))
-                        .foregroundColor(Color.electricViolet)
-                )
-
-            VStack(spacing: 8) {
-                Text("No Follow Ups Scheduled")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(Color.textPrimary)
-
-                Text("When you set follow-up dates for leads, they'll appear here sorted by date.")
-                    .font(.body)
-                    .foregroundColor(Color.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-            }
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .listRowSeparator(.hidden)
+        ObsidianEmptyState(
+            icon: "calendar.badge.clock",
+            title: "No Follow Ups",
+            message: "Set a follow-up date on any lead and it will appear here in priority order."
+        )
     }
 
-}
-
-struct FeatureBullet: View {
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Color.statusInterested)
-                .font(.title3)
-
-            Text(text)
-                .font(.body)
-
-            Spacer()
-        }
-    }
 }
 
 struct FollowUpInteractiveRowView: View {
@@ -239,110 +199,84 @@ struct FollowUpInteractiveRowView: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 16) {
-            // Lead initial circle
-            Circle()
-                .fill(LinearGradient(colors: [Color.electricViolet, Color.electricVioletDeep], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 48, height: 48)
-                .overlay(
-                    Text(leadInitial)
-                        .font(.system(size: 18, weight: .semibold))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(.white)
+        let followUpDate = lead.followUpDate ?? Date()
+        let accent = timeColor(for: followUpDate)
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                ObsidianIconTile(
+                    icon: timeIcon(for: followUpDate),
+                    tint: accent,
+                    size: 46
                 )
-                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(lead.displayName)
-                        .font(.system(size: 17, weight: .semibold))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(Color.textPrimary)
-                        .accessibilityAddTraits(.isHeader)
-
-                    Spacer()
-
-                    if let followUpDate = lead.followUpDate {
-                        HStack(spacing: 4) {
-                            Image(systemName: timeIcon(for: followUpDate))
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(timeColor(for: followUpDate))
-                                .accessibilityHidden(true)
-                            Text(timeStatus(for: followUpDate))
-                                .font(.system(size: 12, weight: .medium))
-                                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                                .foregroundColor(timeColor(for: followUpDate))
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(timeColor(for: followUpDate).opacity(0.15))
-                        )
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Follow-up status")
-                        .accessibilityValue(timeStatus(for: followUpDate))
-                    }
-                }
-
-                if let address = lead.address, !address.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.textSecondary)
-                            .accessibilityHidden(true)
-                        Text(address)
-                            .font(.system(size: 14, weight: .regular))
-                            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                            .foregroundColor(Color.textSecondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(lead.displayName)
+                            .font(.themeTitle)
+                            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                            .foregroundColor(Color.textPrimary)
                             .lineLimit(1)
+                            .accessibilityAddTraits(.isHeader)
+
+                        Spacer(minLength: 6)
+
+                        Label(timeStatus(for: followUpDate), systemImage: timeIcon(for: followUpDate))
+                            .font(.micro)
+                            .foregroundColor(accent)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Capsule().fill(accent.opacity(0.12)))
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Follow-up status")
+                            .accessibilityValue(timeStatus(for: followUpDate))
                     }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Address")
-                    .accessibilityValue(address)
+
+                    Text(followUpDate.formatted(.dateTime.month().day().hour().minute()))
+                        .font(.obsidianFootnote)
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                        .foregroundColor(Color.textSecondary)
+                        .lineLimit(1)
+
+                    if let address = lead.address, !address.isEmpty {
+                        Label(address, systemImage: "location.fill")
+                            .font(.micro)
+                            .foregroundColor(Color.textMuted)
+                            .lineLimit(1)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Address")
+                            .accessibilityValue(address)
+                    }
                 }
+            }
 
-                // Action buttons
-                HStack(spacing: 12) {
-                    Button(action: {
-                        onMessageTap()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "message.fill")
-                            Text("Message")
-                        }
-                        .font(.caption)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(hasContactInfo ? Color.electricViolet : Color.textSecondary)
-                        .cornerRadius(16)
-                    }
-                    .disabled(!hasContactInfo)
-                    .buttonStyle(PlainButtonStyle())
+            HStack(spacing: 8) {
+                followUpActionButton(
+                    title: "Message",
+                    icon: "message.fill",
+                    tint: Color.electricViolet,
+                    isEnabled: hasContactInfo,
+                    action: onMessageTap
+                )
 
-                    Button(action: {
-                        onCheckInTap()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle")
-                            Text("Check-in")
-                        }
-                        .font(.caption)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.statusInterested)
-                        .cornerRadius(16)
-                    }
-                    .buttonStyle(PlainButtonStyle())
+                followUpActionButton(
+                    title: "Check-in",
+                    icon: "checkmark.circle.fill",
+                    tint: Color.statusInterested,
+                    action: onCheckInTap
+                )
 
-                    Spacer()
-                }
-                .padding(.top, 8)
+                Spacer(minLength: 0)
             }
         }
-        .surfaceCard()
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
         .padding(.horizontal, 16)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -401,6 +335,25 @@ struct FollowUpInteractiveRowView: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func followUpActionButton(
+        title: String,
+        icon: String,
+        tint: Color,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.micro)
+                .foregroundColor(isEnabled ? tint : Color.textMuted)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Capsule().fill((isEnabled ? tint : Color.textMuted).opacity(0.12)))
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(!isEnabled)
+    }
+
     private var hasContactInfo: Bool {
         !(lead.phone?.isEmpty ?? true) || !(lead.email?.isEmpty ?? true)
     }
@@ -413,177 +366,17 @@ struct FollowUpInteractiveRowView: View {
         let calendar = Calendar.current
         let baseDate: Date
         if days == 1 {
-            let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date())!
-            baseDate = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow)!
+            let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date().addingTimeInterval(86_400)
+            baseDate = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
         } else {
             let from = lead.followUpDate ?? Date()
-            baseDate = calendar.date(byAdding: .day, value: days, to: from)!
+            baseDate = calendar.date(byAdding: .day, value: days, to: from) ?? from.addingTimeInterval(TimeInterval(days) * 86_400)
         }
         lead.setFollowUpDate(baseDate)
         NotificationService.shared.scheduleFollowUpNotification(for: lead)
         UserDataSyncManager.shared.syncWithServer()
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
-    }
-
-    private func timeIcon(for date: Date) -> String {
-        let now = Date()
-        if date < now {
-            return "exclamationmark.triangle.fill"
-        } else if Calendar.current.isDateInToday(date) {
-            return "clock.fill"
-        } else {
-            return "calendar"
-        }
-    }
-
-    private func timeColor(for date: Date) -> Color {
-        let now = Date()
-        if date < now {
-            return Color.statusNotInterested
-        } else if Calendar.current.isDateInToday(date) {
-            return Color.statusNotHome
-        } else {
-            return Color.electricViolet
-        }
-    }
-
-    private func timeStatus(for date: Date) -> String {
-        let now = Date()
-        if date < now {
-            return "Overdue"
-        } else if Calendar.current.isDateInToday(date) {
-            return "Today"
-        } else if Calendar.current.isDateInTomorrow(date) {
-            return "Tomorrow"
-        } else {
-            let days = Calendar.current.dateComponents([.day], from: now, to: date).day ?? 0
-            return "In \(days) days"
-        }
-    }
-}
-
-struct FollowUpRowView: View {
-    @ObservedObject var lead: Lead
-    let onMessageTap: () -> Void
-    let onCheckInTap: () -> Void
-
-    var body: some View {
-        HStack(spacing: 16) {
-            // Lead initial circle
-            Circle()
-                .fill(LinearGradient(colors: [Color.electricViolet, Color.electricVioletDeep], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 48, height: 48)
-                .overlay(
-                    Text(leadInitial)
-                        .font(.system(size: 18, weight: .semibold))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(.white)
-                )
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(lead.displayName)
-                        .font(.system(size: 17, weight: .semibold))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(Color.textPrimary)
-                        .accessibilityAddTraits(.isHeader)
-
-                    Spacer()
-
-                    if let followUpDate = lead.followUpDate {
-                        HStack(spacing: 4) {
-                            Image(systemName: timeIcon(for: followUpDate))
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(timeColor(for: followUpDate))
-                                .accessibilityHidden(true)
-                            Text(timeStatus(for: followUpDate))
-                                .font(.system(size: 12, weight: .medium))
-                                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                                .foregroundColor(timeColor(for: followUpDate))
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(timeColor(for: followUpDate).opacity(0.15))
-                        )
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Follow-up status")
-                        .accessibilityValue(timeStatus(for: followUpDate))
-                    }
-                }
-
-                if let address = lead.address, !address.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.textSecondary)
-                            .accessibilityHidden(true)
-                        Text(address)
-                            .font(.system(size: 14, weight: .regular))
-                            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                            .foregroundColor(Color.textSecondary)
-                            .lineLimit(1)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Address")
-                    .accessibilityValue(address)
-                }
-
-                // Action buttons
-                HStack(spacing: 12) {
-                    Button(action: {
-                        onMessageTap()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "message.fill")
-                            Text("Message")
-                        }
-                        .font(.caption)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(hasContactInfo ? Color.electricViolet : Color.textSecondary)
-                        .cornerRadius(16)
-                    }
-                    .disabled(!hasContactInfo)
-                    .buttonStyle(PlainButtonStyle())
-
-                    Button(action: {
-                        onCheckInTap()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle")
-                            Text("Check-in")
-                        }
-                        .font(.caption)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.statusInterested)
-                        .cornerRadius(16)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-
-                    Spacer()
-                }
-                .padding(.top, 8)
-            }
-        }
-        .surfaceCard()
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var hasContactInfo: Bool {
-        !(lead.phone?.isEmpty ?? true) || !(lead.email?.isEmpty ?? true)
-    }
-
-    private var leadInitial: String {
-        String(lead.displayName.prefix(1)).uppercased()
     }
 
     private func timeIcon(for date: Date) -> String {
@@ -632,298 +425,24 @@ struct FollowUpDetailView: View {
     @State private var showingRescheduleView = false
 
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Header Card
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Circle()
-                                .fill(LinearGradient(colors: [Color.electricViolet, Color.electricVioletDeep], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .frame(width: 60, height: 60)
-                                .overlay(
-                                    Text(leadInitial)
-                                        .font(.system(size: 24, weight: .bold))
-                                        .foregroundColor(.white)
-                                )
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(lead.displayName)
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(Color.textPrimary)
-
-                                if let address = lead.address, !address.isEmpty {
-                                    Text(address)
-                                        .font(.subheadline)
-                                        .foregroundColor(Color.textSecondary)
-                                        .lineLimit(2)
-                                }
-                            }
-
-                            Spacer()
-                        }
+        NavigationStack {
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        followUpHeaderSection
+                        followUpDetailsSection
+                        followUpActionsSection
                     }
-                    .surfaceCard()
-
-                    // Follow-Up Information Card
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Image(systemName: "calendar.badge.clock")
-                                .foregroundColor(Color.statusNotHome)
-                                .font(.title2)
-
-                            Text("Follow-Up Details")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(Color.textPrimary)
-
-                            Spacer()
-                        }
-
-                        if let followUpDate = lead.followUpDate {
-                            VStack(alignment: .leading, spacing: 12) {
-                                // Status Badge
-                                HStack {
-                                    Text("Status:")
-                                        .font(.subheadline)
-                                        .foregroundColor(Color.textSecondary)
-
-                                    HStack(spacing: 4) {
-                                        Image(systemName: timeIcon(for: followUpDate))
-                                            .foregroundColor(timeColor(for: followUpDate))
-                                        Text(timeStatus(for: followUpDate))
-                                            .fontWeight(.medium)
-                                            .foregroundColor(timeColor(for: followUpDate))
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        Capsule()
-                                            .fill(timeColor(for: followUpDate).opacity(0.15))
-                                    )
-
-                                    Spacer()
-                                }
-
-                                // Scheduled Date & Time
-                                HStack {
-                                    Text("Scheduled:")
-                                        .font(.subheadline)
-                                        .foregroundColor(Color.textSecondary)
-
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(followUpDate.formatted(.dateTime.day().month().year().weekday(.wide)))
-                                            .font(.body)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(Color.textPrimary)
-
-                                        Text(followUpDate.formatted(.dateTime.hour().minute()))
-                                            .font(.subheadline)
-                                            .foregroundColor(Color.textSecondary)
-                                    }
-
-                                    Spacer()
-                                }
-                            }
-                        }
-
-                        // Lead Notes
-                        if let notes = lead.notes, !notes.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Notes:")
-                                    .font(.subheadline)
-                                    .foregroundColor(Color.textSecondary)
-
-                                Text(notes)
-                                    .font(.body)
-                                    .foregroundColor(Color.textPrimary)
-                                    .padding(12)
-                                    .background(Color.obsidianSurface)
-                                    .cornerRadius(8)
-                            }
-                        }
-                    }
-                    .surfaceCard()
-
-                    // Quick Actions Card
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Image(systemName: "bolt.fill")
-                                .foregroundColor(Color.electricViolet)
-                                .font(.title2)
-
-                            Text("Quick Actions")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(Color.textPrimary)
-
-                            Spacer()
-                        }
-
-                        VStack(spacing: 12) {
-                            // Message Button
-                            Button(action: {
-                                leadForMessaging = lead
-                            }) {
-                                HStack {
-                                    Image(systemName: "message.fill")
-                                        .foregroundColor(.white)
-                                    Text("Send Message")
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.white)
-                                    Spacer()
-                                    Image(systemName: "arrow.right")
-                                        .foregroundColor(.white)
-                                }
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 12)
-                                .background(hasContactInfo ? Color.electricViolet : Color.textSecondary)
-                                .cornerRadius(12)
-                            }
-                            .disabled(!hasContactInfo)
-
-                            // Check-in Button
-                            Button(action: {
-                                leadForCheckIn = lead
-                            }) {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.white)
-                                    Text("Record Check-in")
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.white)
-                                    Spacer()
-                                    Image(systemName: "arrow.right")
-                                        .foregroundColor(.white)
-                                }
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 12)
-                                .background(Color.statusInterested)
-                                .cornerRadius(12)
-                            }
-
-                            // Reschedule Button
-                            if lead.followUpDate != nil {
-                                Button(action: {
-                                    showingRescheduleView = true
-                                }) {
-                                    HStack {
-                                        Image(systemName: "calendar.badge.plus")
-                                            .foregroundColor(.white)
-                                        Text("Reschedule Follow-up")
-                                            .fontWeight(.medium)
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        Image(systemName: "arrow.right")
-                                            .foregroundColor(.white)
-                                    }
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 12)
-                                    .background(Color.statusNotHome)
-                                    .cornerRadius(12)
-                                }
-                            }
-
-                            // View Full Lead Details Button
-                            Button(action: {
-                                showingLeadDetail = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "person.fill")
-                                        .foregroundColor(Color.textPrimary)
-                                    Text("View Full Lead Details")
-                                        .fontWeight(.medium)
-                                        .foregroundColor(Color.textPrimary)
-                                    Spacer()
-                                    Image(systemName: "arrow.right")
-                                        .foregroundColor(Color.textSecondary)
-                                }
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 12)
-                                .background(Color.obsidianSurface)
-                                .cornerRadius(12)
-                            }
-                        }
-                    }
-                    .surfaceCard()
+                    .padding()
+                    .padding(.bottom, 16)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 20)
+
+                followUpBottomBar
             }
             .background(Color.obsidianBlack)
             .navigationTitle("Follow-Up")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
-            .safeAreaInset(edge: .bottom) {
-                // Card-based button design
-                HStack(spacing: 16) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3)
-                            Text("Done")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.electricViolet, Color.electricViolet.opacity(0.8)]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-
-                    Menu {
-                        Button("View Lead Details") {
-                            showingLeadDetail = true
-                        }
-
-                        if lead.followUpDate != nil {
-                            Button("Reschedule") {
-                                showingRescheduleView = true
-                            }
-
-                            Button("Complete Follow-up") {
-                                completeFollowUp()
-                            }
-                        }
-                    } label: {
-                        HStack {
-                            Image(systemName: "ellipsis.circle.fill")
-                                .font(.title3)
-                            Text("Options")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(Color.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.obsidianSurface)
-                                .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        )
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: -2)
-                )
-            }
             .sheet(item: $leadForMessaging) { lead in
                 MessageSelectionView(lead: lead)
             }
@@ -937,6 +456,189 @@ struct FollowUpDetailView: View {
                 RescheduleFollowUpView(lead: lead, currentDate: lead.followUpDate ?? Date())
             }
         }
+    }
+
+    private var followUpHeaderSection: some View {
+        let followUpDate = lead.followUpDate ?? Date()
+        let accent = timeColor(for: followUpDate)
+
+        return HStack(alignment: .top, spacing: 12) {
+            ObsidianIconTile(
+                icon: timeIcon(for: followUpDate),
+                tint: accent,
+                size: 46,
+                filled: true
+            )
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(lead.displayName)
+                        .font(.themeTitle)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 6)
+
+                    Label(timeStatus(for: followUpDate), systemImage: timeIcon(for: followUpDate))
+                        .font(.micro)
+                        .foregroundColor(accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(accent.opacity(0.12)))
+                }
+
+                Text(lead.address.flatMap { address in
+                    let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return trimmed.isEmpty ? nil : trimmed
+                } ?? "No address saved")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
+
+                if let followUpDate = lead.followUpDate {
+                    Label(followUpDate.formatted(.dateTime.weekday(.abbreviated).month().day().hour().minute()), systemImage: "calendar.badge.clock")
+                        .font(.micro)
+                        .foregroundColor(Color.textMuted)
+                }
+            }
+        }
+        .padding()
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.6), lineWidth: 0.5)
+        )
+    }
+
+    private var followUpDetailsSection: some View {
+        LeadFormSectionCard(title: "Follow-Up Details", icon: "calendar.badge.clock") {
+            VStack(spacing: 12) {
+                if let followUpDate = lead.followUpDate {
+                    ObsidianDetailRow(
+                        title: "Status",
+                        value: timeStatus(for: followUpDate),
+                        icon: timeIcon(for: followUpDate),
+                        tint: timeColor(for: followUpDate),
+                        valueColor: timeColor(for: followUpDate)
+                    )
+
+                    ObsidianDetailRow(
+                        title: "Date",
+                        value: followUpDate.formatted(.dateTime.day().month().year().weekday(.wide)),
+                        icon: "calendar",
+                        tint: Color.electricViolet
+                    )
+
+                    ObsidianDetailRow(
+                        title: "Time",
+                        value: followUpDate.formatted(.dateTime.hour().minute()),
+                        icon: "clock.fill",
+                        tint: Color.statusNotHome
+                    )
+                } else {
+                    ObsidianDetailRow(
+                        title: "Status",
+                        value: "No follow-up scheduled",
+                        icon: "calendar.badge.minus",
+                        tint: Color.textMuted,
+                        valueColor: Color.textSecondary
+                    )
+                }
+
+                if let notes = lead.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(.obsidianBody)
+                        .foregroundColor(Color.textPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(Color.obsidianElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                        )
+                }
+            }
+        }
+    }
+
+    private var followUpActionsSection: some View {
+        LeadFormSectionCard(title: "Quick Actions", icon: "bolt.fill") {
+            VStack(spacing: 12) {
+                ObsidianActionTile(
+                    title: "Send Message",
+                    subtitle: hasContactInfo ? "Use saved phone or email." : "Add contact info before messaging.",
+                    icon: "message.fill",
+                    tint: Color.electricViolet,
+                    isEnabled: hasContactInfo
+                ) {
+                    leadForMessaging = lead
+                }
+
+                ObsidianActionTile(
+                    title: "Record Check-in",
+                    subtitle: "Log what happened after contacting this customer.",
+                    icon: "checkmark.circle.fill",
+                    tint: Color.statusInterested
+                ) {
+                    leadForCheckIn = lead
+                }
+
+                if lead.followUpDate != nil {
+                    ObsidianActionTile(
+                        title: "Reschedule",
+                        subtitle: "Move this reminder to a new date or time.",
+                        icon: "calendar.badge.plus",
+                        tint: Color.statusNotHome
+                    ) {
+                        showingRescheduleView = true
+                    }
+                }
+
+                ObsidianActionTile(
+                    title: "View Full Lead",
+                    subtitle: "Open customer details, status, notes, and history.",
+                    icon: "person.text.rectangle.fill",
+                    tint: Color.electricViolet
+                ) {
+                    showingLeadDetail = true
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var followUpBottomBar: some View {
+        HStack(spacing: 12) {
+            if lead.followUpDate != nil {
+                Button {
+                    completeFollowUp()
+                } label: {
+                    Label("Complete", systemImage: "checkmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+            }
+
+            Button {
+                dismiss()
+            } label: {
+                Label("Done", systemImage: "checkmark.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ObsidianPrimaryButtonStyle())
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.obsidianElevated)
+                .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: -3)
+        )
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))
     }
 
     private var leadInitial: String {
@@ -1002,218 +704,154 @@ struct RescheduleFollowUpView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Header Section
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Circle()
-                                .fill(LinearGradient(colors: [Color.electricViolet, Color.electricVioletDeep], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .frame(width: 50, height: 50)
-                                .overlay(
-                                    Text(leadInitial)
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(.white)
-                                )
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: "Reschedule",
+                        subtitle: "Move the follow-up reminder for \(lead.displayName).",
+                        icon: "calendar.badge.clock"
+                    )
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(lead.displayName)
-                                    .font(.title3)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(Color.textPrimary)
-
-                                Text("Reschedule Follow-up")
-                                    .font(.subheadline)
-                                    .foregroundColor(Color.textSecondary)
-                            }
-
-                            Spacer()
-                        }
-
-                        // Current vs New Date Comparison
-                        VStack(spacing: 12) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Current")
-                                        .font(.caption)
-                                        .foregroundColor(Color.textSecondary)
-                                        .textCase(.uppercase)
-
-                                    Text(currentDate.formatted(.dateTime.day().month().year().hour().minute()))
-                                        .font(.body)
-                                        .foregroundColor(Color.statusNotInterested)
-                                        .strikethrough()
-                                }
-
-                                Spacer()
-
-                                Image(systemName: "arrow.right")
-                                    .foregroundColor(Color.electricViolet)
-                                    .font(.title2)
-
-                                Spacer()
-
-                                VStack(alignment: .trailing, spacing: 4) {
-                                    Text("New")
-                                        .font(.caption)
-                                        .foregroundColor(Color.textSecondary)
-                                        .textCase(.uppercase)
-
-                                    Text(newDate.formatted(.dateTime.day().month().year().hour().minute()))
-                                        .font(.body)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(Color.statusInterested)
-                                }
-                            }
-                            .padding(16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.obsidianSurface)
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-
-                    // Date Selection Card
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Image(systemName: "calendar")
-                                .foregroundColor(Color.electricViolet)
-                                .font(.title2)
-
-                            Text("Select New Date & Time")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(Color.textPrimary)
-
-                            Spacer()
-                        }
-
-                        // Modern Date Picker
-                        DatePicker("Follow-up Date", selection: $newDate, in: Date()..., displayedComponents: [.date, .hourAndMinute])
-                            .datePickerStyle(.compact)
-                            .padding(.vertical, 8)
-
-                        // Quick Time Suggestions
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Quick Suggestions")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(Color.textSecondary)
-
-                            LazyVGrid(columns: [
-                                GridItem(.flexible(), spacing: 8),
-                                GridItem(.flexible(), spacing: 8)
-                            ], spacing: 8) {
-                                QuickTimeButton(title: "Tomorrow 9 AM", date: Calendar.current.date(byAdding: .day, value: 1, to: Date())?.setting(hour: 9, minute: 0) ?? Date(), selectedDate: $newDate)
-
-                                QuickTimeButton(title: "Tomorrow 2 PM", date: Calendar.current.date(byAdding: .day, value: 1, to: Date())?.setting(hour: 14, minute: 0) ?? Date(), selectedDate: $newDate)
-
-                                QuickTimeButton(title: "In 3 Days 10 AM", date: Calendar.current.date(byAdding: .day, value: 3, to: Date())?.setting(hour: 10, minute: 0) ?? Date(), selectedDate: $newDate)
-
-                                QuickTimeButton(title: "Next Week 9 AM", date: Calendar.current.date(byAdding: .weekOfYear, value: 1, to: Date())?.setting(hour: 9, minute: 0) ?? Date(), selectedDate: $newDate)
-                            }
-                        }
-                    }
-                    .surfaceCard()
-                    .padding(.horizontal, 16)
-
-                    // Summary Card
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Image(systemName: "info.circle")
-                                .foregroundColor(Color.electricViolet)
-
-                            Text("Summary")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(Color.textPrimary)
-
-                            Spacer()
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Lead:")
-                                    .foregroundColor(Color.textSecondary)
-                                Text(lead.displayName)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(Color.textPrimary)
-                                Spacer()
-                            }
-
-                            HStack {
-                                Text("New Follow-up:")
-                                    .foregroundColor(Color.textSecondary)
-                                Text(newDate.formatted(.dateTime.day().month().year().weekday(.abbreviated).hour().minute()))
-                                    .fontWeight(.medium)
-                                    .foregroundColor(Color.statusInterested)
-                                Spacer()
-                            }
-
-                            if let timeUntil = timeUntilFollowUp {
-                                HStack {
-                                    Text("Time until:")
-                                        .foregroundColor(Color.textSecondary)
-                                    Text(timeUntil)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(Color.electricViolet)
-                                    Spacer()
-                                }
-                            }
-                        }
-                    }
-                    .surfaceCard()
-                    .padding(.horizontal, 16)
-
-                    Spacer(minLength: 100)
+                    changeSummarySection
+                    dateSelectionSection
+                    reminderSummarySection
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack)
+            .background(Color.obsidianBlack.ignoresSafeArea())
             .navigationTitle("Reschedule")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Text("Cancel")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .multilineTextAlignment(.center)
+            .obsidianInlineNavigation()
+            .safeAreaInset(edge: .bottom) {
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: newDate <= Date(),
+                    primaryAction: save,
+                    secondaryAction: { dismiss() },
+                    primaryLabel: {
+                        Label("Save", systemImage: "checkmark.circle.fill")
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
                     }
-                    .frame(width: 80, height: 36)
-                    .background(Color.textSecondary)
-                    .cornerRadius(20)
-                }
+                )
+            }
+        }
+        .presentationBackground(Color.obsidianBlack)
+    }
 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        lead.setFollowUpDate(newDate)
-                        dismiss()
-                    }) {
-                        Text("Save")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .multilineTextAlignment(.center)
+    private var changeSummarySection: some View {
+        ObsidianSectionCard(
+            title: "Move Reminder",
+            icon: "arrow.right.circle.fill",
+            subtitle: "Check the old time against the new one before saving."
+        ) {
+            HStack(spacing: 10) {
+                reminderDateCard(
+                    title: "Current",
+                    date: currentDate,
+                    color: Color.statusNotInterested,
+                    isStruckThrough: true
+                )
+
+                Image(systemName: "arrow.right")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textMuted)
+
+                reminderDateCard(
+                    title: "New",
+                    date: newDate,
+                    color: newDate <= Date() ? Color.statusNotInterested : Color.statusInterested
+                )
+            }
+        }
+    }
+
+    private var dateSelectionSection: some View {
+        ObsidianSectionCard(
+            title: "New Date & Time",
+            icon: "calendar",
+            subtitle: "Pick an exact time or use one of the common presets."
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                DatePicker(
+                    "Follow-up Date",
+                    selection: $newDate,
+                    in: Date()...,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .datePickerStyle(.compact)
+                .font(.obsidianCallout)
+                .foregroundColor(Color.textPrimary)
+                .padding(12)
+                .background(Color.obsidianElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                )
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Quick Suggestions")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: 8),
+                        GridItem(.flexible(), spacing: 8)
+                    ], spacing: 8) {
+                        QuickTimeButton(title: "Tomorrow 9 AM", date: quickDate(days: 1, hour: 9), selectedDate: $newDate)
+                        QuickTimeButton(title: "Tomorrow 2 PM", date: quickDate(days: 1, hour: 14), selectedDate: $newDate)
+                        QuickTimeButton(title: "In 3 Days 10 AM", date: quickDate(days: 3, hour: 10), selectedDate: $newDate)
+                        QuickTimeButton(title: "Next Week 9 AM", date: quickDate(days: 7, hour: 9), selectedDate: $newDate)
                     }
-                    .frame(width: 70, height: 36)
-                    .background(newDate <= Date() ? Color.textSecondary.opacity(0.6) : Color.electricViolet)
-                    .cornerRadius(20)
-                    .disabled(newDate <= Date())
                 }
             }
         }
     }
 
-    private var leadInitial: String {
-        String(lead.displayName.prefix(1)).uppercased()
+    private var reminderSummarySection: some View {
+        ObsidianStatusBanner(
+            icon: newDate <= Date() ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
+            title: newDate <= Date() ? "Choose a future time" : "Reminder will move to \(newDate.formatted(.dateTime.weekday(.abbreviated).month().day().hour().minute()))",
+            message: timeUntilFollowUp.map { "That is \($0) from now." },
+            tint: newDate <= Date() ? Color.statusNotInterested : Color.statusInterested
+        )
+    }
+
+    private func reminderDateCard(title: String, date: Date, color: Color, isStruckThrough: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.micro)
+                .foregroundColor(Color.textSecondary)
+                .textCase(.uppercase)
+
+            Text(date.formatted(.dateTime.month().day().hour().minute()))
+                .font(.obsidianCallout)
+                .foregroundColor(color)
+                .strikethrough(isStruckThrough)
+                .lineLimit(2)
+                .minimumScaleFactor(0.82)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(color.opacity(0.35), lineWidth: 0.5)
+        )
+    }
+
+    private func quickDate(days: Int, hour: Int) -> Date {
+        Calendar.current.date(byAdding: .day, value: days, to: Date())?.setting(hour: hour, minute: 0) ?? Date()
+    }
+
+    private func save() {
+        guard newDate > Date() else { return }
+        lead.setFollowUpDate(newDate)
+        dismiss()
     }
 
     private var timeUntilFollowUp: String? {
@@ -1239,23 +877,37 @@ struct QuickTimeButton: View {
     let date: Date
     @Binding var selectedDate: Date
 
+    private var isSelected: Bool {
+        Calendar.current.isDate(selectedDate, equalTo: date, toGranularity: .minute)
+    }
+
     var body: some View {
         Button(action: {
             selectedDate = date
         }) {
-            Text(title)
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(Color.electricViolet)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.electricViolet.opacity(0.1))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.electricViolet.opacity(0.3), lineWidth: 1)
-                        )
+            HStack(spacing: 6) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.micro)
+                }
+
+                Text(title)
+                    .font(.micro)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .foregroundColor(isSelected ? .white : Color.electricViolet)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? Color.electricViolet : Color.electricViolet.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.electricViolet.opacity(isSelected ? 0.0 : 0.3), lineWidth: 1)
+                    )
                 )
         }
         .buttonStyle(PlainButtonStyle())
@@ -1276,13 +928,13 @@ extension Date {
     let context = PersistenceController.preview.container.viewContext
 
     // Create sample leads with follow-up dates
-    let lead1 = Lead(context: context)
+    let lead1 = Lead.create(in: context)
     lead1.name = "John Doe"
     lead1.followUpDate = Calendar.current.date(byAdding: .hour, value: 2, to: Date())
     lead1.address = "123 Main St, Toronto, ON"
     lead1.notes = "Very interested in our service"
 
-    let lead2 = Lead(context: context)
+    let lead2 = Lead.create(in: context)
     lead2.name = "Jane Smith"
     lead2.followUpDate = Calendar.current.date(byAdding: .day, value: -1, to: Date())
     lead2.address = "456 Oak Ave, Toronto, ON"

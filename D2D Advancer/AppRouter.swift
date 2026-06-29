@@ -27,4 +27,3 @@ final class AppRouter: ObservableObject {
         targetAppointmentID = id
     }
 }
-

@@ -1,6 +1,50 @@
 import SwiftUI
 import Combine
 
+struct ThemeColorSnapshot: Codable, Equatable {
+    var red: Double
+    var green: Double
+    var blue: Double
+    var alpha: Double
+}
+
+enum ThemeColorLocalStore {
+    static func snapshot(fromCGColorComponents components: [CGFloat]?) -> ThemeColorSnapshot? {
+        guard let components, let first = components.first else { return nil }
+
+        switch components.count {
+        case 1:
+            let white = Double(first)
+            return ThemeColorSnapshot(red: white, green: white, blue: white, alpha: 1)
+        case 2:
+            let white = Double(first)
+            return ThemeColorSnapshot(red: white, green: white, blue: white, alpha: Double(components[1]))
+        case 3:
+            return ThemeColorSnapshot(
+                red: Double(components[0]),
+                green: Double(components[1]),
+                blue: Double(components[2]),
+                alpha: 1
+            )
+        default:
+            return ThemeColorSnapshot(
+                red: Double(components[0]),
+                green: Double(components[1]),
+                blue: Double(components[2]),
+                alpha: Double(components[3])
+            )
+        }
+    }
+
+    static func encode(_ snapshot: ThemeColorSnapshot) throws -> Data {
+        try JSONEncoder().encode(snapshot)
+    }
+
+    static func decode(from data: Data) throws -> ThemeColorSnapshot {
+        try JSONDecoder().decode(ThemeColorSnapshot.self, from: data)
+    }
+}
+
 /// Manages granular theme customization and persistence
 class CustomizableThemeManager: ObservableObject {
     static let shared = CustomizableThemeManager()
@@ -10,7 +54,9 @@ class CustomizableThemeManager: ObservableObject {
             saveTheme()
         }
     }
-    
+
+    @Published var lastErrorMessage: String?
+
     private let userDefaults = UserDefaults.standard
     private let themePrefix = "customTheme_"
     
@@ -202,30 +248,44 @@ class CustomizableThemeManager: ObservableObject {
     }
     
     private func saveColor(_ color: Color, key: String) {
-        let components = color.cgColor?.components ?? [0, 0, 0, 1]
-        let colorData = [
-            "red": Double(components[0]),
-            "green": Double(components[1]),
-            "blue": Double(components[2]),
-            "alpha": Double(components.count > 3 ? components[3] : 1.0)
-        ]
-        
-        if let data = try? JSONSerialization.data(withJSONObject: colorData) {
+        guard let snapshot = ThemeColorLocalStore.snapshot(fromCGColorComponents: color.cgColor?.components) else {
+            let message = "Theme color \(key) could not be saved because it has no color components."
+            lastErrorMessage = message
+            print("⚠️ \(message)")
+            return
+        }
+
+        do {
+            let data = try ThemeColorLocalStore.encode(snapshot)
             userDefaults.set(data, forKey: themePrefix + key)
+            lastErrorMessage = nil
+        } catch {
+            let message = "Theme color \(key) could not be saved: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("⚠️ \(message)")
         }
     }
     
     private func loadColor(key: String, default defaultColor: Color) -> Color {
-        guard let data = userDefaults.data(forKey: themePrefix + key),
-              let colorData = try? JSONSerialization.jsonObject(with: data) as? [String: Double],
-              let red = colorData["red"],
-              let green = colorData["green"],
-              let blue = colorData["blue"],
-              let alpha = colorData["alpha"] else {
+        guard let data = userDefaults.data(forKey: themePrefix + key) else {
             return defaultColor
         }
-        
-        return Color(red: red, green: green, blue: blue, opacity: alpha)
+
+        do {
+            let snapshot = try ThemeColorLocalStore.decode(from: data)
+            lastErrorMessage = nil
+            return Color(
+                red: snapshot.red,
+                green: snapshot.green,
+                blue: snapshot.blue,
+                opacity: snapshot.alpha
+            )
+        } catch {
+            let message = "Theme color \(key) could not be loaded: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("⚠️ \(message)")
+            return defaultColor
+        }
     }
 }
 
@@ -409,6 +469,416 @@ struct ObsidianHeaderView: View {
     }
 }
 
+// MARK: - Shared Obsidian Screen Components
+
+struct ObsidianSectionCard<Content: View>: View {
+    let title: String
+    let icon: String
+    var subtitle: String?
+    var accentColor: Color = .electricViolet
+    @ViewBuilder var content: Content
+
+    init(
+        title: String,
+        icon: String,
+        subtitle: String? = nil,
+        accentColor: Color = .electricViolet,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.icon = icon
+        self.subtitle = subtitle
+        self.accentColor = accentColor
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: icon)
+                    .font(.obsidianCallout)
+                    .foregroundColor(accentColor)
+                    .frame(width: 34, height: 34)
+                    .background(accentColor.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.obsidianTitle)
+                        .foregroundColor(Color.textPrimary)
+
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            content
+        }
+        .padding(16)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+    }
+}
+
+struct ObsidianEmptyState: View {
+    let icon: String
+    let title: String
+    let message: String
+    var actionTitle: String?
+    var actionIcon: String?
+    var action: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer(minLength: 24)
+
+            Image(systemName: icon)
+                .font(.displayMedium)
+                .foregroundColor(Color.electricViolet)
+                .frame(width: 88, height: 88)
+                .background(Color.electricViolet.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text(message)
+                    .font(.obsidianBody)
+                    .foregroundColor(Color.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 34)
+
+            if let actionTitle, let action {
+                Button(action: action) {
+                    Label(actionTitle, systemImage: actionIcon ?? "arrow.right")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+                .padding(.horizontal, 42)
+            }
+
+            Spacer(minLength: 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct ObsidianCompactIconButton: View {
+    let icon: String
+    let accessibilityLabel: String
+    var accentColor: Color = .electricViolet
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.obsidianCallout)
+                .fontWeight(.semibold)
+                .foregroundColor(accentColor)
+                .frame(width: 38, height: 38)
+                .background(accentColor.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+struct ObsidianScreenTitle: View {
+    let title: String
+    var subtitle: String?
+    var icon: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.electricViolet)
+                    .frame(width: 38, height: 38)
+                    .background(Color.electricViolet.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.displayMedium)
+                    .foregroundColor(Color.textPrimary)
+
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.obsidianBody)
+                        .foregroundColor(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+struct ObsidianStatusBanner: View {
+    let icon: String
+    let title: String
+    var message: String?
+    var tint: Color = .electricViolet
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.obsidianCallout)
+                .foregroundColor(tint)
+                .frame(width: 34, height: 34)
+                .background(tint.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
+
+                if let message, !message.isEmpty {
+                    Text(message)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+    }
+}
+
+struct ObsidianIconTile: View {
+    let icon: String
+    let tint: Color
+    var size: CGFloat = 46
+    var filled = false
+
+    private var cornerRadius: CGFloat {
+        min(14, size * 0.3)
+    }
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(size >= 42 ? .obsidianAction : .obsidianCallout)
+            .fontWeight(.semibold)
+            .foregroundColor(filled ? .white : tint)
+            .frame(width: size, height: size)
+            .background(filled ? tint : tint.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
+struct ObsidianDetailRow<Accessory: View>: View {
+    let title: String
+    let value: String
+    let icon: String
+    let tint: Color
+    var valueColor: Color = .textPrimary
+    var valueLineLimit: Int?
+    private let accessory: (() -> Accessory)?
+
+    init(
+        title: String,
+        value: String,
+        icon: String,
+        tint: Color,
+        valueColor: Color = .textPrimary,
+        valueLineLimit: Int? = nil,
+        @ViewBuilder accessory: @escaping () -> Accessory
+    ) {
+        self.title = title
+        self.value = value
+        self.icon = icon
+        self.tint = tint
+        self.valueColor = valueColor
+        self.valueLineLimit = valueLineLimit
+        self.accessory = accessory
+    }
+
+    init(
+        title: String,
+        value: String,
+        icon: String,
+        tint: Color,
+        valueColor: Color = .textPrimary,
+        valueLineLimit: Int? = nil
+    ) where Accessory == EmptyView {
+        self.title = title
+        self.value = value
+        self.icon = icon
+        self.tint = tint
+        self.valueColor = valueColor
+        self.valueLineLimit = valueLineLimit
+        self.accessory = nil
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ObsidianIconTile(icon: icon, tint: tint, size: 34)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+
+                Text(value)
+                    .font(.obsidianCallout)
+                    .foregroundColor(valueColor)
+                    .lineLimit(valueLineLimit)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            if let accessory {
+                accessory()
+            }
+        }
+        .padding(12)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+        )
+    }
+}
+
+struct ObsidianActionTile: View {
+    let title: String
+    let subtitle: String?
+    let icon: String
+    let tint: Color
+    var isEnabled = true
+    let action: () -> Void
+
+    init(
+        title: String,
+        subtitle: String? = nil,
+        icon: String,
+        tint: Color,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.tint = tint
+        self.isEnabled = isEnabled
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ObsidianIconTile(icon: icon, tint: isEnabled ? tint : Color.textMuted, size: 38)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.obsidianCallout)
+                        .foregroundColor(isEnabled ? Color.textPrimary : Color.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
+            }
+            .padding(12)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.58)
+    }
+}
+
+struct ObsidianBottomActionBar<PrimaryLabel: View, SecondaryLabel: View>: View {
+    let primaryAction: () -> Void
+    let secondaryAction: () -> Void
+    var isPrimaryDisabled = false
+    @ViewBuilder var primaryLabel: PrimaryLabel
+    @ViewBuilder var secondaryLabel: SecondaryLabel
+
+    init(
+        isPrimaryDisabled: Bool = false,
+        primaryAction: @escaping () -> Void,
+        secondaryAction: @escaping () -> Void,
+        @ViewBuilder primaryLabel: () -> PrimaryLabel,
+        @ViewBuilder secondaryLabel: () -> SecondaryLabel
+    ) {
+        self.isPrimaryDisabled = isPrimaryDisabled
+        self.primaryAction = primaryAction
+        self.secondaryAction = secondaryAction
+        self.primaryLabel = primaryLabel()
+        self.secondaryLabel = secondaryLabel()
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: secondaryAction) {
+                secondaryLabel
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ObsidianSecondaryButtonStyle())
+
+            Button(action: primaryAction) {
+                primaryLabel
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ObsidianPrimaryButtonStyle())
+            .disabled(isPrimaryDisabled)
+            .opacity(isPrimaryDisabled ? 0.55 : 1)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            Color.obsidianBlack
+                .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: -3)
+        )
+    }
+}
+
 // MARK: - Obsidian Card Modifiers
 
 struct SurfaceCardModifier: ViewModifier {
@@ -510,6 +980,31 @@ extension View {
     func surfaceCard() -> some View { modifier(SurfaceCardModifier()) }
     func elevatedCard(glow: Color = .electricViolet) -> some View { modifier(ElevatedCardModifier(glowColor: glow)) }
     func accentCard() -> some View { modifier(AccentCardModifier()) }
+
+    func obsidianScreenBackground() -> some View {
+        background(Color.obsidianBlack.ignoresSafeArea())
+    }
+
+    func obsidianListScreen() -> some View {
+        listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.obsidianBlack)
+            .tint(Color.electricViolet)
+    }
+
+    func obsidianListRow() -> some View {
+        listRowBackground(Color.obsidianSurface)
+            .listRowSeparatorTint(Color.obsidianBorder.opacity(0.6))
+            .foregroundColor(Color.textPrimary)
+    }
+
+    func obsidianInlineNavigation() -> some View {
+        navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.obsidianBlack, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .tint(Color.electricViolet)
+    }
 
     /// Backward-compatible alias: `.glassCard()` now maps to `.surfaceCard()`.
     func glassCard() -> some View { modifier(SurfaceCardModifier()) }

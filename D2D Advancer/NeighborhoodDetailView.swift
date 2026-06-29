@@ -4,8 +4,12 @@ import CoreData
 
 struct NeighborhoodDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var viewContext
     let neighborhood: Neighborhood
     @State private var region: MKCoordinateRegion
+    @State private var isEditingNotes = false
+    @State private var noteDraft = ""
+    @State private var noteSaveError: String?
 
     init(neighborhood: Neighborhood) {
         self.neighborhood = neighborhood
@@ -19,77 +23,38 @@ struct NeighborhoodDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Header with map preview
-                ZStack(alignment: .topTrailing) {
-                    Map(position: .constant(.region(region))) {
-                        Annotation("", coordinate: CLLocationCoordinate2D(
-                            latitude: neighborhood.centerLatitude,
-                            longitude: neighborhood.centerLongitude
-                        )) {
-                            Circle()
-                                .fill(scoreColor.opacity(0.3))
-                                .stroke(scoreColor, lineWidth: 2)
-                                .frame(width: 40, height: 40)
-                        }
-                    }
-                    .frame(height: 200)
-                    .cornerRadius(0)
-
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .background(
-                                Circle()
-                                    .fill(Color.black.opacity(0.3))
-                                    .frame(width: 32, height: 32)
-                            )
-                    }
-                    .padding(12)
-                }
-
-                VStack(spacing: 16) {
-                    // Name and location
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(neighborhood.name ?? "Unknown Area")
-                            .font(.title)
-                            .fontWeight(.bold)
-
-                        HStack {
-                            Image(systemName: "mappin.circle.fill")
-                                .foregroundColor(Color.electricViolet)
-                            Text("\(neighborhood.cityName ?? ""), \(neighborhood.state ?? "")")
-                                .font(.subheadline)
-                                .foregroundColor(Color.textSecondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    ObsidianScreenTitle(
+                        title: neighborhood.name ?? "Unknown Area",
+                        subtitle: "\(neighborhood.cityName ?? ""), \(neighborhood.state ?? "")",
+                        icon: "map.circle.fill"
+                    )
                     .padding(.horizontal, 20)
+                    .padding(.top, 18)
+
+                    mapPreviewSection
 
                     // Score card
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Area Score")
-                                .font(.caption)
+                                .font(.obsidianSmall)
                                 .foregroundColor(Color.textSecondary)
 
                             HStack(spacing: 8) {
                                 Text(String(format: "%.0f", neighborhood.score))
-                                    .font(.system(size: 36, weight: .bold))
+                                    .font(.displayLarge)
                                     .foregroundColor(scoreColor)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("out of 100")
-                                        .font(.caption)
+                                        .font(.obsidianSmall)
                                         .foregroundColor(Color.textSecondary)
 
                                     Text(neighborhood.scoreGrade)
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
+                                        .font(.obsidianSmall)
                                         .foregroundColor(scoreColor)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 2)
@@ -106,32 +71,19 @@ struct NeighborhoodDetailView: View {
                         Button(action: {
                             navigateToArea()
                         }) {
-                            HStack {
-                                Image(systemName: "location.fill")
-                                Text("Navigate")
-                            }
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.electricViolet)
-                            .cornerRadius(10)
+                            Label("Navigate", systemImage: "location.fill")
                         }
+                        .buttonStyle(ObsidianPrimaryButtonStyle())
                     }
                     .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.obsidianSurface)
-                    )
+                    .surfaceCard()
                     .padding(.horizontal, 20)
 
-                    // Demographics section
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Demographics")
-                            .font(.headline)
-                            .padding(.horizontal, 20)
-
+                    ObsidianSectionCard(
+                        title: "Demographics",
+                        icon: "chart.bar.xaxis",
+                        subtitle: "Area-level signals used in recommendations."
+                    ) {
                         VStack(spacing: 12) {
                             DemographicRow(
                                 icon: "dollarsign.circle.fill",
@@ -161,61 +113,144 @@ struct NeighborhoodDetailView: View {
                                 color: .statusNotHome
                             )
                         }
-                        .padding(.horizontal, 20)
                     }
+                    .padding(.horizontal, 20)
 
-                    // Performance section (if there are leads in this area)
                     if let leads = neighborhood.leads, leads.count > 0 {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Your Performance")
-                                .font(.headline)
-                                .padding(.horizontal, 20)
-
+                        ObsidianSectionCard(
+                            title: "Your Performance",
+                            icon: "chart.line.uptrend.xyaxis",
+                            subtitle: "\(leads.count) lead\(leads.count == 1 ? "" : "s") in this area."
+                        ) {
                             PerformanceStatsView(neighborhood: neighborhood)
-                                .padding(.horizontal, 20)
-                        }
-                    }
-
-                    // Notes section
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Notes")
-                                .font(.headline)
-
-                            Spacer()
-
-                            Button("Edit") {
-                                // TODO: Add note editing
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(Color.electricViolet)
                         }
                         .padding(.horizontal, 20)
+                    }
+
+                    ObsidianSectionCard(
+                        title: "Notes",
+                        icon: "note.text",
+                        subtitle: "Local notes for this area."
+                    ) {
+                        HStack {
+                            Spacer()
+                            Button("Edit") {
+                                beginEditingNotes()
+                            }
+                            .buttonStyle(ObsidianSecondaryButtonStyle())
+                        }
 
                         if let notes = neighborhood.userNotes, !notes.isEmpty {
                             Text(notes)
-                                .font(.body)
+                                .font(.obsidianBody)
                                 .foregroundColor(Color.textSecondary)
-                                .padding(16)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.obsidianSurface)
-                                )
-                                .padding(.horizontal, 20)
                         } else {
                             Text("No notes yet")
-                                .font(.body)
+                                .font(.obsidianBody)
                                 .foregroundColor(Color.textSecondary)
                                 .italic()
-                                .padding(.horizontal, 20)
                         }
                     }
+                    .padding(.horizontal, 20)
                 }
                 .padding(.bottom, 40)
             }
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationTitle("Area Details")
+            .obsidianInlineNavigation()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    ObsidianCompactIconButton(
+                        icon: "xmark",
+                        accessibilityLabel: "Close area details",
+                        accentColor: Color.textSecondary
+                    ) {
+                        dismiss()
+                    }
+                }
+            }
+            .sheet(isPresented: $isEditingNotes) {
+                notesEditorSheet
+            }
         }
-        .navigationBarHidden(true)
+    }
+
+    private var notesEditorSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                ObsidianScreenTitle(
+                    title: "Area Notes",
+                    subtitle: neighborhood.name ?? "Recommended area",
+                    icon: "note.text"
+                )
+
+                TextEditor(text: $noteDraft)
+                    .font(.obsidianBody)
+                    .foregroundColor(Color.textPrimary)
+                    .scrollContentBackground(.hidden)
+                    .padding(12)
+                    .frame(minHeight: 220)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+                    )
+
+                if let noteSaveError {
+                    Text(noteSaveError)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.statusNotInterested)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 12) {
+                    Button("Cancel") {
+                        isEditingNotes = false
+                    }
+                    .buttonStyle(ObsidianSecondaryButtonStyle())
+
+                    Button("Save Notes") {
+                        saveNotes()
+                    }
+                    .buttonStyle(ObsidianPrimaryButtonStyle())
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .background(Color.obsidianBlack.ignoresSafeArea())
+            .navigationBarHidden(true)
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var mapPreviewSection: some View {
+        ObsidianSectionCard(
+            title: "Map Preview",
+            icon: "location.viewfinder",
+            subtitle: "Center point for this recommended area."
+        ) {
+            Map(position: .constant(.region(region))) {
+                Annotation("", coordinate: CLLocationCoordinate2D(
+                    latitude: neighborhood.centerLatitude,
+                    longitude: neighborhood.centerLongitude
+                )) {
+                    Circle()
+                        .fill(scoreColor.opacity(0.3))
+                        .stroke(scoreColor, lineWidth: 2)
+                        .frame(width: 40, height: 40)
+                }
+            }
+            .frame(height: 190)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+            )
+        }
+        .padding(.horizontal, 20)
     }
 
     private var scoreColor: Color {
@@ -230,6 +265,27 @@ struct NeighborhoodDetailView: View {
             return .statusNotHome
         default:
             return .statusNotInterested
+        }
+    }
+
+    private func beginEditingNotes() {
+        noteDraft = neighborhood.userNotes ?? ""
+        noteSaveError = nil
+        isEditingNotes = true
+    }
+
+    private func saveNotes() {
+        let trimmedNotes = noteDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        neighborhood.userNotes = trimmedNotes.isEmpty ? nil : trimmedNotes
+        neighborhood.lastUpdated = Date()
+
+        do {
+            try viewContext.save()
+            noteSaveError = nil
+            isEditingNotes = false
+        } catch {
+            viewContext.rollback()
+            noteSaveError = "Could not save notes. Try again."
         }
     }
 
@@ -255,26 +311,32 @@ struct DemographicRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.title2)
+                .font(.obsidianHeadline)
                 .foregroundColor(color)
-                .frame(width: 40)
+                .frame(width: 40, height: 40)
+                .background(color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
-                    .font(.subheadline)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
 
                 Text(value)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianCallout)
+                    .foregroundColor(.textPrimary)
             }
 
             Spacer()
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.obsidianSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
     }
 }
@@ -296,14 +358,13 @@ struct PerformanceStatsView: View {
                     .foregroundColor(Color.statusInterested)
 
                 Text("Conversion Rate")
-                    .font(.subheadline)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
 
                 Spacer()
 
                 Text(String(format: "%.1f%%", stats.conversionRate))
-                    .font(.headline)
-                    .fontWeight(.bold)
+                    .font(.obsidianCallout)
                     .foregroundColor(Color.statusInterested)
             }
             .padding(12)
@@ -339,12 +400,11 @@ struct StatBox: View {
     var body: some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(.obsidianHeadline)
                 .foregroundColor(color)
 
             Text(label)
-                .font(.caption)
+                .font(.obsidianSmall)
                 .foregroundColor(Color.textSecondary)
         }
         .frame(maxWidth: .infinity)

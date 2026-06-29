@@ -426,32 +426,22 @@ struct OnboardingView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Modern dark gradient background matching paywall
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.2),
-                        Color(red: 0.15, green: 0.1, blue: 0.25),
-                        Color(red: 0.05, green: 0.05, blue: 0.1)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                Color.obsidianBlack
+                    .ignoresSafeArea()
 
-                VStack(spacing: 24) {
+                VStack(spacing: 20) {
                     headerSection
                         .padding(.top, max(geometry.safeAreaInsets.top + 12, 40))
 
                     ScrollView {
-                        VStack(spacing: 24) {
+                        VStack(spacing: 18) {
                             content(for: onboardingManager.currentPage)
                         }
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, 20)
                         .padding(.bottom, 24)
                     }
 
                     navigationControls
-                        .padding(.horizontal, 24)
                         .padding(.bottom, max(geometry.safeAreaInsets.bottom + 16, 32))
                 }
             }
@@ -474,13 +464,13 @@ struct OnboardingView: View {
 
             VStack(spacing: 8) {
                 Text(onboardingManager.currentPage.title)
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.displayMedium)
+                    .foregroundColor(.textPrimary)
                     .multilineTextAlignment(.center)
 
                 Text(onboardingManager.currentPage.subtitle)
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.obsidianBody)
+                    .foregroundColor(.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
@@ -505,14 +495,15 @@ struct OnboardingView: View {
                     ) {
                         onboardingManager.selectSalesGoal(goal)
                     }
+                    .accessibilityIdentifier("onboardingSalesGoal_\(goal.rawValue)")
                 }
             }
 
         case .focusAreas:
             VStack(alignment: .leading, spacing: 16) {
                 Text("Select at least one feature you want to use")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.6))
+                    .font(.obsidianFootnote)
+                    .foregroundColor(.textSecondary)
 
                 VStack(spacing: 16) {
                     ForEach(OnboardingProfile.FocusArea.allCases) { focus in
@@ -525,6 +516,7 @@ struct OnboardingView: View {
                         ) {
                             onboardingManager.toggleFocusArea(focus)
                         }
+                        .accessibilityIdentifier("onboardingFocusArea_\(focus.rawValue)")
                     }
                 }
             }
@@ -541,6 +533,7 @@ struct OnboardingView: View {
                     ) {
                         onboardingManager.selectWorkflowStyle(style)
                     }
+                    .accessibilityIdentifier("onboardingWorkflowStyle_\(style.rawValue)")
                 }
             }
 
@@ -558,23 +551,17 @@ struct OnboardingView: View {
     private var welcomeContent: some View {
         VStack(spacing: 24) {
             ZStack {
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.electricViolet.opacity(0.18), Color.electricViolet.opacity(0.18)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.obsidianSurface)
                     .frame(height: 180)
                     .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+                    )
+                    .overlay(
                         Image(systemName: "sparkles")
-                            .font(.system(size: 72))
-                            .foregroundStyle(LinearGradient(
-                                colors: [Color.electricViolet, Color.electricViolet],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ))
+                            .font(.displayHero)
+                            .foregroundColor(.electricViolet)
                     )
             }
 
@@ -603,23 +590,17 @@ struct OnboardingView: View {
     private var locationPermissionContent: some View {
         VStack(spacing: 24) {
             ZStack {
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.statusInterested.opacity(0.18), Color.electricViolet.opacity(0.18)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.obsidianSurface)
                     .frame(height: 180)
                     .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+                    )
+                    .overlay(
                         Image(systemName: "location.circle.fill")
-                            .font(.system(size: 72))
-                            .foregroundStyle(LinearGradient(
-                                colors: [Color.statusInterested, Color.electricViolet],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ))
+                            .font(.displayHero)
+                            .foregroundColor(.statusInterested)
                     )
             }
 
@@ -644,8 +625,8 @@ struct OnboardingView: View {
             }
 
             Text("You can change this in Settings at any time.")
-                .font(.system(size: 13))
-                .foregroundColor(.white.opacity(0.5))
+                .font(.obsidianFootnote)
+                .foregroundColor(.textSecondary)
                 .padding(.top, 8)
         }
     }
@@ -653,23 +634,17 @@ struct OnboardingView: View {
     private var notificationPermissionContent: some View {
         VStack(spacing: 24) {
             ZStack {
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.electricViolet.opacity(0.18), Color.pink.opacity(0.18)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.obsidianSurface)
                     .frame(height: 180)
                     .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+                    )
+                    .overlay(
                         Image(systemName: "bell.badge.fill")
-                            .font(.system(size: 72))
-                            .foregroundStyle(LinearGradient(
-                                colors: [Color.electricViolet, Color.pink],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ))
+                            .font(.displayHero)
+                            .foregroundColor(.electricViolet)
                     )
             }
 
@@ -694,8 +669,8 @@ struct OnboardingView: View {
             }
 
             Text("You can customize notification preferences in Settings.")
-                .font(.system(size: 13))
-                .foregroundColor(.white.opacity(0.5))
+                .font(.obsidianFootnote)
+                .foregroundColor(.textSecondary)
                 .padding(.top, 8)
         }
     }
@@ -743,26 +718,18 @@ struct OnboardingView: View {
             }) {
                 HStack {
                     Text(buttonTitle)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.obsidianAction)
 
                     Image(systemName: buttonIcon)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.obsidianHeadline)
                 }
-                .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(
-                    LinearGradient(
-                        colors: [buttonColor.0, buttonColor.1],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .cornerRadius(18)
-                .shadow(color: buttonColor.0.opacity(0.28), radius: 14, x: 0, y: 8)
             }
+            .buttonStyle(ObsidianPrimaryButtonStyle())
+            .padding(.horizontal, 20)
             .disabled(!onboardingManager.canAdvance(from: onboardingManager.currentPage))
             .opacity(onboardingManager.canAdvance(from: onboardingManager.currentPage) ? 1 : 0.45)
+            .accessibilityIdentifier("onboardingContinueButton")
 
             if onboardingManager.currentPage.previous != nil {
                 Button(action: {
@@ -770,22 +737,14 @@ struct OnboardingView: View {
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.obsidianSmall)
                         Text("Back")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.obsidianCallout)
                     }
-                    .foregroundColor(.white.opacity(0.9))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.white.opacity(0.1))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                            )
-                    )
                 }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+                .padding(.horizontal, 20)
             }
         }
     }
@@ -927,19 +886,7 @@ private struct OnboardingProgressIndicator: View {
         HStack(spacing: 8) {
             ForEach(0..<total, id: \.self) { index in
                 Capsule()
-                    .fill(
-                        index <= currentIndex
-                        ? LinearGradient(
-                            colors: [Color.electricViolet, Color.electricViolet],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        : LinearGradient(
-                            colors: [Color.textSecondary.opacity(0.25), Color.textSecondary.opacity(0.18)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .fill(index <= currentIndex ? Color.electricViolet : Color.textSecondary.opacity(0.2))
                     .frame(height: 4)
                     .animation(.easeInOut(duration: 0.3), value: currentIndex)
             }
@@ -964,48 +911,35 @@ private struct SelectionCard: View {
                         .frame(width: 56, height: 56)
 
                     Image(systemName: icon)
-                        .font(.system(size: 24, weight: .semibold))
+                        .font(.obsidianHeadline)
                         .foregroundColor(accent)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.obsidianCallout)
+                        .foregroundColor(.textPrimary)
 
                     Text(subtitle)
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 26, weight: .bold))
-                    .foregroundColor(isSelected ? accent : Color.white.opacity(0.3))
+                    .font(.obsidianHeadline)
+                    .foregroundColor(isSelected ? accent : Color.textMuted)
             }
             .padding(18)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(Color.white.opacity(isSelected ? 0.12 : 0.06))
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.obsidianSurface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18)
-                            .stroke(
-                                isSelected
-                                    ? LinearGradient(
-                                        colors: [accent.opacity(0.8), accent.opacity(0.4)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                    : LinearGradient(
-                                        colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                lineWidth: isSelected ? 2 : 1
-                            )
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(isSelected ? accent.opacity(0.85) : Color.obsidianBorder.opacity(0.55), lineWidth: isSelected ? 1.4 : 0.5)
                     )
                     .shadow(
                         color: isSelected ? accent.opacity(0.3) : Color.clear,
@@ -1037,39 +971,36 @@ private struct MultiSelectionCard: View {
                             .frame(width: 44, height: 44)
 
                         Image(systemName: icon)
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.obsidianHeadline)
                             .foregroundColor(accent)
                     }
 
                     Spacer()
 
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(isSelected ? accent : Color.white.opacity(0.3))
+                        .font(.obsidianHeadline)
+                        .foregroundColor(isSelected ? accent : Color.textMuted)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.obsidianCallout)
+                        .foregroundColor(.textPrimary)
 
                     Text(subtitle)
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(18)
             .frame(maxWidth: .infinity, minHeight: 150)
             .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.white.opacity(isSelected ? 0.12 : 0.06))
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.obsidianSurface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(
-                                isSelected ? accent : Color.white.opacity(0.1),
-                                lineWidth: isSelected ? 2 : 1
-                            )
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(isSelected ? accent.opacity(0.85) : Color.obsidianBorder.opacity(0.55), lineWidth: isSelected ? 1.4 : 0.5)
                     )
             )
         }
@@ -1089,29 +1020,29 @@ private struct FeatureHighlightRow: View {
                     .fill(Color.electricViolet.opacity(0.2))
                     .frame(width: 48, height: 48)
                 Image(systemName: icon)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.obsidianHeadline)
                     .foregroundColor(Color.electricViolet)
             }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.obsidianCallout)
+                    .foregroundColor(.textPrimary)
 
                 Text(subtitle)
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.obsidianFootnote)
+                    .foregroundColor(.textSecondary)
             }
 
             Spacer()
         }
         .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color.white.opacity(0.08))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.obsidianSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
                 )
         )
     }
@@ -1126,49 +1057,32 @@ private struct SummaryCard: View {
         VStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.electricViolet.opacity(0.25), Color.electricViolet.opacity(0.2)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(Color.electricViolet.opacity(0.14))
                     .frame(width: 96, height: 96)
 
                 Image(systemName: icon)
-                    .font(.system(size: 40, weight: .semibold))
-                    .foregroundStyle(LinearGradient(
-                        colors: [Color.electricViolet, Color.electricViolet],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ))
+                    .font(.displayMedium)
+                    .foregroundColor(.electricViolet)
             }
 
             Text(title)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.white)
+                .font(.obsidianHeadline)
+                .foregroundColor(.textPrimary)
 
             Text(subtitle)
-                .font(.system(size: 15))
-                .foregroundColor(.white.opacity(0.7))
+                .font(.obsidianBody)
+                .foregroundColor(.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
         }
         .padding(24)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 28)
-                .fill(Color.white.opacity(0.08))
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.obsidianSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 28)
-                        .stroke(
-                            LinearGradient(
-                                colors: [Color.white.opacity(0.15), Color.white.opacity(0.05)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
                 )
         )
     }
@@ -1181,8 +1095,8 @@ private struct SummarySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white.opacity(0.6))
+                .font(.obsidianTitle)
+                .foregroundColor(.textPrimary)
 
             ForEach(items) { item in
                 SummaryItemView(item: item)
@@ -1191,11 +1105,11 @@ private struct SummarySection: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 24)
-                .fill(Color.white.opacity(0.08))
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.obsidianSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 24)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
                 )
         )
     }
@@ -1214,18 +1128,18 @@ private struct SummaryItemView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             Image(systemName: item.icon)
-                .font(.system(size: 22))
+                .font(.obsidianHeadline)
                 .foregroundColor(Color.electricViolet)
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.obsidianCallout)
+                    .foregroundColor(.textPrimary)
 
                 Text(item.subtitle)
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.obsidianFootnote)
+                    .foregroundColor(.textSecondary)
             }
 
             Spacer()
