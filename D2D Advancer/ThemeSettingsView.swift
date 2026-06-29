@@ -4,7 +4,7 @@ struct ThemeSettingsView: View {
     @AppStorage("isDarkMode") private var darkModeEnabled = false
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 Section {
                     HStack(spacing: 12) {

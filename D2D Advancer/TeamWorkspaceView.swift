@@ -2633,7 +2633,7 @@ private struct TeamInfoCard<Content: View>: View {
 }
 
 #Preview {
-    NavigationView {
+    NavigationStack {
         TeamWorkspaceView()
     }
 }

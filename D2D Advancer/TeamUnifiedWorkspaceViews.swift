@@ -62,7 +62,7 @@ struct TeamFieldMapSheet: View {
     @State private var selectedCluster: TeamLeadClusterSelection?
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 VStack(spacing: 12) {
                     TeamUnifiedSummaryCard(summary: summary)

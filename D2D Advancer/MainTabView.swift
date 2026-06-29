@@ -112,7 +112,6 @@ struct MainTabView: View {
             )
         }
         .background(Color.obsidianBlack)
-        .navigationViewStyle(StackNavigationViewStyle())
         .customThemed()
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mainTabView")
