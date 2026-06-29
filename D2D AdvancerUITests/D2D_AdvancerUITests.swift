@@ -823,6 +823,59 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testMapToolsAndQuickActionSheetsSmoke() throws {
+        let app = makeApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        _ = waitForMapReady(app)
+
+        tapButton(app, "mapToolsButton", timeout: 8)
+        waitForIdentifiedElement(app, "mapToolsSheet", timeout: 8)
+        waitForText(app, "Map Tools", timeout: 8)
+
+        for identifier in [
+            "mapWorkflowMode_all",
+            "mapWorkflowMode_hot",
+            "mapWorkflowMode_due",
+            "mapWorkflowMode_sold",
+            "mapStyle_standard",
+            "mapStyle_satellite",
+            "mapStyle_hybrid",
+            "nextBestLeadButton",
+            "routePlannerButton"
+        ] {
+            waitForIdentifiedElement(app, identifier, timeout: 8)
+        }
+
+        tapButton(app, "Close map tools", timeout: 8)
+        XCTAssertTrue(app.staticTexts["Map Tools"].waitForNonExistence(timeout: 5), "Map tools should dismiss cleanly")
+
+        tapButton(app, "quickAction_later", timeout: 8)
+        waitForIdentifiedElement(app, "comeBackLaterSheet", timeout: 8)
+        waitForText(app, "Come Back Later", timeout: 8)
+        for identifier in [
+            "comeBackQuickTime_1",
+            "comeBackQuickTime_2",
+            "comeBackQuickTime_4",
+            "comeBackQuickTime_24",
+            "saveCustomComeBackLeadButton"
+        ] {
+            waitForIdentifiedElement(app, identifier, timeout: 8)
+        }
+        tapButton(app, "Close come back later", timeout: 8)
+        XCTAssertTrue(app.staticTexts["Come Back Later"].waitForNonExistence(timeout: 5), "Come Back Later sheet should dismiss cleanly")
+
+        tapButton(app, "quickAction_interest", timeout: 8)
+        waitForIdentifiedElement(app, "interestedQuickFormSheet", timeout: 8)
+        waitForText(app, "Interested Lead", timeout: 8)
+        waitForIdentifiedElement(app, "interestedQuickFormNameField", timeout: 8)
+        waitForIdentifiedElement(app, "interestedQuickFormPhoneField", timeout: 8)
+        waitForIdentifiedElement(app, "interestedQuickFormNoteField", timeout: 8)
+        waitForIdentifiedElement(app, "saveInterestedLeadButton", timeout: 8)
+    }
+
+    @MainActor
     func testOnboardingCompletesIntoMainApp() throws {
         let app = makeOnboardingApp()
         app.launch()
@@ -902,6 +955,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         // Check for menu items
         let addLeadBtn = app.buttons["longPressAddLeadButton"]
         let streetViewBtn = app.buttons["longPressStreetViewButton"]
+        waitForIdentifiedElement(app, "longPressMenuSheet", timeout: 5)
+        waitForIdentifiedElement(app, "longPressConfirmedAddressField", timeout: 5)
         XCTAssertTrue(addLeadBtn.waitForExistence(timeout: 5), "Long press should show the Add Lead action")
         screenshot(app, name: "08-LongPressMenuVisible")
         XCTAssertTrue(streetViewBtn.exists, "Street View Here should exist")

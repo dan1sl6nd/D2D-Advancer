@@ -1842,6 +1842,7 @@ struct InterestedQuickForm: View {
                     .font(.obsidianTitle)
                     .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
+                    .accessibilityIdentifier("interestedQuickFormSheet")
 
                 Text("Capture the customer while the conversation is fresh.")
                     .font(.obsidianFootnote)
@@ -1949,9 +1950,13 @@ struct InterestedQuickForm: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .shadow(color: Color.electricViolet.opacity(0.25), radius: 10, x: 0, y: 4)
+            .accessibilityIdentifier("saveInterestedLeadButton")
         }
         .disabled(isSaving || usableAddress == nil)
         .opacity(usableAddress == nil ? 0.55 : 1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Save Interested Lead")
+        .accessibilityHint(usableAddress == nil ? "Wait for the address to finish loading before saving." : "Saves this interested lead.")
         .accessibilityIdentifier("saveInterestedLeadButton")
     }
 
@@ -2328,6 +2333,7 @@ struct ComeBackLaterSheet: View {
                     .font(.obsidianTitle)
                     .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
+                    .accessibilityIdentifier("comeBackLaterSheet")
 
                 Text("Create a follow-up lead at this location.")
                     .font(.obsidianFootnote)
@@ -2630,6 +2636,7 @@ struct LongPressMenuSheet: View {
                 Text("Dropped Pin")
                     .font(.obsidianTitle)
                     .foregroundColor(Color.textPrimary)
+                    .accessibilityIdentifier("longPressMenuSheet")
 
                 Text(address == nil ? "Finding the nearest address..." : "Review and confirm the exact address before adding the lead.")
                     .font(.obsidianFootnote)
@@ -2736,6 +2743,7 @@ struct LongPressMenuSheet: View {
                         didEditConfirmedAddress = true
                         didAcceptSuggestedAddress = false
                     }
+                    .accessibilityIdentifier("longPressConfirmedAddressField")
 
                 if let suggestedAddress, !didEditConfirmedAddress && !didAcceptSuggestedAddress {
                     Button {
@@ -2746,6 +2754,7 @@ struct LongPressMenuSheet: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(ObsidianSecondaryButtonStyle())
+                    .accessibilityIdentifier("longPressUseSuggestedAddressButton")
                 }
 
                 Text("Auto-fill is only a suggestion. Confirm it or type the exact house address.")
@@ -3280,6 +3289,7 @@ private struct MapToolsSheet: View {
                 Text("Map Tools")
                     .font(.obsidianSubheadline)
                     .foregroundColor(Color.textPrimary)
+                    .accessibilityIdentifier("mapToolsSheet")
 
                 Text("Change views without crowding the map.")
                     .font(.obsidianFootnote)
