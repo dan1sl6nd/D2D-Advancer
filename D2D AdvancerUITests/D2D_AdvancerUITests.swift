@@ -18,6 +18,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launchArguments.append("-skipOnboardingForUITests")
         app.launchArguments.append("-unlockPremiumForUITests")
         app.launchArguments.append("-resetMessageTemplatesForUITests")
+        app.launchArguments.append("-resetSyncSettingsForUITests")
         return app
     }
 
@@ -1087,6 +1088,32 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testMoreSyncSettingsControlsSmoke() throws {
+        let app = makeApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        tapButton(app, "tab_More", timeout: 12)
+        waitForIdentifiedElement(app, "moreSyncSettingsButton", timeout: 12)
+        tapIdentifiedElement(app, "moreSyncSettingsButton", timeout: 8)
+
+        waitForIdentifiedElement(app, "syncSettingsSheet", timeout: 10)
+        waitForText(app, "Sync Settings", timeout: 8)
+        waitForIdentifiedElement(app, "syncSettingsAutoSyncToggle", timeout: 8)
+
+        for interval in ["30min", "1hour", "3hours", "6hours", "1day"] {
+            waitForIdentifiedElement(app, "syncSettingsInterval_\(interval)", timeout: 8)
+        }
+
+        tapIdentifiedElement(app, "syncSettingsCloseButton", timeout: 8)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["syncSettingsSheet"].waitForExistence(timeout: 5),
+            "Sync settings sheet should close cleanly"
+        )
+        waitForIdentifiedElement(app, "moreSyncSettingsButton", timeout: 8)
+    }
+
+    @MainActor
     func testPrimaryTabsAndMoreSurfacesSmoke() throws {
         let app = makeApp()
         app.launch()
@@ -1155,7 +1182,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapIdentifiedElement(app, "moreCloudStorageButton", timeout: 8)
         waitForIdentifiedElement(app, "cloudProviderSheet", timeout: 8)
         waitForText(app, "Cloud Storage", timeout: 8)
-        tapButton(app, "Close cloud storage", timeout: 8)
+        tapIdentifiedElement(app, "cloudProviderCloseButton", timeout: 8)
 
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "moreOverviewCard", timeout: 12)

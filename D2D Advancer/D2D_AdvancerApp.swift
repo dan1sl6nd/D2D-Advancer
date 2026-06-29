@@ -39,6 +39,12 @@ struct D2D_AdvancerApp: App {
             UserDefaults.standard.removeObject(forKey: "custom_message_templates")
             print("🧪 Message templates reset for UI tests")
         }
+        if launchArguments.contains("-resetSyncSettingsForUITests") {
+            CloudSyncProvider.current = .icloud
+            UserDefaults.standard.set(true, forKey: "auto_sync_enabled")
+            UserDefaults.standard.set(UserDataSyncManager.SyncInterval.oneHour.rawValue, forKey: "sync_interval")
+            print("🧪 Sync settings reset for UI tests")
+        }
         if shouldResetOnboardingForUITests || shouldShowOnboardingForUITests {
             UserDefaults.standard.removeObject(forKey: "onboarding_completed")
             UserDefaults.standard.removeObject(forKey: "onboarding_profile")

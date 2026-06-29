@@ -1443,6 +1443,7 @@ struct CloudProviderSheet: View {
                     Text("Cloud Storage")
                         .font(.obsidianHeadline)
                         .foregroundColor(.textPrimary)
+                        .accessibilityIdentifier("cloudProviderSheet")
 
                     Text("Choose where your lead data syncs and backs up.")
                         .font(.obsidianFootnote)
@@ -1455,7 +1456,8 @@ struct CloudProviderSheet: View {
                 ObsidianCompactIconButton(
                     icon: "xmark",
                     accessibilityLabel: "Close cloud storage",
-                    accentColor: Color.textSecondary
+                    accentColor: Color.textSecondary,
+                    accessibilityIdentifier: "cloudProviderCloseButton"
                 ) {
                     dismiss()
                 }
@@ -1497,6 +1499,7 @@ struct CloudProviderSheet: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 14)
                     }
+                    .accessibilityIdentifier("cloudProviderOption_\(provider.rawValue)")
                     if provider != CloudSyncProvider.allCases.last {
                         Divider().padding(.leading, 70)
                     }
@@ -1513,7 +1516,6 @@ struct CloudProviderSheet: View {
             Spacer()
         }
         .background(Color.obsidianBlack)
-        .accessibilityIdentifier("cloudProviderSheet")
         .presentationBackground(Color.obsidianBlack)
         .overlay {
             if isMigrating {
@@ -1611,6 +1613,7 @@ struct SyncSettingsView: View {
                         Text("Sync Settings")
                             .font(.obsidianHeadline)
                             .foregroundColor(Color.textPrimary)
+                            .accessibilityIdentifier("syncSettingsSheet")
 
                         Text("Choose how often your data syncs automatically.")
                             .font(.obsidianFootnote)
@@ -1620,13 +1623,20 @@ struct SyncSettingsView: View {
 
                     Spacer(minLength: 0)
 
-                    ObsidianCompactIconButton(
-                        icon: "xmark",
-                        accessibilityLabel: "Close sync settings",
-                        accentColor: Color.textSecondary
-                    ) {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.obsidianCallout)
+                            .fontWeight(.semibold)
+                            .foregroundColor(Color.textSecondary)
+                            .frame(width: 38, height: 38)
+                            .background(Color.textSecondary.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
+                    .buttonStyle(PlainButtonStyle())
+                    .accessibilityLabel("Close sync settings")
+                    .accessibilityIdentifier("syncSettingsCloseButton")
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -1658,6 +1668,7 @@ struct SyncSettingsView: View {
                                         }
                                     ))
                                     .labelsHidden()
+                                    .accessibilityIdentifier("syncSettingsAutoSyncToggle")
                                     .accessibilityLabel("Automatic Sync")
                                     .accessibilityValue(syncManager.isAutoSyncEnabled ? "Enabled" : "Disabled")
                                     .accessibilityHint("Toggles automatic data sync.")
@@ -1689,7 +1700,6 @@ struct SyncSettingsView: View {
                 }
             }
             .background(Color.obsidianBlack)
-            .accessibilityIdentifier("syncSettingsSheet")
             .navigationBarHidden(true)
         }
         .presentationDetents([.large])
@@ -1718,6 +1728,7 @@ struct SyncSettingsView: View {
             .padding(.vertical, 8)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("syncSettingsInterval_\(interval.rawValue)")
     }
     
     private func syncInfoRow(title: String, description: String, icon: String) -> some View {
