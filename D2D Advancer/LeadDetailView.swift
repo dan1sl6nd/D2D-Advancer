@@ -170,12 +170,14 @@ struct LeadDetailView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("leadDetailCancelEditButton")
 
                 Button(action: saveLead) {
                     Label("Save", systemImage: "checkmark.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ObsidianPrimaryButtonStyle())
+                .accessibilityIdentifier("leadDetailSaveButton")
             } else {
                 Button {
                     guard paywallManager.gateAction() else { return }
@@ -185,12 +187,14 @@ struct LeadDetailView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ObsidianDangerButtonStyle())
+                .accessibilityIdentifier("leadDetailDeleteButton")
 
                 Button(action: startEditing) {
                     Label("Edit", systemImage: "pencil.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ObsidianPrimaryButtonStyle())
+                .accessibilityIdentifier("leadDetailEditButton")
             }
         }
         .padding(.horizontal, 16)
@@ -329,9 +333,21 @@ struct LeadDetailView: View {
     private var editCustomerSection: some View {
         LeadFormSectionCard(title: "Customer", icon: "person.crop.circle.fill") {
             VStack(spacing: 12) {
-                LeadFormTextField(title: "Name", placeholder: "Customer name", text: $editedName, icon: "person.fill")
+                LeadFormTextField(
+                    title: "Name",
+                    placeholder: "Customer name",
+                    text: $editedName,
+                    icon: "person.fill",
+                    accessibilityIdentifier: "leadDetailNameField"
+                )
 
-                LeadFormTextField(title: "Phone", placeholder: "Phone number", text: $editedPhone, icon: "phone.fill")
+                LeadFormTextField(
+                    title: "Phone",
+                    placeholder: "Phone number",
+                    text: $editedPhone,
+                    icon: "phone.fill",
+                    accessibilityIdentifier: "leadDetailPhoneField"
+                )
                     .keyboardType(.phonePad)
                     .onChange(of: editedPhone) { _, newValue in
                         DispatchQueue.main.async {
@@ -339,7 +355,13 @@ struct LeadDetailView: View {
                         }
                     }
 
-                LeadFormTextField(title: "Email", placeholder: "Email address", text: $editedEmail, icon: "envelope.fill")
+                LeadFormTextField(
+                    title: "Email",
+                    placeholder: "Email address",
+                    text: $editedEmail,
+                    icon: "envelope.fill",
+                    accessibilityIdentifier: "leadDetailEmailField"
+                )
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -353,6 +375,7 @@ struct LeadDetailView: View {
                 LeadAddressEditor(
                     address: $editedAddress,
                     isUpdatingAddress: isUpdatingAddress,
+                    accessibilityIdentifier: "leadDetailAddressField",
                     updateAddressAction: updateAddressFromCurrentLocation
                 )
 
@@ -371,11 +394,13 @@ struct LeadDetailView: View {
                         get: { editedPrice == 0 ? "" : String(format: "%.2f", editedPrice) },
                         set: { editedPrice = Double($0) ?? 0 }
                     ),
-                    icon: "dollarsign.circle.fill"
+                    icon: "dollarsign.circle.fill",
+                    accessibilityIdentifier: "leadDetailPriceField"
                 )
                 .keyboardType(.decimalPad)
 
                 LeadStatusChipRow(selection: $editedStatus)
+                    .accessibilityIdentifier("leadDetailStatusMenu")
             }
         }
     }
@@ -390,6 +415,7 @@ struct LeadDetailView: View {
                 LeadFollowUpCadencePicker(cadence: $editedFollowUpCadence)
 
                 LeadNotesEditor(title: "Notes", text: $editedNotes, minHeight: 108)
+                    .accessibilityIdentifier("leadDetailNotesField")
             }
         }
     }

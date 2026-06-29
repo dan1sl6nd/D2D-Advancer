@@ -201,6 +201,20 @@ final class D2D_AdvancerUITests: XCTestCase {
         }
     }
 
+    private func dismissKeyboardIfPresent(_ app: XCUIApplication) {
+        guard app.keyboards.firstMatch.exists else { return }
+
+        for label in ["Done", "Return"] {
+            let button = app.keyboards.buttons[label]
+            if button.waitForExistence(timeout: 1), button.isHittable {
+                button.tap()
+                return
+            }
+        }
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+    }
+
     private func allowLocalNetworkPermissionIfPresented(timeout: TimeInterval = 5) {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let allowButton = springboard.buttons["Allow"]
@@ -453,6 +467,28 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         // The team write is intentionally async so field reps are not blocked by network latency.
         sleep(4)
+    }
+
+    private func createPersonalLeadThroughUI(_ app: XCUIApplication, name: String) {
+        if !app.buttons["addLeadButton"].waitForExistence(timeout: 4) {
+            tapButton(app, "tab_Map", timeout: 12)
+        }
+        XCTAssertTrue(app.buttons["addLeadButton"].waitForExistence(timeout: 12), "Map add lead button should be ready before creating a personal lead")
+        tapButton(app, "addLeadButton", timeout: 12)
+
+        let clearDraftButton = app.buttons["Clear"]
+        if clearDraftButton.waitForExistence(timeout: 2), clearDraftButton.isHittable {
+            clearDraftButton.tap()
+        }
+
+        typeText(name, into: app.textFields["addLeadNameField"])
+        let addressField = app.textFields["addLeadAddressField"]
+        typeText("123 UI Detail Test St", into: addressField)
+        dismissKeyboardIfPresent(app)
+
+        tapButton(app, "addLeadSaveButton", timeout: 10)
+        denySystemPermissionIfPresented(timeout: 2)
+        XCTAssertTrue(app.buttons["addLeadButton"].waitForExistence(timeout: 15), "Saving a personal lead should return to the map")
     }
 
     private func denySystemPermissionIfPresented(timeout: TimeInterval = 4) {
@@ -742,6 +778,45 @@ final class D2D_AdvancerUITests: XCTestCase {
         return mapView
     }
 
+    private func dismissMapSheetIfPresented(_ app: XCUIApplication) {
+        let closeClusterButton = app.buttons["Close cluster"]
+        if closeClusterButton.waitForExistence(timeout: 1), closeClusterButton.isHittable {
+            closeClusterButton.tap()
+            return
+        }
+
+        let statusCancelButton = app.buttons["statusChangeCancelButton"]
+        if statusCancelButton.waitForExistence(timeout: 1), statusCancelButton.isHittable {
+            statusCancelButton.tap()
+            return
+        }
+
+        let closePinButton = app.buttons["Close pin actions"]
+        if closePinButton.waitForExistence(timeout: 1), closePinButton.isHittable {
+            closePinButton.tap()
+        }
+    }
+
+    private func openLongPressMenu(_ app: XCUIApplication, on mapView: XCUIElement) {
+        let menu = app.descendants(matching: .any)["longPressMenuSheet"]
+        let emptyMapCandidates = [
+            CGVector(dx: 0.18, dy: 0.34),
+            CGVector(dx: 0.76, dy: 0.46),
+            CGVector(dx: 0.28, dy: 0.58),
+            CGVector(dx: 0.62, dy: 0.32)
+        ]
+
+        for candidate in emptyMapCandidates {
+            mapView.coordinate(withNormalizedOffset: candidate).press(forDuration: 1.5)
+            if menu.waitForExistence(timeout: 3) {
+                return
+            }
+            dismissMapSheetIfPresented(app)
+        }
+
+        XCTFail("Long press should open dropped-pin actions when pressing an empty map area")
+    }
+
     @MainActor
     func testAddLeadFormCoreFieldsAndDismissSmoke() throws {
         let app = makeApp()
@@ -803,6 +878,35 @@ final class D2D_AdvancerUITests: XCTestCase {
             "Appointment lead picker should dismiss cleanly"
         )
         waitForIdentifiedElement(app, "appointmentsScreen", timeout: 8)
+    }
+
+    @MainActor
+    func testLeadListDetailEditSmoke() throws {
+        let app = makeApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        _ = waitForMapReady(app)
+        let leadName = "UI Detail \(Int(Date().timeIntervalSince1970))"
+        createPersonalLeadThroughUI(app, name: leadName)
+
+        tapButton(app, "tab_Leads", timeout: 12)
+        waitForIdentifiedElement(app, "leadsScreen", timeout: 12)
+        waitForTextContaining(app, leadName, timeout: 15)
+
+        let personalLeadRow = app.descendants(matching: .any)["personalLeadRow"].firstMatch
+        XCTAssertTrue(personalLeadRow.waitForExistence(timeout: 10), "Newly created personal lead row should be visible")
+        tapElement(app, personalLeadRow, description: "personalLeadRow")
+
+        waitForTextContaining(app, leadName, timeout: 8)
+        tapButton(app, "leadDetailEditButton", timeout: 8)
+        let nameField = app.textFields["leadDetailNameField"]
+        typeText(" Updated", into: nameField, timeout: 8)
+        dismissKeyboardIfPresent(app)
+        tapButton(app, "leadDetailSaveButton", timeout: 8)
+
+        waitForTextContaining(app, "\(leadName) Updated", timeout: 8)
+        waitForIdentifiedElement(app, "leadDetailEditButton", timeout: 8)
     }
 
     @MainActor
@@ -1010,9 +1114,7 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         let mapView = waitForMapReady(app)
 
-        // Long press on center of map
-        mapView.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1.5)
-        sleep(3)
+        openLongPressMenu(app, on: mapView)
         screenshot(app, name: "07-LongPressMenu")
 
         // Check for menu items

@@ -367,6 +367,7 @@ struct AddLeadView: View {
                     isUpdatingAddress: isUpdatingAddress,
                     isGeocodingAddress: locationManager.isForwardGeocoding,
                     geocodingError: locationManager.lastGeocodingError,
+                    accessibilityIdentifier: "addLeadAddressField",
                     updateAddressAction: updateAddressFromCurrentLocation,
                     onAddressChange: { oldValue, newValue in
                         guard !isApplyingSystemAddress else { return }
@@ -378,7 +379,6 @@ struct AddLeadView: View {
                         }
                     }
                 )
-                .accessibilityIdentifier("addLeadAddressField")
 
                 LeadServiceCategoryPicker(
                     categories: categoryManager.allCategories,
@@ -977,6 +977,7 @@ struct LeadAddressEditor: View {
     let isUpdatingAddress: Bool
     var isGeocodingAddress: Bool = false
     var geocodingError: String? = nil
+    var accessibilityIdentifier: String? = nil
     let updateAddressAction: () -> Void
     var onAddressChange: (_ oldValue: String, _ newValue: String) -> Void = { _, _ in }
 
@@ -1025,6 +1026,7 @@ struct LeadAddressEditor: View {
                 .onChange(of: address) { oldValue, newValue in
                     onAddressChange(oldValue, newValue)
                 }
+                .accessibilityIdentifier(accessibilityIdentifier ?? "leadAddressField")
 
             if isGeocodingAddress || isUpdatingAddress {
                 Label(isUpdatingAddress ? "Updating address..." : "Finding location...", systemImage: "arrow.triangle.2.circlepath")

@@ -3879,6 +3879,7 @@ struct StatusChangeSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("statusChangeCancelButton")
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))

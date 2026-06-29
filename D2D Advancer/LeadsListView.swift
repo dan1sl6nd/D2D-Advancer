@@ -381,6 +381,7 @@ struct LeadsListView: View {
                 .accessibilityLabel("Lead: \(lead.displayName)")
                 .accessibilityHint("Double tap to view lead details, long press to delete")
                 .accessibilityValue(leadAccessibilityValue(for: lead))
+                .accessibilityIdentifier("personalLeadRow")
                 .onAppear {
                     if lead == paginatedLeads.last {
                         loadMoreLeadsIfNeeded()
