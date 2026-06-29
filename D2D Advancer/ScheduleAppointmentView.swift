@@ -291,9 +291,16 @@ struct AppointmentDetailsSection: View {
                 }
             }
             
-            LeadFormTextField(title: "Title", placeholder: "Appointment title", text: $title, icon: "text.cursor")
+            LeadFormTextField(
+                title: "Title",
+                placeholder: "Appointment title",
+                text: $title,
+                icon: "text.cursor",
+                accessibilityIdentifier: "appointmentTitleField"
+            )
 
             LeadNotesEditor(title: "Notes", text: $notes, minHeight: 88)
+                .accessibilityIdentifier("appointmentNotesField")
         }
         .surfaceCard()
         .sheet(isPresented: $showingCustomTypeCreator) {
@@ -566,7 +573,13 @@ struct LocationSection: View {
             }
             
             VStack(alignment: .leading, spacing: 8) {
-                LeadFormTextField(title: "Address", placeholder: "Appointment location", text: $location, icon: "location.fill")
+                LeadFormTextField(
+                    title: "Address",
+                    placeholder: "Appointment location",
+                    text: $location,
+                    icon: "location.fill",
+                    accessibilityIdentifier: "appointmentLocationField"
+                )
                 
                 if let address = lead.address, location != address {
                     Button(action: {

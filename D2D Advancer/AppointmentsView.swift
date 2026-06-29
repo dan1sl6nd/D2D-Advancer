@@ -402,6 +402,7 @@ struct AppointmentInteractiveRowView: View {
             }
         }
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("appointmentRow")
         .onAppear {
             loadAssociatedLead()
         }
@@ -764,6 +765,7 @@ struct AppointmentDetailView: View {
             }
             .id(refreshId)
         }
+        .accessibilityIdentifier("appointmentDetailScreen")
     }
 
     @ViewBuilder
@@ -775,7 +777,8 @@ struct AppointmentDetailView: View {
                         appointmentActionButton(
                             title: "Cancel",
                             icon: "xmark",
-                            tone: .danger
+                            tone: .danger,
+                            accessibilityIdentifier: "appointmentDetailCancelButton"
                         ) {
                             updateAppointmentStatus(appointment, to: .cancelled)
                         }
@@ -783,7 +786,8 @@ struct AppointmentDetailView: View {
                         appointmentActionButton(
                             title: "Complete",
                             icon: "checkmark",
-                            tone: .primary
+                            tone: .primary,
+                            accessibilityIdentifier: "appointmentDetailCompleteButton"
                         ) {
                             updateAppointmentStatus(appointment, to: .completed)
                         }
@@ -792,7 +796,8 @@ struct AppointmentDetailView: View {
                     appointmentActionButton(
                         title: "Reactivate",
                         icon: "arrow.clockwise",
-                        tone: .secondary
+                        tone: .secondary,
+                        accessibilityIdentifier: "appointmentDetailReactivateButton"
                     ) {
                         updateAppointmentStatus(appointment, to: .scheduled)
                     }
@@ -803,7 +808,8 @@ struct AppointmentDetailView: View {
                         title: "Delete",
                         icon: "trash",
                         tone: .danger,
-                        disabled: isDeletingAppointment
+                        disabled: isDeletingAppointment,
+                        accessibilityIdentifier: "appointmentDetailDeleteButton"
                     ) {
                         showingDeleteConfirmation = true
                     }
@@ -811,7 +817,8 @@ struct AppointmentDetailView: View {
                     appointmentActionButton(
                         title: "Edit",
                         icon: "pencil",
-                        tone: .secondary
+                        tone: .secondary,
+                        accessibilityIdentifier: "appointmentDetailEditButton"
                     ) {
                         showingEditView = true
                     }
@@ -819,7 +826,8 @@ struct AppointmentDetailView: View {
                     appointmentActionButton(
                         title: "Done",
                         icon: "checkmark",
-                        tone: .primary
+                        tone: .primary,
+                        accessibilityIdentifier: "appointmentDetailDoneButton"
                     ) {
                         dismiss()
                     }
@@ -839,7 +847,8 @@ struct AppointmentDetailView: View {
             appointmentActionButton(
                 title: "Done",
                 icon: "checkmark",
-                tone: .primary
+                tone: .primary,
+                accessibilityIdentifier: "appointmentDetailDoneButton"
             ) {
                 dismiss()
             }
@@ -854,6 +863,7 @@ struct AppointmentDetailView: View {
         icon: String,
         tone: AppointmentActionTone,
         disabled: Bool = false,
+        accessibilityIdentifier: String? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -884,6 +894,7 @@ struct AppointmentDetailView: View {
         .disabled(disabled)
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .accessibilityLabel(title)
+        .accessibilityIdentifier(accessibilityIdentifier ?? title)
     }
 
     private enum AppointmentActionTone {
@@ -1350,7 +1361,8 @@ struct EditLocationSection: View {
                     title: "Appointment Location",
                     placeholder: "Street address or service location",
                     text: $location,
-                    icon: "mappin.circle.fill"
+                    icon: "mappin.circle.fill",
+                    accessibilityIdentifier: "appointmentEditLocationField"
                 )
 
                 Label("Optional: add unit number, parking notes, or service-specific details.", systemImage: "info.circle")

@@ -857,17 +857,23 @@ struct ObsidianBottomActionBar<PrimaryLabel: View, SecondaryLabel: View>: View {
     let primaryAction: () -> Void
     let secondaryAction: () -> Void
     var isPrimaryDisabled = false
+    var primaryAccessibilityIdentifier: String?
+    var secondaryAccessibilityIdentifier: String?
     @ViewBuilder var primaryLabel: PrimaryLabel
     @ViewBuilder var secondaryLabel: SecondaryLabel
 
     init(
         isPrimaryDisabled: Bool = false,
+        primaryAccessibilityIdentifier: String? = nil,
+        secondaryAccessibilityIdentifier: String? = nil,
         primaryAction: @escaping () -> Void,
         secondaryAction: @escaping () -> Void,
         @ViewBuilder primaryLabel: () -> PrimaryLabel,
         @ViewBuilder secondaryLabel: () -> SecondaryLabel
     ) {
         self.isPrimaryDisabled = isPrimaryDisabled
+        self.primaryAccessibilityIdentifier = primaryAccessibilityIdentifier
+        self.secondaryAccessibilityIdentifier = secondaryAccessibilityIdentifier
         self.primaryAction = primaryAction
         self.secondaryAction = secondaryAction
         self.primaryLabel = primaryLabel()
@@ -881,6 +887,7 @@ struct ObsidianBottomActionBar<PrimaryLabel: View, SecondaryLabel: View>: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(ObsidianSecondaryButtonStyle())
+            .accessibilityIdentifierIfPresent(secondaryAccessibilityIdentifier)
 
             Button(action: primaryAction) {
                 primaryLabel
@@ -889,6 +896,7 @@ struct ObsidianBottomActionBar<PrimaryLabel: View, SecondaryLabel: View>: View {
             .buttonStyle(ObsidianPrimaryButtonStyle())
             .disabled(isPrimaryDisabled)
             .opacity(isPrimaryDisabled ? 0.55 : 1)
+            .accessibilityIdentifierIfPresent(primaryAccessibilityIdentifier)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -896,6 +904,17 @@ struct ObsidianBottomActionBar<PrimaryLabel: View, SecondaryLabel: View>: View {
             Color.obsidianBlack
                 .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: -3)
         )
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func accessibilityIdentifierIfPresent(_ identifier: String?) -> some View {
+        if let identifier {
+            accessibilityIdentifier(identifier)
+        } else {
+            self
+        }
     }
 }
 

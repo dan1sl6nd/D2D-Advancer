@@ -117,9 +117,12 @@ struct AppointmentFormView: View {
             .navigationTitle(mode.navigationTitle)
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .accessibilityIdentifier(mode == .create ? "appointmentCreateForm" : "appointmentEditForm")
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: title.isEmpty || isProcessing,
+                    primaryAccessibilityIdentifier: mode == .create ? "appointmentScheduleSaveButton" : "appointmentEditSaveButton",
+                    secondaryAccessibilityIdentifier: mode == .create ? "appointmentScheduleCancelButton" : "appointmentEditCancelButton",
                     primaryAction: saveAppointment,
                     secondaryAction: onCancel,
                     primaryLabel: {

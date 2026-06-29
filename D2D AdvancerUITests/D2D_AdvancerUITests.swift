@@ -491,6 +491,29 @@ final class D2D_AdvancerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["addLeadButton"].waitForExistence(timeout: 15), "Saving a personal lead should return to the map")
     }
 
+    private func scheduleAppointmentThroughUI(_ app: XCUIApplication, leadName: String) {
+        tapButton(app, "tab_Appts", timeout: 12)
+        waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
+        tapButton(app, "appointmentsScheduleButton", timeout: 10)
+
+        waitForIdentifiedElement(app, "appointmentLeadPickerSheet", timeout: 10)
+        typeText(leadName, into: app.textFields["appointmentLeadSearchField"])
+        dismissKeyboardIfPresent(app)
+
+        let leadRow = app.descendants(matching: .any)["appointmentLeadSelectionRow"].firstMatch
+        XCTAssertTrue(leadRow.waitForExistence(timeout: 10), "Eligible lead should appear in appointment lead picker")
+        tapElement(app, leadRow, description: "appointmentLeadSelectionRow")
+
+        waitForIdentifiedElement(app, "appointmentCreateForm", timeout: 12)
+        waitForIdentifiedElement(app, "appointmentTitleField", timeout: 8)
+        waitForIdentifiedElement(app, "appointmentLocationField", timeout: 8)
+        tapButton(app, "appointmentScheduleSaveButton", timeout: 10)
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForIdentifiedElement(app, "appointmentsScreen", timeout: 15)
+        waitForTextContaining(app, leadName, timeout: 15)
+    }
+
     private func denySystemPermissionIfPresented(timeout: TimeInterval = 4) {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let denyLabels = ["Don’t Allow", "Don't Allow"]
@@ -907,6 +930,38 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         waitForTextContaining(app, "\(leadName) Updated", timeout: 8)
         waitForIdentifiedElement(app, "leadDetailEditButton", timeout: 8)
+    }
+
+    @MainActor
+    func testAppointmentCreateDetailDeleteSmoke() throws {
+        let app = makeApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        _ = waitForMapReady(app)
+        let leadName = "UI Appt \(Int(Date().timeIntervalSince1970))"
+        createInterestedLead(app, name: leadName)
+        scheduleAppointmentThroughUI(app, leadName: leadName)
+
+        let appointmentRow = app.descendants(matching: .any)["appointmentRow"].firstMatch
+        XCTAssertTrue(appointmentRow.waitForExistence(timeout: 10), "Scheduled appointment row should be visible")
+        tapElement(app, appointmentRow, description: "appointmentRow")
+
+        waitForIdentifiedElement(app, "appointmentDetailScreen", timeout: 10)
+        waitForIdentifiedElement(app, "appointmentDetailCancelButton", timeout: 8)
+        waitForIdentifiedElement(app, "appointmentDetailCompleteButton", timeout: 8)
+        waitForIdentifiedElement(app, "appointmentDetailEditButton", timeout: 8)
+        waitForIdentifiedElement(app, "appointmentDetailDeleteButton", timeout: 8)
+        waitForIdentifiedElement(app, "appointmentDetailDoneButton", timeout: 8)
+
+        tapButton(app, "appointmentDetailDeleteButton", timeout: 8)
+        let deleteAlert = app.alerts["Delete Appointment?"]
+        XCTAssertTrue(deleteAlert.waitForExistence(timeout: 8), "Delete confirmation should appear before removing an appointment")
+        deleteAlert.buttons["Delete"].tap()
+
+        waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
+        let deletedAppointmentText = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", leadName)).firstMatch
+        XCTAssertFalse(deletedAppointmentText.waitForExistence(timeout: 4), "Deleted test appointment should leave the appointment list")
     }
 
     @MainActor
