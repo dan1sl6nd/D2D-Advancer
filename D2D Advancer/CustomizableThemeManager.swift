@@ -441,22 +441,27 @@ extension View {
 
 struct ObsidianHeaderView: View {
     let title: String
+    var titleAccessibilityIdentifier: String? = nil
     var trailing: AnyView? = nil
 
-    init(_ title: String) {
+    init(_ title: String, titleAccessibilityIdentifier: String? = nil) {
         self.title = title
+        self.titleAccessibilityIdentifier = titleAccessibilityIdentifier
     }
 
-    init(_ title: String, @ViewBuilder trailing: () -> some View) {
+    init(
+        _ title: String,
+        titleAccessibilityIdentifier: String? = nil,
+        @ViewBuilder trailing: () -> some View
+    ) {
         self.title = title
+        self.titleAccessibilityIdentifier = titleAccessibilityIdentifier
         self.trailing = AnyView(trailing())
     }
 
     var body: some View {
         HStack {
-            Text(title)
-                .font(.displayMedium)
-                .foregroundColor(.textPrimary)
+            titleText
             Spacer()
             if let trailing {
                 trailing
@@ -466,6 +471,19 @@ struct ObsidianHeaderView: View {
         .padding(.top, 8)
         .padding(.bottom, 14)
         .background(Color.obsidianBlack)
+    }
+
+    @ViewBuilder
+    private var titleText: some View {
+        let text = Text(title)
+            .font(.displayMedium)
+            .foregroundColor(.textPrimary)
+
+        if let titleAccessibilityIdentifier {
+            text.accessibilityIdentifier(titleAccessibilityIdentifier)
+        } else {
+            text
+        }
     }
 }
 
@@ -583,6 +601,7 @@ struct ObsidianCompactIconButton: View {
     let icon: String
     let accessibilityLabel: String
     var accentColor: Color = .electricViolet
+    var accessibilityIdentifier: String? = nil
     let action: () -> Void
 
     var body: some View {
@@ -597,6 +616,7 @@ struct ObsidianCompactIconButton: View {
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(accessibilityIdentifier ?? accessibilityLabel)
     }
 }
 

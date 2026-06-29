@@ -48,15 +48,18 @@ struct AppointmentsView: View {
             GeometryReader { geometry in
                 VStack(spacing: 0) {
                     safeAreaSpacer(geometry: geometry)
-                    ObsidianHeaderView("Appointments") {
+                    ObsidianHeaderView(
+                        "Appointments",
+                        titleAccessibilityIdentifier: "appointmentsScreen"
+                    ) {
                         ObsidianCompactIconButton(
                             icon: "plus",
-                            accessibilityLabel: "Schedule appointment"
+                            accessibilityLabel: "Schedule appointment",
+                            accessibilityIdentifier: "appointmentsScheduleButton"
                         ) {
                             guard paywallManager.gateAction() else { return }
                             showingScheduleView = true
                         }
-                        .accessibilityIdentifier("appointmentsScheduleButton")
                     }
                     tabSelectionView
                     appointmentContentView
@@ -65,7 +68,6 @@ struct AppointmentsView: View {
             }
             .navigationBarHidden(true)
             .background(Color.obsidianBlack)
-            .accessibilityIdentifier("appointmentsScreen")
             .sheet(isPresented: $showingScheduleView) {
                 SelectLeadForAppointmentView { lead in
                     selectedLead = lead
@@ -521,7 +523,8 @@ struct SelectLeadForAppointmentView: View {
                             title: "Search",
                             placeholder: "Name or address",
                             text: $searchText,
-                            icon: "magnifyingglass"
+                            icon: "magnifyingglass",
+                            accessibilityIdentifier: "appointmentLeadSearchField"
                         )
                     }
 
@@ -531,6 +534,7 @@ struct SelectLeadForAppointmentView: View {
                             title: "No eligible leads",
                             message: "Only interested, scheduled, or converted leads can have appointments scheduled."
                         )
+                        .accessibilityIdentifier("appointmentLeadPickerEmptyState")
                     } else {
                         LazyVStack(spacing: 12) {
                             ForEach(filteredLeads, id: \.id) { lead in
@@ -556,6 +560,7 @@ struct SelectLeadForAppointmentView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("appointmentLeadPickerCancelButton")
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(
@@ -565,6 +570,7 @@ struct SelectLeadForAppointmentView: View {
             }
         }
         .presentationBackground(Color.obsidianBlack)
+        .accessibilityIdentifier("appointmentLeadPickerSheet")
     }
 }
 
@@ -623,6 +629,7 @@ struct LeadSelectionRow: View {
             .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("appointmentLeadSelectionRow")
     }
 }
 

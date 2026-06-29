@@ -773,6 +773,39 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testAppointmentLeadPickerOpensAndDismissesSmoke() throws {
+        let app = makeApp()
+        app.launchArguments.append("-openAppointmentsTabForUITests")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
+        tapIdentifiedElement(app, "appointmentsScheduleButton", timeout: 12)
+
+        waitForIdentifiedElement(app, "appointmentLeadPickerSheet", timeout: 8)
+        waitForText(app, "Select Customer", timeout: 8)
+        waitForIdentifiedElement(app, "appointmentLeadSearchField", timeout: 8)
+
+        let emptyState = app.descendants(matching: .any)["appointmentLeadPickerEmptyState"]
+        let leadRow = app.descendants(matching: .any)["appointmentLeadSelectionRow"]
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline, !emptyState.exists, !leadRow.exists {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        XCTAssertTrue(
+            emptyState.exists || leadRow.exists,
+            "Appointment lead picker should show either eligible leads or an empty state"
+        )
+
+        tapButton(app, "appointmentLeadPickerCancelButton", timeout: 8)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["appointmentLeadPickerSheet"].waitForNonExistence(timeout: 5),
+            "Appointment lead picker should dismiss cleanly"
+        )
+        waitForIdentifiedElement(app, "appointmentsScreen", timeout: 8)
+    }
+
+    @MainActor
     func testPrimaryTabsAndMoreSurfacesSmoke() throws {
         let app = makeApp()
         app.launch()
