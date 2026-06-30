@@ -620,13 +620,12 @@ struct TeamWorkspaceView: View {
                 .foregroundColor(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Picker("Worker type", selection: $pendingInviteWorkType) {
-                Text("Sales Rep").tag(TeamMemberWorkType.salesRep)
-                Text("Technician").tag(TeamMemberWorkType.technician)
-            }
-            .pickerStyle(.segmented)
-            .disabled(activeMemberCount >= team.memberLimit || !team.planStatus.allowsTeamWrite || isWorking || teamService.isLoading)
-            .accessibilityIdentifier("teamInviteWorkerTypePicker")
+            inviteWorkerTypeSelector(
+                disabled: activeMemberCount >= team.memberLimit
+                    || !team.planStatus.allowsTeamWrite
+                    || isWorking
+                    || teamService.isLoading
+            )
 
             if let createdInvite {
                 createdInvitePanel(
@@ -644,6 +643,47 @@ struct TeamWorkspaceView: View {
                 createInvite()
             }
         }
+    }
+
+    private func inviteWorkerTypeSelector(disabled: Bool) -> some View {
+        HStack(spacing: 10) {
+            inviteWorkerTypeButton(.salesRep, disabled: disabled)
+            inviteWorkerTypeButton(.technician, disabled: disabled)
+        }
+        .padding(4)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("teamInviteWorkerTypePicker")
+    }
+
+    private func inviteWorkerTypeButton(_ workType: TeamMemberWorkType, disabled: Bool) -> some View {
+        let isSelected = pendingInviteWorkType == workType
+
+        return Button {
+            pendingInviteWorkType = workType
+        } label: {
+            Label(workType.title, systemImage: workType == .technician ? "wrench.and.screwdriver.fill" : "person.2.fill")
+                .font(.obsidianFootnote)
+                .fontWeight(.semibold)
+                .foregroundColor(isSelected ? Color.obsidianBlack : Color.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(isSelected ? Color.statusNotHome : Color.clear)
+                )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(disabled)
+        .opacity(disabled ? 0.55 : 1)
+        .accessibilityIdentifier(workType == .technician ? "teamInviteWorkerTypeTechnicianButton" : "teamInviteWorkerTypeSalesRepButton")
     }
 
     private var ownerNotificationsCard: some View {

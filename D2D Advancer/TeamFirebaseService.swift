@@ -372,7 +372,7 @@ final class TeamFirebaseService: ObservableObject {
         let pendingMember = TeamMember.rep(
             teamId: team.id,
             userId: "\(TeamFirebaseSchema.pendingRepUserPrefix)-\(invite.code)",
-            displayName: "Pending Rep",
+            displayName: "Pending \(workType.title)",
             email: nil,
             acceptedInviteId: invite.code,
             workType: workType,
@@ -380,7 +380,7 @@ final class TeamFirebaseService: ObservableObject {
         )
 
         let batch = db.batch()
-        batch.setData(inviteData(invite, team: team, createdByUserId: user.uid, createdAt: now), forDocument: inviteRef(invite.code))
+        batch.setData(inviteData(invite, team: team, workType: workType, createdByUserId: user.uid, createdAt: now), forDocument: inviteRef(invite.code))
         batch.setData(memberData(pendingMember, updatedAt: now), forDocument: memberRef(teamId: team.id, userId: pendingMember.userId))
         addActivityLog(
             to: batch,
@@ -418,6 +418,8 @@ final class TeamFirebaseService: ObservableObject {
         guard invitePlanStatus?.allowsTeamWrite ?? true else {
             throw TeamFirebaseServiceError.writeBlocked
         }
+        let inviteWorkType = (inviteData[TeamFirebaseSchema.Field.workType] as? String)
+            .flatMap(TeamMemberWorkType.init(rawValue:))
 
         let existingProfile = try await teamProfileRef(userId: user.uid).getDocument()
         if existingProfile.exists {
@@ -435,7 +437,7 @@ final class TeamFirebaseService: ObservableObject {
             displayName: Self.nilIfBlank(displayName) ?? Self.nilIfBlank(user.displayName) ?? "Team Rep",
             email: Self.nilIfBlank(email) ?? user.email,
             acceptedInviteId: code,
-            workType: pendingMember?.workType ?? .salesRep,
+            workType: pendingMember?.workType ?? inviteWorkType ?? .salesRep,
             joinedAt: now
         )
 
@@ -2198,14 +2200,15 @@ private extension TeamFirebaseService {
         ].filterNilValues()
     }
 
-    func inviteData(_ invite: TeamInvite, team: TeamWorkspace, createdByUserId: String, createdAt: Date) -> [String: Any] {
+    func inviteData(_ invite: TeamInvite, team: TeamWorkspace, workType: TeamMemberWorkType, createdByUserId: String, createdAt: Date) -> [String: Any] {
         [
             TeamFirebaseSchema.Field.teamId: invite.teamId,
             TeamFirebaseSchema.Field.createdByUserId: createdByUserId,
             TeamFirebaseSchema.Field.createdAt: Timestamp(date: createdAt),
             TeamFirebaseSchema.Field.expiresAt: Timestamp(date: invite.expiresAt),
             TeamFirebaseSchema.Field.status: TeamFirebaseSchema.InviteStatus.pending,
-            TeamFirebaseSchema.Field.planStatus: team.planStatus.rawValue
+            TeamFirebaseSchema.Field.planStatus: team.planStatus.rawValue,
+            TeamFirebaseSchema.Field.workType: workType.rawValue
         ]
     }
 

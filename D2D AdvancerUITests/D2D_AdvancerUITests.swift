@@ -51,6 +51,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         let runId: String
         let ownerEmail: String
         let repEmail: String
+        let technicianEmail: String
         let password: String
         let leadName: String
     }
@@ -124,6 +125,7 @@ final class D2D_AdvancerUITests: XCTestCase {
             runId: safeRunId,
             ownerEmail: "owner-ui-\(safeRunId)@example.com",
             repEmail: "rep-ui-\(safeRunId)@example.com",
+            technicianEmail: "tech-ui-\(safeRunId)@example.com",
             password: password,
             leadName: "UI Interested \(safeRunId)"
         )
@@ -354,14 +356,17 @@ final class D2D_AdvancerUITests: XCTestCase {
         _ app: XCUIApplication,
         _ identifier: String,
         direction: ScrollDirection = .down,
-        maxSwipes: Int = 8
+        maxSwipes: Int = 8,
+        requireHittable: Bool = true
     ) -> XCUIElement {
         let element = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
-        for _ in 0..<maxSwipes where !element.exists || !element.isHittable {
+        for _ in 0..<maxSwipes where !element.exists || (requireHittable && !element.isHittable) {
             dragContent(app, direction: direction)
         }
         XCTAssertTrue(element.waitForExistence(timeout: 3), "Expected element to exist after scrolling: \(identifier)")
-        XCTAssertTrue(element.isHittable, "Expected element to be hittable after scrolling: \(identifier)")
+        if requireHittable {
+            XCTAssertTrue(element.isHittable, "Expected element to be hittable after scrolling: \(identifier)")
+        }
         return element
     }
 
@@ -487,6 +492,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         let code = app.staticTexts.matching(codePredicate).firstMatch
         XCTAssertTrue(code.waitForExistence(timeout: 12), "Generated invite code should be visible")
         return code.label
+    }
+
+    private func selectInviteWorkerType(_ app: XCUIApplication, technician: Bool, direction: ScrollDirection = .down) {
+        let buttonIdentifier = technician ? "teamInviteWorkerTypeTechnicianButton" : "teamInviteWorkerTypeSalesRepButton"
+        scrollToButton(app, buttonIdentifier, direction: direction, maxSwipes: 10).tap()
     }
 
     private func createInterestedLead(_ app: XCUIApplication, name: String) {
@@ -640,6 +650,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         let credentials = teamUITestCredentials()
         let ownerEmail = credentials.ownerEmail
         let repEmail = credentials.repEmail
+        let technicianEmail = credentials.technicianEmail
         let password = credentials.password
         let leadName = credentials.leadName
 
@@ -657,10 +668,32 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForText(ownerApp, "Team plan active", timeout: 25)
         _ = scrollToButtonEitherDirection(ownerApp, "teamCloseWorkspaceButton")
 
-        let createInviteButton = scrollToButton(ownerApp, "teamCreateInviteButton", direction: .down)
-        createInviteButton.tap()
+        selectInviteWorkerType(ownerApp, technician: true)
+        scrollToButton(ownerApp, "teamCreateInviteButton", direction: .down).tap()
+        let technicianInviteCode = readInviteCode(ownerApp)
+
+        selectInviteWorkerType(ownerApp, technician: false, direction: .up)
+        scrollToButton(ownerApp, "teamCreateInviteButton", direction: .down).tap()
         let inviteCode = readInviteCode(ownerApp)
         ownerApp.terminate()
+
+        let technicianApp = makeTeamEmulatorApp(
+            autoAuthEmail: technicianEmail,
+            autoAuthDisplayName: "Tech UI",
+            autoAuthPassword: password,
+            shouldCreateAutoAuthAccount: true
+        )
+        technicianApp.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        openTeamWorkspace(technicianApp, expectedInitialText: "Create or Accept Team")
+        typeText(technicianInviteCode, into: technicianApp.textFields["teamInviteCodeField"])
+        dismissTeamKeyboardIfPresent(technicianApp)
+        scrollToButton(technicianApp, "teamJoinTeamButton").tap()
+        waitForText(technicianApp, "Joined team.", timeout: 25)
+        scrollToText(technicianApp, "My Service Jobs", direction: .down)
+        _ = scrollToButtonEitherDirection(technicianApp, "teamLeaveButton")
+        technicianApp.terminate()
 
         let repApp = makeTeamEmulatorApp(
             autoAuthEmail: repEmail,
@@ -702,7 +735,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForText(ownerReturnApp, "Rep marked a lead interested", timeout: 25)
         waitForTextContaining(ownerReturnApp, String(leadName), timeout: 25)
         scrollToText(ownerReturnApp, "Seats used", direction: .down)
-        waitForText(ownerReturnApp, "2/3", timeout: 8)
+        waitForText(ownerReturnApp, "3/3", timeout: 8)
         scrollToText(ownerReturnApp, "Field Map", direction: .down)
         XCTAssertTrue(
             ownerReturnApp.otherElements["teamFieldMapView"].waitForExistence(timeout: 8),
@@ -730,6 +763,16 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapButton(ownerReturnApp, "teamLeadDetailCloseButton", timeout: 8)
 
         relaunch(ownerReturnApp, opening: "-openMapTabForUITests")
+        tapButton(ownerReturnApp, "addLeadButton", timeout: 12)
+        scrollToIdentifiedElement(ownerReturnApp, "addLeadTechnicianMenu", direction: .down)
+        scrollToIdentifiedElement(ownerReturnApp, "addLeadTechnicianArrivalDatePicker", direction: .down)
+        scrollToIdentifiedElement(ownerReturnApp, "addLeadTechnicianDurationStepper", direction: .down, requireHittable: false)
+        tapButton(ownerReturnApp, "addLeadCancelButton", timeout: 8)
+        XCTAssertTrue(
+            ownerReturnApp.buttons["addLeadButton"].waitForExistence(timeout: 8),
+            "Cancel should dismiss Add Lead after verifying technician job controls"
+        )
+
         tapButton(ownerReturnApp, "teamMapShortcut", timeout: 12)
         waitForText(ownerReturnApp, "Team Field Map", timeout: 12)
     }
