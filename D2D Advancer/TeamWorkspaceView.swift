@@ -105,7 +105,7 @@ struct TeamWorkspaceView: View {
                         if !canUseTeamWorkspace {
                             appleSignInRequiredCard
                         } else if let team = teamService.activeTeam, let member = teamService.currentMember {
-                            planStateCard(team)
+                            planStateCard(team, member: member)
                             if member.role == .owner {
                                 inviteManagementCard(team: team)
                                 ownerNotificationsCard
@@ -117,11 +117,9 @@ struct TeamWorkspaceView: View {
                                 ownerRepWorkCard
                                 activityLogCard
                                 memberListCard(team: team)
-                                teamAccessCard(team: team, member: member)
                             } else {
                                 repSummary(team: team, member: member)
                                 activityLogCard
-                                teamAccessCard(team: team, member: member)
                             }
                         } else {
                             setupTeamCard
@@ -208,7 +206,7 @@ struct TeamWorkspaceView: View {
         max(geometry.safeAreaInsets.top, 54)
     }
 
-    private func planStateCard(_ team: TeamWorkspace) -> some View {
+    private func planStateCard(_ team: TeamWorkspace, member: TeamMember) -> some View {
         TeamInfoCard {
             Text(team.name)
                 .font(.obsidianCallout)
@@ -217,6 +215,41 @@ struct TeamWorkspaceView: View {
             Label(planStateText(team.planStatus), systemImage: planStateIcon(team.planStatus))
                 .font(.obsidianFootnote)
                 .foregroundColor(planStateColor(team.planStatus))
+
+            Divider()
+                .overlay(Color.obsidianBorder.opacity(0.6))
+
+            if member.role == .owner {
+                Text("Close the workspace to remove worker access and cancel pending invites.")
+                    .font(.micro)
+                    .foregroundColor(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                teamActionButton(
+                    title: "Close Team Workspace",
+                    icon: "person.3.sequence.fill",
+                    color: Color.statusNotInterested,
+                    disabled: !TeamAccessPolicy.canCloseTeam(owner: member, team: team),
+                    accessibilityIdentifier: "teamCloseWorkspaceButton"
+                ) {
+                    showingCloseTeamConfirmation = true
+                }
+            } else {
+                Text("Leave this workspace and remove team access from this account.")
+                    .font(.micro)
+                    .foregroundColor(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                teamActionButton(
+                    title: "Leave Team",
+                    icon: "rectangle.portrait.and.arrow.right",
+                    color: Color.statusNotInterested,
+                    disabled: !TeamAccessPolicy.canLeaveTeam(member: member, team: team),
+                    accessibilityIdentifier: "teamLeaveButton"
+                ) {
+                    showingLeaveTeamConfirmation = true
+                }
+            }
         }
     }
 
@@ -748,47 +781,6 @@ struct TeamWorkspaceView: View {
                 }
             }
         }
-    }
-
-    private func teamAccessCard(team: TeamWorkspace, member: TeamMember) -> some View {
-        TeamInfoCard {
-            Text("Team Access")
-                .font(.obsidianCallout)
-                .foregroundColor(Color.textPrimary)
-
-            if member.role == .owner {
-                Text("Close this Team Workspace when you no longer want workers to access shared leads, jobs, map, or active-hours location history.")
-                    .font(.obsidianFootnote)
-                    .foregroundColor(Color.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                teamActionButton(
-                    title: "Close Team Workspace",
-                    icon: "person.3.sequence.fill",
-                    color: Color.statusNotInterested,
-                    disabled: !TeamAccessPolicy.canCloseTeam(owner: member, team: team),
-                    accessibilityIdentifier: "teamCloseWorkspaceButton"
-                ) {
-                    showingCloseTeamConfirmation = true
-                }
-            } else {
-                Text("Leave the team if you no longer work in this workspace. Assigned team leads, service jobs, and live sharing access will be removed from this account.")
-                    .font(.obsidianFootnote)
-                    .foregroundColor(Color.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                teamActionButton(
-                    title: "Leave Team",
-                    icon: "rectangle.portrait.and.arrow.right",
-                    color: Color.statusNotInterested,
-                    disabled: !TeamAccessPolicy.canLeaveTeam(member: member, team: team),
-                    accessibilityIdentifier: "teamLeaveButton"
-                ) {
-                    showingLeaveTeamConfirmation = true
-                }
-            }
-        }
-        .accessibilityIdentifier("teamAccessCard")
     }
 
     private func memberRow(_ member: TeamMember) -> some View {

@@ -311,6 +311,30 @@ final class D2D_AdvancerUITests: XCTestCase {
         return button
     }
 
+    private func scrollToButtonEitherDirection(
+        _ app: XCUIApplication,
+        _ identifier: String,
+        maxSwipesPerDirection: Int = 5
+    ) -> XCUIElement {
+        let button = app.buttons[identifier]
+        if button.waitForExistence(timeout: 1), button.isHittable {
+            return button
+        }
+
+        for direction in [ScrollDirection.down, .up] {
+            for _ in 0..<maxSwipesPerDirection where !button.exists || !button.isHittable {
+                dragContent(app, direction: direction)
+            }
+            if button.waitForExistence(timeout: 1), button.isHittable {
+                return button
+            }
+        }
+
+        XCTAssertTrue(button.waitForExistence(timeout: 3), "Expected button to appear after scrolling both directions: \(identifier)")
+        XCTAssertTrue(button.isHittable, "Expected button to be hittable after scrolling both directions: \(identifier)")
+        return button
+    }
+
     private func scrollToElement(
         _ element: XCUIElement,
         in app: XCUIApplication,
@@ -631,6 +655,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         openTeamWorkspace(ownerApp, expectedInitialText: "Create or Accept Team")
         tapButton(ownerApp, "teamCreateTeamButton", timeout: 12)
         waitForText(ownerApp, "Team plan active", timeout: 25)
+        _ = scrollToButtonEitherDirection(ownerApp, "teamCloseWorkspaceButton")
 
         let createInviteButton = scrollToButton(ownerApp, "teamCreateInviteButton", direction: .down)
         createInviteButton.tap()
@@ -652,8 +677,9 @@ final class D2D_AdvancerUITests: XCTestCase {
         scrollToButton(repApp, "teamJoinTeamButton").tap()
         waitForText(repApp, "Joined team.", timeout: 25)
         waitForText(repApp, "My Team Work", timeout: 12)
+        _ = scrollToButtonEitherDirection(repApp, "teamLeaveButton")
 
-        tapButton(repApp, "teamDutyToggleButton", timeout: 8)
+        scrollToButton(repApp, "teamDutyToggleButton", direction: .down).tap()
         waitForText(repApp, "Go Off Duty", timeout: 12)
         tapButton(repApp, "teamDutyToggleButton", timeout: 8)
         waitForText(repApp, "Go On Duty", timeout: 12)
