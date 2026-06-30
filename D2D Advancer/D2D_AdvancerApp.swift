@@ -39,6 +39,10 @@ struct D2D_AdvancerApp: App {
             UserDefaults.standard.removeObject(forKey: "custom_message_templates")
             print("🧪 Message templates reset for UI tests")
         }
+        if launchArguments.contains("-resetAppointmentTypesForUITests") {
+            UserDefaults.standard.removeObject(forKey: "custom_appointment_types")
+            print("🧪 Appointment types reset for UI tests")
+        }
         if launchArguments.contains("-resetSyncSettingsForUITests") {
             CloudSyncProvider.current = .icloud
             UserDefaults.standard.set(true, forKey: "auto_sync_enabled")

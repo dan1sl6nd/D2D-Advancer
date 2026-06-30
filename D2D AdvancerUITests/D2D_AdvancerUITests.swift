@@ -18,6 +18,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launchArguments.append("-skipOnboardingForUITests")
         app.launchArguments.append("-unlockPremiumForUITests")
         app.launchArguments.append("-resetMessageTemplatesForUITests")
+        app.launchArguments.append("-resetAppointmentTypesForUITests")
         app.launchArguments.append("-resetSyncSettingsForUITests")
         return app
     }
@@ -1303,6 +1304,30 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
         waitForIdentifiedElement(app, "appointmentTypesCreateButton", timeout: 8)
         waitForIdentifiedElement(app, "appointmentTypesDoneButton", timeout: 8)
+
+        tapButton(app, "appointmentTypesCreateButton", timeout: 8)
+        waitForIdentifiedElement(app, "customAppointmentTypeEditor", timeout: 10)
+        let typeName = "UI Type \(Int(Date().timeIntervalSince1970))"
+        typeText(typeName, into: app.textFields["customAppointmentTypeNameField"], timeout: 8)
+        dismissKeyboardIfPresent(app)
+        tapIdentifiedElement(app, "customAppointmentTypeColor_green", direction: .down, timeout: 8)
+        tapIdentifiedElement(app, "customAppointmentTypeIconButton", direction: .up, timeout: 8)
+        waitForIdentifiedElement(app, "customAppointmentTypeIconPicker", timeout: 10)
+        tapButton(app, "customAppointmentTypeIconPickerDoneButton", timeout: 8)
+        waitForIdentifiedElement(app, "customAppointmentTypeEditor", timeout: 10)
+        tapButton(app, "customAppointmentTypeSaveButton", timeout: 8)
+        waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
+        waitForTextContaining(app, typeName, timeout: 10)
+
+        let customTypeRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "customAppointmentTypeRow", typeName))
+            .firstMatch
+        XCTAssertTrue(customTypeRow.waitForExistence(timeout: 8), "Created custom appointment type should appear in the list")
+        tapElement(app, customTypeRow, description: "customAppointmentTypeRow")
+        waitForIdentifiedElement(app, "customAppointmentTypeEditor", timeout: 10)
+        XCTAssertTrue(app.textFields["customAppointmentTypeNameField"].waitForExistence(timeout: 8), "Custom appointment type should reopen for editing")
+        tapButton(app, "customAppointmentTypeCancelButton", timeout: 8)
+        waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
     }
 
     @MainActor

@@ -54,6 +54,7 @@ struct CustomAppointmentTypeCreatorView: View {
                         subtitle: "Customize appointment labels used in scheduling.",
                         icon: "calendar.badge.plus"
                     )
+                    .accessibilityIdentifier("customAppointmentTypeEditor")
 
                     typeDetailsCard
                     appearanceCard
@@ -70,6 +71,8 @@ struct CustomAppointmentTypeCreatorView: View {
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !isValidType,
+                    primaryAccessibilityIdentifier: "customAppointmentTypeSaveButton",
+                    secondaryAccessibilityIdentifier: "customAppointmentTypeCancelButton",
                     primaryAction: saveType,
                     secondaryAction: { dismiss() },
                     primaryLabel: {
@@ -103,7 +106,13 @@ struct CustomAppointmentTypeCreatorView: View {
             icon: "tag.fill",
             subtitle: "The name shown in appointment lists and details."
         ) {
-            LeadFormTextField(title: "Type Name", placeholder: "Enter type name", text: $typeName, icon: "tag.fill")
+            LeadFormTextField(
+                title: "Type Name",
+                placeholder: "Enter type name",
+                text: $typeName,
+                icon: "tag.fill",
+                accessibilityIdentifier: "customAppointmentTypeNameField"
+            )
         }
     }
 
@@ -146,6 +155,7 @@ struct CustomAppointmentTypeCreatorView: View {
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("customAppointmentTypeIconButton")
             }
             
             // Color Selection
@@ -283,6 +293,7 @@ struct ColorSelectionChip: View {
             .padding(.vertical, 8)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("customAppointmentTypeColor_\(colorValue)")
     }
 }
 
@@ -352,12 +363,14 @@ struct IconPickerView: View {
             .background(Color.obsidianBlack.ignoresSafeArea())
             .navigationTitle("Choose Icon")
             .obsidianInlineNavigation()
+            .accessibilityIdentifier("customAppointmentTypeIconPicker")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     ObsidianCompactIconButton(
                         icon: "checkmark",
                         accessibilityLabel: "Done choosing icon",
-                        accentColor: Color.electricViolet
+                        accentColor: Color.electricViolet,
+                        accessibilityIdentifier: "customAppointmentTypeIconPickerDoneButton"
                     ) {
                         dismiss()
                     }
@@ -400,6 +413,7 @@ struct IconSelectionChip: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("customAppointmentTypeIcon_\(iconData.symbol)")
     }
 }
 
@@ -414,6 +428,7 @@ struct IconSearchBar: View {
             TextField("Search icons...", text: $text)
                 .font(.obsidianBody)
                 .foregroundColor(Color.textPrimary)
+                .accessibilityIdentifier("customAppointmentTypeIconSearchField")
 
             if !text.isEmpty {
                 Button(action: {
@@ -428,6 +443,7 @@ struct IconSearchBar: View {
         .padding(.vertical, 8)
         .background(Color.obsidianSurface)
         .cornerRadius(10)
+        .accessibilityIdentifier("customAppointmentTypeIconSearchBar")
     }
 }
 

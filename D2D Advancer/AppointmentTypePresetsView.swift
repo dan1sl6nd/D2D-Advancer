@@ -234,6 +234,7 @@ struct CustomTypeChip: View {
         .onTapGesture {
             onEdit()
         }
+        .accessibilityIdentifier("customAppointmentTypeRow")
         .alert("Delete Appointment Type", isPresented: $showingDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive, action: onDelete)
