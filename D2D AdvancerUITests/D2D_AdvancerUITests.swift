@@ -19,6 +19,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launchArguments.append("-unlockPremiumForUITests")
         app.launchArguments.append("-resetMessageTemplatesForUITests")
         app.launchArguments.append("-resetAppointmentTypesForUITests")
+        app.launchArguments.append("-resetServiceCategoriesForUITests")
         app.launchArguments.append("-resetSyncSettingsForUITests")
         return app
     }
@@ -971,12 +972,24 @@ final class D2D_AdvancerUITests: XCTestCase {
             "addLeadPhoneField",
             "addLeadEmailField",
             "addLeadAddressField",
+            "addLeadServiceCategoryAddButton",
             "addLeadPriceField",
             "addLeadStatusMenu",
             "addLeadNotesField"
         ] {
             waitForIdentifiedElement(app, identifier, timeout: 8)
         }
+
+        tapIdentifiedElement(app, "addLeadServiceCategoryAddButton", direction: .down, timeout: 8)
+        waitForIdentifiedElement(app, "serviceCategoryEditor", timeout: 10)
+        let serviceName = "UI Service \(Int(Date().timeIntervalSince1970))"
+        typeText(serviceName, into: app.textFields["serviceCategoryNameField"], timeout: 8)
+        dismissKeyboardIfPresent(app)
+        tapIdentifiedElement(app, "serviceCategoryIcon_wind", direction: .down, timeout: 8)
+        tapIdentifiedElement(app, "serviceCategoryColor_green", direction: .down, timeout: 8)
+        tapButton(app, "serviceCategorySaveButton", timeout: 8)
+        waitForIdentifiedElement(app, "addLeadNameField", timeout: 10)
+        waitForTextContaining(app, serviceName, timeout: 10)
 
         tapButton(app, "addLeadCancelButton", timeout: 8)
         XCTAssertTrue(

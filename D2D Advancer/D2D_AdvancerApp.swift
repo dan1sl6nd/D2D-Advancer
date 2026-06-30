@@ -43,6 +43,10 @@ struct D2D_AdvancerApp: App {
             UserDefaults.standard.removeObject(forKey: "custom_appointment_types")
             print("🧪 Appointment types reset for UI tests")
         }
+        if launchArguments.contains("-resetServiceCategoriesForUITests") {
+            UserDefaults.standard.removeObject(forKey: "custom_service_categories")
+            print("🧪 Service categories reset for UI tests")
+        }
         if launchArguments.contains("-resetSyncSettingsForUITests") {
             CloudSyncProvider.current = .icloud
             UserDefaults.standard.set(true, forKey: "auto_sync_enabled")

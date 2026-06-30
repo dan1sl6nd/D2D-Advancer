@@ -10,9 +10,11 @@ struct ServiceCategoryCreatorView: View {
     @State private var saveErrorMessage: String?
     
     let editingCategory: ServiceCategory?
+    let onSave: ((ServiceCategory) -> Void)?
     
-    init(editingCategory: ServiceCategory? = nil) {
+    init(editingCategory: ServiceCategory? = nil, onSave: ((ServiceCategory) -> Void)? = nil) {
         self.editingCategory = editingCategory
+        self.onSave = onSave
         if let category = editingCategory {
             _name = State(initialValue: category.name)
             _selectedIcon = State(initialValue: category.icon)
@@ -33,6 +35,7 @@ struct ServiceCategoryCreatorView: View {
                         subtitle: "Name, icon, and color used across lead forms.",
                         icon: "tag.fill"
                     )
+                    .accessibilityIdentifier("serviceCategoryEditor")
 
                     categoryDetailsCard
                     iconSelectionCard
@@ -50,6 +53,8 @@ struct ServiceCategoryCreatorView: View {
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !isValidCategory,
+                    primaryAccessibilityIdentifier: "serviceCategorySaveButton",
+                    secondaryAccessibilityIdentifier: "serviceCategoryCancelButton",
                     primaryAction: saveCategory,
                     secondaryAction: { dismiss() },
                     primaryLabel: {
@@ -80,7 +85,13 @@ struct ServiceCategoryCreatorView: View {
             icon: "tag.fill",
             subtitle: "This is what you will pick when creating or editing leads."
         ) {
-            LeadFormTextField(title: "Service Name", placeholder: "Enter service name", text: $name, icon: "tag.fill")
+            LeadFormTextField(
+                title: "Service Name",
+                placeholder: "Enter service name",
+                text: $name,
+                icon: "tag.fill",
+                accessibilityIdentifier: "serviceCategoryNameField"
+            )
         }
     }
     
@@ -109,6 +120,7 @@ struct ServiceCategoryCreatorView: View {
                             )
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .accessibilityIdentifier("serviceCategoryIcon_\(icon)")
                 }
             }
         }
@@ -142,6 +154,7 @@ struct ServiceCategoryCreatorView: View {
                             )
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .accessibilityIdentifier("serviceCategoryColor_\(color)")
                 }
             }
         }
@@ -220,7 +233,8 @@ struct ServiceCategoryCreatorView: View {
             saveErrorMessage = categoryManager.lastErrorMessage ?? "Could not save this service. Please try again."
             return
         }
-        
+
+        onSave?(category)
         dismiss()
     }
 }

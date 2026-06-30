@@ -251,7 +251,9 @@ struct AddLeadView: View {
             }
         }
         .sheet(isPresented: $showingServiceCategoryCreator) {
-            ServiceCategoryCreatorView(editingCategory: categoryToEdit)
+            ServiceCategoryCreatorView(editingCategory: categoryToEdit) { category in
+                selectedServiceCategory = category
+            }
         }
         .onAppear {
             if let seedAddress = locationSeed.address {
@@ -1047,6 +1049,15 @@ struct LeadServiceCategoryPicker: View {
     @Binding var selectedCategory: ServiceCategory?
     let onAddCategory: () -> Void
 
+    private var displayedCategories: [ServiceCategory] {
+        guard let selectedCategory,
+              categories.contains(where: { $0.id == selectedCategory.id }) else {
+            return categories
+        }
+
+        return [selectedCategory] + categories.filter { $0.id != selectedCategory.id }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -1063,6 +1074,7 @@ struct LeadServiceCategoryPicker: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel("Add service category")
+                .accessibilityIdentifier("addLeadServiceCategoryAddButton")
             }
 
             if categories.isEmpty {
@@ -1076,6 +1088,7 @@ struct LeadServiceCategoryPicker: View {
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("addLeadServiceCategoryEmptyAddButton")
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -1083,7 +1096,7 @@ struct LeadServiceCategoryPicker: View {
                             selectedCategory = nil
                         }
 
-                        ForEach(categories, id: \.id) { category in
+                        ForEach(displayedCategories, id: \.id) { category in
                             ServiceCategoryChip(category: category, isSelected: selectedCategory?.id == category.id) {
                                 selectedCategory = category
                             }
@@ -1350,6 +1363,7 @@ struct ServiceCategoryChip: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("addLeadServiceCategoryChip_\(category?.id ?? "none")")
     }
 }
 
