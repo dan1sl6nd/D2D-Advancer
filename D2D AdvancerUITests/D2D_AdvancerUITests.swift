@@ -1198,7 +1198,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapIdentifiedElement(app, "moreNotificationsCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "notificationSettingsScreen", timeout: 10)
         waitForIdentifiedElement(app, "notificationPlaySoundToggle", timeout: 8)
-        scrollToButton(app, "notificationRefreshAllButton", direction: .down)
+        _ = scrollToButton(app, "notificationRefreshAllButton", direction: .down)
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreCalendarSettingsCard", direction: .down)
