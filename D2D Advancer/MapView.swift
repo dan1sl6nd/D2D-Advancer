@@ -3329,6 +3329,7 @@ private struct MapToolsSheet: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
+        .accessibilityIdentifier("mapWorkflowStatusCard")
     }
 
     private func dismissThen(_ action: @escaping () -> Void) {

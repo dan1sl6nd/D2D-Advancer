@@ -99,6 +99,7 @@ struct RoutePlannerSheet: View {
                             .clipShape(Circle())
                     }
                     .accessibilityLabel("Close")
+                    .accessibilityIdentifier("routePlannerCloseButton")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: recompute) {
@@ -111,10 +112,12 @@ struct RoutePlannerSheet: View {
                     }
                     .disabled(isComputing)
                     .accessibilityLabel("Recompute route")
+                    .accessibilityIdentifier("routePlannerRecomputeButton")
                 }
             }
         }
         .onAppear(perform: recompute)
+        .accessibilityIdentifier("routePlannerSheet")
     }
 
     // MARK: - States
@@ -143,6 +146,7 @@ struct RoutePlannerSheet: View {
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("routePlannerFilter_\(option.rawValue)")
             }
         }
         .padding(4)
@@ -173,6 +177,7 @@ struct RoutePlannerSheet: View {
                 .padding(.horizontal, 32)
             Spacer()
         }
+        .accessibilityIdentifier("routePlannerEmptyState")
     }
 
     private var progressView: some View {
@@ -184,6 +189,7 @@ struct RoutePlannerSheet: View {
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.textSecondary)
         }
+        .accessibilityIdentifier("routePlannerProgress")
     }
 
     private func routeContent(plan: RoutePlan) -> some View {
@@ -212,6 +218,7 @@ struct RoutePlannerSheet: View {
                 .frame(height: 0.5),
             alignment: .bottom
         )
+        .accessibilityIdentifier("routePlannerSummary")
     }
 
     private func summaryStat(value: String, label: String) -> some View {
@@ -238,6 +245,7 @@ struct RoutePlannerSheet: View {
             .padding(.horizontal, 16)
             .padding(.top, 14)
         }
+        .accessibilityIdentifier("routePlannerStopsList")
     }
 
     private func stopRow(stop: RouteStop) -> some View {
@@ -289,6 +297,7 @@ struct RoutePlannerSheet: View {
                         .clipShape(Circle())
                 }
                 .accessibilityLabel("Navigate to \(stop.lead.displayName)")
+                .accessibilityIdentifier("routePlannerNavigateStopButton")
 
                 Button(action: { toggleVisited(stop: stop) }) {
                     Image(systemName: isVisited ? "arrow.uturn.backward.circle" : "checkmark.circle")
@@ -296,6 +305,7 @@ struct RoutePlannerSheet: View {
                         .foregroundColor(isVisited ? Color.textMuted : Color.statusInterested)
                 }
                 .accessibilityLabel(isVisited ? "Mark as not visited" : "Mark as visited")
+                .accessibilityIdentifier("routePlannerVisitedStopButton")
             }
         }
         .padding(14)
@@ -308,6 +318,7 @@ struct RoutePlannerSheet: View {
                 .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
         )
         .opacity(isVisited ? 0.6 : 1.0)
+        .accessibilityIdentifier("routePlannerStopRow")
     }
 
     private func orderBadge(order: Int, visited: Bool) -> some View {
@@ -354,6 +365,7 @@ struct RoutePlannerSheet: View {
             .buttonStyle(ObsidianPrimaryButtonStyle())
             .disabled(firstUnvisited == nil)
             .opacity(firstUnvisited == nil ? 0.6 : 1)
+            .accessibilityIdentifier("routePlannerStartRouteButton")
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)

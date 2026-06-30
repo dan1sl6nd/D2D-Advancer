@@ -1333,8 +1333,43 @@ final class D2D_AdvancerUITests: XCTestCase {
             waitForIdentifiedElement(app, identifier, timeout: 8)
         }
 
-        tapButton(app, "Close map tools", timeout: 8)
-        XCTAssertTrue(app.staticTexts["Map Tools"].waitForNonExistence(timeout: 5), "Map tools should dismiss cleanly")
+        tapIdentifiedElement(app, "mapStyle_satellite", timeout: 8)
+        tapIdentifiedElement(app, "mapStyle_hybrid", timeout: 8)
+        tapIdentifiedElement(app, "mapStyle_standard", timeout: 8)
+
+        tapIdentifiedElement(app, "mapWorkflowMode_hot", timeout: 8)
+        XCTAssertTrue(app.staticTexts["Map Tools"].waitForNonExistence(timeout: 5), "Map tools should close after applying Hot")
+        tapButton(app, "mapToolsButton", timeout: 8)
+        waitForIdentifiedElement(app, "mapWorkflowStatusCard", timeout: 8)
+        waitForTextContaining(app, "hot leads", timeout: 8)
+
+        tapIdentifiedElement(app, "mapWorkflowMode_due", timeout: 8)
+        XCTAssertTrue(app.staticTexts["Map Tools"].waitForNonExistence(timeout: 5), "Map tools should close after applying Due")
+        tapButton(app, "mapToolsButton", timeout: 8)
+        waitForIdentifiedElement(app, "mapWorkflowStatusCard", timeout: 8)
+        waitForTextContaining(app, "due leads", timeout: 8)
+
+        tapIdentifiedElement(app, "mapWorkflowMode_sold", timeout: 8)
+        XCTAssertTrue(app.staticTexts["Map Tools"].waitForNonExistence(timeout: 5), "Map tools should close after applying Sold")
+        tapButton(app, "mapToolsButton", timeout: 8)
+        waitForIdentifiedElement(app, "mapWorkflowStatusCard", timeout: 8)
+        waitForTextContaining(app, "sold leads", timeout: 8)
+
+        tapIdentifiedElement(app, "mapWorkflowMode_all", timeout: 8)
+        XCTAssertTrue(app.staticTexts["Map Tools"].waitForNonExistence(timeout: 5), "Map tools should close after resetting to All")
+
+        tapButton(app, "mapToolsButton", timeout: 8)
+        waitForIdentifiedElement(app, "mapToolsSheet", timeout: 8)
+        tapIdentifiedElement(app, "routePlannerButton", timeout: 8)
+        waitForIdentifiedElement(app, "routePlannerSheet", timeout: 10)
+        waitForIdentifiedElement(app, "routePlannerFilter_followUps", timeout: 8)
+        waitForIdentifiedElement(app, "routePlannerFilter_thisArea", timeout: 8)
+        waitForIdentifiedElement(app, "routePlannerRecomputeButton", timeout: 8)
+        tapIdentifiedElement(app, "routePlannerFilter_thisArea", timeout: 8)
+        tapIdentifiedElement(app, "routePlannerRecomputeButton", timeout: 8)
+        waitForIdentifiedElement(app, "routePlannerSheet", timeout: 8)
+        tapIdentifiedElement(app, "routePlannerCloseButton", timeout: 8)
+        XCTAssertTrue(app.descendants(matching: .any)["routePlannerSheet"].waitForNonExistence(timeout: 5), "Route planner should dismiss cleanly")
 
         tapButton(app, "quickAction_later", timeout: 8)
         waitForIdentifiedElement(app, "comeBackLaterSheet", timeout: 8)
