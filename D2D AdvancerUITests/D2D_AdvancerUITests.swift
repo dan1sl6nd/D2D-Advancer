@@ -993,10 +993,24 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapElement(app, personalLeadRow, description: "personalLeadRow")
 
         waitForTextContaining(app, leadName, timeout: 8)
+        waitForIdentifiedElement(app, "leadDetailDeleteButton", timeout: 8)
+        tapButton(app, "leadDetailDeleteButton", timeout: 8)
+        waitForText(app, "Delete Lead", timeout: 8)
+        app.buttons["Cancel"].tap()
+        waitForIdentifiedElement(app, "leadDetailEditButton", timeout: 8)
+
         tapButton(app, "leadDetailEditButton", timeout: 8)
+        waitForIdentifiedElement(app, "leadDetailCancelEditButton", timeout: 8)
+        tapButton(app, "leadDetailCancelEditButton", timeout: 8)
+        waitForIdentifiedElement(app, "leadDetailEditButton", timeout: 8)
+
+        tapButton(app, "leadDetailEditButton", timeout: 8)
+        waitForIdentifiedElement(app, "leadDetailSaveButton", timeout: 8)
         let nameField = app.textFields["leadDetailNameField"]
         typeText(" Updated", into: nameField, timeout: 8)
         dismissKeyboardIfPresent(app)
+        scrollToIdentifiedElement(app, "leadDetailStatusMenu", direction: .down)
+        scrollToIdentifiedElement(app, "leadDetailNotesField", direction: .down)
         tapButton(app, "leadDetailSaveButton", timeout: 8)
 
         waitForTextContaining(app, "\(leadName) Updated", timeout: 8)
