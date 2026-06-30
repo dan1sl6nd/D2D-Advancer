@@ -76,6 +76,10 @@ struct D2D_AdvancerApp: App {
         _userAccountManager = StateObject(wrappedValue: FirebaseUserAccountManager.shared)
         _appleSignInManager = StateObject(wrappedValue: AppleSignInManager.shared)
 
+        if isRunningUITests, launchArguments.contains("-resetUITestLeads") {
+            Self.resetUITestLeadsWhenReady(using: persistenceController)
+        }
+
         if isRunningUITests {
             UIView.setAnimationsEnabled(false)
             if launchArguments.contains("-openMoreTabForUITests") {
@@ -221,6 +225,36 @@ struct D2D_AdvancerApp: App {
                 }
             }
             .errorAlert()
+        }
+    }
+
+    private static func resetUITestLeadsWhenReady(using persistenceController: PersistenceController, attemptsRemaining: Int = 20) {
+        guard persistenceController.hasPersistentStore else {
+            guard attemptsRemaining > 0 else {
+                print("🧪 UI test lead reset skipped: Core Data store was not ready")
+                return
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                resetUITestLeadsWhenReady(using: persistenceController, attemptsRemaining: attemptsRemaining - 1)
+            }
+            return
+        }
+
+        let context = persistenceController.container.viewContext
+        let request = Lead.fetchRequest(in: context)
+        request.predicate = NSPredicate(format: "name BEGINSWITH %@", "UI ")
+
+        do {
+            let testLeads = try context.fetch(request)
+            testLeads.forEach(context.delete)
+            if context.hasChanges {
+                try context.save()
+            }
+            print("🧪 Reset \(testLeads.count) UI test lead(s)")
+        } catch {
+            context.rollback()
+            print("🧪 UI test lead reset failed: \(error)")
         }
     }
 

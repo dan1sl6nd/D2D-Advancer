@@ -21,6 +21,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launchArguments.append("-resetAppointmentTypesForUITests")
         app.launchArguments.append("-resetServiceCategoriesForUITests")
         app.launchArguments.append("-resetSyncSettingsForUITests")
+        app.launchArguments.append("-resetUITestLeads")
         return app
     }
 
@@ -397,6 +398,22 @@ final class D2D_AdvancerUITests: XCTestCase {
             dragContent(app, direction: direction)
         }
         XCTAssertTrue(label.waitForExistence(timeout: 3), "Expected text containing to appear after scrolling: \(text)")
+    }
+
+    private func scrollToFollowUpRow(
+        _ app: XCUIApplication,
+        leadName: String,
+        direction: ScrollDirection = .down,
+        maxSwipes: Int = 24
+    ) -> XCUIElement {
+        let predicate = NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "followUpRow", leadName)
+        let row = app.descendants(matching: .any).matching(predicate).firstMatch
+        for _ in 0..<maxSwipes where !row.exists || !row.isHittable {
+            dragContent(app, direction: direction)
+        }
+        XCTAssertTrue(row.waitForExistence(timeout: 3), "Expected follow-up row to appear after scrolling: \(leadName)")
+        XCTAssertTrue(row.isHittable, "Expected follow-up row to be hittable after scrolling: \(leadName)")
+        return row
     }
 
     private func openTeamWorkspace(_ app: XCUIApplication, expectedInitialText: String = "Apple Sign-In Required") {
@@ -1118,12 +1135,8 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         tapButton(app, "tab_Follow_Up", timeout: 12)
         waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
-        waitForTextContaining(app, leadName, timeout: 15)
 
-        let followUpRow = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "followUpRow", leadName))
-            .firstMatch
-        XCTAssertTrue(followUpRow.waitForExistence(timeout: 10), "Created follow-up row should be tappable")
+        let followUpRow = scrollToFollowUpRow(app, leadName: leadName)
         tapElement(app, followUpRow, description: "created follow-up row")
         waitForIdentifiedElement(app, "followUpDetailScreen", timeout: 10)
         waitForIdentifiedElement(app, "followUpDetailCompleteButton", timeout: 8)
