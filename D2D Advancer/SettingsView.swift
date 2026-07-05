@@ -105,9 +105,9 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 18)
-                .padding(.bottom, 28)
+                .padding(.bottom, 112)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle("Settings")
             .obsidianInlineNavigation()
             .sheet(isPresented: $showingOnboarding) {
@@ -687,7 +687,7 @@ struct CreateAccountFromGuestView: View {
             .padding(.top, 18)
             .padding(.bottom, 28)
         }
-        .background(Color.obsidianBlack.ignoresSafeArea())
+        .obsidianScreenBackground()
         .navigationTitle("Create Account")
         .obsidianInlineNavigation()
         .safeAreaInset(edge: .bottom) {
@@ -847,7 +847,7 @@ struct AccountManagementView: View {
             .padding(.top, 16)
             .padding(.bottom, 28)
         }
-        .background(Color.obsidianBlack.ignoresSafeArea())
+        .obsidianScreenBackground()
         .navigationTitle("Account")
         .obsidianInlineNavigation()
         .sheet(isPresented: $showingPasswordChange) {
@@ -1126,9 +1126,12 @@ struct PasswordChangeView: View {
     @State private var currentPassword = ""
     @State private var newPassword = ""
     @State private var confirmPassword = ""
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
         NavigationStack {
             VStack(spacing: 0) {
                 sheetHeader
@@ -1142,12 +1145,12 @@ struct PasswordChangeView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 28)
                 }
-                .background(Color.obsidianBlack)
+                .background(screenBackground)
             }
-            .background(Color.obsidianBlack)
+            .background(screenBackground)
             .navigationBarHidden(true)
         }
-        .presentationBackground(Color.obsidianBlack)
+        .presentationBackground(screenBackground)
         .onAppear {
             userAccountManager.authStatus = .idle
         }
@@ -1183,7 +1186,7 @@ struct PasswordChangeView: View {
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .padding(.bottom, 18)
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .top))
     }
 
     private var passwordFieldsSection: some View {
@@ -1355,16 +1358,18 @@ struct AppPreferencesView: View {
                             title: "Default Lead Status",
                             subtitle: "Status assigned to new leads",
                             trailingContent: {
-                                Picker("Default lead status", selection: $preferences.defaultLeadStatus) {
-                                    Text("Not Contacted").tag("not_contacted")
-                                    Text("Interested").tag("interested")
-                                    Text("Not Interested").tag("not_interested")
-                                    Text("Not Home").tag("not_home")
-                                    Text("Converted").tag("converted")
-                                }
-                                .pickerStyle(.menu)
-                                .labelsHidden()
-                                .accessibilityIdentifier("appPreferenceLeadStatusPicker")
+                                preferenceMenu(
+                                    title: "Default lead status",
+                                    selection: $preferences.defaultLeadStatus,
+                                    options: [
+                                        (value: "not_contacted", label: "Not Contacted"),
+                                        (value: "interested", label: "Interested"),
+                                        (value: "not_interested", label: "Not Interested"),
+                                        (value: "not_home", label: "Not Home"),
+                                        (value: "converted", label: "Converted")
+                                    ],
+                                    accessibilityIdentifier: "appPreferenceLeadStatusPicker"
+                                )
                             }
                         )
 
@@ -1376,14 +1381,16 @@ struct AppPreferencesView: View {
                             title: "Default Lead Sort",
                             subtitle: "How leads are sorted in lists",
                             trailingContent: {
-                                Picker("Default lead sort", selection: $preferences.leadSortPreference) {
-                                    Text("Date Updated").tag("date")
-                                    Text("Name").tag("name")
-                                    Text("Status").tag("status")
-                                }
-                                .pickerStyle(.menu)
-                                .labelsHidden()
-                                .accessibilityIdentifier("appPreferenceLeadSortPicker")
+                                preferenceMenu(
+                                    title: "Default lead sort",
+                                    selection: $preferences.leadSortPreference,
+                                    options: [
+                                        (value: "date", label: "Date Updated"),
+                                        (value: "name", label: "Name"),
+                                        (value: "status", label: "Status")
+                                    ],
+                                    accessibilityIdentifier: "appPreferenceLeadSortPicker"
+                                )
                             }
                         )
                     }
@@ -1400,16 +1407,18 @@ struct AppPreferencesView: View {
                             title: "Default Follow-up Time",
                             subtitle: "Time interval for new follow-ups",
                             trailingContent: {
-                                Picker("Default follow-up time", selection: $preferences.defaultFollowUpTime) {
-                                    Text("1 Hour").tag("1_hour")
-                                    Text("4 Hours").tag("4_hours")
-                                    Text("1 Day").tag("1_day")
-                                    Text("3 Days").tag("3_days")
-                                    Text("1 Week").tag("1_week")
-                                }
-                                .pickerStyle(.menu)
-                                .labelsHidden()
-                                .accessibilityIdentifier("appPreferenceFollowUpTimePicker")
+                                preferenceMenu(
+                                    title: "Default follow-up time",
+                                    selection: $preferences.defaultFollowUpTime,
+                                    options: [
+                                        (value: "1_hour", label: "1 Hour"),
+                                        (value: "4_hours", label: "4 Hours"),
+                                        (value: "1_day", label: "1 Day"),
+                                        (value: "3_days", label: "3 Days"),
+                                        (value: "1_week", label: "1 Week")
+                                    ],
+                                    accessibilityIdentifier: "appPreferenceFollowUpTimePicker"
+                                )
                             }
                         )
 
@@ -1421,15 +1430,17 @@ struct AppPreferencesView: View {
                             title: "Default Check-in Type",
                             subtitle: "Method used for follow-up check-ins",
                             trailingContent: {
-                                Picker("Default check-in type", selection: $preferences.defaultCheckInType) {
-                                    Text("Door Knock").tag("door_knock")
-                                    Text("Phone Call").tag("phone_call")
-                                    Text("Text Message").tag("text_message")
-                                    Text("Email").tag("email")
-                                }
-                                .pickerStyle(.menu)
-                                .labelsHidden()
-                                .accessibilityIdentifier("appPreferenceCheckInTypePicker")
+                                preferenceMenu(
+                                    title: "Default check-in type",
+                                    selection: $preferences.defaultCheckInType,
+                                    options: [
+                                        (value: "door_knock", label: "Door Knock"),
+                                        (value: "phone_call", label: "Phone Call"),
+                                        (value: "text_message", label: "Text Message"),
+                                        (value: "email", label: "Email")
+                                    ],
+                                    accessibilityIdentifier: "appPreferenceCheckInTypePicker"
+                                )
                             }
                         )
                     }
@@ -1446,14 +1457,16 @@ struct AppPreferencesView: View {
                             title: "Default Map Type",
                             subtitle: "Map style when opening map view",
                             trailingContent: {
-                                Picker("Default map type", selection: $preferences.mapDefaultView) {
-                                    Text("Standard").tag("standard")
-                                    Text("Satellite").tag("satellite")
-                                    Text("Hybrid").tag("hybrid")
-                                }
-                                .pickerStyle(.menu)
-                                .labelsHidden()
-                                .accessibilityIdentifier("appPreferenceMapTypePicker")
+                                preferenceMenu(
+                                    title: "Default map type",
+                                    selection: $preferences.mapDefaultView,
+                                    options: [
+                                        (value: "standard", label: "Standard"),
+                                        (value: "satellite", label: "Satellite"),
+                                        (value: "hybrid", label: "Hybrid")
+                                    ],
+                                    accessibilityIdentifier: "appPreferenceMapTypePicker"
+                                )
                             }
                         )
 
@@ -1465,25 +1478,27 @@ struct AppPreferencesView: View {
                             title: "Auto Backup Frequency",
                             subtitle: "How often data is automatically backed up",
                             trailingContent: {
-                                Picker("Auto backup frequency", selection: $preferences.autoBackupFrequency) {
-                                    Text("Daily").tag("daily")
-                                    Text("Weekly").tag("weekly")
-                                    Text("Monthly").tag("monthly")
-                                    Text("Never").tag("never")
-                                }
-                                .pickerStyle(.menu)
-                                .labelsHidden()
-                                .accessibilityIdentifier("appPreferenceBackupFrequencyPicker")
+                                preferenceMenu(
+                                    title: "Auto backup frequency",
+                                    selection: $preferences.autoBackupFrequency,
+                                    options: [
+                                        (value: "daily", label: "Daily"),
+                                        (value: "weekly", label: "Weekly"),
+                                        (value: "monthly", label: "Monthly"),
+                                        (value: "never", label: "Never")
+                                    ],
+                                    accessibilityIdentifier: "appPreferenceBackupFrequencyPicker"
+                                )
                             }
                         )
                     }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-                .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
-            .navigationTitle("App Preferences")
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 112)
+        }
+        .obsidianScreenBackground()
+        .navigationTitle("App Preferences")
             .obsidianInlineNavigation()
         }
     }
@@ -1494,14 +1509,58 @@ struct AppPreferencesView: View {
             .frame(height: 0.5)
             .padding(.leading, 74)
     }
+
+    private func preferenceMenu(
+        title: String,
+        selection: Binding<String>,
+        options: [(value: String, label: String)],
+        accessibilityIdentifier: String
+    ) -> some View {
+        Menu {
+            ForEach(options, id: \.value) { option in
+                Button {
+                    selection.wrappedValue = option.value
+                } label: {
+                    if selection.wrappedValue == option.value {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(options.first(where: { $0.value == selection.wrappedValue })?.label ?? title)
+                    .font(.obsidianFootnote)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+
+                Image(systemName: "chevron.down")
+                    .font(.micro)
+            }
+            .foregroundColor(Color.electricViolet)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+            .background(Color.electricViolet.opacity(0.12))
+            .clipShape(Capsule())
+            .contentShape(Capsule())
+        }
+        .accessibilityLabel(title)
+        .accessibilityValue(options.first(where: { $0.value == selection.wrappedValue })?.label ?? "")
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
 }
 
 struct DeleteAccountView: View {
     @ObservedObject var userAccountManager: FirebaseUserAccountManager
     @State private var password = ""
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
         NavigationStack {
             VStack(spacing: 0) {
                 deleteHeader
@@ -1540,12 +1599,12 @@ struct DeleteAccountView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 28)
                 }
-                .background(Color.obsidianBlack)
+                .background(screenBackground)
             }
-            .background(Color.obsidianBlack)
+            .background(screenBackground)
             .navigationBarHidden(true)
         }
-        .presentationBackground(Color.obsidianBlack)
+        .presentationBackground(screenBackground)
         .onAppear {
             userAccountManager.authStatus = .idle
         }
@@ -1581,7 +1640,7 @@ struct DeleteAccountView: View {
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .padding(.bottom, 18)
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .top))
     }
 
     private var deleteActionSection: some View {
@@ -1716,7 +1775,7 @@ struct AccountCardView<TrailingContent: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(alignment: .center, spacing: 14) {
             ObsidianIconTile(icon: icon, tint: iconColor, size: 42)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -1776,10 +1835,10 @@ struct PreferenceCardView<TrailingContent: View>: View {
     }
     
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(alignment: .top, spacing: 14) {
             ObsidianIconTile(icon: icon, tint: iconColor, size: 42)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 7) {
                 Text(title)
                     .font(.obsidianCallout)
                     .foregroundColor(Color.textPrimary)
@@ -1792,11 +1851,17 @@ struct PreferenceCardView<TrailingContent: View>: View {
                         .foregroundColor(Color.textSecondary)
                         .lineLimit(2)
                 }
+
+                trailingContent()
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.electricViolet)
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .trailing)
             }
-
-            Spacer()
-
-            trailingContent()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
         .background(Color.obsidianSurface)

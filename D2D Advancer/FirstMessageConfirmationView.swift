@@ -46,12 +46,15 @@ struct FirstMessageConfirmationView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .accessibilityIdentifier("firstMessageConfirmationScreen")
+            .obsidianScreenBackground()
             .navigationTitle("First Message")
             .obsidianInlineNavigation()
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !canSendMessage,
+                    primaryAccessibilityIdentifier: "firstMessageSendButton",
+                    secondaryAccessibilityIdentifier: "firstMessageSkipButton",
                     primaryAction: { showingMessageComposer = true },
                     secondaryAction: {
                         dismiss()

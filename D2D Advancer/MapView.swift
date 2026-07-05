@@ -312,6 +312,7 @@ struct MapView: View {
     @ObservedObject private var paywallManager = PaywallManager.shared
     @State private var toastLead: Lead?
     @State private var toastMessage: String = ""
+    @State private var toastToken = UUID()
     @State private var showToast = false
     @State private var showingLookAround = false
     @State private var showingRoutePlanner = false
@@ -384,9 +385,8 @@ struct MapView: View {
     }
 
     private var visibleMapLeads: [Lead] {
-        MapWorkflowOptimizer.visibleLeads(
+        MapLeadVisibilityPolicy.visibleLeads(
             from: allLeads,
-            in: locationManager.region,
             mode: selectedMapMode
         )
     }
@@ -412,10 +412,6 @@ struct MapView: View {
 
         if selectedMapMode != .all {
             return "\(visibleMapLeads.count) \(selectedMapMode.title.lowercased()) leads"
-        }
-
-        if visibleMapLeads.count < allLeads.count {
-            return "Map optimized: \(visibleMapLeads.count)/\(allLeads.count)"
         }
 
         return nil
@@ -764,7 +760,7 @@ struct MapView: View {
     private func overlayTopPadding(for geometry: GeometryProxy) -> CGFloat {
         // The map root ignores the top safe area, so GeometryProxy can report
         // zero here. Clamp to keep controls out of the status bar and tappable.
-        max(geometry.safeAreaInsets.top, 56) + 4
+        ObsidianLayout.safeAreaTop(geometry, minimum: 56) + 4
     }
 
     private var statusIndicator: some View {
@@ -883,7 +879,7 @@ struct MapView: View {
                 DispatchQueue.main.async {
                     guard longPressCoordinate?.isEqual(to: coordinate, tolerance: 0.000001) == true else { return }
                     longPressAddress = resolution.source == .coordinateFallback ? nil : resolution.address
-                    print("📍 Long press resolved \(resolution.source.debugLabel): \(Utilities.redactedText(resolution.address))")
+                    AppLog.debug("Map", "Long press resolved \(resolution.source.debugLabel): \(Utilities.redactedText(resolution.address))")
                 }
             }
         }
@@ -1128,7 +1124,7 @@ struct MapView: View {
     ) {
         resolveLeadAddress(from: coordinate, preferredAddress: preferredAddress) { resolution in
             DispatchQueue.main.async {
-                print("📍 Search pin resolved \(resolution.source.debugLabel): \(Utilities.redactedText(resolution.address))")
+                AppLog.debug("Map", "Search pin resolved \(resolution.source.debugLabel): \(Utilities.redactedText(resolution.address))")
 
                 presentAddLead(
                     coordinate: resolution.coordinate,
@@ -1242,14 +1238,25 @@ struct MapView: View {
                         .font(.obsidianFootnote)
                         .foregroundColor(Color.textPrimary)
                         .lineLimit(1)
+                        .accessibilityIdentifier("quickLeadToastMessage")
 
                     Spacer()
 
-                    Button("Undo") {
+                    Button {
                         undoQuickLead()
+                    } label: {
+                        Text("Undo")
+                            .font(.obsidianFootnote)
+                            .fontWeight(.semibold)
+                            .foregroundColor(Color.electricViolet)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
                     }
-                    .font(.obsidianFootnote)
-                    .foregroundColor(Color.electricViolet)
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel("Undo quick lead")
+                    .accessibilityHint("Deletes the quick lead you just created.")
+                    .accessibilityIdentifier("quickLeadUndoButton")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -1259,6 +1266,8 @@ struct MapView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .padding(.horizontal, 20)
                 .padding(.top, 60)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("quickLeadToast")
 
                 Spacer()
             }
@@ -1267,12 +1276,16 @@ struct MapView: View {
     }
 
     private func showQuickLeadToast(status: Lead.Status, address: String, lead: Lead) {
+        let token = UUID()
+        toastToken = token
         toastLead = lead
         toastMessage = "\(status.displayName) — \(address)"
         withAnimation {
             showToast = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+            guard toastToken == token else { return }
             withAnimation {
                 showToast = false
             }
@@ -1304,8 +1317,7 @@ struct MapView: View {
                         do {
                             try await UserDataSyncManager.shared.deleteLeadFromCloud(leadId: cloudLeadId)
                         } catch {
-                            print("❌ Failed to delete undone quick lead \(cloudLeadId) from cloud: \(error)")
-                            ErrorHandler.shared.handle(error, context: "Undo Quick Lead Cloud Delete")
+                            AppLog.warning("Map", "Quick lead undo removed the local lead, but cloud cleanup will retry later for \(cloudLeadId): \(error.localizedDescription)")
                         }
                     }
                 }
@@ -1317,6 +1329,7 @@ struct MapView: View {
         withAnimation {
             showToast = false
         }
+        toastToken = UUID()
         toastLead = nil
     }
 
@@ -1533,7 +1546,7 @@ struct MapView: View {
                     // Show user feedback that address couldn't be resolved
                     let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)
                     impactFeedback.impactOccurred()
-                    print("❌ Failed to create quick lead: No address found")
+                    AppLog.error("Map", "Failed to create quick lead: No address found")
                     return
                 }
 
@@ -1556,7 +1569,7 @@ struct MapView: View {
 
                 do {
                     try viewContext.save()
-                    print("✅ Quick lead created: \(status.displayName) at \(Utilities.redactedText(addressString))")
+                    AppLog.info("Map", "Quick lead created: \(status.displayName) at \(Utilities.redactedText(addressString))")
                     UserDataSyncManager.shared.syncWithServer()
                     // Schedule notification for Not Home follow-ups
                     if status == .notHome {
@@ -1564,7 +1577,7 @@ struct MapView: View {
                     }
                     showQuickLeadToast(status: status, address: addressString, lead: newLead)
                 } catch {
-                    print("❌ Error creating quick lead: \(error.localizedDescription)")
+                    AppLog.error("Map", "Error creating quick lead: \(error.localizedDescription)")
                     ErrorHandler.shared.handle(error, context: "Create Quick Lead")
                 }
             }
@@ -1769,6 +1782,7 @@ struct MapView: View {
 // MARK: - Interested Quick Form
 
 struct InterestedQuickForm: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
 
     let coordinate: CLLocationCoordinate2D
@@ -1819,8 +1833,8 @@ struct InterestedQuickForm: View {
                 .padding(.bottom, 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.obsidianBlack)
-        .presentationBackground(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
         .sheet(isPresented: $showingMessageConfirmation) {
             if let lead = createdLead {
                 FirstMessageConfirmationView(lead: lead) {
@@ -2072,7 +2086,7 @@ struct InterestedQuickForm: View {
             }
         } catch {
             isSaving = false
-            print("❌ Error saving interested lead: \(error.localizedDescription)")
+            AppLog.error("Map", "Error saving interested lead: \(error.localizedDescription)")
             ErrorHandler.shared.handle(error, context: "Save Interested Lead")
         }
     }
@@ -2106,7 +2120,7 @@ class MapSearchCompleter: NSObject, ObservableObject, MKLocalSearchCompleterDele
     }
 
     func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
-        print("⚠️ Search completer error: \(error.localizedDescription)")
+        AppLog.warning("Map", "Search completer error: \(error.localizedDescription)")
     }
 }
 
@@ -2124,6 +2138,7 @@ struct SearchPin: Equatable {
 }
 
 struct MapSearchSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @StateObject private var completer = MapSearchCompleter()
     @State private var searchText = ""
@@ -2137,6 +2152,7 @@ struct MapSearchSheet: View {
                 Text("Search Address")
                     .font(.obsidianSubheadline)
                     .foregroundColor(.textPrimary)
+                    .accessibilityIdentifier("mapSearchSheet")
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark")
@@ -2146,6 +2162,8 @@ struct MapSearchSheet: View {
                         .background(Color.obsidianElevated)
                         .clipShape(Circle())
                 }
+                .accessibilityLabel("Close search")
+                .accessibilityIdentifier("mapSearchCloseButton")
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
@@ -2252,7 +2270,8 @@ struct MapSearchSheet: View {
                 }
             }
         }
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
         .onAppear { isSearchFocused = true }
     }
 
@@ -2273,6 +2292,7 @@ struct MapSearchSheet: View {
 // MARK: - Come Back Later Sheet
 
 struct ComeBackLaterSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     let coordinate: CLLocationCoordinate2D
     let resolveLeadSeed: (CLLocationCoordinate2D, @escaping (MapQuickActionLeadSeed) -> Void) -> Void
@@ -2317,8 +2337,8 @@ struct ComeBackLaterSheet: View {
                 .padding(.bottom, 20)
             }
         }
-        .background(Color.obsidianBlack)
-        .presentationBackground(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
         .onAppear {
             resolveLocation()
         }
@@ -2563,7 +2583,7 @@ struct ComeBackLaterSheet: View {
             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
             impactFeedback.impactOccurred()
         } catch {
-            print("❌ Error creating come-back lead: \(error)")
+            AppLog.error("Map", "Error creating come-back lead: \(error.localizedDescription)")
         }
         onDone()
     }
@@ -2577,6 +2597,7 @@ struct ComeBackLaterSheet: View {
 }
 
 struct LongPressMenuSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     let coordinate: CLLocationCoordinate2D?
     @Binding var address: String?
@@ -2587,18 +2608,13 @@ struct LongPressMenuSheet: View {
     @State private var confirmedAddress = ""
     @State private var didEditConfirmedAddress = false
     @State private var isApplyingResolvedAddress = false
-    @State private var didAcceptSuggestedAddress = false
 
     private var trimmedConfirmedAddress: String {
         confirmedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var suggestedAddress: String? {
-        Self.cleanSuggestedAddress(address)
-    }
-
     private var canAddLead: Bool {
-        !trimmedConfirmedAddress.isEmpty && (didEditConfirmedAddress || didAcceptSuggestedAddress)
+        !trimmedConfirmedAddress.isEmpty
     }
 
     var body: some View {
@@ -2614,8 +2630,8 @@ struct LongPressMenuSheet: View {
                 .padding(.bottom, 20)
             }
         }
-        .background(Color.obsidianBlack)
-        .presentationBackground(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
         .presentationDragIndicator(.visible)
         .onAppear {
             if confirmedAddress.isEmpty {
@@ -2638,7 +2654,7 @@ struct LongPressMenuSheet: View {
                     .foregroundColor(Color.textPrimary)
                     .accessibilityIdentifier("longPressMenuSheet")
 
-                Text(address == nil ? "Finding the nearest address..." : "Review and confirm the exact address before adding the lead.")
+                Text(address == nil ? "Finding the nearest address..." : "Using the closest address to this pin.")
                     .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
                     .lineLimit(2)
@@ -2690,11 +2706,11 @@ struct LongPressMenuSheet: View {
                             }
                             .accessibilityHint("Long press to copy address")
                     } else {
-                        Text("No exact address found yet")
+                        Text("Finding nearest address...")
                             .font(.obsidianCallout)
                             .foregroundColor(Color.textSecondary)
 
-                        Text("Type the house address below to add a lead at this pin.")
+                        Text("Lead creation unlocks when a real address is found.")
                             .font(.micro)
                             .foregroundColor(Color.textMuted)
                     }
@@ -2718,11 +2734,11 @@ struct LongPressMenuSheet: View {
             )
 
             VStack(alignment: .leading, spacing: 7) {
-                Label("Confirm address", systemImage: "house.fill")
+                Label("Lead address", systemImage: "house.fill")
                     .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
 
-                TextField("Enter exact house address", text: $confirmedAddress)
+                TextField("Nearest address", text: $confirmedAddress)
                     .font(.obsidianCallout)
                     .foregroundColor(Color.textPrimary)
                     .textInputAutocapitalization(.words)
@@ -2741,23 +2757,10 @@ struct LongPressMenuSheet: View {
                     .onChange(of: confirmedAddress) { _, _ in
                         guard !isApplyingResolvedAddress else { return }
                         didEditConfirmedAddress = true
-                        didAcceptSuggestedAddress = false
                     }
                     .accessibilityIdentifier("longPressConfirmedAddressField")
 
-                if let suggestedAddress, !didEditConfirmedAddress && !didAcceptSuggestedAddress {
-                    Button {
-                        applyResolvedAddress(suggestedAddress)
-                        didAcceptSuggestedAddress = true
-                    } label: {
-                        Label("Use Suggested Address", systemImage: "checkmark.seal.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(ObsidianSecondaryButtonStyle())
-                    .accessibilityIdentifier("longPressUseSuggestedAddressButton")
-                }
-
-                Text("Auto-fill is only a suggestion. Confirm it or type the exact house address.")
+                Text("The closest resolved address is used automatically. Edit it only if the map result is wrong.")
                     .font(.micro)
                     .foregroundColor(Color.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2774,7 +2777,7 @@ struct LongPressMenuSheet: View {
             VStack(spacing: 10) {
                 pinActionButton(
                     title: "Add Lead Here",
-                    subtitle: canAddLead ? "Open lead creation with confirmed address" : "Confirm the exact address first",
+                    subtitle: canAddLead ? "Open lead creation with this address" : "Waiting for nearest address",
                     icon: "plus.circle.fill",
                     tint: Color.electricViolet,
                     isDisabled: !canAddLead,
@@ -2885,6 +2888,7 @@ struct LongPressMenuSheet: View {
 // MARK: - Search Pin Actions Sheet
 
 struct SearchPinActionsSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     let pin: SearchPin
     let matchingLeads: [Lead]
@@ -2908,6 +2912,8 @@ struct SearchPinActionsSheet: View {
                         .background(Color.obsidianElevated)
                         .clipShape(Circle())
                 }
+                .accessibilityLabel("Close pin actions")
+                .accessibilityIdentifier("searchPinActionsCloseButton")
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
@@ -3024,7 +3030,8 @@ struct SearchPinActionsSheet: View {
             .padding(.bottom, 20)
             .accessibilityIdentifier("searchPinAddLeadButton")
         }
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
     }
 }
 
@@ -3105,66 +3112,21 @@ private enum LeadWorkflowScorer {
     }
 }
 
-private enum MapWorkflowOptimizer {
+enum MapLeadVisibilityPolicy {
     static func visibleLeads(
         from leads: [Lead],
-        in region: MKCoordinateRegion,
         mode: MapWorkflowMode,
         now: Date = Date()
     ) -> [Lead] {
-        let modeFiltered = leads.filter { mode.includes($0, now: now) }
-        guard !modeFiltered.isEmpty else { return [] }
-
-        let span = max(region.span.latitudeDelta, region.span.longitudeDelta)
-        let hardLimit: Int
-        if mode == .next {
-            hardLimit = 24
-        } else if span > 0.22 {
-            hardLimit = 700
-        } else if span > 0.075 {
-            hardLimit = 1_100
-        } else {
-            hardLimit = 1_600
-        }
-
-        guard modeFiltered.count > hardLimit else {
-            return sorted(modeFiltered, around: region.center, now: now)
-        }
-
-        let regionLeads = modeFiltered.filter { isLead($0, visibleIn: region, paddingMultiplier: span > 0.075 ? 1.4 : 2.2) }
-        let priorityLeads = modeFiltered.filter { LeadWorkflowScorer.score($0, near: region.center, now: now) >= 420 }
-        let candidates = unique(regionLeads + priorityLeads, fallback: modeFiltered)
-        return Array(sorted(candidates, around: region.center, now: now).prefix(hardLimit))
-    }
-
-    private static func isLead(_ lead: Lead, visibleIn region: MKCoordinateRegion, paddingMultiplier: CLLocationDegrees) -> Bool {
-        let latDelta = max(region.span.latitudeDelta * paddingMultiplier, 0.006)
-        let lonDelta = max(region.span.longitudeDelta * paddingMultiplier, 0.006)
-        return abs(lead.latitude - region.center.latitude) <= latDelta / 2
-            && abs(lead.longitude - region.center.longitude) <= lonDelta / 2
-    }
-
-    private static func sorted(_ leads: [Lead], around coordinate: CLLocationCoordinate2D, now: Date) -> [Lead] {
-        leads.sorted {
-            let lhsScore = LeadWorkflowScorer.score($0, near: coordinate, now: now)
-            let rhsScore = LeadWorkflowScorer.score($1, near: coordinate, now: now)
-            if lhsScore != rhsScore { return lhsScore > rhsScore }
-            return ($0.updatedDate ?? $0.createdDate ?? .distantPast) > ($1.updatedDate ?? $1.createdDate ?? .distantPast)
-        }
-    }
-
-    private static func unique(_ leads: [Lead], fallback: [Lead]) -> [Lead] {
-        var seen = Set<NSManagedObjectID>()
-        let uniqueLeads = leads.filter { lead in
-            if seen.contains(lead.objectID) { return false }
-            seen.insert(lead.objectID)
-            return true
-        }
-        return uniqueLeads.isEmpty ? fallback : uniqueLeads
+        LeadClusterSummary.sortedLeads(
+            leads.filter { mode.includes($0, now: now) },
+            now: now
+        )
     }
 }
 
 private struct MapToolsSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
     let selectedMode: MapWorkflowMode
@@ -3277,8 +3239,8 @@ private struct MapToolsSheet: View {
                 .padding(.bottom, 24)
             }
         }
-        .background(Color.obsidianBlack)
-        .presentationBackground(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
     }
 
     private var header: some View {
@@ -3433,6 +3395,7 @@ private struct MapToolActionRow: View {
 }
 
 struct LeadClusterSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     let selection: LeadClusterSelection
@@ -3468,8 +3431,8 @@ struct LeadClusterSheet: View {
                 .padding(.bottom, 24)
             }
         }
-        .background(Color.obsidianBlack)
-        .presentationBackground(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
     }
 
     private var quickActions: some View {
@@ -3837,12 +3800,15 @@ private extension View {
 // MARK: - Status Change Sheet
 
 struct StatusChangeSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     let lead: Lead?
     let onSelect: (Lead.Status) -> Void
     let onCancel: () -> Void
 
     var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 14) {
@@ -3868,7 +3834,7 @@ struct StatusChangeSheet: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .background(screenBackground.ignoresSafeArea())
             .navigationTitle("Change Status")
             .obsidianInlineNavigation()
             .safeAreaInset(edge: .bottom) {
@@ -3883,10 +3849,10 @@ struct StatusChangeSheet: View {
                 .accessibilityIdentifier("statusChangeCancelButton")
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))
+                .background(screenBackground.ignoresSafeArea(edges: .bottom))
             }
         }
-        .presentationBackground(Color.obsidianBlack)
+        .presentationBackground(screenBackground)
     }
 
     private var leadSubtitle: String {

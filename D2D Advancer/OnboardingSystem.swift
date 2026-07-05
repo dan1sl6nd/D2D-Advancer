@@ -431,7 +431,7 @@ struct OnboardingView: View {
 
                 VStack(spacing: 20) {
                     headerSection
-                        .padding(.top, max(geometry.safeAreaInsets.top + 12, 40))
+                        .padding(.top, ObsidianLayout.safeAreaTop(geometry, extra: 12, minimum: 40))
 
                     ScrollView {
                         VStack(spacing: 18) {
@@ -442,7 +442,7 @@ struct OnboardingView: View {
                     }
 
                     navigationControls
-                        .padding(.bottom, max(geometry.safeAreaInsets.bottom + 16, 32))
+                        .padding(.bottom, ObsidianLayout.safeAreaBottom(geometry, extra: 16, minimum: 32))
                 }
             }
         }

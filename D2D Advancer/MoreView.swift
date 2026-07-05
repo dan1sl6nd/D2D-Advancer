@@ -41,6 +41,7 @@ enum SyncStatusSummaryPolicy {
 }
 
 struct MoreView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var preferences = AppPreferences.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
@@ -80,14 +81,20 @@ struct MoreView: View {
             ownerNotifications: teamService.ownerNotifications
         )
     }
+
+    private var roleContext: TeamRoleContext {
+        TeamRoleContext(summary: teamSurfaceSummary)
+    }
     
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
+                let screenBackground = Color.obsidianBackground(for: colorScheme)
+
                 VStack(spacing: 0) {
                     Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .frame(height: geometry.safeAreaInsets.top)
+                        .fill(screenBackground)
+                        .frame(height: ObsidianLayout.safeAreaTop(geometry))
                     ObsidianHeaderView("More")
 
                     ScrollView {
@@ -101,11 +108,13 @@ struct MoreView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
-                        .padding(.bottom, 28)
+                        .padding(.bottom, 32)
                     }
+                    .background(screenBackground)
                 }
                 .navigationBarHidden(true)
                 .ignoresSafeArea(.all, edges: .top)
+                .background(screenBackground.ignoresSafeArea())
                 .sheet(isPresented: $showingSyncSettings) {
                     SyncSettingsView()
                 }
@@ -205,9 +214,9 @@ struct MoreView: View {
 
     private var workspaceSection: some View {
         MoreSectionGroup(
-            title: "Workspace",
+            title: roleContext.workspaceMenuTitle,
             icon: "square.grid.2x2.fill",
-            subtitle: "Reports, team work, and customer messaging.",
+            subtitle: workspaceSectionSubtitle,
             accentColor: Color.electricViolet
         ) {
             NavigationLink(destination: OverviewContentView()) {
@@ -228,7 +237,7 @@ struct MoreView: View {
                 MoreCardView(
                     icon: "person.3.fill",
                     iconColor: Color.electricViolet,
-                    title: "Team Workspace",
+                    title: roleContext.workspaceMenuTitle,
                     subtitle: teamWorkspaceSubtitle,
                     showChevron: false,
                     trailingContent: {
@@ -629,9 +638,22 @@ struct MoreView: View {
 
     private var teamWorkspaceSubtitle: String {
         guard let summary = teamSurfaceSummary else {
-            return "Create or manage your team workspace"
+            return roleContext.workspaceMenuSubtitle
         }
         return "\(summary.headline) • \(summary.detailLine)"
+    }
+
+    private var workspaceSectionSubtitle: String {
+        switch roleContext {
+        case .owner:
+            return "Team admin, reports, and customer messaging."
+        case .salesRep:
+            return "Assigned leads, replies, and customer messaging."
+        case .technician:
+            return "Assigned jobs, route status, and team access."
+        case .solo:
+            return "Reports, team setup, and customer messaging."
+        }
     }
 
     private var teamWorkspaceBadgeCount: Int? {
@@ -855,7 +877,7 @@ struct OverviewContentView: View {
             .padding(.top, 16)
             .padding(.bottom, 28)
         }
-        .background(Color.obsidianBlack.ignoresSafeArea())
+        .obsidianScreenBackground()
         .navigationTitle("Overview")
         .obsidianInlineNavigation()
         .refreshable {
@@ -1479,6 +1501,7 @@ struct RecentActivityCardView: View {
 // MARK: - Cloud Provider Sheet
 
 struct CloudProviderSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     @State private var selectedProvider = CloudSyncProvider.current
@@ -1497,6 +1520,8 @@ struct CloudProviderSheet: View {
     }
 
     var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
                 ObsidianIconTile(icon: "externaldrive.connected.to.line.below.fill", tint: Color.electricViolet, size: 42)
@@ -1527,6 +1552,7 @@ struct CloudProviderSheet: View {
             .padding(.horizontal, 20)
             .padding(.top, 20)
             .padding(.bottom, 18)
+            .background(screenBackground.ignoresSafeArea(edges: .top))
 
             // Provider options
             VStack(spacing: 0) {
@@ -1577,8 +1603,8 @@ struct CloudProviderSheet: View {
 
             Spacer()
         }
-        .background(Color.obsidianBlack)
-        .presentationBackground(Color.obsidianBlack)
+        .background(screenBackground.ignoresSafeArea())
+        .obsidianModalBackground()
         .overlay {
             if isMigrating {
                 VStack(spacing: 12) {
@@ -1590,7 +1616,7 @@ struct CloudProviderSheet: View {
                         .foregroundColor(.textSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.obsidianBlack.opacity(0.9))
+                .background(screenBackground.opacity(0.9))
             }
         }
         .alert("Switch to \(selectedProvider.displayName)?", isPresented: $showingConfirmation) {
@@ -1662,10 +1688,13 @@ struct CloudProviderSheet: View {
 }
 
 struct SyncSettingsView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var syncManager = UserDataSyncManager.shared
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
         NavigationStack {
             VStack(spacing: 0) {
                 HStack(alignment: .top, spacing: 12) {
@@ -1703,7 +1732,7 @@ struct SyncSettingsView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
                 .padding(.bottom, 18)
-                .background(Color.obsidianBlack)
+                .background(screenBackground.ignoresSafeArea(edges: .top))
                 
                 ScrollView {
                     VStack(spacing: 16) {
@@ -1761,11 +1790,11 @@ struct SyncSettingsView: View {
                     .padding(.bottom, 40)
                 }
             }
-            .background(Color.obsidianBlack)
+            .background(screenBackground.ignoresSafeArea())
             .navigationBarHidden(true)
         }
         .presentationDetents([.large])
-        .presentationBackground(Color.obsidianBlack)
+        .obsidianModalBackground()
     }
     
     private func syncIntervalRow(interval: UserDataSyncManager.SyncInterval) -> some View {

@@ -2,6 +2,32 @@ import Foundation
 import UIKit
 import CoreData
 
+enum AppLog {
+    static func debug(_ category: String, _ message: @autoclosure () -> String) {
+        #if DEBUG
+        print("🔎 [\(category)] \(message())")
+        #endif
+    }
+
+    static func info(_ category: String, _ message: @autoclosure () -> String) {
+        #if DEBUG
+        print("ℹ️ [\(category)] \(message())")
+        #endif
+    }
+
+    static func warning(_ category: String, _ message: @autoclosure () -> String) {
+        #if DEBUG
+        print("⚠️ [\(category)] \(message())")
+        #endif
+    }
+
+    static func error(_ category: String, _ message: @autoclosure () -> String) {
+        #if DEBUG
+        print("❌ [\(category)] \(message())")
+        #endif
+    }
+}
+
 /// Utility functions and extensions for the D2D Advancer app
 struct Utilities {
     
@@ -53,7 +79,7 @@ struct Utilities {
     static func openURL(_ urlString: String) {
         guard !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let url = URL(string: urlString) else {
-            print("Failed to open URL: invalid URL format")
+            AppLog.warning("Utilities", "Failed to open URL: invalid URL format")
             return
         }
         openURL(url)
@@ -64,7 +90,7 @@ struct Utilities {
     static func makePhoneCall(to phoneNumber: String) {
         let sanitized = sanitizePhoneNumber(phoneNumber)
         guard !sanitized.isEmpty else {
-            print("Empty phone number provided")
+            AppLog.warning("Utilities", "Empty phone number provided")
             return
         }
         openURL("tel:\(sanitized)")
@@ -75,7 +101,7 @@ struct Utilities {
     static func sendSMS(to phoneNumber: String) {
         let sanitized = sanitizePhoneNumber(phoneNumber)
         guard !sanitized.isEmpty else {
-            print("Empty phone number provided")
+            AppLog.warning("Utilities", "Empty phone number provided")
             return
         }
         openURL("sms:\(sanitized)")
@@ -85,7 +111,7 @@ struct Utilities {
     /// - Parameter email: The email address to send to
     static func sendEmail(to email: String) {
         guard let encodedEmail = sanitizedEmailAddress(email) else {
-            print("Empty email address provided")
+            AppLog.warning("Utilities", "Empty email address provided")
             return
         }
         openURL("mailto:\(encodedEmail)")
@@ -96,7 +122,7 @@ struct Utilities {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         guard let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            print("Failed to encode maps search query")
+            AppLog.warning("Utilities", "Failed to encode maps search query")
             return
         }
         openURL("https://maps.apple.com/?q=\(encoded)")
@@ -105,7 +131,7 @@ struct Utilities {
     /// Opens Apple Maps driving directions to coordinates
     static func openMapsDirections(latitude: Double, longitude: Double) {
         guard latitude != 0 || longitude != 0 else {
-            print("Invalid coordinates for navigation")
+            AppLog.warning("Utilities", "Invalid coordinates for navigation")
             return
         }
         openURL("https://maps.apple.com/?daddr=\(latitude),\(longitude)&dirflg=d")
@@ -127,14 +153,14 @@ struct Utilities {
                 if let leadID = lead.id {
                     if seenIDs.contains(leadID) {
                         duplicatesToDelete.append(lead)
-                        print("🗑️ Found duplicate lead: \(lead.displayName) (ID: \(leadID))")
+                        AppLog.debug("Utilities", "Found duplicate lead: \(Utilities.redactedText(lead.displayName)) (ID: \(leadID))")
                     } else {
                         seenIDs.insert(leadID)
                     }
                 } else {
                     // Lead without ID - assign new UUID
                     lead.id = UUID()
-                    print("🔧 Fixed lead without ID: \(lead.displayName)")
+                    AppLog.debug("Utilities", "Fixed lead without ID: \(Utilities.redactedText(lead.displayName))")
                 }
             }
             
@@ -145,13 +171,13 @@ struct Utilities {
             
             if !duplicatesToDelete.isEmpty {
                 try context.save()
-                print("✅ Removed \(duplicatesToDelete.count) duplicate leads from Core Data")
+                AppLog.info("Utilities", "Removed \(duplicatesToDelete.count) duplicate leads from Core Data")
             } else {
-                print("✅ No duplicate leads found")
+                AppLog.debug("Utilities", "No duplicate leads found")
             }
             
         } catch {
-            print("❌ Failed to remove duplicate leads: \(error)")
+            AppLog.error("Utilities", "Failed to remove duplicate leads: \(error.localizedDescription)")
         }
         }
     }
@@ -161,7 +187,7 @@ struct Utilities {
     private static func openURL(_ url: URL) {
         let openAction = {
             guard UIApplication.shared.canOpenURL(url) else {
-                print("Cannot open URL for scheme: \(url.scheme ?? "unknown")")
+                AppLog.warning("Utilities", "Cannot open URL for scheme: \(url.scheme ?? "unknown")")
                 return
             }
             UIApplication.shared.open(url, options: [:], completionHandler: nil)

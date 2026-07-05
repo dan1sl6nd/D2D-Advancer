@@ -4,6 +4,7 @@ struct SeasonalDatePickerView: View {
     @Binding var selectedDate: Date?
     let onCompletion: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     
     @State private var selectedPreset: SeasonalDatePreset?
     @State private var customDate: Date = Date()
@@ -43,13 +44,16 @@ struct SeasonalDatePickerView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle("Follow Up Date")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .accessibilityIdentifier("seasonalDatePickerScreen")
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !hasSelection,
+                    primaryAccessibilityIdentifier: "seasonalDatePickerSetButton",
+                    secondaryAccessibilityIdentifier: "seasonalDatePickerCancelButton",
                     primaryAction: saveDate,
                     secondaryAction: { dismiss() },
                     primaryLabel: {
@@ -61,6 +65,7 @@ struct SeasonalDatePickerView: View {
                 )
             }
         }
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
     }
     
     private var hasSelection: Bool {
@@ -115,7 +120,7 @@ struct SeasonalDatePickerView: View {
             }
             
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 12) {
-                ForEach(presets.prefix(8), id: \.id) { preset in
+                ForEach(Array(presets.prefix(8).enumerated()), id: \.element.id) { index, preset in
                     SeasonalPresetCard(
                         preset: preset,
                         isSelected: selectedPreset?.id == preset.id
@@ -123,6 +128,7 @@ struct SeasonalDatePickerView: View {
                         selectedPreset = preset
                         useCustomDate = false
                     }
+                    .accessibilityIdentifier("seasonalPreset_\(index)")
                 }
             }
             .clipped()
@@ -147,6 +153,7 @@ struct SeasonalDatePickerView: View {
                     .toggleStyle(SwitchToggleStyle(tint: Color.electricViolet))
                     .labelsHidden()
                     .accessibilityLabel("Use custom follow-up date")
+                    .accessibilityIdentifier("seasonalDatePickerCustomToggle")
                     .accessibilityValue(useCustomDate ? "Enabled" : "Disabled")
                     .accessibilityHint("Shows an exact date and time picker.")
                     .onChange(of: useCustomDate) { _, newValue in
@@ -160,6 +167,7 @@ struct SeasonalDatePickerView: View {
                 DatePicker("Select Date & Time", selection: $customDate, displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.compact)
                     .padding(.horizontal, 8)
+                    .accessibilityIdentifier("seasonalDatePickerCustomDatePicker")
             }
         }
         .surfaceCard()
@@ -242,6 +250,7 @@ struct SeasonalPresetCard: View {
                         lineWidth: isSelected ? 2 : 1
                     )
             )
+            .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(PlainButtonStyle())
     }

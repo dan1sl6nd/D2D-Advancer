@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CustomTemplateCreatorView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var templateManager = FollowUpMessageTemplates.shared
 
     @State private var title: String = ""
@@ -45,9 +46,10 @@ struct CustomTemplateCreatorView: View {
                     .padding(.top, 4)
                     .padding(.bottom, 96)
                 }
-                .background(Color.obsidianBlack)
+                .scrollDismissesKeyboard(.immediately)
+                .background(Color.obsidianBackground(for: colorScheme))
             }
-            .background(Color.obsidianBlack)
+            .background(Color.obsidianBackground(for: colorScheme))
             .navigationBarHidden(true)
             .navigationBarBackButtonHidden(true)
             .accessibilityIdentifier("customTemplateEditorSheet")
@@ -73,7 +75,7 @@ struct CustomTemplateCreatorView: View {
                     category: selectedCategory
                 )
                 .presentationDetents([.large])
-                .presentationBackground(Color.obsidianBlack)
+                .presentationBackground(Color.obsidianBackground(for: colorScheme))
             }
             .alert(
                 "Template not saved",
@@ -87,7 +89,7 @@ struct CustomTemplateCreatorView: View {
                 Text(saveErrorMessage ?? "Please try again.")
             }
         }
-        .presentationBackground(Color.obsidianBlack)
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
     }
 
     private var editorHeader: some View {
@@ -123,7 +125,7 @@ struct CustomTemplateCreatorView: View {
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .padding(.bottom, 18)
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
     }
     
     private func saveTemplate() {
@@ -255,6 +257,42 @@ struct CustomTemplateCreatorView: View {
             subtitle: "Use placeholders to personalize messages from lead data."
         ) {
             VStack(alignment: .leading, spacing: 18) {
+            Button(action: {
+                showingPreview = true
+            }) {
+                HStack(spacing: 14) {
+                    ObsidianIconTile(icon: "eye.fill", tint: Color.electricViolet, size: 42)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Preview Message")
+                            .font(.obsidianCallout)
+                            .foregroundColor(Color.textPrimary)
+
+                        Text("Check how this template looks with sample data")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(Color.textMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("customTemplatePreviewButton")
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+            )
+
             LeadNotesEditor(
                 title: "Template Message",
                 text: $message,
@@ -350,7 +388,7 @@ struct CustomTemplateCreatorView: View {
                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(PlainButtonStyle())
-                .accessibilityIdentifier("customTemplatePreviewButton")
+                .accessibilityIdentifier("customTemplatePreviewCard")
                 .background(Color.obsidianElevated)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
@@ -396,6 +434,7 @@ struct CustomTemplateCreatorView: View {
 
 struct PreviewTemplateView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     let title: String
     let message: String
     let category: MessageTemplate.MessageCategory
@@ -414,14 +453,14 @@ struct PreviewTemplateView: View {
                     .padding(.top, 4)
                     .padding(.bottom, 28)
                 }
-                .background(Color.obsidianBlack)
+                .background(Color.obsidianBackground(for: colorScheme))
             }
-            .background(Color.obsidianBlack)
+            .background(Color.obsidianBackground(for: colorScheme))
             .navigationBarHidden(true)
             .navigationBarBackButtonHidden(true)
             .accessibilityIdentifier("customTemplatePreviewSheet")
         }
-        .presentationBackground(Color.obsidianBlack)
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
     }
 
     private var previewHeader: some View {
@@ -452,7 +491,7 @@ struct PreviewTemplateView: View {
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .padding(.bottom, 18)
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
     }
 
     private var templateHeaderCard: some View {

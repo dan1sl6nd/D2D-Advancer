@@ -62,13 +62,16 @@ struct MessageSelectionView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .accessibilityIdentifier("messageSelectionScreen")
+            .obsidianScreenBackground()
             .navigationTitle("Send Follow-up")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !canSendMessage,
+                    primaryAccessibilityIdentifier: "messageSelectionSendButton",
+                    secondaryAccessibilityIdentifier: "messageSelectionCancelButton",
                     primaryAction: sendMessage,
                     secondaryAction: { dismiss() },
                     primaryLabel: {

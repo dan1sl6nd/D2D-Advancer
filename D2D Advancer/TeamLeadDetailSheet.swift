@@ -280,12 +280,12 @@ struct TeamLeadDetailSheet: View {
                     .padding(16)
                     .padding(.bottom, 24)
                 }
-                .background(Color.obsidianBlack.ignoresSafeArea())
+                .obsidianScreenBackground()
 
                 copyToastOverlay
             }
             .navigationTitle("Team Lead Detail")
-            .navigationBarTitleDisplayMode(.inline)
+            .obsidianInlineNavigation()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     TeamToolbarDoneButton {

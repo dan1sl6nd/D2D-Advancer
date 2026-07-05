@@ -53,7 +53,7 @@ struct AreaRecommendationsView: View {
                     }
                 }
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle("Best Areas")
             .obsidianInlineNavigation()
             .toolbar {

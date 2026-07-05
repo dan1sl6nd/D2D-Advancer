@@ -46,14 +46,16 @@ struct FollowUpHistoryView: View {
                     }
                 }
             }
-            .background(Color.obsidianBlack)
+            .obsidianScreenBackground()
             .navigationTitle("Follow-up History")
             .obsidianInlineNavigation()
+            .accessibilityIdentifier("followUpHistoryScreen")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     ObsidianCompactIconButton(
                         icon: "plus",
                         accessibilityLabel: "Add follow-up check-in",
+                        accessibilityIdentifier: "followUpHistoryAddCheckInButton",
                         action: { showingAddCheckIn = true }
                     )
                 }

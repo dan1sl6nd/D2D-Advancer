@@ -1510,10 +1510,163 @@ enum TeamSyncWriteState: Equatable, Sendable {
         case .idle:
             return "Synced"
         case .pending(let localWriteCount):
-            return localWriteCount == 1 ? "1 pending team edit" : "\(localWriteCount) pending team edits"
+            return localWriteCount == 1 ? "Saving 1 team edit..." : "Saving \(localWriteCount) team edits..."
         case .failed(let message):
             return message
         }
+    }
+
+    var pendingWriteCount: Int {
+        if case .pending(let count) = self {
+            return count
+        }
+        return 0
+    }
+}
+
+enum TeamSyncHealthLevel: String, Equatable, Sendable {
+    case ready
+    case refreshing
+    case saving
+    case offline
+    case blocked
+    case setup
+}
+
+struct TeamSyncHealthSnapshot: Equatable, Sendable {
+    var level: TeamSyncHealthLevel
+    var title: String
+    var detail: String
+    var actionTitle: String?
+}
+
+enum TeamSyncHealthPolicy {
+    static func snapshot(
+        isAuthenticated: Bool,
+        hasActiveTeam: Bool,
+        hasCurrentMember: Bool,
+        isLoading: Bool,
+        isWorking: Bool,
+        syncWriteState: TeamSyncWriteState,
+        lastErrorMessage: String?,
+        lastSuccessfulSyncAt: Date?,
+        now: Date = Date()
+    ) -> TeamSyncHealthSnapshot? {
+        if !isAuthenticated {
+            return TeamSyncHealthSnapshot(
+                level: .setup,
+                title: "Team sign-in needed",
+                detail: "Sign in before creating or joining a team workspace.",
+                actionTitle: nil
+            )
+        }
+
+        if isLoading {
+            return TeamSyncHealthSnapshot(
+                level: .refreshing,
+                title: "Refreshing Team",
+                detail: "Checking your latest team data.",
+                actionTitle: nil
+            )
+        }
+
+        switch syncWriteState {
+        case .pending:
+            return TeamSyncHealthSnapshot(
+                level: .saving,
+                title: syncWriteState.displayText,
+                detail: "Keep this screen open until the cloud confirms the change.",
+                actionTitle: nil
+            )
+        case .failed(let message):
+            if TeamFirebaseService.isOfflineMessage(message) {
+                return TeamSyncHealthSnapshot(
+                    level: .offline,
+                    title: "Offline",
+                    detail: "Saved team data stays visible. Refresh when the connection returns.",
+                    actionTitle: "Refresh Team"
+                )
+            }
+
+            if TeamFirebaseService.isPermissionMessage(message) {
+                return TeamSyncHealthSnapshot(
+                    level: .blocked,
+                    title: "Team access needs refresh",
+                    detail: "Refresh Team or sign in again to confirm your current access.",
+                    actionTitle: "Refresh Team"
+                )
+            }
+
+            return TeamSyncHealthSnapshot(
+                level: .blocked,
+                title: "Team sync needs attention",
+                detail: message,
+                actionTitle: "Refresh Team"
+            )
+        case .idle:
+            break
+        }
+
+        if let lastErrorMessage {
+            if TeamFirebaseService.isOfflineMessage(lastErrorMessage) {
+                return TeamSyncHealthSnapshot(
+                    level: .offline,
+                    title: "Offline",
+                    detail: hasActiveTeam && hasCurrentMember
+                        ? "Showing saved team data until the connection returns."
+                        : "Connect to the internet to create or join a team.",
+                    actionTitle: "Refresh Team"
+                )
+            }
+
+            if TeamFirebaseService.isPermissionMessage(lastErrorMessage) {
+                return TeamSyncHealthSnapshot(
+                    level: .blocked,
+                    title: "Team access needs refresh",
+                    detail: "Refresh Team or sign in again to confirm your current access.",
+                    actionTitle: "Refresh Team"
+                )
+            }
+        }
+
+        if isWorking {
+            return TeamSyncHealthSnapshot(
+                level: .saving,
+                title: "Saving team edit...",
+                detail: "Waiting for the cloud to confirm this change.",
+                actionTitle: nil
+            )
+        }
+
+        if hasActiveTeam && hasCurrentMember {
+            return TeamSyncHealthSnapshot(
+                level: .ready,
+                title: "Team online",
+                detail: lastSuccessfulSyncAt.map { "Last synced \(relativeSyncText(since: $0, now: now))." }
+                    ?? "Team data is ready.",
+                actionTitle: nil
+            )
+        }
+
+        return nil
+    }
+
+    private static func relativeSyncText(since date: Date, now: Date) -> String {
+        let seconds = max(0, now.timeIntervalSince(date))
+        if seconds < 60 { return "just now" }
+
+        let minutes = Int(seconds / 60)
+        if minutes < 60 {
+            return minutes == 1 ? "1 min ago" : "\(minutes) min ago"
+        }
+
+        let hours = Int(seconds / 3600)
+        if hours < 24 {
+            return hours == 1 ? "1 hr ago" : "\(hours) hrs ago"
+        }
+
+        let days = Int(seconds / 86_400)
+        return days == 1 ? "1 day ago" : "\(days) days ago"
     }
 }
 

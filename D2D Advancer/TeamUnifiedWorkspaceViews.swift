@@ -58,6 +58,7 @@ struct TeamMapShortcutPill: View {
 struct TeamFieldMapSheet: View {
     let summary: TeamWorkspaceSurfaceSummary
     @Binding var selectedRepUserId: String?
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedLead: TeamLead?
     @State private var selectedCluster: TeamLeadClusterSelection?
 
@@ -77,7 +78,7 @@ struct TeamFieldMapSheet: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, 8)
-                .background(Color.obsidianBlack)
+                .background(Color.obsidianBackground(for: colorScheme))
 
                 TeamFieldMapView(
                     workspaces: summary.workspaces,
@@ -94,9 +95,9 @@ struct TeamFieldMapSheet: View {
                         .padding(12)
                 }
             }
-            .background(Color.obsidianBlack)
+            .background(Color.obsidianBackground(for: colorScheme))
             .navigationTitle(summary.role == .owner ? "Team Field Map" : "My Field Map")
-            .navigationBarTitleDisplayMode(.inline)
+            .obsidianInlineNavigation()
         }
         .sheet(item: $selectedLead) { lead in
             TeamLeadDetailSheet(initialLead: lead)
@@ -122,6 +123,7 @@ struct TeamLeadClusterSelection: Identifiable {
 
 struct TeamLeadClusterSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var teamService = TeamFirebaseService.shared
     let selection: TeamLeadClusterSelection
     let onViewLead: (TeamLead) -> Void
@@ -180,8 +182,8 @@ struct TeamLeadClusterSheet: View {
                 .padding(.bottom, 24)
             }
         }
-        .background(Color.obsidianBlack)
-        .presentationBackground(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
     }
 
     @ViewBuilder
@@ -987,7 +989,7 @@ struct TeamWorkInlineSection: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(summary.role == .owner ? "Team Work" : "My Team Work")
+                    Text(sectionTitle)
                         .font(.obsidianCallout)
                         .foregroundColor(Color.textPrimary)
 
@@ -1117,6 +1119,12 @@ struct TeamWorkInlineSection: View {
         if summary.role == .owner { return "person.3.fill" }
         if summary.currentMemberWorkType == .technician { return "wrench.and.screwdriver.fill" }
         return "briefcase.fill"
+    }
+
+    private var sectionTitle: String {
+        if summary.role == .owner { return "Team Work" }
+        if summary.currentMemberWorkType == .technician { return "My Jobs" }
+        return "My Leads"
     }
 }
 

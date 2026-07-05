@@ -3,14 +3,45 @@ import UIKit
 import CoreData
 
 struct AppointmentsView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var appointmentManager = AppointmentManager.shared
     @ObservedObject private var router = AppRouter.shared
+    @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
     @State private var showingScheduleView = false
     @State private var selectedLead: Lead?
     @State private var selectedAppointment: Appointment?
+    @State private var selectedTeamLead: TeamLead?
+    @State private var showingTeamFieldMap = false
+    @State private var selectedTeamRepUserId: String?
     @State private var selectedView: AppointmentView = .active
     @ObservedObject private var paywallManager = PaywallManager.shared
+
+    private var isRunningUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
+    }
+
+    private var shouldLoadTeamWorkspace: Bool {
+        !isRunningUITests || FirebaseEmulatorConfiguration.isEnabled
+    }
+
+    private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.make(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            dutyLocationPoints: teamService.dutyLocationPoints,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
+
+    private var roleContext: TeamRoleContext {
+        TeamRoleContext(summary: teamSurfaceSummary)
+    }
     
     enum AppointmentView: String, CaseIterable {
         case active = "Active"
@@ -49,7 +80,7 @@ struct AppointmentsView: View {
                 VStack(spacing: 0) {
                     safeAreaSpacer(geometry: geometry)
                     ObsidianHeaderView(
-                        "Appointments",
+                        roleContext.appointmentScreenTitle,
                         titleAccessibilityIdentifier: "appointmentsScreen"
                     ) {
                         ObsidianCompactIconButton(
@@ -67,7 +98,7 @@ struct AppointmentsView: View {
                 .ignoresSafeArea(.all, edges: .top)
             }
             .navigationBarHidden(true)
-            .background(Color.obsidianBlack)
+            .background(Color.obsidianBackground(for: colorScheme))
             .sheet(isPresented: $showingScheduleView) {
                 SelectLeadForAppointmentView { lead in
                     selectedLead = lead
@@ -80,8 +111,20 @@ struct AppointmentsView: View {
             .sheet(item: $selectedAppointment) { appointment in
                 AppointmentDetailView(appointmentId: appointment.id)
             }
+            .sheet(item: $selectedTeamLead) { lead in
+                TeamLeadDetailSheet(initialLead: lead)
+            }
+            .sheet(isPresented: $showingTeamFieldMap) {
+                if let summary = teamSurfaceSummary {
+                    TeamFieldMapSheet(
+                        summary: summary,
+                        selectedRepUserId: $selectedTeamRepUserId
+                    )
+                }
+            }
             .onAppear {
                 print("🗓️ AppointmentsView appeared - listener already active")
+                Task { await loadTeamWorkspaceIfNeeded() }
             }
             .onChange(of: router.targetAppointmentID) { _, newValue in
                 guard let id = newValue else { return }
@@ -96,9 +139,9 @@ struct AppointmentsView: View {
     // MARK: - Extracted View Components
     
     private func safeAreaSpacer(geometry: GeometryProxy) -> some View {
-        Rectangle()
-            .fill(Color.obsidianBlack)
-            .frame(height: geometry.safeAreaInsets.top)
+            Rectangle()
+                .fill(Color.obsidianBackground(for: colorScheme))
+                .frame(height: ObsidianLayout.safeAreaTop(geometry))
     }
     
     private var tabSelectionView: some View {
@@ -143,12 +186,12 @@ struct AppointmentsView: View {
         .accessibilityLabel("Appointment filter tabs")
         .padding(.horizontal, 16)
         .padding(.bottom, 4)
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
     }
     
     private var appointmentContentView: some View {
         Group {
-            if filteredAppointments.isEmpty {
+            if filteredAppointments.isEmpty && teamSurfaceSummary == nil {
                 emptyStateView
             } else {
                 appointmentScrollView
@@ -159,6 +202,17 @@ struct AppointmentsView: View {
     private var appointmentScrollView: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
+                if let summary = teamSurfaceSummary {
+                    TeamWorkInlineSection(
+                        summary: summary,
+                        selectedRepUserId: $selectedTeamRepUserId,
+                        onOpenMap: { showingTeamFieldMap = true },
+                        onSelectLead: { selectedTeamLead = $0 }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 4)
+                }
+
                 ForEach(filteredAppointments) { appointment in
                     AppointmentInteractiveRowView(
                         appointment: appointment,
@@ -172,10 +226,27 @@ struct AppointmentsView: View {
                         handleLongPressDelete(appointment)
                     }
                 }
+
+                if filteredAppointments.isEmpty && teamSurfaceSummary != nil {
+                    Text(emptyMessage)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                }
             }
             .padding(.vertical, 8)
             .padding(.bottom, 12)
         }
+    }
+
+    private func loadTeamWorkspaceIfNeeded() async {
+        guard shouldLoadTeamWorkspace else { return }
+        await teamService.loadCurrentTeam(
+            displayName: userAccountManager.currentUserDisplayName,
+            email: userAccountManager.currentUserEmail
+        )
     }
     
     private func updateAppointmentStatus(_ appointment: Appointment, to status: Appointment.AppointmentStatus) {
@@ -229,7 +300,7 @@ struct AppointmentsView: View {
     private var emptyStateView: some View {
         ObsidianEmptyState(
             icon: selectedView.icon,
-            title: "No \(selectedView.rawValue.lowercased()) appointments",
+            title: roleContext.appointmentEmptyTitle,
             message: emptyMessage,
             actionTitle: selectedView == .active ? "Schedule" : nil,
             actionIcon: "plus",
@@ -243,11 +314,18 @@ struct AppointmentsView: View {
     private var emptyMessage: String {
         switch selectedView {
         case .active:
-            return "Start scheduling appointments with your customers to keep track of installations and follow-ups."
+            if roleContext == .technician {
+                return "Assigned technician jobs will appear here with arrival time, route, and status controls."
+            }
+            return "Start scheduling appointments with your customers to keep track of jobs and follow-ups."
         case .completed:
-            return "Completed appointments will appear here after you mark them as finished."
+            return roleContext == .technician
+                ? "Completed jobs will appear here after you mark them done."
+                : "Completed appointments will appear here after you mark them finished."
         case .cancelled:
-            return "Cancelled appointments will appear here when you cancel scheduled appointments."
+            return roleContext == .technician
+                ? "Cancelled jobs will appear here when service work is cancelled."
+                : "Cancelled appointments will appear here when you cancel scheduled appointments."
         }
     }
     
@@ -483,6 +561,7 @@ struct AppointmentInteractiveRowView: View {
 // MARK: - Appointment Lead Selection
 
 struct SelectLeadForAppointmentView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     @FetchRequest(
@@ -550,8 +629,8 @@ struct SelectLeadForAppointmentView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 96)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
-            .navigationBarTitleDisplayMode(.inline)
+            .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
+            .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
             .safeAreaInset(edge: .bottom) {
                 Button(action: {
@@ -565,12 +644,12 @@ struct SelectLeadForAppointmentView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(
-                    Color.obsidianBlack
+                    Color.obsidianBackground(for: colorScheme)
                         .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: -3)
                 )
             }
         }
-        .presentationBackground(Color.obsidianBlack)
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
         .accessibilityIdentifier("appointmentLeadPickerSheet")
     }
 }
@@ -651,6 +730,7 @@ struct LeadStatusBadge: View {
 
 struct AppointmentDetailView: View {
     let appointmentId: UUID
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var customTypeManager = CustomAppointmentTypeManager.shared
@@ -714,10 +794,10 @@ struct AppointmentDetailView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 20)
                 }
-                .background(Color.obsidianBlack)
+                .background(Color.obsidianBackground(for: colorScheme))
             }
             .navigationTitle("Appointment Details")
-            .navigationBarTitleDisplayMode(.inline)
+            .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
             .safeAreaInset(edge: .bottom) {
                 appointmentDetailBottomBar
@@ -842,7 +922,7 @@ struct AppointmentDetailView: View {
             )
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
-            .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))
+            .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .bottom))
         } else {
             appointmentActionButton(
                 title: "Done",
@@ -854,7 +934,7 @@ struct AppointmentDetailView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))
+            .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .bottom))
         }
     }
 

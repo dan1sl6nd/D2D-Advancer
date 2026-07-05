@@ -10,6 +10,7 @@ import CoreGraphics
 import CoreData
 import Foundation
 import MapKit
+import SwiftUI
 import Testing
 import UIKit
 @testable import D2D_Advancer
@@ -880,6 +881,34 @@ struct D2D_AdvancerTests {
                 userHasInteracted: true
             )
         )
+    }
+
+    @MainActor
+    @Test func launchMapUserGestureInterruptsPendingProgrammaticStartupCentering() async throws {
+        let coordinator = AdvancedMapView.Coordinator(makeAdvancedMapViewForTests())
+        coordinator.isProgrammaticChange = true
+        coordinator.userHasInteracted = false
+        coordinator.isUserInteracting = false
+
+        coordinator.handleRegionWillChange(userGesture: true)
+
+        #expect(coordinator.userHasInteracted)
+        #expect(coordinator.isUserInteracting)
+        #expect(!coordinator.isProgrammaticChange)
+    }
+
+    @MainActor
+    @Test func launchMapProgrammaticRegionChangeDoesNotSetUserInteractionLock() async throws {
+        let coordinator = AdvancedMapView.Coordinator(makeAdvancedMapViewForTests())
+        coordinator.isProgrammaticChange = true
+        coordinator.userHasInteracted = false
+        coordinator.isUserInteracting = false
+
+        coordinator.handleRegionWillChange(userGesture: false)
+
+        #expect(!coordinator.userHasInteracted)
+        #expect(!coordinator.isUserInteracting)
+        #expect(coordinator.isProgrammaticChange)
     }
 
     @Test func launchMapAppliesFirstStartupFollowEvenWhenMapIsAlreadyNearTarget() async throws {
@@ -2297,6 +2326,66 @@ struct D2D_AdvancerTests {
         #expect(MapWorkflowMode.hot.includes(hotLead, now: now))
     }
 
+    @MainActor
+    @Test func mapLeadVisibilityPolicyDoesNotCapDisplayedLeads() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        var leads: [Lead] = []
+        for index in 0..<1_750 {
+            let lead = Lead.create(in: context)
+            lead.name = "Open \(index)"
+            lead.status = Lead.Status.notContacted.rawValue
+            lead.latitude = 43.55 + (Double(index % 40) * 0.0001)
+            lead.longitude = -79.70 - (Double(index % 40) * 0.0001)
+            lead.updatedDate = now.addingTimeInterval(TimeInterval(-index))
+            leads.append(lead)
+        }
+
+        let soldLead = Lead.create(in: context)
+        soldLead.name = "Sold"
+        soldLead.status = Lead.Status.converted.rawValue
+        leads.append(soldLead)
+
+        let rejectedLead = Lead.create(in: context)
+        rejectedLead.name = "Rejected"
+        rejectedLead.status = Lead.Status.notInterested.rawValue
+        leads.append(rejectedLead)
+
+        #expect(MapLeadVisibilityPolicy.visibleLeads(from: leads, mode: .all, now: now).count == leads.count)
+        #expect(MapLeadVisibilityPolicy.visibleLeads(from: leads, mode: .next, now: now).count == 1_750)
+    }
+
+    @MainActor
+    @Test func mapLeadVisibilityPolicySortsSoldThenInterestedBeforeOtherLeads() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        func makeLead(_ name: String, status: Lead.Status, updatedOffset: TimeInterval, priority: Int16 = 0) -> Lead {
+            let lead = Lead.create(in: context)
+            lead.name = name
+            lead.status = status.rawValue
+            lead.priority = priority
+            lead.updatedDate = now.addingTimeInterval(updatedOffset)
+            return lead
+        }
+
+        let priorityLead = makeLead("Priority", status: .notContacted, updatedOffset: 120, priority: 3)
+        let coldLead = makeLead("Cold", status: .notContacted, updatedOffset: 300)
+        let interestedLead = makeLead("Interested", status: .interested, updatedOffset: 60)
+        let soldLead = makeLead("Sold", status: .converted, updatedOffset: -300)
+
+        let visible = MapLeadVisibilityPolicy.visibleLeads(
+            from: [priorityLead, coldLead, interestedLead, soldLead],
+            mode: .all,
+            now: now
+        )
+
+        #expect(visible.map(\.name) == ["Sold", "Interested", "Priority", "Cold"])
+    }
+
     @Test func quickLeadAddressPolicyRejectsCoordinateFallbackAddresses() {
         #expect(MapQuickLeadAddressPolicy.acceptedAddress("Dropped pin at 43.55970, -79.70720", source: .coordinateFallback) == nil)
         #expect(MapQuickLeadAddressPolicy.acceptedAddress("  ", source: .streetAddress) == nil)
@@ -2509,6 +2598,120 @@ struct D2D_AdvancerTests {
         #expect(!LeadClusterSummary.isUrgent(rejectedLead))
     }
 
+    @MainActor
+    @Test func leadClusterSummarySortsSoldLeadsBeforeActiveWork() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        func makeLead(_ name: String, status: Lead.Status, updatedOffset: TimeInterval, priority: Int16 = 0) -> Lead {
+            let lead = Lead.create(in: context)
+            lead.name = name
+            lead.status = status.rawValue
+            lead.priority = priority
+            lead.updatedDate = now.addingTimeInterval(updatedOffset)
+            return lead
+        }
+
+        let priorityLead = makeLead("Priority", status: .notContacted, updatedOffset: 20, priority: 3)
+        let interestedLead = makeLead("Interested", status: .interested, updatedOffset: 30)
+        let soldLead = makeLead("Sold", status: .converted, updatedOffset: -200)
+
+        let sorted = LeadClusterSummary.sortedLeads([priorityLead, interestedLead, soldLead], now: now)
+
+        #expect(sorted.first?.leadStatus == .converted)
+        #expect(sorted.first?.name == "Sold")
+        #expect(sorted.dropFirst().first?.leadStatus == .interested)
+        #expect(sorted.dropFirst().first?.name == "Interested")
+    }
+
+    @MainActor
+    @Test func leadClusterSummaryLabelsAndColorsSoldBeforeInterestedOrDue() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        func makeLead(_ name: String, status: Lead.Status, followUpOffset: TimeInterval? = nil) -> Lead {
+            let lead = Lead.create(in: context)
+            lead.name = name
+            lead.status = status.rawValue
+            lead.followUpDate = followUpOffset.map { now.addingTimeInterval($0) }
+            return lead
+        }
+
+        let soldLead = makeLead("Sold", status: .converted)
+        let interestedLead = makeLead("Interested", status: .interested, followUpOffset: -60)
+        let dueLead = makeLead("Due", status: .notHome, followUpOffset: -60)
+
+        let soldSummary = LeadClusterSummary(leads: [dueLead, interestedLead, soldLead], now: now)
+        #expect(soldSummary.headline == "1 sold")
+        #expect(soldSummary.uiColor.isEqual(UIColor.systemGreen))
+
+        let interestedSummary = LeadClusterSummary(leads: [dueLead, interestedLead], now: now)
+        #expect(interestedSummary.headline == "1 interested")
+        #expect(interestedSummary.uiColor.isEqual(UIColor.systemOrange))
+    }
+
+    @MainActor
+    @Test func soldLeadMarkersHaveHighestMapDisplayPriority() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+
+        let soldLead = Lead.create(in: context)
+        soldLead.status = Lead.Status.converted.rawValue
+
+        let interestedLead = Lead.create(in: context)
+        interestedLead.status = Lead.Status.interested.rawValue
+
+        #expect(LeadMapAnnotationPriorityPolicy.displayPriority(for: soldLead) == .required)
+        #expect(
+            LeadMapAnnotationPriorityPolicy.displayPriority(for: soldLead).rawValue
+            > LeadMapAnnotationPriorityPolicy.displayPriority(for: interestedLead).rawValue
+        )
+    }
+
+    @MainActor
+    @Test func interestedLeadMarkersHaveSecondMapDisplayPriority() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+
+        let interestedLead = Lead.create(in: context)
+        interestedLead.status = Lead.Status.interested.rawValue
+
+        let priorityLead = Lead.create(in: context)
+        priorityLead.status = Lead.Status.notContacted.rawValue
+        priorityLead.priority = 3
+
+        let interestedCluster = LeadClusterSummary(leads: [interestedLead])
+        let priorityCluster = LeadClusterSummary(leads: [priorityLead])
+
+        #expect(
+            LeadMapAnnotationPriorityPolicy.displayPriority(for: interestedLead).rawValue
+            > LeadMapAnnotationPriorityPolicy.displayPriority(for: priorityLead).rawValue
+        )
+        #expect(
+            LeadMapAnnotationPriorityPolicy.clusterDisplayPriority(for: interestedCluster).rawValue
+            > LeadMapAnnotationPriorityPolicy.clusterDisplayPriority(for: priorityCluster).rawValue
+        )
+    }
+
+    @Test func leadClusterInteractionOpensAreaSheetBeforeExtremeZoom() {
+        let route = LeadClusterInteractionPolicy.route(
+            mapSpan: 0.035,
+            coordinateSpread: 0.009,
+            memberCount: 24,
+            containsUrgentLead: false
+        )
+
+        #expect(route == .openSheet)
+    }
+
+    @Test func leadClusterDisplayPolicyExpandsPinsAtNeighborhoodZoom() {
+        #expect(LeadClusterDisplayPolicy.mode(mapSpan: 0.04) == .expanded)
+        #expect(LeadClusterDisplayPolicy.mode(mapSpan: 0.05) == .clustered)
+        #expect(LeadClusterDisplayPolicy.clusteringIdentifier(for: .expanded) == nil)
+    }
+
     @Test func calendarSettingsLocalStoreDistinguishesMissingValidAndCorruptData() async throws {
         let suiteName = "CalendarSettingsLocalStoreTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -2555,6 +2758,11 @@ struct D2D_AdvancerTests {
         #expect(throws: Error.self) {
             try ThemeColorLocalStore.decode(from: Data("not-json".utf8))
         }
+    }
+
+    @Test func obsidianNavigationChromeFollowsCurrentColorScheme() {
+        #expect(ObsidianNavigationChromePolicy.toolbarColorScheme(for: .light) == .light)
+        #expect(ObsidianNavigationChromePolicy.toolbarColorScheme(for: .dark) == .dark)
     }
 
     @Test func leadCountDisplayDoesNotShowFakeZeroWhenCountIsUnknown() {
@@ -2958,6 +3166,35 @@ struct D2D_AdvancerTests {
         #expect(throws: Error.self) {
             try AppleSearchAdsAttributionStore.load(from: defaults, key: key)
         }
+    }
+
+    private func makeAdvancedMapViewForTests() -> AdvancedMapView {
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 43.5597, longitude: -79.7072),
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        )
+
+        return AdvancedMapView(
+            region: .constant(region),
+            mapType: .constant(.standard),
+            rotation: .constant(0),
+            pitch: .constant(0),
+            animateNextUpdate: .constant(false),
+            is3DModeEnabled: .constant(false),
+            launchCenteringResetToken: 0,
+            launchLocationCenterRevision: 0,
+            leads: [],
+            searchPin: .constant(nil),
+            showsUserLocation: true,
+            shouldFollowUserLocationOnLaunch: true,
+            needsLaunchLocationCenteringConfirmation: true,
+            hasLaunchLocationCandidate: true,
+            onLaunchCenteringConfirmed: {},
+            onLeadTap: { _ in },
+            onLeadClusterTap: { _, _ in },
+            onSearchPinTap: { _ in },
+            onLongPress: { _, _ in }
+        )
     }
 
 }

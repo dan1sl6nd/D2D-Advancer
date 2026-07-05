@@ -532,11 +532,12 @@ struct VoiceRecorderSheet: View {
     @ObservedObject var recorder: VoiceNoteRecorder
     let onComplete: (URL?) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack {
-            Color.obsidianBlack.ignoresSafeArea()
+            Color.obsidianBackground(for: colorScheme).ignoresSafeArea()
 
             VStack(spacing: 30) {
                 Spacer()

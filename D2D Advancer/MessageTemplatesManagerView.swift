@@ -19,7 +19,7 @@ struct MessageTemplatesManagerView: View {
             .padding(.horizontal, 16)
             .padding(.top, 16)
         }
-        .background(Color.obsidianBlack.ignoresSafeArea())
+        .obsidianScreenBackground()
         .accessibilityIdentifier("messageTemplatesScreen")
         .navigationTitle("Message Templates")
         .obsidianInlineNavigation()

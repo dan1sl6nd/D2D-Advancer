@@ -4,6 +4,7 @@ import AuthenticationServices
 struct AuthenticationView: View {
     @StateObject private var accountManager = FirebaseUserAccountManager.shared
     @StateObject private var appleSignInManager = AppleSignInManager.shared
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var isLoginMode = true
     @State private var email = ""
@@ -15,8 +16,10 @@ struct AuthenticationView: View {
     @State private var resetEmail = ""
     
     var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
         ZStack {
-            Color.obsidianBlack
+            screenBackground
                 .ignoresSafeArea()
 
             ScrollView(.vertical, showsIndicators: false) {
@@ -42,7 +45,7 @@ struct AuthenticationView: View {
                 .padding(.bottom, 32)
             }
         }
-        .presentationBackground(Color.obsidianBlack)
+        .presentationBackground(screenBackground)
         .navigationBarHidden(true)
         .onAppear {
             loadStoredCredentials()
@@ -366,14 +369,17 @@ struct AuthenticationView: View {
 }
 
 struct ForgotPasswordSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var email: String
     @Binding var isPresented: Bool
     @ObservedObject var accountManager: FirebaseUserAccountManager
     @State private var resetEmail = ""
 
     var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
         ZStack {
-            Color.obsidianBlack
+            screenBackground
                 .ignoresSafeArea()
 
             ScrollView(.vertical, showsIndicators: false) {
@@ -400,7 +406,7 @@ struct ForgotPasswordSheet: View {
                 .padding(.bottom, 32)
             }
         }
-        .presentationBackground(Color.obsidianBlack)
+        .presentationBackground(screenBackground)
         .onAppear {
             accountManager.authStatus = .idle
             resetEmail = email

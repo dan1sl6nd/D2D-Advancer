@@ -272,6 +272,7 @@ struct AdvancedMapView: UIViewRepresentable {
         }
 
         coordinator.updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
+        coordinator.updateLeadClusteringModeIfNeeded(mapView: mapView)
 
         // Update search pin
         coordinator.updateSearchPin(mapView: mapView, searchPin: searchPin)
@@ -616,6 +617,7 @@ struct AdvancedMapView: UIViewRepresentable {
         private var currentAnnotations: [LeadMapAnnotation] = []
         private var currentSearchPinAnnotation: MKPointAnnotation?
         private var currentAnnotationSignature: [LeadAnnotationSignature] = []
+        private var currentLeadClusteringMode: LeadClusterDisplayPolicy.Mode?
         var isUserInteracting = false
         var userHasInteracted = false
         var isProgrammaticChange = false
@@ -786,19 +788,53 @@ struct AdvancedMapView: UIViewRepresentable {
             let newSignature = leads.map { LeadAnnotationSignature(lead: $0) }
             guard newSignature != currentAnnotationSignature else { return }
 
-            if !currentAnnotations.isEmpty {
-                mapView.removeAnnotations(currentAnnotations)
+            let previousSignatureByAnnotation = Dictionary(
+                uniqueKeysWithValues: zip(currentAnnotations, currentAnnotationSignature)
+                    .map { annotation, signature in (ObjectIdentifier(annotation), signature) }
+            )
+            let previousAnnotationsBySignature = Dictionary(
+                uniqueKeysWithValues: zip(currentAnnotationSignature, currentAnnotations)
+                    .map { signature, annotation in (signature, annotation) }
+            )
+            let newSignatureSet = Set(newSignature)
+            let previousSignatureSet = Set(currentAnnotationSignature)
+
+            let annotationsToRemove = currentAnnotations.filter { annotation in
+                guard let signature = previousSignatureByAnnotation[ObjectIdentifier(annotation)] else {
+                    return true
+                }
+                return !newSignatureSet.contains(signature)
             }
 
-            currentAnnotations = leads.map { LeadMapAnnotation(lead: $0) }
-            if !currentAnnotations.isEmpty {
-                mapView.addAnnotations(currentAnnotations)
+            let newAnnotations = zip(leads, newSignature).map { lead, signature in
+                previousAnnotationsBySignature[signature] ?? LeadMapAnnotation(lead: lead)
             }
+            let annotationsToAdd = zip(newAnnotations, newSignature).compactMap { annotation, signature in
+                previousSignatureSet.contains(signature) ? nil : annotation
+            }
+
+            if !annotationsToRemove.isEmpty {
+                mapView.removeAnnotations(annotationsToRemove)
+            }
+            if !annotationsToAdd.isEmpty {
+                mapView.addAnnotations(annotationsToAdd)
+            }
+            currentAnnotations = newAnnotations
             currentAnnotationSignature = newSignature
+            currentLeadClusteringMode = LeadClusterDisplayPolicy.mode(for: mapView.region)
 
-            #if DEBUG
-            print("Updated map annotations: \(currentAnnotations.count) leads displayed")
-            #endif
+            AppLog.debug("Map", "Updated map annotations: \(currentAnnotations.count) leads displayed")
+        }
+
+        func updateLeadClusteringModeIfNeeded(mapView: MKMapView) {
+            let nextMode = LeadClusterDisplayPolicy.mode(for: mapView.region)
+            guard currentLeadClusteringMode != nextMode else { return }
+
+            currentLeadClusteringMode = nextMode
+            guard !currentAnnotations.isEmpty else { return }
+
+            mapView.removeAnnotations(currentAnnotations)
+            mapView.addAnnotations(currentAnnotations)
         }
 
         func updateSearchPin(mapView: MKMapView, searchPin: SearchPin?) {
@@ -823,7 +859,7 @@ struct AdvancedMapView: UIViewRepresentable {
             }
         }
 
-        private struct LeadAnnotationSignature: Equatable {
+        private struct LeadAnnotationSignature: Equatable, Hashable {
             let id: String
             let latitude: Double
             let longitude: Double
@@ -853,7 +889,7 @@ struct AdvancedMapView: UIViewRepresentable {
             guard gesture.state == .began else { return }
 
             guard let mapView = gesture.view as? MKMapView else {
-                print("❌ Long press gesture view is not an MKMapView")
+                AppLog.error("Map", "Long press gesture view is not an MKMapView")
                 return
             }
 
@@ -901,7 +937,7 @@ struct AdvancedMapView: UIViewRepresentable {
                 clusterView.glyphText = summary.glyphText
                 clusterView.markerTintColor = summary.uiColor
                 clusterView.glyphTintColor = .white
-                clusterView.displayPriority = summary.isUrgent ? .required : .defaultHigh
+                clusterView.displayPriority = LeadMapAnnotationPriorityPolicy.clusterDisplayPriority(for: summary)
                 clusterView.collisionMode = .circle
                 return clusterView
             }
@@ -916,7 +952,9 @@ struct AdvancedMapView: UIViewRepresentable {
 
             annotationView.annotation = annotation
             annotationView.canShowCallout = true
-            annotationView.clusteringIdentifier = "LeadCluster"
+            annotationView.clusteringIdentifier = LeadClusterDisplayPolicy.clusteringIdentifier(
+                for: LeadClusterDisplayPolicy.mode(for: mapView.region)
+            )
             annotationView.displayPriority = displayPriority(for: lead)
 
             // Customize based on lead status
@@ -952,13 +990,7 @@ struct AdvancedMapView: UIViewRepresentable {
         }
 
         private func displayPriority(for lead: Lead) -> MKFeatureDisplayPriority {
-            if LeadClusterSummary.isUrgent(lead) {
-                return .required
-            }
-            if lead.leadStatus == .interested || lead.leadStatus == .converted {
-                return .defaultHigh
-            }
-            return .defaultLow
+            LeadMapAnnotationPriorityPolicy.displayPriority(for: lead)
         }
         
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
@@ -1009,7 +1041,13 @@ struct AdvancedMapView: UIViewRepresentable {
 
         private func shouldOpenClusterSheet(mapView: MKMapView, cluster: MKClusterAnnotation) -> Bool {
             let maxSpan = max(mapView.region.span.latitudeDelta, mapView.region.span.longitudeDelta)
-            return maxSpan <= 0.012 || coordinateSpread(for: cluster) <= 0.0012
+            let leads = cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.lead }
+            return LeadClusterInteractionPolicy.route(
+                mapSpan: maxSpan,
+                coordinateSpread: coordinateSpread(for: cluster),
+                memberCount: cluster.memberAnnotations.count,
+                containsUrgentLead: leads.contains(where: LeadClusterSummary.isUrgent)
+            ) == .openSheet
         }
 
         private func zoomIntoCluster(_ cluster: MKClusterAnnotation, on mapView: MKMapView) {
@@ -1074,12 +1112,16 @@ struct AdvancedMapView: UIViewRepresentable {
         
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
             let userGesture = isUserDrivenRegionGesture(in: mapView)
+            handleRegionWillChange(userGesture: userGesture)
+        }
+
+        func handleRegionWillChange(userGesture: Bool) {
             isUserInteracting = userGesture
             updateTimer?.invalidate()
-            guard !isProgrammaticChange else { return }
-
             if userGesture {
                 userHasInteracted = true
+                isProgrammaticChange = false
+                resetStartupCenterVerification()
             }
         }
 
@@ -1097,6 +1139,7 @@ struct AdvancedMapView: UIViewRepresentable {
         
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             updateTimer?.invalidate()
+            updateLeadClusteringModeIfNeeded(mapView: mapView)
 
             let currentRegion = mapView.region
             let currentCamera = mapView.camera
@@ -1173,6 +1216,91 @@ struct AdvancedMapView: UIViewRepresentable {
     }
 }
 
+enum LeadClusterInteractionPolicy {
+    enum Route {
+        case openSheet
+        case zoomIn
+    }
+
+    static func route(
+        mapSpan: CLLocationDegrees,
+        coordinateSpread: CLLocationDegrees,
+        memberCount: Int,
+        containsUrgentLead: Bool
+    ) -> Route {
+        if containsUrgentLead {
+            return .openSheet
+        }
+
+        if memberCount <= 35, mapSpan <= 0.04 {
+            return .openSheet
+        }
+
+        if mapSpan <= 0.018 || coordinateSpread <= 0.004 {
+            return .openSheet
+        }
+
+        return .zoomIn
+    }
+}
+
+enum LeadClusterDisplayPolicy {
+    enum Mode {
+        case clustered
+        case expanded
+    }
+
+    static func mode(for region: MKCoordinateRegion) -> Mode {
+        mode(mapSpan: max(region.span.latitudeDelta, region.span.longitudeDelta))
+    }
+
+    static func mode(mapSpan: CLLocationDegrees) -> Mode {
+        mapSpan <= 0.04 ? .expanded : .clustered
+    }
+
+    static func clusteringIdentifier(for mode: Mode) -> String? {
+        mode == .clustered ? "LeadCluster" : nil
+    }
+}
+
+enum LeadMapAnnotationPriorityPolicy {
+    private static let interestedPriority = MKFeatureDisplayPriority(
+        rawValue: (MKFeatureDisplayPriority.required.rawValue + MKFeatureDisplayPriority.defaultHigh.rawValue) / 2
+    )
+
+    static func displayPriority(for lead: Lead) -> MKFeatureDisplayPriority {
+        if lead.leadStatus == .converted {
+            return .required
+        }
+
+        if lead.leadStatus == .interested {
+            return interestedPriority
+        }
+
+        if LeadClusterSummary.isUrgent(lead) {
+            return .defaultHigh
+        }
+
+        return .defaultLow
+    }
+
+    static func clusterDisplayPriority(for summary: LeadClusterSummary) -> MKFeatureDisplayPriority {
+        if summary.soldCount > 0 {
+            return .required
+        }
+
+        if summary.leads.contains(where: { $0.leadStatus == .interested }) {
+            return interestedPriority
+        }
+
+        if summary.isUrgent {
+            return .defaultHigh
+        }
+
+        return .defaultHigh
+    }
+}
+
 class LeadMapAnnotation: NSObject, MKAnnotation {
     let lead: Lead
     // Cache coordinate at creation time so accessing a deleted managed object won't crash
@@ -1240,6 +1368,10 @@ struct LeadClusterSummary {
         leads.filter { $0.leadStatus == .converted }.count
     }
 
+    var interestedCount: Int {
+        leads.filter { $0.leadStatus == .interested }.count
+    }
+
     var totalValue: Double {
         leads.reduce(0) { partial, lead in
             partial + max(lead.price, lead.estimatedValue)
@@ -1257,14 +1389,17 @@ struct LeadClusterSummary {
     }
 
     var headline: String {
+        if soldCount > 0 {
+            return soldCount == count ? "Sold cluster" : "\(soldCount) sold"
+        }
+        if interestedCount > 0 {
+            return "\(interestedCount) interested"
+        }
         if dueFollowUpCount > 0 {
             return "\(dueFollowUpCount) follow-up due"
         }
         if hotLeadCount > 0 {
             return "\(hotLeadCount) hot \(hotLeadCount == 1 ? "lead" : "leads")"
-        }
-        if soldCount > 0 && soldCount == count {
-            return "Sold cluster"
         }
         if let dominant = statusCounts.first {
             return dominant.status.displayName
@@ -1284,14 +1419,17 @@ struct LeadClusterSummary {
     }
 
     var uiColor: UIColor {
+        if soldCount > 0 {
+            return .systemGreen
+        }
+        if interestedCount > 0 {
+            return .systemOrange
+        }
         if dueFollowUpCount > 0 || leads.contains(where: { Self.isPriorityActionable($0) }) {
             return .systemPink
         }
         if hotLeadCount > 0 {
             return .systemOrange
-        }
-        if soldCount > 0 && soldCount >= max(1, count / 2) {
-            return .systemGreen
         }
         guard let dominant = statusCounts.first?.status else {
             return .systemPurple
@@ -1351,10 +1489,10 @@ struct LeadClusterSummary {
         if isPriorityActionable(lead) { score += 600 + Int(lead.priority) }
         if isFollowUpDue(lead, now: now) { score += 520 }
         switch lead.leadStatus {
-        case .interested:
-            score += 500
         case .converted:
-            score += 420
+            score += 2_000
+        case .interested:
+            score += 1_500
         case .notHome:
             score += 260
         case .notContacted:

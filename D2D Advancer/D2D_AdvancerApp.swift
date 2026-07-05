@@ -53,6 +53,10 @@ struct D2D_AdvancerApp: App {
             UserDefaults.standard.set(UserDataSyncManager.SyncInterval.oneHour.rawValue, forKey: "sync_interval")
             print("🧪 Sync settings reset for UI tests")
         }
+        if launchArguments.contains("-resetSearchPresetsForUITests") {
+            UserDefaults.standard.removeObject(forKey: "saved_search_presets")
+            print("🧪 Search presets reset for UI tests")
+        }
         if shouldResetOnboardingForUITests || shouldShowOnboardingForUITests {
             UserDefaults.standard.removeObject(forKey: "onboarding_completed")
             UserDefaults.standard.removeObject(forKey: "onboarding_profile")
@@ -64,6 +68,16 @@ struct D2D_AdvancerApp: App {
         }
         if launchArguments.contains("-unlockPremiumForUITests") {
             UserDefaults.standard.set(true, forKey: "isPremiumUser")
+        }
+        if launchArguments.contains("-resetPremiumForUITests") {
+            UserDefaults.standard.removeObject(forKey: "isPremiumUser")
+            UserDefaults.standard.removeObject(forKey: "totalLeadCount")
+        }
+        if launchArguments.contains("-forceLightModeForUITests") {
+            UserDefaults.standard.set(false, forKey: "isDarkMode")
+        }
+        if launchArguments.contains("-forceDarkModeForUITests") {
+            UserDefaults.standard.set(true, forKey: "isDarkMode")
         }
 
         if shouldShowOnboardingForUITests {
@@ -82,7 +96,9 @@ struct D2D_AdvancerApp: App {
 
         if isRunningUITests {
             UIView.setAnimationsEnabled(false)
-            if launchArguments.contains("-openMoreTabForUITests") {
+            if launchArguments.contains("-openTeamWorkspaceForUITests") {
+                AppRouter.shared.selectedTab = 4
+            } else if launchArguments.contains("-openMoreTabForUITests") {
                 AppRouter.shared.selectedTab = 4
             } else if launchArguments.contains("-openAppointmentsTabForUITests") {
                 AppRouter.shared.selectedTab = 3

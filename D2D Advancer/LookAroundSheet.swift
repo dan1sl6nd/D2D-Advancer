@@ -10,6 +10,7 @@ enum StreetViewProvider: String, CaseIterable {
 struct LookAroundSheet: View {
     @Binding var coordinate: CLLocationCoordinate2D
     let title: String
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var scene: MKLookAroundScene?
     @State private var isAppleLoading = true
@@ -29,8 +30,8 @@ struct LookAroundSheet: View {
             .padding(.bottom, 20)
             .frame(maxHeight: .infinity, alignment: .top)
         }
-        .background(Color.obsidianBlack)
-        .presentationBackground(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
         .onAppear {
             // Always load on appear — the task(id:) only fires on coordinate CHANGES
             Task { await loadAppleScene() }

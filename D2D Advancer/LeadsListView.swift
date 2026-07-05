@@ -2,6 +2,7 @@ import SwiftUI
 import CoreData
 
 struct LeadsListView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var preferences = AppPreferences.shared
     @ObservedObject private var router = AppRouter.shared
@@ -71,15 +72,21 @@ struct LeadsListView: View {
             ownerNotifications: teamService.ownerNotifications
         )
     }
+
+    private var roleContext: TeamRoleContext {
+        TeamRoleContext(summary: teamSurfaceSummary)
+    }
     
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
+                let screenBackground = Color.obsidianBackground(for: colorScheme)
+
                 VStack(spacing: 0) {
                     Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .frame(height: geometry.safeAreaInsets.top)
-                    ObsidianHeaderView("Leads") {
+                        .fill(screenBackground)
+                        .frame(height: ObsidianLayout.safeAreaTop(geometry))
+                    ObsidianHeaderView(roleContext.leadScreenTitle) {
                         HStack(spacing: 6) {
                             Button {
                                 showingSortOptions = true
@@ -127,7 +134,7 @@ struct LeadsListView: View {
                 .ignoresSafeArea(.all, edges: .top)
             }
             .navigationBarHidden(true)
-            .background(Color.obsidianBlack)
+            .background(Color.obsidianBackground(for: colorScheme))
             .accessibilityIdentifier("leadsScreen")
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
@@ -214,8 +221,8 @@ struct LeadsListView: View {
 
     private func safeAreaSpacer(geometry: GeometryProxy) -> some View {
         Rectangle()
-            .fill(Color.obsidianBlack)
-            .frame(height: max(geometry.safeAreaInsets.top + 20, 70))
+            .fill(Color.obsidianBackground(for: colorScheme))
+            .frame(height: ObsidianLayout.safeAreaTop(geometry, extra: 20, minimum: 70))
     }
     
     private var tabSelectionSection: some View {
@@ -248,7 +255,7 @@ struct LeadsListView: View {
         .accessibilityLabel("Lead filter tabs")
         .padding(.horizontal, 16)
         .padding(.bottom, 4)
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
     }
     
     private var searchAndFiltersSection: some View {
@@ -306,7 +313,7 @@ struct LeadsListView: View {
                     .foregroundColor(Color.textPrimary)
 
                 Text(selectedTab == .active ?
-                    "Add leads from the Map tab to start building your pipeline." :
+                    activeEmptyMessage :
                     "Leads marked as Not Home or Not Interested will appear here.")
                     .font(.obsidianBody)
                     .foregroundColor(Color.textSecondary)
@@ -332,6 +339,17 @@ struct LeadsListView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("No leads found")
     }
+
+    private var activeEmptyMessage: String {
+        switch roleContext {
+        case .technician:
+            return "Assigned service jobs appear in the Jobs tab. Lead work stays out of the way."
+        case .salesRep:
+            return "Assigned leads and leads you create will appear here."
+        default:
+            return "Add leads from the Map tab to start building your pipeline."
+        }
+    }
     
     private var leadsScrollView: some View {
         List {
@@ -343,7 +361,7 @@ struct LeadsListView: View {
                     onSelectLead: { selectedTeamLead = $0 }
                 )
                 .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 8, trailing: 16))
-                .listRowBackground(Color.obsidianBlack)
+                .listRowBackground(Color.obsidianBackground(for: colorScheme))
                 .listRowSeparator(.hidden)
             }
 
@@ -375,7 +393,7 @@ struct LeadsListView: View {
                     handleLongPressDelete(lead)
                 }
                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                .listRowBackground(Color.obsidianBlack)
+                .listRowBackground(Color.obsidianBackground(for: colorScheme))
                 .listRowSeparator(.hidden)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Lead: \(lead.displayName)")
@@ -396,7 +414,7 @@ struct LeadsListView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .listRowBackground(Color.obsidianBlack)
+                    .listRowBackground(Color.obsidianBackground(for: colorScheme))
                     .listRowSeparator(.hidden)
             }
 
@@ -410,14 +428,14 @@ struct LeadsListView: View {
                         .foregroundColor(Color.textSecondary)
                 }
                 .padding()
-                .listRowBackground(Color.obsidianBlack)
+                .listRowBackground(Color.obsidianBackground(for: colorScheme))
                 .accessibilityLabel("Loading more leads")
             }
         }
         .listStyle(.plain)
         .listRowSeparator(.hidden)
         .scrollContentBackground(.hidden)
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
         .refreshable {
             resetAndLoadLeads()
             UserDataSyncManager.shared.syncWithServer()

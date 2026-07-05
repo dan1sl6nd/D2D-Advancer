@@ -72,6 +72,7 @@ enum AddLeadDraftAddressPolicy {
 }
 
 struct AddLeadView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var locationManager = LocationManager.shared
@@ -161,9 +162,9 @@ struct AddLeadView: View {
             }
             .padding()
         }
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
         .navigationTitle("Add Lead")
-        .navigationBarTitleDisplayMode(.inline)
+        .obsidianInlineNavigation()
         .navigationBarBackButtonHidden(true)
         .safeAreaInset(edge: .bottom) {
             // Card-based button design
@@ -235,12 +236,7 @@ struct AddLeadView: View {
             )
         }
         .sheet(isPresented: $showingDatePicker) {
-            DatePicker("Follow-Up Date", selection: Binding(
-                get: { followUpDate ?? Date() },
-                set: { followUpDate = $0 }
-            ), displayedComponents: [.date, .hourAndMinute])
-            .datePickerStyle(.graphical)
-            .presentationDetents([.medium])
+            SeasonalDatePickerView(selectedDate: $followUpDate)
         }
         .sheet(isPresented: $showingMessageConfirmation) {
             if let lead = createdLead {
@@ -1159,8 +1155,11 @@ struct LeadFollowUpControls: View {
 
             HStack(spacing: 8) {
                 quickButton("Tomorrow", days: 1)
+                    .accessibilityIdentifier("leadFollowUpQuick_1")
                 quickButton("3 days", days: 3)
+                    .accessibilityIdentifier("leadFollowUpQuick_3")
                 quickButton("1 week", days: 7)
+                    .accessibilityIdentifier("leadFollowUpQuick_7")
             }
 
             HStack(spacing: 8) {
@@ -1173,6 +1172,7 @@ struct LeadFollowUpControls: View {
                         Image(systemName: "calendar")
                             .foregroundColor(Color.textSecondary)
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(PlainButtonStyle())
                 .padding(.horizontal, 14)
@@ -1183,6 +1183,7 @@ struct LeadFollowUpControls: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                 )
+                .accessibilityIdentifier("leadFollowUpCustomDateButton")
 
                 if selectedDate != nil {
                     Button {
@@ -1198,6 +1199,7 @@ struct LeadFollowUpControls: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                     .accessibilityLabel("Clear follow up date")
+                    .accessibilityIdentifier("leadFollowUpClearDateButton")
                 }
             }
         }
@@ -1281,9 +1283,24 @@ struct LeadNotesEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: "note.text")
-                .font(.obsidianFootnote)
-                .foregroundColor(Color.textSecondary)
+            HStack {
+                Label(title, systemImage: "note.text")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+
+                Spacer()
+
+                Button("Done") {
+                    isFocused = false
+                }
+                .font(.obsidianFootnote.weight(.semibold))
+                .foregroundColor(Color.electricViolet)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.electricViolet.opacity(0.1))
+                .clipShape(Capsule())
+                .accessibilityIdentifier(keyboardDoneAccessibilityIdentifier)
+            }
 
             if let accessibilityIdentifier {
                 TextEditor(text: $text)
@@ -1291,27 +1308,12 @@ struct LeadNotesEditor: View {
                     .frame(minHeight: minHeight)
                     .obsidianEditorSurface(cornerRadius: 14)
                     .accessibilityIdentifier(accessibilityIdentifier)
-                    .toolbar { keyboardToolbar }
             } else {
                 TextEditor(text: $text)
                     .focused($isFocused)
                     .frame(minHeight: minHeight)
                     .obsidianEditorSurface(cornerRadius: 14)
-                    .toolbar { keyboardToolbar }
             }
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var keyboardToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .keyboard) {
-            Spacer()
-            Button("Done") {
-                isFocused = false
-            }
-            .font(.obsidianCallout.weight(.semibold))
-            .foregroundColor(Color.electricViolet)
-            .accessibilityIdentifier(keyboardDoneAccessibilityIdentifier)
         }
     }
 }

@@ -30,7 +30,7 @@ struct CalendarSettingsView: View {
             .padding(.top, 18)
             .padding(.bottom, 28)
         }
-        .background(Color.obsidianBlack.ignoresSafeArea())
+        .obsidianScreenBackground()
         .navigationTitle("Calendar Settings")
         .obsidianInlineNavigation()
         .onAppear {

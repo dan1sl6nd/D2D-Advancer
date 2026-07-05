@@ -46,7 +46,7 @@ struct ServiceCategoryCreatorView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle(editingCategory != nil ? "Edit Service" : "Add Service")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)

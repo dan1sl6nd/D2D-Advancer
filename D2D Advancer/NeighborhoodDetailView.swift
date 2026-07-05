@@ -156,7 +156,7 @@ struct NeighborhoodDetailView: View {
                 }
                 .padding(.bottom, 40)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle("Area Details")
             .obsidianInlineNavigation()
             .toolbar {
@@ -220,7 +220,7 @@ struct NeighborhoodDetailView: View {
                 Spacer(minLength: 0)
             }
             .padding(20)
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationBarHidden(true)
         }
         .presentationDetents([.medium, .large])

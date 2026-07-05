@@ -113,7 +113,7 @@ struct AppointmentFormView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle(mode.navigationTitle)
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)

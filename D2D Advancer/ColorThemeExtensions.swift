@@ -3,6 +3,14 @@ import UIKit
 
 // MARK: - Obsidian Color System (Adaptive Light/Dark)
 
+enum ObsidianPalette {
+    static func backgroundUIColor(for colorScheme: ColorScheme) -> UIColor {
+        colorScheme == .dark
+            ? UIColor(red: 0.035, green: 0.035, blue: 0.043, alpha: 1)
+            : UIColor(red: 0.965, green: 0.969, blue: 0.976, alpha: 1)
+    }
+}
+
 extension Color {
     // Base
     static let obsidianBlack = Color(UIColor { traits in
@@ -102,4 +110,8 @@ extension Color {
     static let themeWarning = statusNotHome
     static let themeError = statusNotInterested
     static let themeInfo = statusConverted
+
+    static func obsidianBackground(for colorScheme: ColorScheme) -> Color {
+        Color(ObsidianPalette.backgroundUIColor(for: colorScheme))
+    }
 }

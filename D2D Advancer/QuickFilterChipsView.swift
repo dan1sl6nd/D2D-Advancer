@@ -1,10 +1,9 @@
 import SwiftUI
-import UIKit
 
 struct QuickFilterChipsView: View {
     @ObservedObject var searchFilterManager: SearchFilterManager
     @State private var showingSavePreset = false
-    @State private var presetName = ""
+    @State private var showingPresetPicker = false
     @State private var presetSaveErrorMessage: String?
 
     private let quickStatuses: [LeadStatus] = [.new, .interested, .closed, .notInterested]
@@ -18,17 +17,20 @@ struct QuickFilterChipsView: View {
                         chip(title: status.displayName, icon: status.icon, isSelected: searchFilterManager.currentFilter.selectedStatuses.contains(status)) {
                             toggleStatus(status)
                         }
+                        .accessibilityIdentifier("quickFilterStatus_\(status.rawValue)")
                     }
 
                     // Has Follow-up
                     chip(title: "Has Follow-up", icon: "calendar.badge.clock", isSelected: searchFilterManager.currentFilter.hasFollowUp == true) {
                         toggleHasFollowUp()
                     }
+                    .accessibilityIdentifier("quickFilterHasFollowUp")
 
                     // Due Today (follow-up date today)
                     chip(title: "Due Today", icon: "sun.max", isSelected: isDueTodaySelected) {
                         toggleDueToday()
                     }
+                    .accessibilityIdentifier("quickFilterDueToday")
 
                     // Clear
                     Button(action: { searchFilterManager.clearAllFilters() }) {
@@ -40,16 +42,10 @@ struct QuickFilterChipsView: View {
                         .foregroundColor(Color.textSecondary)
                         .glassChip()
                     }
+                    .accessibilityIdentifier("quickFilterClearButton")
 
-                    // Presets menu
-                    Menu {
-                        Button("Save Current…") { showingSavePreset = true }
-                        if !searchFilterManager.savedPresets.isEmpty {
-                            Divider()
-                            ForEach(searchFilterManager.savedPresets) { preset in
-                                Button(preset.name) { searchFilterManager.loadPreset(preset) }
-                            }
-                        }
+                    Button {
+                        showingPresetPicker = true
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "tray.full")
@@ -59,18 +55,40 @@ struct QuickFilterChipsView: View {
                         .foregroundColor(Color.textSecondary)
                         .glassChip()
                     }
+                    .buttonStyle(PlainButtonStyle())
+                    .accessibilityIdentifier("quickFilterPresetsMenu")
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
             }
+            .accessibilityIdentifier("quickFilterChipScroller")
+        }
+        .sheet(isPresented: $showingPresetPicker) {
+            QuickFilterPresetPickerSheet(
+                presets: searchFilterManager.savedPresets,
+                onSaveCurrent: {
+                    showingPresetPicker = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        showingSavePreset = true
+                    }
+                },
+                onLoadPreset: { preset in
+                    searchFilterManager.loadPreset(preset)
+                    showingPresetPicker = false
+                },
+                onDeletePreset: { preset in
+                    if !searchFilterManager.deletePreset(preset) {
+                        presetSaveErrorMessage = searchFilterManager.lastErrorMessage ?? "Preset was not deleted."
+                    }
+                }
+            )
         }
         .sheet(isPresented: $showingSavePreset) {
-            SavePresetSheet(presetName: $presetName) {
+            SavePresetSheet { presetName in
                 guard searchFilterManager.savePreset(name: presetName) else {
                     presetSaveErrorMessage = searchFilterManager.lastErrorMessage ?? "Preset was not saved."
                     return false
                 }
-                presetName = ""
                 return true
             }
         }
@@ -156,16 +174,161 @@ struct QuickFilterChipsView: View {
     }
 }
 
-struct SavePresetSheet: View {
-    @Binding var presetName: String
-    var onSave: () -> Bool
+struct QuickFilterPresetPickerSheet: View {
+    let presets: [SearchPreset]
+    let onSaveCurrent: () -> Void
+    let onLoadPreset: (SearchPreset) -> Void
+    let onDeletePreset: (SearchPreset) -> Void
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: "Filter Presets",
+                        subtitle: "Save this view or load a saved filter setup.",
+                        icon: "tray.full.fill"
+                    )
+
+                    ObsidianSectionCard(
+                        title: "Current Filter",
+                        icon: "bookmark.fill",
+                        subtitle: "Store the selected statuses, dates, and follow-up filters."
+                    ) {
+                        Button(action: onSaveCurrent) {
+                            Label("Save Current", systemImage: "plus.circle.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(ObsidianPrimaryButtonStyle())
+                        .accessibilityIdentifier("quickFilterSaveCurrentButton")
+                    }
+
+                    ObsidianSectionCard(
+                        title: "Saved Presets",
+                        icon: "folder.fill",
+                        subtitle: presets.isEmpty ? "No saved presets yet." : "\(presets.count) saved \(presets.count == 1 ? "preset" : "presets")"
+                    ) {
+                        if presets.isEmpty {
+                            ObsidianEmptyState(
+                                icon: "tray",
+                                title: "No presets",
+                                message: "Save the current filter when you want to reuse it."
+                            )
+                        } else {
+                            VStack(spacing: 10) {
+                                ForEach(presets) { preset in
+                                    QuickFilterPresetRow(
+                                        preset: preset,
+                                        onLoad: {
+                                            onLoadPreset(preset)
+                                        },
+                                        onDelete: {
+                                            onDeletePreset(preset)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 96)
+            }
+            .background(screenBackground.ignoresSafeArea())
+            .navigationTitle("Filter Presets")
+            .obsidianInlineNavigation()
+            .safeAreaInset(edge: .bottom) {
+                Button(action: { dismiss() }) {
+                    Label("Close", systemImage: "xmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("quickFilterPresetPickerCloseButton")
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(screenBackground.ignoresSafeArea(edges: .bottom))
+            }
+        }
+        .presentationBackground(screenBackground)
+        .accessibilityIdentifier("quickFilterPresetPickerSheet")
+    }
+}
+
+private struct QuickFilterPresetRow: View {
+    let preset: SearchPreset
+    let onLoad: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onLoad) {
+                HStack(spacing: 10) {
+                    Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.electricViolet)
+                        .frame(width: 34, height: 34)
+                        .background(Color.electricViolet.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(preset.name)
+                            .font(.obsidianCallout)
+                            .foregroundColor(Color.textPrimary)
+                            .lineLimit(1)
+
+                        Text(preset.dateCreated, style: .date)
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("quickFilterPreset_\(preset.id.uuidString)")
+            .accessibilityLabel(preset.name)
+
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.statusNotInterested)
+                    .frame(width: 38, height: 38)
+                    .background(Color.statusNotInterested.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("quickFilterDeletePreset_\(preset.id.uuidString)")
+            .accessibilityLabel("Delete \(preset.name)")
+        }
+        .padding(12)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+        )
+    }
+}
+
+struct SavePresetSheet: View {
+    var onSave: (String) -> Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+    @State private var presetName = ""
 
     private var trimmedPresetName: String {
         presetName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
@@ -184,7 +347,8 @@ struct SavePresetSheet: View {
                             title: "Preset Name",
                             placeholder: "Example: Interested today",
                             text: $presetName,
-                            icon: "text.cursor"
+                            icon: "text.cursor",
+                            accessibilityIdentifier: "quickFilterPresetNameField"
                         )
                     }
                 }
@@ -192,19 +356,19 @@ struct SavePresetSheet: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .background(screenBackground.ignoresSafeArea())
             .navigationTitle("Save Preset")
             .obsidianInlineNavigation()
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: trimmedPresetName.isEmpty,
                     primaryAction: {
-                        if onSave() {
+                        let name = trimmedPresetName
+                        if onSave(name) {
                             dismiss()
                         }
                     },
                     secondaryAction: {
-                        presetName = ""
                         dismiss()
                     },
                     primaryLabel: {
@@ -214,18 +378,11 @@ struct SavePresetSheet: View {
                         Label("Cancel", systemImage: "xmark.circle.fill")
                     }
                 )
-                .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))
-            }
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    }
-                    .foregroundColor(Color.electricViolet)
-                }
+                .accessibilityIdentifier("quickFilterSavePresetActionBar")
+                .background(screenBackground.ignoresSafeArea(edges: .bottom))
             }
         }
-        .presentationBackground(Color.obsidianBlack)
+        .presentationBackground(screenBackground)
+        .accessibilityIdentifier("quickFilterSavePresetSheet")
     }
 }

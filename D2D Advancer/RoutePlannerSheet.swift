@@ -43,6 +43,7 @@ struct RoutePlannerSheet: View {
 
     let region: MKCoordinateRegion
 
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var locationManager = LocationManager.shared
@@ -62,9 +63,11 @@ struct RoutePlannerSheet: View {
     ) private var candidateLeads: FetchedResults<Lead>
 
     var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
         NavigationStack {
             ZStack {
-                Color.obsidianBlack.ignoresSafeArea()
+                screenBackground.ignoresSafeArea()
 
                 VStack(spacing: 0) {
                     ObsidianScreenTitle(

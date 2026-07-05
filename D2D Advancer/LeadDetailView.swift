@@ -4,6 +4,7 @@ import MapKit
 import UIKit
 
 struct LeadDetailView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var lead: Lead
@@ -87,12 +88,15 @@ struct LeadDetailView: View {
             leadDetailBottomBar
         }
         .navigationTitle(isEditing ? "Edit Lead" : "Lead Details")
-        .navigationBarTitleDisplayMode(.inline)
+        .obsidianInlineNavigation()
         .navigationBarBackButtonHidden(false)
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
         .overlay(alignment: .bottom) {
             copyToastOverlay
                 .padding(.bottom, 96)
+        }
+        .sheet(isPresented: $showingDatePicker) {
+            SeasonalDatePickerView(selectedDate: $editedFollowUpDate)
         }
         .onAppear {
             loadLeadData()
@@ -206,7 +210,7 @@ struct LeadDetailView: View {
         )
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
-        .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))
+        .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .bottom))
     }
 
     private func statusColor(for status: Lead.Status) -> Color {
@@ -319,14 +323,6 @@ struct LeadDetailView: View {
             editCustomerSection
             editWorkSection
             editNextStepSection
-        }
-        .sheet(isPresented: $showingDatePicker) {
-            DatePicker("Follow-Up Date", selection: Binding(
-                get: { editedFollowUpDate ?? Date() },
-                set: { editedFollowUpDate = $0 }
-            ), displayedComponents: [.date, .hourAndMinute])
-            .datePickerStyle(.graphical)
-            .presentationDetents([.medium])
         }
     }
 
@@ -494,6 +490,7 @@ struct LeadDetailView: View {
                     .padding(.vertical, 6)
                     .background(Capsule().fill(Color.electricViolet.opacity(0.12)))
                 }
+                .accessibilityIdentifier("leadDetailHistoryRecordCheckInButton")
             }
             
             if checkIns.isEmpty {
@@ -534,6 +531,7 @@ struct LeadDetailView: View {
                             }
                             .font(.obsidianFootnote)
                             .foregroundColor(Color.electricViolet)
+                            .accessibilityIdentifier("leadDetailFullHistoryButton")
                         }
                     }
 
@@ -601,7 +599,8 @@ struct LeadDetailView: View {
                         title: "Navigate",
                         subtitle: "Route",
                         icon: "location.fill",
-                        color: Color.electricViolet
+                        color: Color.electricViolet,
+                        accessibilityIdentifier: "leadDetailNavigateButton"
                     ) {
                         openInMaps()
                     }
@@ -612,11 +611,22 @@ struct LeadDetailView: View {
                         title: "Schedule",
                         subtitle: "Appointment",
                         icon: "calendar.badge.plus",
-                        color: Color.electricViolet
+                        color: Color.electricViolet,
+                        accessibilityIdentifier: "leadDetailScheduleButton"
                     ) {
                         guard paywallManager.gateAction() else { return }
                         showingScheduleAppointment = true
                     }
+                }
+
+                leadActionButton(
+                    title: "Check-in",
+                    subtitle: "Status",
+                    icon: "checkmark.bubble.fill",
+                    color: Color.statusInterested,
+                    accessibilityIdentifier: "leadDetailRecordCheckInButton"
+                ) {
+                    showingAddCheckIn = true
                 }
 
                 if let phone = lead.phone, !phone.isEmpty {
@@ -624,7 +634,8 @@ struct LeadDetailView: View {
                         title: "Call",
                         subtitle: "Customer",
                         icon: "phone.fill",
-                        color: Color.statusInterested
+                        color: Color.statusInterested,
+                        accessibilityIdentifier: "leadDetailCallButton"
                     ) {
                         Utilities.makePhoneCall(to: phone)
                     }
@@ -635,7 +646,8 @@ struct LeadDetailView: View {
                         title: "Message",
                         subtitle: "Customer",
                         icon: "message.fill",
-                        color: Color.electricViolet
+                        color: Color.electricViolet,
+                        accessibilityIdentifier: "leadDetailMessageButton"
                     ) {
                         Utilities.sendSMS(to: phone)
                     }
@@ -647,7 +659,8 @@ struct LeadDetailView: View {
                         subtitle: "Contact",
                         icon: "person.crop.circle.badge.plus",
                         color: Color.statusConverted,
-                        isLoading: isCreatingContact
+                        isLoading: isCreatingContact,
+                        accessibilityIdentifier: "leadDetailCreateContactButton"
                     ) {
                         createContactForLead()
                     }
@@ -659,7 +672,8 @@ struct LeadDetailView: View {
                         title: "Email",
                         subtitle: "Customer",
                         icon: "envelope.fill",
-                        color: Color.dataCyan
+                        color: Color.dataCyan,
+                        accessibilityIdentifier: "leadDetailEmailButton"
                     ) {
                         Utilities.sendEmail(to: email)
                     }
@@ -693,6 +707,7 @@ struct LeadDetailView: View {
         icon: String,
         color: Color,
         isLoading: Bool = false,
+        accessibilityIdentifier: String,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -737,6 +752,7 @@ struct LeadDetailView: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
     
     private var shouldShowScheduleButton: Bool {

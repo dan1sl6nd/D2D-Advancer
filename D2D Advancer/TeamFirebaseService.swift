@@ -108,6 +108,8 @@ final class TeamFirebaseService: ObservableObject {
     @Published private(set) var activeDutySession: TeamDutySession?
     @Published private(set) var syncWriteState: TeamSyncWriteState = .idle
     @Published private(set) var isLoading = false
+    @Published private(set) var lastSuccessfulTeamSyncAt: Date?
+    @Published private(set) var lastTeamSyncFailureAt: Date?
     @Published var lastErrorMessage: String?
 
     private static let cachedMembershipKey = "teamFirebase.cachedMembership.v1"
@@ -126,12 +128,12 @@ final class TeamFirebaseService: ObservableObject {
     }
 
     nonisolated static let removedTeamAccessMessage = "You no longer have access to this team. Ask the owner for a new invite if needed."
-    nonisolated static let teamOfflineMessage = "Team is offline. Showing saved team data until the connection returns."
-    nonisolated static let teamSetupOfflineMessage = "Team is offline. Connect to the internet to create or join a team."
+    nonisolated static let teamOfflineMessage = "Offline. Saved team data will update when connection returns."
+    nonisolated static let teamSetupOfflineMessage = "Offline. Connect to the internet to create or join a team."
 
     nonisolated static func userFacingErrorMessage(for error: Error) -> String {
         if isPermissionDeniedError(error) {
-            return "Team permissions need updating. Refresh Team or sign in again."
+            return "Team access needs refresh. Refresh Team or sign in again."
         }
         if isOfflineError(error) {
             return teamOfflineMessage
@@ -139,10 +141,25 @@ final class TeamFirebaseService: ObservableObject {
         return error.localizedDescription
     }
 
-    nonisolated static func isStaleNoTeamSetupMessage(_ message: String) -> Bool {
+    nonisolated static func isPermissionMessage(_ message: String) -> Bool {
         message.localizedCaseInsensitiveContains("team permissions need updating")
-            || message.localizedCaseInsensitiveContains("no active team")
+            || message.localizedCaseInsensitiveContains("team access needs refresh")
             || message.localizedCaseInsensitiveContains("missing or insufficient permissions")
+            || message.localizedCaseInsensitiveContains("permission_denied")
+    }
+
+    nonisolated static func isOfflineMessage(_ message: String) -> Bool {
+        message == teamOfflineMessage
+            || message == teamSetupOfflineMessage
+            || message.localizedCaseInsensitiveContains("client is offline")
+            || message.localizedCaseInsensitiveContains("connection appears to be offline")
+            || message.localizedCaseInsensitiveContains("network connection was lost")
+            || message.localizedCaseInsensitiveContains("not connected to the internet")
+    }
+
+    nonisolated static func isStaleNoTeamSetupMessage(_ message: String) -> Bool {
+        isPermissionMessage(message)
+            || message.localizedCaseInsensitiveContains("no active team")
     }
 
     nonisolated static func isPermissionDeniedError(_ error: Error) -> Bool {
@@ -278,15 +295,18 @@ final class TeamFirebaseService: ObservableObject {
             updateActiveDutySession(for: member.userId)
             cacheMembership(team: team, member: member)
             startTeamRealtimeListeners(team: team, member: member)
+            lastSuccessfulTeamSyncAt = Date()
+            lastTeamSyncFailureAt = nil
         } catch TeamFirebaseServiceError.notAuthenticated {
             restoreCachedMembershipIfAvailable()
         } catch {
+            lastTeamSyncFailureAt = Date()
             if Self.isOfflineError(error), activeTeam != nil, currentMember != nil {
                 hasPreparedFirestoreNetwork = false
                 #if DEBUG
                 await debugLogFirestoreRESTProbe()
                 #endif
-                print("⚠️ Team refresh failed while offline; keeping cached Team workspace visible.")
+                AppLog.warning("Team", "Team refresh failed while offline; keeping cached Team workspace visible.")
             } else {
                 lastErrorMessage = Self.userFacingErrorMessage(for: error)
             }
@@ -344,6 +364,8 @@ final class TeamFirebaseService: ObservableObject {
         activityLog = []
         activeDutySession = nil
         syncWriteState = .idle
+        lastSuccessfulTeamSyncAt = Date()
+        lastTeamSyncFailureAt = nil
         cacheMembership(team: team, member: owner)
     }
 
@@ -1479,7 +1501,7 @@ enum TeamFirebaseServiceError: LocalizedError {
         case .ownerOnly:
             return "Only the team owner can do that."
         case .serverConfirmationTimedOut:
-            return "Team could not be confirmed with the cloud. Check your connection and try again."
+            return "Team could not be confirmed. Check your connection and try again."
         case .teamFull:
             return "The included team seats are full."
         case .writeBlocked:
@@ -1494,7 +1516,7 @@ private extension TeamFirebaseService {
         guard let options = FirebaseApp.app()?.options,
               let projectID = options.projectID,
               let apiKey = options.apiKey else {
-            print("🧪 Firestore REST probe skipped: Firebase options unavailable")
+            AppLog.debug("Team", "Firestore REST probe skipped: Firebase options unavailable")
             return
         }
 
@@ -1505,7 +1527,7 @@ private extension TeamFirebaseService {
         components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
 
         guard let url = components.url else {
-            print("🧪 Firestore REST probe skipped: invalid URL")
+            AppLog.debug("Team", "Firestore REST probe skipped: invalid URL")
             return
         }
 
@@ -1513,13 +1535,13 @@ private extension TeamFirebaseService {
             let (data, response) = try await URLSession.shared.data(from: url)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let body = String(data: data, encoding: .utf8) ?? ""
-            print("🧪 \(TeamFirestoreRESTProbeLogPolicy.summary(label: "Firestore public REST probe", statusCode: statusCode, body: body, publicProbe: true))")
+            AppLog.debug("Team", TeamFirestoreRESTProbeLogPolicy.summary(label: "Firestore public REST probe", statusCode: statusCode, body: body, publicProbe: true))
         } catch {
-            print("🧪 Firestore public REST probe failed before HTTP response: \(error.localizedDescription)")
+            AppLog.debug("Team", "Firestore public REST probe failed before HTTP response: \(error.localizedDescription)")
         }
 
         guard let user = Auth.auth().currentUser else {
-            print("🧪 Firestore auth REST probe skipped: no Firebase Auth user")
+            AppLog.debug("Team", "Firestore auth REST probe skipped: no Firebase Auth user")
             return
         }
 
@@ -1528,12 +1550,12 @@ private extension TeamFirebaseService {
             do {
                 idToken = try await firebaseIDToken(for: user, forceRefresh: false)
             } catch {
-                print("🧪 Firestore auth REST probe could not read cached Firebase ID token: \(error.localizedDescription)")
+                AppLog.debug("Team", "Firestore auth REST probe could not read cached Firebase ID token: \(error.localizedDescription)")
                 idToken = try await firebaseIDToken(for: user, forceRefresh: true)
-                print("🧪 Firestore auth REST probe recovered with refreshed Firebase ID token")
+                AppLog.debug("Team", "Firestore auth REST probe recovered with refreshed Firebase ID token")
             }
         } catch {
-            print("🧪 Firestore auth REST probe failed before HTTP request: Firebase ID token unavailable (\(error.localizedDescription))")
+            AppLog.debug("Team", "Firestore auth REST probe failed before HTTP request: Firebase ID token unavailable (\(error.localizedDescription))")
             return
         }
 
@@ -1544,7 +1566,7 @@ private extension TeamFirebaseService {
         authComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
 
         guard let authURL = authComponents.url else {
-            print("🧪 Firestore auth REST probe skipped: invalid URL")
+            AppLog.debug("Team", "Firestore auth REST probe skipped: invalid URL")
             return
         }
 
@@ -1554,9 +1576,9 @@ private extension TeamFirebaseService {
             let (data, response) = try await URLSession.shared.data(for: request)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let body = String(data: data, encoding: .utf8) ?? ""
-            print("🧪 \(TeamFirestoreRESTProbeLogPolicy.summary(label: "Firestore authenticated REST probe", statusCode: statusCode, body: body, publicProbe: false))")
+            AppLog.debug("Team", TeamFirestoreRESTProbeLogPolicy.summary(label: "Firestore authenticated REST probe", statusCode: statusCode, body: body, publicProbe: false))
         } catch {
-            print("🧪 Firestore auth REST probe failed before HTTP response: \(error.localizedDescription)")
+            AppLog.debug("Team", "Firestore auth REST probe failed before HTTP response: \(error.localizedDescription)")
         }
     }
 #endif
@@ -1631,7 +1653,7 @@ private extension TeamFirebaseService {
         } catch {
             let message = "Team cache could not be saved: \(error.localizedDescription)"
             lastErrorMessage = message
-            print("⚠️ \(message)")
+            AppLog.warning("Team", message)
         }
     }
 
@@ -1648,7 +1670,7 @@ private extension TeamFirebaseService {
             let message = "Saved Team cache could not be loaded: \(error.localizedDescription)"
             lastErrorMessage = message
             UserDefaults.standard.removeObject(forKey: Self.cachedMembershipKey)
-            print("⚠️ \(message)")
+            AppLog.warning("Team", message)
             return
         }
         guard let cached else { return }
@@ -1679,7 +1701,7 @@ private extension TeamFirebaseService {
             return user
         } catch {
             hasPreparedFirestoreNetwork = false
-            print("⚠️ Firebase Team session token refresh failed: \(error.localizedDescription)")
+            AppLog.warning("Team", "Firebase Team session token refresh failed: \(error.localizedDescription)")
             try? Auth.auth().signOut()
             throw TeamFirebaseServiceError.firebaseSessionExpired
         }
@@ -1722,7 +1744,7 @@ private extension TeamFirebaseService {
         do {
             try await teamProfileRef(userId: userId).delete()
         } catch {
-            print("⚠️ Team profile cleanup failed after access revocation: \(Self.userFacingErrorMessage(for: error))")
+            AppLog.warning("Team", "Team profile cleanup failed after access revocation: \(Self.userFacingErrorMessage(for: error))")
         }
 
         clearLocalTeam(removeCachedMembership: true)
@@ -2090,7 +2112,7 @@ private extension TeamFirebaseService {
         }
 
         let message = Self.userFacingErrorMessage(for: error)
-        print("⚠️ Team non-blocking sync failed (\(context)): \(message)")
+        AppLog.warning("Team", "Non-blocking sync failed (\(context)): \(message)")
         if activeTeam == nil || currentMember == nil {
             lastErrorMessage = message
         }
@@ -2107,7 +2129,10 @@ private extension TeamFirebaseService {
                 batch.commit(completion: completion)
             }
             syncWriteState = .idle
+            lastSuccessfulTeamSyncAt = Date()
+            lastTeamSyncFailureAt = nil
         } catch {
+            lastTeamSyncFailureAt = Date()
             syncWriteState = .failed(Self.userFacingErrorMessage(for: error))
             throw error
         }
@@ -2120,7 +2145,10 @@ private extension TeamFirebaseService {
                 document.setData(data, merge: merge, completion: completion)
             }
             syncWriteState = .idle
+            lastSuccessfulTeamSyncAt = Date()
+            lastTeamSyncFailureAt = nil
         } catch {
+            lastTeamSyncFailureAt = Date()
             syncWriteState = .failed(Self.userFacingErrorMessage(for: error))
             throw error
         }
@@ -2137,8 +2165,11 @@ private extension TeamFirebaseService {
                     guard updateSyncStateOnLateCompletion else { return }
                     guard let self else { return }
                     if let error {
+                        self.lastTeamSyncFailureAt = Date()
                         self.syncWriteState = .failed(Self.userFacingErrorMessage(for: error))
                     } else {
+                        self.lastSuccessfulTeamSyncAt = Date()
+                        self.lastTeamSyncFailureAt = nil
                         self.syncWriteState = .idle
                     }
                 }
@@ -2166,7 +2197,7 @@ private extension TeamFirebaseService {
                     batch.commit(completion: completion)
                 }
             } catch {
-                print("⚠️ Team optional write failed (\(context)): \(Self.userFacingErrorMessage(for: error))")
+                AppLog.warning("Team", "Optional write failed (\(context)): \(Self.userFacingErrorMessage(for: error))")
             }
         }
     }

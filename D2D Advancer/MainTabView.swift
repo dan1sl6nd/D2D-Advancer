@@ -1,10 +1,12 @@
 import SwiftUI
 
 struct MainTabView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var locationManager = LocationManager.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var teamService = TeamFirebaseService.shared
+    @State private var didApplyRoleDefaultTab = false
 
     @FetchRequest(
         sortDescriptors: [],
@@ -17,6 +19,10 @@ struct MainTabView: View {
 
     private var shouldLoadTeamWorkspace: Bool {
         !isRunningUITests || FirebaseEmulatorConfiguration.isEnabled
+    }
+
+    private var shouldOpenTeamWorkspaceForUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-openTeamWorkspaceForUITests")
     }
 
     private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
@@ -36,82 +42,97 @@ struct MainTabView: View {
         min(teamSurfaceSummary?.badgeCount ?? 0, 99)
     }
 
+    private var roleContext: TeamRoleContext {
+        TeamRoleContext(summary: teamSurfaceSummary)
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Content area
-            Group {
-                switch router.selectedTab {
-                case 0:
-                    MapView()
-                case 1:
-                    LeadsListView()
-                case 2:
-                    FollowUpView()
-                case 3:
-                    AppointmentsView()
-                case 4:
-                    MoreView()
-                default:
-                    MapView()
+        Group {
+            if shouldOpenTeamWorkspaceForUITests {
+                TeamWorkspaceView()
+            } else {
+                VStack(spacing: 0) {
+                    // Content area
+                    Group {
+                        switch router.selectedTab {
+                        case 0:
+                            MapView()
+                        case 1:
+                            LeadsListView()
+                        case 2:
+                            FollowUpView()
+                        case 3:
+                            AppointmentsView()
+                        case 4:
+                            MoreView()
+                        default:
+                            MapView()
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .animation(.easeInOut(duration: 0.2), value: router.selectedTab)
+
+                    // Obsidian tab bar
+                    HStack(spacing: 0) {
+                        TabBarButton(
+                            title: roleContext.mapTabTitle,
+                            icon: "map",
+                            selectedIcon: "map.fill",
+                            isSelected: router.selectedTab == 0,
+                            accessibilityID: "tab_Map",
+                            action: { router.selectedTab = 0 }
+                        )
+
+                        TabBarButton(
+                            title: roleContext.leadsTabTitle,
+                            icon: "person.2",
+                            selectedIcon: "person.2.fill",
+                            isSelected: router.selectedTab == 1,
+                            badgeCount: teamLeadBadgeCount,
+                            accessibilityID: "tab_Leads",
+                            action: { router.selectedTab = 1 }
+                        )
+
+                        TabBarButton(
+                            title: roleContext.followUpTabTitle,
+                            icon: "bell",
+                            selectedIcon: "bell.fill",
+                            isSelected: router.selectedTab == 2,
+                            badgeCount: overdueLeads.count,
+                            accessibilityID: "tab_Follow_Up",
+                            action: { router.selectedTab = 2 }
+                        )
+
+                        TabBarButton(
+                            title: roleContext.scheduleTabTitle,
+                            icon: "calendar",
+                            selectedIcon: "calendar",
+                            isSelected: router.selectedTab == 3,
+                            accessibilityID: "tab_Appts",
+                            action: { router.selectedTab = 3 }
+                        )
+
+                        TabBarButton(
+                            title: roleContext.moreTabTitle,
+                            icon: "ellipsis.circle",
+                            selectedIcon: "ellipsis.circle.fill",
+                            isSelected: router.selectedTab == 4,
+                            accessibilityID: "tab_More",
+                            action: { router.selectedTab = 4 }
+                        )
+                    }
+                    .padding(.top, 8)
+                    .background(Color.obsidianBackground(for: colorScheme))
+                    .overlay(
+                        Rectangle()
+                            .fill(Color.obsidianBorder)
+                            .frame(height: 1),
+                        alignment: .top
+                    )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .animation(.easeInOut(duration: 0.2), value: router.selectedTab)
-
-            // Obsidian tab bar
-            HStack(spacing: 0) {
-                TabBarButton(
-                    title: "Map",
-                    icon: "map",
-                    selectedIcon: "map.fill",
-                    isSelected: router.selectedTab == 0,
-                    action: { router.selectedTab = 0 }
-                )
-
-                TabBarButton(
-                    title: "Leads",
-                    icon: "person.2",
-                    selectedIcon: "person.2.fill",
-                    isSelected: router.selectedTab == 1,
-                    badgeCount: teamLeadBadgeCount,
-                    action: { router.selectedTab = 1 }
-                )
-
-                TabBarButton(
-                    title: "Follow Up",
-                    icon: "bell",
-                    selectedIcon: "bell.fill",
-                    isSelected: router.selectedTab == 2,
-                    badgeCount: overdueLeads.count,
-                    action: { router.selectedTab = 2 }
-                )
-
-                TabBarButton(
-                    title: "Appts",
-                    icon: "calendar",
-                    selectedIcon: "calendar",
-                    isSelected: router.selectedTab == 3,
-                    action: { router.selectedTab = 3 }
-                )
-
-                TabBarButton(
-                    title: "More",
-                    icon: "ellipsis.circle",
-                    selectedIcon: "ellipsis.circle.fill",
-                    isSelected: router.selectedTab == 4,
-                    action: { router.selectedTab = 4 }
-                )
-            }
-            .padding(.top, 8)
-            .background(Color.obsidianBlack)
-            .overlay(
-                Rectangle()
-                    .fill(Color.obsidianBorder)
-                    .frame(height: 1),
-                alignment: .top
-            )
         }
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
         .customThemed()
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mainTabView")
@@ -143,12 +164,17 @@ struct MainTabView: View {
 
             Task {
                 await loadTeamWorkspaceIfNeeded()
+                applyDefaultTabForRoleIfNeeded()
             }
         }
         .onChange(of: userAccountManager.isLoggedIn) { _, _ in
             Task {
                 await loadTeamWorkspaceIfNeeded()
+                applyDefaultTabForRoleIfNeeded(reset: true)
             }
+        }
+        .onChange(of: teamService.currentMember?.workType) { _, _ in
+            applyDefaultTabForRoleIfNeeded()
         }
     }
 
@@ -160,6 +186,24 @@ struct MainTabView: View {
             displayName: userAccountManager.currentUserDisplayName,
             email: userAccountManager.currentUserEmail
         )
+    }
+
+    private func applyDefaultTabForRoleIfNeeded(reset: Bool = false) {
+        guard !isRunningUITests else { return }
+        if reset {
+            didApplyRoleDefaultTab = false
+        }
+        guard !didApplyRoleDefaultTab else { return }
+        guard router.selectedTab == 0 else {
+            didApplyRoleDefaultTab = true
+            return
+        }
+
+        let defaultTab = roleContext.defaultTabIndex
+        if defaultTab != router.selectedTab {
+            router.selectedTab = defaultTab
+        }
+        didApplyRoleDefaultTab = true
     }
 
     private func initializeLocationServices() {
@@ -194,6 +238,7 @@ struct TabBarButton: View {
     let selectedIcon: String
     let isSelected: Bool
     var badgeCount: Int = 0
+    let accessibilityID: String
     let action: () -> Void
 
     var body: some View {
@@ -218,6 +263,8 @@ struct TabBarButton: View {
                 }
                 Text(title)
                     .font(.nano)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
             .foregroundColor(isSelected ? Color.electricViolet : Color.textMuted)
             .frame(maxWidth: .infinity)
@@ -231,7 +278,7 @@ struct TabBarButton: View {
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityLabel(title)
-        .accessibilityIdentifier("tab_\(title.replacingOccurrences(of: " ", with: "_"))")
+        .accessibilityIdentifier(accessibilityID)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }

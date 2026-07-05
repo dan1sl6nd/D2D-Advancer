@@ -62,9 +62,9 @@ struct CustomAppointmentTypeCreatorView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 18)
-                .padding(.bottom, 28)
+                .padding(.bottom, 112)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle(editingType != nil ? "Edit Type" : "Create Type")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
@@ -360,7 +360,7 @@ struct IconPickerView: View {
                     .padding(.vertical, 20)
                 }
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle("Choose Icon")
             .obsidianInlineNavigation()
             .accessibilityIdentifier("customAppointmentTypeIconPicker")

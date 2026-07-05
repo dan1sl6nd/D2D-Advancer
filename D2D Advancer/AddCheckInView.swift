@@ -87,12 +87,15 @@ struct AddCheckInView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle("Record Check-in")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .accessibilityIdentifier("addCheckInScreen")
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
+                    primaryAccessibilityIdentifier: "addCheckInSaveButton",
+                    secondaryAccessibilityIdentifier: "addCheckInCancelButton",
                     primaryAction: saveCheckIn,
                     secondaryAction: { dismiss() },
                     primaryLabel: {
@@ -121,11 +124,14 @@ struct AddCheckInView: View {
                         
                         Spacer(minLength: 20)
                     }
-                    .background(Color.obsidianBlack.ignoresSafeArea())
+                    .obsidianScreenBackground()
                     .navigationTitle("Next Follow-up")
                     .obsidianInlineNavigation()
+                    .accessibilityIdentifier("addCheckInNextFollowUpDatePicker")
                     .safeAreaInset(edge: .bottom) {
                         ObsidianBottomActionBar(
+                            primaryAccessibilityIdentifier: "addCheckInDateDoneButton",
+                            secondaryAccessibilityIdentifier: "addCheckInDateCancelButton",
                             primaryAction: { showingDatePicker = false },
                             secondaryAction: { showingDatePicker = false },
                             primaryLabel: { Label("Done", systemImage: "checkmark.circle.fill") },

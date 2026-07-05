@@ -24,9 +24,9 @@ struct NotificationSettingsView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 18)
-            .padding(.bottom, 28)
+            .padding(.bottom, 112)
         }
-        .background(Color.obsidianBlack.ignoresSafeArea())
+        .obsidianScreenBackground()
         .navigationTitle("Notifications")
         .obsidianInlineNavigation()
         .onAppear {
@@ -123,16 +123,7 @@ struct NotificationSettingsView: View {
                     title: "Follow-up Timing",
                     subtitle: "When follow-up alerts fire",
                     trailingContent: {
-                        Picker("Reminder Time", selection: $notificationService.notificationSettings.followUpReminders.reminderTime) {
-                            ForEach(FollowUpReminderTime.allCases, id: \.self) { time in
-                                Text(time.displayName).tag(time)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        .onChange(of: notificationService.notificationSettings.followUpReminders.reminderTime) {
-                            saveSettings()
-                        }
+                        followUpReminderTimeMenu
                     }
                 )
             }
@@ -251,6 +242,54 @@ struct NotificationSettingsView: View {
             .fill(Color.obsidianBorder.opacity(0.45))
             .frame(height: 0.5)
             .padding(.leading, 74)
+    }
+
+    private var followUpReminderTimeMenu: some View {
+        Menu {
+            ForEach(FollowUpReminderTime.allCases, id: \.self) { time in
+                Button {
+                    notificationService.notificationSettings.followUpReminders.reminderTime = time
+                    saveSettings()
+                } label: {
+                    if notificationService.notificationSettings.followUpReminders.reminderTime == time {
+                        Label(time.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(time.displayName)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(compactFollowUpReminderTimeLabel(notificationService.notificationSettings.followUpReminders.reminderTime))
+                    .font(.obsidianFootnote)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+
+                Image(systemName: "chevron.down")
+                    .font(.micro)
+            }
+            .foregroundColor(Color.electricViolet)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(minWidth: 118)
+            .background(Color.electricViolet.opacity(0.12))
+            .clipShape(Capsule())
+        }
+        .accessibilityIdentifier("notificationFollowUpReminderTimeMenu")
+    }
+
+    private func compactFollowUpReminderTimeLabel(_ time: FollowUpReminderTime) -> String {
+        switch time {
+        case .atTime:
+            return "At time"
+        case .fifteenMinutesBefore:
+            return "15 min before"
+        case .thirtyMinutesBefore:
+            return "30 min before"
+        case .oneHourBefore:
+            return "1 hr before"
+        }
     }
 
     private func reminderTimeButton(_ reminderTime: AppointmentReminderTime) -> some View {

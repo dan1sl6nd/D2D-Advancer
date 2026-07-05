@@ -23,7 +23,7 @@ extension Lead {
             case .converted:
                 return "Sold"
             case .notInterested:
-                return "No Interest"
+                return "Not Interested"
             }
         }
         

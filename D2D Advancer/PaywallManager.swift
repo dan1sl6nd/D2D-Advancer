@@ -235,6 +235,9 @@ class PaywallManager: ObservableObject {
     private var isPremiumUnlockedForUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-unlockPremiumForUITests")
     }
+    private var isStoreKitDisabledForUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-disableStoreKitForUITests")
+    }
 
     // Product IDs - UPDATE THESE to match your App Store Connect IDs
     private let weeklyProductID = "com.d2dadvancer.weekly"
@@ -247,11 +250,16 @@ class PaywallManager: ObservableObject {
         experience = PaywallExperience(profile: OnboardingManager.shared.profile)
         loadPremiumStatus()
         loadLeadCount()
-        updateListenerTask = listenForTransactions()
 
-        Task {
-            await loadProducts()
-            await checkSubscriptionStatus()
+        if !isStoreKitDisabledForUITests {
+            updateListenerTask = listenForTransactions()
+
+            Task {
+                await loadProducts()
+                await checkSubscriptionStatus()
+            }
+        } else {
+            print("🧪 StoreKit disabled for UI tests")
         }
 
         OnboardingManager.shared.$profile
@@ -415,6 +423,12 @@ class PaywallManager: ObservableObject {
 
     @MainActor
     func loadProducts() async {
+        guard !isStoreKitDisabledForUITests else {
+            hasAttemptedProductLoad = true
+            products = []
+            return
+        }
+
         guard !isLoadingProducts else { return }
 
         isLoadingProducts = true
@@ -543,6 +557,18 @@ class PaywallManager: ObservableObject {
 
     @MainActor
     func checkSubscriptionStatus() async {
+        guard !isPremiumUnlockedForUITests else {
+            setPremiumStatus(true)
+            print("🧪 Subscription status check skipped: premium unlocked for UI tests")
+            return
+        }
+
+        guard !isStoreKitDisabledForUITests else {
+            setPremiumStatus(false)
+            print("🧪 Subscription status check skipped for UI tests")
+            return
+        }
+
         print("🔍 Checking subscription status...")
         var isActive = false
         var hasActiveSubscription = false

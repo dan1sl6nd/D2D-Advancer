@@ -1,6 +1,21 @@
 import SwiftUI
 import Combine
 
+enum ObsidianLayout {
+    static func finiteDimension(_ value: CGFloat, minimum: CGFloat = 0) -> CGFloat {
+        guard value.isFinite else { return minimum }
+        return max(value, minimum)
+    }
+
+    static func safeAreaTop(_ geometry: GeometryProxy, extra: CGFloat = 0, minimum: CGFloat = 0) -> CGFloat {
+        finiteDimension(geometry.safeAreaInsets.top + extra, minimum: minimum)
+    }
+
+    static func safeAreaBottom(_ geometry: GeometryProxy, extra: CGFloat = 0, minimum: CGFloat = 0) -> CGFloat {
+        finiteDimension(geometry.safeAreaInsets.bottom + extra, minimum: minimum)
+    }
+}
+
 struct ThemeColorSnapshot: Codable, Equatable {
     var red: Double
     var green: Double
@@ -443,6 +458,7 @@ struct ObsidianHeaderView: View {
     let title: String
     var titleAccessibilityIdentifier: String? = nil
     var trailing: AnyView? = nil
+    @Environment(\.colorScheme) private var colorScheme
 
     init(_ title: String, titleAccessibilityIdentifier: String? = nil) {
         self.title = title
@@ -470,7 +486,7 @@ struct ObsidianHeaderView: View {
         .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 14)
-        .background(Color.obsidianBlack)
+        .background(Color.obsidianBackground(for: colorScheme))
     }
 
     @ViewBuilder
@@ -861,6 +877,7 @@ struct ObsidianBottomActionBar<PrimaryLabel: View, SecondaryLabel: View>: View {
     var secondaryAccessibilityIdentifier: String?
     @ViewBuilder var primaryLabel: PrimaryLabel
     @ViewBuilder var secondaryLabel: SecondaryLabel
+    @Environment(\.colorScheme) private var colorScheme
 
     init(
         isPrimaryDisabled: Bool = false,
@@ -901,7 +918,7 @@ struct ObsidianBottomActionBar<PrimaryLabel: View, SecondaryLabel: View>: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(
-            Color.obsidianBlack
+            Color.obsidianBackground(for: colorScheme)
                 .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: -3)
         )
     }
@@ -1015,20 +1032,77 @@ struct ObsidianFloatingButtonModifier: ViewModifier {
 
 // MARK: - Obsidian Card & Modifier View Extensions
 
+enum ObsidianNavigationChromePolicy {
+    static func toolbarColorScheme(for colorScheme: ColorScheme) -> ColorScheme {
+        colorScheme
+    }
+}
+
+struct ObsidianInlineNavigationModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .navigationBarTitleDisplayMode(.inline)
+            .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .top))
+            .toolbarBackground(Color.obsidianBackground(for: colorScheme), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(
+                ObsidianNavigationChromePolicy.toolbarColorScheme(for: colorScheme),
+                for: .navigationBar
+            )
+            .tint(Color.electricViolet)
+    }
+}
+
+private struct ObsidianScreenBackgroundModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
+    }
+}
+
+private struct ObsidianModalBackgroundModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        let background = Color.obsidianBackground(for: colorScheme)
+
+        content
+            .background(background.ignoresSafeArea())
+            .presentationBackground(background)
+    }
+}
+
+private struct ObsidianListScreenModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.obsidianBackground(for: colorScheme))
+            .tint(Color.electricViolet)
+    }
+}
+
 extension View {
     func surfaceCard() -> some View { modifier(SurfaceCardModifier()) }
     func elevatedCard(glow: Color = .electricViolet) -> some View { modifier(ElevatedCardModifier(glowColor: glow)) }
     func accentCard() -> some View { modifier(AccentCardModifier()) }
 
     func obsidianScreenBackground() -> some View {
-        background(Color.obsidianBlack.ignoresSafeArea())
+        modifier(ObsidianScreenBackgroundModifier())
+    }
+
+    func obsidianModalBackground() -> some View {
+        modifier(ObsidianModalBackgroundModifier())
     }
 
     func obsidianListScreen() -> some View {
-        listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(Color.obsidianBlack)
-            .tint(Color.electricViolet)
+        modifier(ObsidianListScreenModifier())
     }
 
     func obsidianListRow() -> some View {
@@ -1038,11 +1112,7 @@ extension View {
     }
 
     func obsidianInlineNavigation() -> some View {
-        navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color.obsidianBlack, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .tint(Color.electricViolet)
+        modifier(ObsidianInlineNavigationModifier())
     }
 
     /// Backward-compatible alias: `.glassCard()` now maps to `.surfaceCard()`.
@@ -1067,6 +1137,7 @@ struct ObsidianPrimaryButtonStyle: ButtonStyle {
             .foregroundColor(.white)
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
+            .frame(minHeight: 44)
             .background(
                 LinearGradient(
                     colors: [.electricViolet, .electricVioletDeep],
@@ -1088,6 +1159,7 @@ struct ObsidianSecondaryButtonStyle: ButtonStyle {
             .foregroundColor(.textPrimary)
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
+            .frame(minHeight: 44)
             .background(Color.obsidianElevated)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
@@ -1116,6 +1188,7 @@ struct ObsidianDangerButtonStyle: ButtonStyle {
             .foregroundColor(.statusNotInterested)
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
+            .frame(minHeight: 44)
             .background(Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(

@@ -2,13 +2,14 @@ import SwiftUI
 import StoreKit
 
 struct PaywallView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @StateObject private var paywallManager = PaywallManager.shared
     @State private var selectedPlan: PaywallManager.SubscriptionPlan = PaywallManager.shared.experience.recommendedPlan
 
     var body: some View {
         ZStack {
-            Color.obsidianBlack
+            Color.obsidianBackground(for: colorScheme)
                 .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
@@ -24,6 +25,7 @@ struct PaywallView: View {
                 .padding(.top, 14)
             }
         }
+        .accessibilityIdentifier("paywallScreen")
         .safeAreaInset(edge: .bottom) {
             purchaseBar
         }
@@ -62,6 +64,7 @@ struct PaywallView: View {
                     )
             }
             .accessibilityLabel("Close paywall")
+            .accessibilityIdentifier("paywallCloseButton")
         }
     }
 
@@ -134,6 +137,7 @@ struct PaywallView: View {
             planRow(for: plan)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier(plan == .weekly ? "paywallPlanWeeklyButton" : "paywallPlanYearlyButton")
     }
 
     private func planRow(for plan: PaywallManager.SubscriptionPlan) -> some View {
@@ -317,6 +321,7 @@ struct PaywallView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .disabled(paywallManager.isPurchasing || paywallManager.isLoadingProducts)
+                .accessibilityIdentifier("paywallPurchaseButton")
 
                 HStack(spacing: 14) {
                     Button("Restore Purchases") {
@@ -325,6 +330,7 @@ struct PaywallView: View {
                     .font(.obsidianCaption)
                     .foregroundColor(.textSecondary)
                     .disabled(paywallManager.isPurchasing)
+                    .accessibilityIdentifier("paywallRestoreButton")
 
                     Text("•")
                         .font(.nano)
@@ -335,12 +341,14 @@ struct PaywallView: View {
                             .font(.obsidianCaption)
                             .foregroundColor(.textSecondary)
                     }
+                    .accessibilityIdentifier("paywallPrivacyButton")
 
                     Button(action: { openTermsOfUse() }) {
                         Text("Terms")
                             .font(.obsidianCaption)
                             .foregroundColor(.textSecondary)
                     }
+                    .accessibilityIdentifier("paywallTermsButton")
                 }
 
                 Text(selectedPlan == .weekly ? "No payment required now. Cancel during trial at no charge." : "Full access immediately. Cancel anytime from device settings.")
@@ -353,7 +361,7 @@ struct PaywallView: View {
             .padding(.top, 14)
             .padding(.bottom, 10)
             .background(.ultraThinMaterial)
-            .background(Color.obsidianBlack.opacity(0.96))
+            .background(Color.obsidianBackground(for: colorScheme).opacity(0.96))
         }
     }
 
@@ -386,6 +394,7 @@ struct PaywallView: View {
                             )
                     )
             )
+            .accessibilityIdentifier("paywallPurchaseStatusBanner")
         }
     }
 

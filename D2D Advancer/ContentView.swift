@@ -36,6 +36,11 @@ struct ContentView: View {
                 PaywallView()
             }
             .onAppear {
+                if ProcessInfo.processInfo.arguments.contains("-showPaywallForUITests") {
+                    paywallManager.setPremiumStatus(false)
+                    paywallManager.shouldShowPaywall = true
+                }
+
                 // Check subscription status when app launches
                 Task {
                     await paywallManager.checkSubscriptionStatus()

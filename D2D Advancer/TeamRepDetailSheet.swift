@@ -56,9 +56,9 @@ struct TeamRepDetailSheet: View {
                 .padding(16)
                 .padding(.bottom, 24)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
+            .obsidianInlineNavigation()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     TeamToolbarDoneButton {

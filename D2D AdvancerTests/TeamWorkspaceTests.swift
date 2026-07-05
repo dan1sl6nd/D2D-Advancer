@@ -3,6 +3,69 @@ import Foundation
 @testable import D2D_Advancer
 
 struct TeamWorkspaceTests {
+    @Test func teamRoleContextRoutesTechniciansToJobs() {
+        let summary = TeamWorkspaceSurfaceSummary(
+            role: .member,
+            currentMemberWorkType: .technician,
+            teamName: "Field Team",
+            workspaces: [],
+            teamLeadCount: 0,
+            importantLeadCount: 0,
+            activeRepCount: 0,
+            upcomingBookingCount: 3,
+            unreadNotificationCount: 0
+        )
+
+        let context = TeamRoleContext(summary: summary)
+
+        #expect(context.defaultTabIndex == 3)
+        #expect(context.scheduleTabTitle == "Jobs")
+        #expect(context.appointmentScreenTitle == "Today's Jobs")
+        #expect(context.workspaceMenuTitle == "Job Workspace")
+    }
+
+    @Test func teamRoleContextRoutesSalesRepsToTheirLeads() {
+        let summary = TeamWorkspaceSurfaceSummary(
+            role: .member,
+            currentMemberWorkType: .salesRep,
+            teamName: "Field Team",
+            workspaces: [],
+            teamLeadCount: 4,
+            importantLeadCount: 1,
+            activeRepCount: 1,
+            upcomingBookingCount: 0,
+            unreadNotificationCount: 0
+        )
+
+        let context = TeamRoleContext(summary: summary)
+
+        #expect(context.defaultTabIndex == 1)
+        #expect(context.leadsTabTitle == "Mine")
+        #expect(context.leadScreenTitle == "My Leads")
+        #expect(context.workspaceMenuTitle == "My Team")
+    }
+
+    @Test func teamRoleContextKeepsOwnersMapFirst() {
+        let summary = TeamWorkspaceSurfaceSummary(
+            role: .owner,
+            currentMemberWorkType: .owner,
+            teamName: "Field Team",
+            workspaces: [],
+            teamLeadCount: 8,
+            importantLeadCount: 2,
+            activeRepCount: 1,
+            upcomingBookingCount: 2,
+            unreadNotificationCount: 1
+        )
+
+        let context = TeamRoleContext(summary: summary)
+
+        #expect(context.defaultTabIndex == 0)
+        #expect(context.leadsTabTitle == "Leads")
+        #expect(context.appointmentScreenTitle == "Schedule")
+        #expect(context.workspaceMenuTitle == "Team Admin")
+    }
+
     @Test func activePlanAllowsWritesButGraceIsReadOnly() {
         #expect(TeamPlanStatus.active.allowsTeamRead)
         #expect(TeamPlanStatus.active.allowsTeamWrite)
@@ -1327,7 +1390,7 @@ struct TeamWorkspaceTests {
         let read = TeamOwnerNotification.markedRead(notification, at: now.addingTimeInterval(20))
         #expect(read.readAt == now.addingTimeInterval(20))
         #expect(TeamSyncWriteState.idle.displayText == "Synced")
-        #expect(TeamSyncWriteState.pending(localWriteCount: 2).displayText == "2 pending team edits")
+        #expect(TeamSyncWriteState.pending(localWriteCount: 2).displayText == "Saving 2 team edits...")
         #expect(TeamSyncWriteState.failed("Network unavailable").displayText == "Network unavailable")
 
         let permissionError = NSError(
@@ -1337,7 +1400,7 @@ struct TeamWorkspaceTests {
         )
         #expect(
             TeamFirebaseService.userFacingErrorMessage(for: permissionError)
-                == "Team permissions need updating. Refresh Team or sign in again."
+                == "Team access needs refresh. Refresh Team or sign in again."
         )
 
         let firestoreOfflineError = NSError(
@@ -1352,13 +1415,76 @@ struct TeamWorkspaceTests {
         )
         #expect(
             TeamFirebaseService.teamSetupOfflineMessage
-                == "Team is offline. Connect to the internet to create or join a team."
+                == "Offline. Connect to the internet to create or join a team."
         )
+        #expect(TeamFirebaseService.isOfflineMessage(TeamFirebaseService.teamOfflineMessage))
+        #expect(TeamFirebaseService.isPermissionMessage("Missing or insufficient permissions."))
 
         #expect(
             TeamFirebaseServiceError.serverConfirmationTimedOut.errorDescription
-                == "Team could not be confirmed with the cloud. Check your connection and try again."
+                == "Team could not be confirmed. Check your connection and try again."
         )
+    }
+
+    @Test func teamSyncHealthPolicySummarizesReadySavingOfflineAndBlockedStates() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let ready = TeamSyncHealthPolicy.snapshot(
+            isAuthenticated: true,
+            hasActiveTeam: true,
+            hasCurrentMember: true,
+            isLoading: false,
+            isWorking: false,
+            syncWriteState: .idle,
+            lastErrorMessage: nil,
+            lastSuccessfulSyncAt: now.addingTimeInterval(-90),
+            now: now
+        )
+        #expect(ready?.level == .ready)
+        #expect(ready?.title == "Team online")
+        #expect(ready?.detail == "Last synced 1 min ago.")
+
+        let saving = TeamSyncHealthPolicy.snapshot(
+            isAuthenticated: true,
+            hasActiveTeam: true,
+            hasCurrentMember: true,
+            isLoading: false,
+            isWorking: false,
+            syncWriteState: .pending(localWriteCount: 2),
+            lastErrorMessage: nil,
+            lastSuccessfulSyncAt: nil,
+            now: now
+        )
+        #expect(saving?.level == .saving)
+        #expect(saving?.title == "Saving 2 team edits...")
+
+        let offline = TeamSyncHealthPolicy.snapshot(
+            isAuthenticated: true,
+            hasActiveTeam: true,
+            hasCurrentMember: true,
+            isLoading: false,
+            isWorking: false,
+            syncWriteState: .failed(TeamFirebaseService.teamOfflineMessage),
+            lastErrorMessage: nil,
+            lastSuccessfulSyncAt: nil,
+            now: now
+        )
+        #expect(offline?.level == .offline)
+        #expect(offline?.actionTitle == "Refresh Team")
+
+        let blocked = TeamSyncHealthPolicy.snapshot(
+            isAuthenticated: true,
+            hasActiveTeam: true,
+            hasCurrentMember: true,
+            isLoading: false,
+            isWorking: false,
+            syncWriteState: .failed("Missing or insufficient permissions."),
+            lastErrorMessage: nil,
+            lastSuccessfulSyncAt: nil,
+            now: now
+        )
+        #expect(blocked?.level == .blocked)
+        #expect(blocked?.title == "Team access needs refresh")
     }
 
     @Test func removedRepPermissionErrorClearsMemberSessionButNotOwnerSession() {

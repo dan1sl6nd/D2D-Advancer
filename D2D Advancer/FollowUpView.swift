@@ -2,6 +2,7 @@ import SwiftUI
 import CoreData
 
 struct FollowUpView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var paywallManager = PaywallManager.shared
     @State private var selectedLead: Lead?
@@ -18,10 +19,12 @@ struct FollowUpView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
+                let screenBackground = Color.obsidianBackground(for: colorScheme)
+
                 VStack(spacing: 0) {
                     Rectangle()
-                        .fill(Color.obsidianBlack)
-                        .frame(height: geometry.safeAreaInsets.top)
+                        .fill(screenBackground)
+                        .frame(height: ObsidianLayout.safeAreaTop(geometry))
 
                     ObsidianHeaderView("Follow Up")
 
@@ -62,7 +65,7 @@ struct FollowUpView: View {
                 .ignoresSafeArea(.all, edges: .top)
             }
             .navigationBarHidden(true)
-            .background(Color.obsidianBlack)
+            .background(Color.obsidianBackground(for: colorScheme))
             .accessibilityIdentifier("followUpScreen")
             .sheet(item: $selectedLead) { lead in
                 FollowUpDetailView(lead: lead)
@@ -422,6 +425,7 @@ struct FollowUpInteractiveRowView: View {
 
 struct FollowUpDetailView: View {
     @ObservedObject var lead: Lead
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var leadForMessaging: Lead?
     @State private var leadForCheckIn: Lead?
@@ -444,9 +448,9 @@ struct FollowUpDetailView: View {
 
                 followUpBottomBar
             }
-            .background(Color.obsidianBlack)
+            .background(Color.obsidianBackground(for: colorScheme))
             .navigationTitle("Follow-Up")
-            .navigationBarTitleDisplayMode(.inline)
+            .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
             .sheet(item: $leadForMessaging) { lead in
                 MessageSelectionView(lead: lead)
@@ -649,7 +653,7 @@ struct FollowUpDetailView: View {
         )
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
-        .background(Color.obsidianBlack.ignoresSafeArea(edges: .bottom))
+        .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .bottom))
     }
 
     private func followUpActionButton(
@@ -774,6 +778,7 @@ struct FollowUpDetailView: View {
 struct RescheduleFollowUpView: View {
     @ObservedObject var lead: Lead
     let currentDate: Date
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var newDate: Date
 
@@ -801,7 +806,7 @@ struct RescheduleFollowUpView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
             .navigationTitle("Reschedule")
             .obsidianInlineNavigation()
             .accessibilityIdentifier("followUpRescheduleSheet")
@@ -821,7 +826,7 @@ struct RescheduleFollowUpView: View {
                 )
             }
         }
-        .presentationBackground(Color.obsidianBlack)
+        .presentationBackground(Color.obsidianBackground(for: colorScheme))
     }
 
     private var changeSummarySection: some View {

@@ -268,6 +268,7 @@ struct NeighborhoodOverlayControls: View {
 
 struct NeighborhoodLegendView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         NavigationStack {
@@ -304,7 +305,7 @@ struct NeighborhoodLegendView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 28)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle("Area Score Legend")
             .obsidianInlineNavigation()
             .safeAreaInset(edge: .bottom) {
@@ -317,7 +318,7 @@ struct NeighborhoodLegendView: View {
                 .buttonStyle(ObsidianPrimaryButtonStyle())
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.obsidianBlack)
+                .background(Color.obsidianBackground(for: colorScheme))
             }
         }
     }

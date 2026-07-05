@@ -6,6 +6,7 @@ struct AppointmentTypePresetsView: View {
     @State private var editingType: CustomAppointmentType?
     @State private var deleteErrorMessage: String?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
         NavigationStack {
@@ -23,9 +24,9 @@ struct AppointmentTypePresetsView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 18)
-                .padding(.bottom, 28)
+                .padding(.bottom, 112)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle("Appointment Types")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
@@ -48,7 +49,7 @@ struct AppointmentTypePresetsView: View {
                 .accessibilityIdentifier("appointmentTypesDoneButton")
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.obsidianBlack)
+                .background(Color.obsidianBackground(for: colorScheme))
             }
             .sheet(isPresented: $showingCreateView) {
                 CustomAppointmentTypeCreatorView()
@@ -78,8 +79,8 @@ struct AppointmentTypePresetsView: View {
         ) {
             VStack(alignment: .leading, spacing: 12) {
                 LazyVGrid(columns: [
-                    GridItem(.adaptive(minimum: 140), spacing: 12)
-                ], spacing: 12) {
+                    GridItem(.adaptive(minimum: 150), spacing: 10)
+                ], spacing: 10) {
                     ForEach(Appointment.AppointmentType.allCases, id: \.self) { type in
                         DefaultTypeChip(type: type)
                     }
@@ -95,29 +96,34 @@ struct AppointmentTypePresetsView: View {
             subtitle: "Create appointment types that fit your business."
         ) {
             if customTypeManager.customTypes.isEmpty {
-                VStack(spacing: 16) {
-                    Image(systemName: "calendar.badge.plus")
-                        .font(.system(size: 48))
-                        .foregroundColor(Color.electricViolet)
-                    
-                    Text("No Custom Types")
-                        .font(.obsidianHeadline)
-                        .foregroundColor(.textPrimary)
-                    
-                    Text("Create custom appointment types that fit your specific business needs.")
-                        .font(.obsidianBody)
-                        .foregroundColor(Color.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 16)
-                    
-                    Button(action: { showingCreateView = true }) {
-                        Label("Create First Type", systemImage: "plus")
+                HStack(alignment: .center, spacing: 14) {
+                    ObsidianIconTile(icon: "calendar.badge.plus", tint: Color.electricViolet, size: 46)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("No Custom Types")
+                            .font(.obsidianCallout)
+                            .foregroundColor(.textPrimary)
+
+                        Text("Add a job label for work your crew repeats often.")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                            .lineLimit(2)
                     }
-                    .buttonStyle(ObsidianPrimaryButtonStyle())
+
+                    Spacer(minLength: 0)
+
+                    Button(action: { showingCreateView = true }) {
+                        Image(systemName: "plus")
+                            .font(.obsidianCallout)
+                            .fontWeight(.bold)
+                    }
+                    .buttonStyle(ObsidianSecondaryButtonStyle())
+                    .controlSize(.small)
+                    .accessibilityLabel("Create first appointment type")
                     .accessibilityIdentifier("appointmentTypesCreateFirstButton")
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 32)
+                .padding(.vertical, 10)
             } else {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Tap to edit or swipe to delete custom appointment types.")
@@ -125,8 +131,8 @@ struct AppointmentTypePresetsView: View {
                         .foregroundColor(Color.textSecondary)
                     
                     LazyVGrid(columns: [
-                        GridItem(.adaptive(minimum: 140), spacing: 12)
-                    ], spacing: 12) {
+                        GridItem(.adaptive(minimum: 150), spacing: 10)
+                    ], spacing: 10) {
                         ForEach(customTypeManager.customTypes) { customType in
                             CustomTypeChip(
                                 customType: customType,
@@ -166,6 +172,8 @@ struct DefaultTypeChip: View {
                 Text(type.rawValue)
                     .font(.obsidianFootnote)
                     .foregroundColor(Color.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
 
                 Text("Built-in")
                     .font(.nano)
@@ -203,6 +211,7 @@ struct CustomTypeChip: View {
                     .font(.obsidianFootnote)
                     .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.72)
 
                 Text("Custom")
                     .font(.nano)

@@ -149,7 +149,7 @@ struct DemographicsPreferencesView: View {
                 }
                 .padding(.top, 18)
             }
-            .background(Color.obsidianBlack.ignoresSafeArea())
+            .obsidianScreenBackground()
             .navigationTitle("Target Demographics")
             .obsidianInlineNavigation()
             .toolbar {
