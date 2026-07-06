@@ -1110,6 +1110,27 @@ struct ObsidianInlineNavigationModifier: ViewModifier {
     }
 }
 
+struct ObsidianPushedNavigationModifier: ViewModifier {
+    @Environment(\.dismiss) private var dismiss
+
+    let title: String
+    var backButtonAccessibilityIdentifier: String?
+
+    func body(content: Content) -> some View {
+        content
+            .navigationTitle(title)
+            .obsidianInlineNavigation()
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ObsidianBackButton(accessibilityIdentifier: backButtonAccessibilityIdentifier) {
+                        dismiss()
+                    }
+                }
+            }
+    }
+}
+
 private struct ObsidianScreenBackgroundModifier: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
@@ -1168,6 +1189,15 @@ extension View {
 
     func obsidianInlineNavigation() -> some View {
         modifier(ObsidianInlineNavigationModifier())
+    }
+
+    func obsidianPushedNavigation(_ title: String, backButtonAccessibilityIdentifier: String? = nil) -> some View {
+        modifier(
+            ObsidianPushedNavigationModifier(
+                title: title,
+                backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier
+            )
+        )
     }
 
     /// Backward-compatible alias: `.glassCard()` now maps to `.surfaceCard()`.

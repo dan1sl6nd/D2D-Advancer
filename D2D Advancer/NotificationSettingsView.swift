@@ -27,8 +27,7 @@ struct NotificationSettingsView: View {
             .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
-        .navigationTitle("Notifications")
-        .obsidianInlineNavigation()
+        .obsidianPushedNavigation("Notifications", backButtonAccessibilityIdentifier: "notificationSettingsBackButton")
         .onAppear {
             checkPermissionStatus()
         }

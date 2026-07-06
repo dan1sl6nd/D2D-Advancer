@@ -21,8 +21,7 @@ struct MessageTemplatesManagerView: View {
         }
         .obsidianScreenBackground()
         .accessibilityIdentifier("messageTemplatesScreen")
-        .navigationTitle("Message Templates")
-        .obsidianInlineNavigation()
+        .obsidianPushedNavigation("Message Templates", backButtonAccessibilityIdentifier: "messageTemplatesBackButton")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

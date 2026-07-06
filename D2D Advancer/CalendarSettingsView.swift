@@ -31,8 +31,7 @@ struct CalendarSettingsView: View {
             .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
-        .navigationTitle("Calendar Settings")
-        .obsidianInlineNavigation()
+        .obsidianPushedNavigation("Calendar Settings", backButtonAccessibilityIdentifier: "calendarSettingsBackButton")
         .onAppear {
             if calendarService.settings.isEnabled && calendarService.hasFullAccess {
                 loadCalendars()

@@ -878,8 +878,7 @@ struct OverviewContentView: View {
             .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
-        .navigationTitle("Overview")
-        .obsidianInlineNavigation()
+        .obsidianPushedNavigation("Overview", backButtonAccessibilityIdentifier: "overviewBackButton")
         .refreshable {
             await loadStatistics()
         }

@@ -155,8 +155,7 @@ struct TeamWorkspaceView: View {
             }
         }
         .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
-        .navigationTitle("Team")
-        .obsidianInlineNavigation()
+        .obsidianPushedNavigation("Team", backButtonAccessibilityIdentifier: "teamWorkspaceBackButton")
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {

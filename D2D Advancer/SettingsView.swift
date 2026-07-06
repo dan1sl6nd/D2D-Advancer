@@ -848,8 +848,7 @@ struct AccountManagementView: View {
             .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
-        .navigationTitle("Account")
-        .obsidianInlineNavigation()
+        .obsidianPushedNavigation("Account", backButtonAccessibilityIdentifier: "accountManagementBackButton")
         .sheet(isPresented: $showingPasswordChange) {
             PasswordChangeView(userAccountManager: userAccountManager)
         }
@@ -1497,8 +1496,7 @@ struct AppPreferencesView: View {
             .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
-        .navigationTitle("App Preferences")
-        .obsidianInlineNavigation()
+        .obsidianPushedNavigation("App Preferences", backButtonAccessibilityIdentifier: "appPreferencesBackButton")
     }
 
     private var preferencesDivider: some View {

@@ -24,8 +24,7 @@ struct AppointmentTypePresetsView: View {
             .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
-        .navigationTitle("Appointment Types")
-        .obsidianInlineNavigation()
+        .obsidianPushedNavigation("Appointment Types", backButtonAccessibilityIdentifier: "appointmentTypesBackButton")
         .sheet(isPresented: $showingCreateView) {
             CustomAppointmentTypeCreatorView()
         }
