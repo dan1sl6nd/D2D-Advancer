@@ -5,54 +5,43 @@ struct AppointmentTypePresetsView: View {
     @State private var showingCreateView = false
     @State private var editingType: CustomAppointmentType?
     @State private var deleteErrorMessage: String?
-    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "Appointment Types",
-                        subtitle: "Manage the job labels used when scheduling work.",
-                        icon: "calendar.badge.plus"
-                    )
-                    .accessibilityIdentifier("appointmentTypesScreen")
-
-                    defaultTypesCard
-                    customTypesCard
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-                .padding(.bottom, 28)
-            }
-            .obsidianScreenBackground()
-            .navigationTitle("Appointment Types")
-            .obsidianInlineNavigation()
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    ObsidianBackButton(accessibilityIdentifier: "appointmentTypesBackButton") {
-                        dismiss()
-                    }
-                }
-            }
-            .sheet(isPresented: $showingCreateView) {
-                CustomAppointmentTypeCreatorView()
-            }
-            .sheet(item: $editingType) { type in
-                CustomAppointmentTypeCreatorView(editingType: type)
-            }
-            .alert(
-                "Type not deleted",
-                isPresented: Binding(
-                    get: { deleteErrorMessage != nil },
-                    set: { if !$0 { deleteErrorMessage = nil } }
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ObsidianScreenTitle(
+                    title: "Appointment Types",
+                    subtitle: "Manage the job labels used when scheduling work.",
+                    icon: "calendar.badge.plus"
                 )
-            ) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(deleteErrorMessage ?? "Please try again.")
+                .accessibilityIdentifier("appointmentTypesScreen")
+
+                defaultTypesCard
+                customTypesCard
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 28)
+        }
+        .obsidianScreenBackground()
+        .navigationTitle("Appointment Types")
+        .obsidianInlineNavigation()
+        .sheet(isPresented: $showingCreateView) {
+            CustomAppointmentTypeCreatorView()
+        }
+        .sheet(item: $editingType) { type in
+            CustomAppointmentTypeCreatorView(editingType: type)
+        }
+        .alert(
+            "Type not deleted",
+            isPresented: Binding(
+                get: { deleteErrorMessage != nil },
+                set: { if !$0 { deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteErrorMessage ?? "Please try again.")
         }
     }
     

@@ -147,40 +147,6 @@ final class D2D_AdvancerUITests: XCTestCase {
         )
     }
 
-    private func assertFilledLightBackButton(_ element: XCUIElement, app: XCUIApplication, screenName: String) throws {
-        XCTAssertTrue(element.exists, "\(screenName) back button should exist before sampling")
-
-        let screenFrame = app.frame
-        let buttonFrame = element.frame
-        guard isFinite(screenFrame), isFinite(buttonFrame) else {
-            XCTFail("\(screenName) back button has invalid test geometry. screen=\(screenFrame), button=\(buttonFrame)")
-            return
-        }
-
-        let sampleSide = max(6, min(buttonFrame.width, buttonFrame.height) * 0.16)
-        let sampleOriginX = buttonFrame.midX + buttonFrame.width * 0.14
-        let sampleOriginY = buttonFrame.midY - buttonFrame.height * 0.25
-        let normalizedRect = CGRect(
-            x: clamp(sampleOriginX / screenFrame.width, lower: 0, upper: 0.98),
-            y: clamp(sampleOriginY / screenFrame.height, lower: 0, upper: 0.98),
-            width: clamp(sampleSide / screenFrame.width, lower: 0.006, upper: 0.05),
-            height: clamp(sampleSide / screenFrame.height, lower: 0.006, upper: 0.05)
-        )
-
-        let screenshot = XCUIScreen.main.screenshot()
-        let attachment = XCTAttachment(screenshot: screenshot)
-        attachment.name = "\(screenName) filled back button"
-        attachment.lifetime = .keepAlways
-        add(attachment)
-
-        let luminance = try averageLuminance(in: screenshot, normalizedRect: normalizedRect)
-        XCTAssertLessThan(
-            luminance,
-            0.42,
-            "\(screenName) back button fill is too light in light mode. luminance=\(luminance), rect=\(normalizedRect)"
-        )
-    }
-
     private func makeApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append("-skipOnboardingForUITests")
@@ -367,7 +333,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         let appFrame = app.windows.firstMatch.frame
         let elementFrame = element.frame
         let availableFrame = excludingBottomChrome
-            ? appFrame.inset(by: UIEdgeInsets(top: 0, left: 0, bottom: 96, right: 0))
+            ? appFrame.inset(by: UIEdgeInsets(top: 120, left: 0, bottom: 96, right: 0))
             : appFrame
         let visibleFrame = elementFrame.intersection(availableFrame)
         XCTAssertTrue(isFinite(appFrame), "Expected app frame to be finite before tapping: \(description)")
@@ -388,7 +354,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         let elementFrame = element.frame
         guard isFinite(appFrame), isFinite(elementFrame) else { return false }
         let availableFrame = excludingBottomChrome
-            ? appFrame.inset(by: UIEdgeInsets(top: 0, left: 0, bottom: 96, right: 0))
+            ? appFrame.inset(by: UIEdgeInsets(top: 120, left: 0, bottom: 96, right: 0))
             : appFrame
         let visibleFrame = elementFrame.intersection(availableFrame)
         let minimumVisibleLength: CGFloat = excludingBottomChrome ? 44 : 2
@@ -399,7 +365,7 @@ final class D2D_AdvancerUITests: XCTestCase {
     private func availableTapFrame(in app: XCUIApplication, excludingBottomChrome: Bool = true) -> CGRect {
         let appFrame = app.windows.firstMatch.frame
         return excludingBottomChrome
-            ? appFrame.inset(by: UIEdgeInsets(top: 0, left: 0, bottom: 96, right: 0))
+            ? appFrame.inset(by: UIEdgeInsets(top: 120, left: 0, bottom: 96, right: 0))
             : appFrame
     }
 
@@ -570,7 +536,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         for _ in 0..<maxSwipes where !hasVisibleTapFrame(element, in: app, excludingBottomChrome: true) {
             dragContent(app, direction: direction)
         }
-        tapElement(app, element, description: identifier)
+        tapElement(app, element, description: identifier, excludingBottomChrome: true)
     }
 
     private func tapHorizontallyScrollableElement(
@@ -853,11 +819,29 @@ final class D2D_AdvancerUITests: XCTestCase {
         dismissKeychainPromptIfPresented(app)
     }
 
-    private func signOutFromMore(_ app: XCUIApplication) {
+    private func dismissMoreChildScreenIfNeeded(_ app: XCUIApplication) {
         let backToMoreButton = app.buttons["teamBackToMoreButton"]
         if backToMoreButton.waitForExistence(timeout: 2), backToMoreButton.isHittable {
             backToMoreButton.tap()
+            return
         }
+
+        for label in ["More", "Back"] {
+            let navigationBackButton = app.navigationBars.buttons[label]
+            if navigationBackButton.waitForExistence(timeout: 1), navigationBackButton.isHittable {
+                navigationBackButton.tap()
+                return
+            }
+        }
+
+        let firstNavigationButton = app.navigationBars.buttons.element(boundBy: 0)
+        if firstNavigationButton.waitForExistence(timeout: 1), firstNavigationButton.isHittable {
+            firstNavigationButton.tap()
+        }
+    }
+
+    private func signOutFromMore(_ app: XCUIApplication) {
+        dismissMoreChildScreenIfNeeded(app)
         if !app.buttons["signOutButton"].waitForExistence(timeout: 2) {
             tapButton(app, "tab_More", timeout: 12)
         }
@@ -2015,16 +1999,15 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
         waitForIdentifiedElement(app, "appPreferenceLeadStatusPicker", timeout: 8)
         waitForIdentifiedElement(app, "appPreferenceLeadSortPicker", timeout: 8)
-        scrollToIdentifiedElement(app, "appPreferenceBackupFrequencyPicker", direction: .down)
+        scrollToIdentifiedElement(app, "appPreferenceBackupFrequencyPicker", direction: .down, requireHittable: false)
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
-        waitForIdentifiedElement(app, "appointmentTypesBackButton", timeout: 8)
         waitForIdentifiedElement(app, "appointmentTypesCreateButton", timeout: 8)
 
-        tapButton(app, "appointmentTypesCreateButton", timeout: 8)
+        scrollToButton(app, "appointmentTypesCreateButton", direction: .down).tap()
         waitForIdentifiedElement(app, "customAppointmentTypeEditor", timeout: 10)
         try assertLightSurfaceAround(
             app.descendants(matching: .any)["customAppointmentTypeEditor"].firstMatch,
@@ -2082,11 +2065,6 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapIdentifiedElement(app, "teamWorkspaceCard", direction: .down, timeout: 8)
         waitForText(app, "Team Workspace", timeout: 10)
         try assertLightTopChrome(app, screenName: "Team Workspace")
-        try assertFilledLightBackButton(
-            app.buttons["teamBackToMoreButton"],
-            app: app,
-            screenName: "Team Workspace"
-        )
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreNotificationsCard", direction: .down)
@@ -2111,11 +2089,6 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Appointment Types")
-        try assertFilledLightBackButton(
-            app.buttons["appointmentTypesBackButton"],
-            app: app,
-            screenName: "Appointment Types"
-        )
     }
 
     @MainActor

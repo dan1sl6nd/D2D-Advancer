@@ -5,7 +5,6 @@ import CoreLocation
 
 struct TeamWorkspaceView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var firebaseService = FirebaseService.shared
     @ObservedObject private var appleSignInManager = AppleSignInManager.shared
@@ -58,115 +57,106 @@ struct TeamWorkspaceView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let screenBackground = Color.obsidianBackground(for: colorScheme)
+        VStack(spacing: 0) {
+            if let team = teamService.activeTeam,
+               teamService.currentMember?.role == .owner,
+               canUseTeamWorkspace {
+                ownerPinnedInvitePanel(team: team)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
+            if let team = teamService.activeTeam,
+               let member = teamService.currentMember,
+               member.role != .owner,
+               canUseTeamWorkspace {
+                workerPinnedDutyPanel(team: team, member: member)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
 
-            VStack(spacing: 0) {
-                Rectangle()
-                    .fill(screenBackground)
-                    .frame(height: topChromeHeight(for: geometry))
-                teamHeader
-                if let team = teamService.activeTeam,
-                   teamService.currentMember?.role == .owner,
-                   canUseTeamWorkspace {
-                    ownerPinnedInvitePanel(team: team)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 8)
-                }
-                if let team = teamService.activeTeam,
-                   let member = teamService.currentMember,
-                   member.role != .owner,
-                   canUseTeamWorkspace {
-                    workerPinnedDutyPanel(team: team, member: member)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 8)
-                }
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        Color.clear
+                            .frame(height: 0)
+                            .id(scrollTopAnchor)
 
-                ScrollViewReader { scrollProxy in
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            Color.clear
-                                .frame(height: 0)
-                                .id(scrollTopAnchor)
+                        introCard
 
-                            introCard
-
-                            if let statusMessage = visibleStatusMessage {
-                                statusCard(
-                                    statusMessage,
-                                    color: statusMessageIsError ? Color.statusNotInterested : Color.statusInterested
-                                )
-                            }
-
-                            #if DEBUG
-                            if FirebaseEmulatorConfiguration.isEnabled {
-                                statusCard("Firebase emulator mode active: \(FirebaseEmulatorConfiguration.activeHostDescription)")
-                            }
-                            #endif
-
-                            if let syncHealth = visibleTeamSyncHealthSnapshot {
-                                teamSyncHealthCard(syncHealth)
-                            }
-
-                            if let errorMessage = visibleUserAuthErrorMessage {
-                                statusCard(errorMessage, color: Color.statusNotInterested)
-                            }
-
-                            if let errorMessage = visibleAppleAuthErrorMessage {
-                                statusCard(errorMessage, color: Color.statusNotInterested)
-                            }
-
-                            if shouldShowInitialLoadingCard {
-                                loadingCard("Loading team workspace...")
-                            }
-
-                            if !canUseTeamWorkspace {
-                                appleSignInRequiredCard
-                            } else if let team = teamService.activeTeam, let member = teamService.currentMember {
-                                planStateCard(team, member: member)
-                                if member.role == .owner {
-                                    ownerSummary(team: team)
-                                    memberListCard(team: team)
-                                    ownerNotificationsCard
-                                    ownerLeadQueueCard
-                                    ownerTechnicianJobsCard
-                                    ownerDuplicateWarningsCard
-                                    ownerFieldMapCard
-                                    ownerRepWorkCard
-                                    activityLogCard
-                                } else {
-                                    repSummary(team: team, member: member)
-                                    activityLogCard
-                                }
-                            } else {
-                                setupTeamCard
-                            }
+                        if let statusMessage = visibleStatusMessage {
+                            statusCard(
+                                statusMessage,
+                                color: statusMessageIsError ? Color.statusNotInterested : Color.statusInterested
+                            )
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
-                        .padding(.bottom, 112)
+
+                        #if DEBUG
+                        if FirebaseEmulatorConfiguration.isEnabled {
+                            statusCard("Firebase emulator mode active: \(FirebaseEmulatorConfiguration.activeHostDescription)")
+                        }
+                        #endif
+
+                        if let syncHealth = visibleTeamSyncHealthSnapshot {
+                            teamSyncHealthCard(syncHealth)
+                        }
+
+                        if let errorMessage = visibleUserAuthErrorMessage {
+                            statusCard(errorMessage, color: Color.statusNotInterested)
+                        }
+
+                        if let errorMessage = visibleAppleAuthErrorMessage {
+                            statusCard(errorMessage, color: Color.statusNotInterested)
+                        }
+
+                        if shouldShowInitialLoadingCard {
+                            loadingCard("Loading team workspace...")
+                        }
+
+                        if !canUseTeamWorkspace {
+                            appleSignInRequiredCard
+                        } else if let team = teamService.activeTeam, let member = teamService.currentMember {
+                            planStateCard(team, member: member)
+                            if member.role == .owner {
+                                ownerSummary(team: team)
+                                memberListCard(team: team)
+                                ownerNotificationsCard
+                                ownerLeadQueueCard
+                                ownerTechnicianJobsCard
+                                ownerDuplicateWarningsCard
+                                ownerFieldMapCard
+                                ownerRepWorkCard
+                                activityLogCard
+                            } else {
+                                repSummary(team: team, member: member)
+                                activityLogCard
+                            }
+                        } else {
+                            setupTeamCard
+                        }
                     }
-                    .id(teamService.activeTeam?.id ?? "team-setup")
-                    .scrollDismissesKeyboard(.immediately)
-                    .onChange(of: teamService.activeTeam?.id) { _, _ in
-                        scrollTeamWorkspaceToTop(scrollProxy)
-                    }
-                    .onChange(of: teamService.currentMember?.role) { _, _ in
-                        scrollTeamWorkspaceToTop(scrollProxy)
-                    }
-                    .onChange(of: teamService.currentMember?.id) { _, _ in
-                        scrollTeamWorkspaceToTop(scrollProxy)
-                    }
-                    .onChange(of: scrollResetToken) { _, _ in
-                        scrollTeamWorkspaceToTop(scrollProxy)
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 112)
+                }
+                .id(teamService.activeTeam?.id ?? "team-setup")
+                .scrollDismissesKeyboard(.immediately)
+                .onChange(of: teamService.activeTeam?.id) { _, _ in
+                    scrollTeamWorkspaceToTop(scrollProxy)
+                }
+                .onChange(of: teamService.currentMember?.role) { _, _ in
+                    scrollTeamWorkspaceToTop(scrollProxy)
+                }
+                .onChange(of: teamService.currentMember?.id) { _, _ in
+                    scrollTeamWorkspaceToTop(scrollProxy)
+                }
+                .onChange(of: scrollResetToken) { _, _ in
+                    scrollTeamWorkspaceToTop(scrollProxy)
                 }
             }
-            .background(screenBackground)
         }
         .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
-        .navigationBarHidden(true)
-        .navigationBarBackButtonHidden(true)
+        .navigationTitle("Team")
+        .obsidianInlineNavigation()
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -177,7 +167,6 @@ struct TeamWorkspaceView: View {
                 .accessibilityIdentifier("teamKeyboardDoneButton")
             }
         }
-        .ignoresSafeArea(.all, edges: .top)
         .task {
             await loadTeam()
         }
@@ -252,10 +241,6 @@ struct TeamWorkspaceView: View {
             return "Use this screen for team access and duty sharing. Your daily sales work is in My Leads."
         }
         return "Create or join a team. Personal leads stay private unless you create or assign work inside Team."
-    }
-
-    private func topChromeHeight(for geometry: GeometryProxy) -> CGFloat {
-        ObsidianLayout.safeAreaTop(geometry, minimum: 54)
     }
 
     private func planStateCard(_ team: TeamWorkspace, member: TeamMember) -> some View {
@@ -1493,32 +1478,6 @@ struct TeamWorkspaceView: View {
                             .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                     )
             )
-    }
-
-    private var teamHeader: some View {
-        HStack(spacing: 12) {
-            ObsidianBackButton(
-                accessibilityLabel: "Back to More",
-                accessibilityIdentifier: "teamBackToMoreButton"
-            ) {
-                dismiss()
-            }
-
-            Text("Team")
-                .font(.displayMedium)
-                .foregroundColor(.textPrimary)
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 6)
-        .padding(.bottom, 12)
-        .background(Color.obsidianBackground(for: colorScheme))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Color.obsidianBorder.opacity(0.35))
-                .frame(height: 0.5)
-        }
     }
 
     private func statusCard(_ text: String, color: Color = Color.statusInterested) -> some View {
