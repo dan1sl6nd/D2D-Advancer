@@ -147,6 +147,40 @@ final class D2D_AdvancerUITests: XCTestCase {
         )
     }
 
+    private func assertFilledLightBackButton(_ element: XCUIElement, app: XCUIApplication, screenName: String) throws {
+        XCTAssertTrue(element.exists, "\(screenName) back button should exist before sampling")
+
+        let screenFrame = app.frame
+        let buttonFrame = element.frame
+        guard isFinite(screenFrame), isFinite(buttonFrame) else {
+            XCTFail("\(screenName) back button has invalid test geometry. screen=\(screenFrame), button=\(buttonFrame)")
+            return
+        }
+
+        let sampleSide = max(6, min(buttonFrame.width, buttonFrame.height) * 0.16)
+        let sampleOriginX = buttonFrame.midX + buttonFrame.width * 0.14
+        let sampleOriginY = buttonFrame.midY - buttonFrame.height * 0.25
+        let normalizedRect = CGRect(
+            x: clamp(sampleOriginX / screenFrame.width, lower: 0, upper: 0.98),
+            y: clamp(sampleOriginY / screenFrame.height, lower: 0, upper: 0.98),
+            width: clamp(sampleSide / screenFrame.width, lower: 0.006, upper: 0.05),
+            height: clamp(sampleSide / screenFrame.height, lower: 0.006, upper: 0.05)
+        )
+
+        let screenshot = XCUIScreen.main.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = "\(screenName) filled back button"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        let luminance = try averageLuminance(in: screenshot, normalizedRect: normalizedRect)
+        XCTAssertLessThan(
+            luminance,
+            0.42,
+            "\(screenName) back button fill is too light in light mode. luminance=\(luminance), rect=\(normalizedRect)"
+        )
+    }
+
     private func makeApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append("-skipOnboardingForUITests")
@@ -2048,6 +2082,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapIdentifiedElement(app, "teamWorkspaceCard", direction: .down, timeout: 8)
         waitForText(app, "Team Workspace", timeout: 10)
         try assertLightTopChrome(app, screenName: "Team Workspace")
+        try assertFilledLightBackButton(
+            app.buttons["teamBackToMoreButton"],
+            app: app,
+            screenName: "Team Workspace"
+        )
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreNotificationsCard", direction: .down)
@@ -2072,6 +2111,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Appointment Types")
+        try assertFilledLightBackButton(
+            app.buttons["appointmentTypesBackButton"],
+            app: app,
+            screenName: "Appointment Types"
+        )
     }
 
     @MainActor

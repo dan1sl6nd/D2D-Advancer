@@ -617,6 +617,9 @@ struct ObsidianCompactIconButton: View {
     let icon: String
     let accessibilityLabel: String
     var accentColor: Color = .electricViolet
+    var backgroundColor: Color? = nil
+    var foregroundColor: Color? = nil
+    var borderColor: Color? = nil
     var accessibilityIdentifier: String? = nil
     var size: CGFloat = 42
     let action: () -> Void
@@ -625,16 +628,16 @@ struct ObsidianCompactIconButton: View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(accentColor.opacity(0.14))
+                    .fill(backgroundColor ?? accentColor.opacity(0.14))
                     .overlay(
                         Circle()
-                            .stroke(accentColor.opacity(0.22), lineWidth: 0.5)
+                            .stroke(borderColor ?? accentColor.opacity(0.22), lineWidth: 0.5)
                     )
 
                 Image(systemName: icon)
                     .font(.obsidianCallout)
                     .fontWeight(.semibold)
-                    .foregroundColor(accentColor)
+                    .foregroundColor(foregroundColor ?? accentColor)
             }
                 .frame(width: size, height: size)
                 .contentShape(Circle())
@@ -647,6 +650,8 @@ struct ObsidianCompactIconButton: View {
 }
 
 struct ObsidianBackButton: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var accessibilityLabel: String = "Back"
     var accessibilityIdentifier: String? = nil
     let action: () -> Void
@@ -656,6 +661,9 @@ struct ObsidianBackButton: View {
             icon: "chevron.left",
             accessibilityLabel: accessibilityLabel,
             accentColor: Color.textPrimary,
+            backgroundColor: Color.textPrimary,
+            foregroundColor: Color.obsidianBackground(for: colorScheme),
+            borderColor: Color.textPrimary.opacity(0.08),
             accessibilityIdentifier: accessibilityIdentifier,
             action: action
         )
@@ -663,6 +671,8 @@ struct ObsidianBackButton: View {
 }
 
 struct ObsidianCloseButton: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var accessibilityLabel: String = "Close"
     var accessibilityIdentifier: String? = nil
     let action: () -> Void
@@ -672,6 +682,9 @@ struct ObsidianCloseButton: View {
             icon: "xmark",
             accessibilityLabel: accessibilityLabel,
             accentColor: Color.textPrimary,
+            backgroundColor: Color.textPrimary,
+            foregroundColor: Color.obsidianBackground(for: colorScheme),
+            borderColor: Color.textPrimary.opacity(0.08),
             accessibilityIdentifier: accessibilityIdentifier,
             action: action
         )
