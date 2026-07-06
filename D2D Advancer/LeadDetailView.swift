@@ -402,8 +402,11 @@ struct LeadDetailView: View {
                 )
                 .keyboardType(.decimalPad)
 
-                LeadStatusChipRow(selection: $editedStatus)
-                    .accessibilityIdentifier("leadDetailStatusMenu")
+                LeadStatusChipRow(
+                    selection: $editedStatus,
+                    selectedAccessibilityIdentifier: "leadDetailStatusMenu",
+                    optionAccessibilityPrefix: "leadDetailStatusOption"
+                )
             }
         }
     }
@@ -417,8 +420,13 @@ struct LeadDetailView: View {
 
                 LeadFollowUpCadencePicker(cadence: $editedFollowUpCadence)
 
-                LeadNotesEditor(title: "Notes", text: $editedNotes, minHeight: 108)
-                    .accessibilityIdentifier("leadDetailNotesField")
+                LeadNotesEditor(
+                    title: "Notes",
+                    text: $editedNotes,
+                    minHeight: 108,
+                    accessibilityIdentifier: "leadDetailNotesField",
+                    keyboardDoneAccessibilityIdentifier: "leadDetailNotesDoneButton"
+                )
             }
         }
     }

@@ -1066,6 +1066,12 @@ struct LeadServiceCategoryPicker: View {
 
 struct LeadStatusChipRow: View {
     @Binding var selection: Lead.Status
+    var selectedAccessibilityIdentifier: String = "addLeadStatusMenu"
+    var optionAccessibilityPrefix: String = "addLeadStatusOption"
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 132), spacing: 8, alignment: .leading)
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1073,30 +1079,27 @@ struct LeadStatusChipRow: View {
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.textSecondary)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Lead.Status.allCases, id: \.self) { status in
-                        Button {
-                            selection = status
-                        } label: {
-                            Label(status.displayName, systemImage: status.iconName)
-                                .font(.obsidianFootnote)
-                                .fontWeight(.semibold)
-                                .lineLimit(1)
-                                .foregroundColor(selection == status ? .white : status.uiColor)
-                                .padding(.horizontal, 11)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Capsule()
-                                        .fill(selection == status ? status.uiColor : status.uiColor.opacity(0.12))
-                                )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .accessibilityIdentifier(selection == status ? "addLeadStatusMenu" : "addLeadStatusOption_\(status.rawValue)")
-                        .accessibilityLabel(status.displayName)
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                ForEach(Lead.Status.allCases, id: \.self) { status in
+                    Button {
+                        selection = status
+                    } label: {
+                        Label(status.displayName, systemImage: status.iconName)
+                            .font(.obsidianFootnote)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                            .foregroundColor(selection == status ? .white : status.uiColor)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .padding(.horizontal, 11)
+                            .background(
+                                Capsule()
+                                    .fill(selection == status ? status.uiColor : status.uiColor.opacity(0.12))
+                            )
                     }
+                    .buttonStyle(PlainButtonStyle())
+                    .accessibilityIdentifier(selection == status ? selectedAccessibilityIdentifier : "\(optionAccessibilityPrefix)_\(status.rawValue)")
+                    .accessibilityLabel(status.displayName)
                 }
-                .padding(.horizontal, 1)
             }
         }
     }
@@ -1131,17 +1134,17 @@ struct LeadFollowUpControls: View {
                         Image(systemName: "calendar")
                             .foregroundColor(Color.textSecondary)
                     }
-                    .contentShape(Rectangle())
+                    .padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(PlainButtonStyle())
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Color.obsidianElevated)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
-                )
                 .accessibilityIdentifier("leadFollowUpCustomDateButton")
 
                 if selectedDate != nil {
@@ -1152,7 +1155,7 @@ struct LeadFollowUpControls: View {
                             .font(.obsidianSmall)
                             .fontWeight(.semibold)
                             .foregroundColor(Color.textSecondary)
-                            .frame(width: 42, height: 42)
+                            .frame(width: 44, height: 44)
                             .background(Color.obsidianElevated)
                             .clipShape(Circle())
                     }
@@ -1178,8 +1181,7 @@ struct LeadFollowUpControls: View {
                 .font(.micro)
                 .fontWeight(.semibold)
                 .foregroundColor(selected ? .white : Color.electricViolet)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .background(
                     Capsule()
                         .fill(selected ? Color.electricViolet : Color.electricViolet.opacity(0.12))

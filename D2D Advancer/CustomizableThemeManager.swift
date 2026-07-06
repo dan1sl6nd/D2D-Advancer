@@ -713,13 +713,22 @@ struct ObsidianBackButton: View {
         ObsidianToolbarIconButton(
             icon: "chevron.left",
             accessibilityLabel: accessibilityLabel,
-            accentColor: Color.textPrimary,
-            backgroundColor: Color.obsidianSurface,
-            foregroundColor: Color.textPrimary,
-            borderColor: Color.obsidianBorder.opacity(colorScheme == .dark ? 0.65 : 0.45),
+            accentColor: backFill,
+            backgroundColor: backFill,
+            foregroundColor: backForeground,
+            borderColor: Color.clear,
             accessibilityIdentifier: accessibilityIdentifier,
+            size: 44,
             action: action
         )
+    }
+
+    private var backFill: Color {
+        colorScheme == .dark ? .white : Color.textPrimary
+    }
+
+    private var backForeground: Color {
+        colorScheme == .dark ? .black : .white
     }
 }
 

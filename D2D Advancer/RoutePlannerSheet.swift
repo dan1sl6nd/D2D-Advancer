@@ -79,6 +79,7 @@ struct RoutePlannerSheet: View {
                     .padding(.top, 16)
 
                     filterPicker
+                    routePlannerActionRow
 
                     if let plan = plan, !plan.isEmpty {
                         routeContent(plan: plan)
@@ -93,29 +94,25 @@ struct RoutePlannerSheet: View {
             .obsidianInlineNavigation()
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.obsidianCaption.weight(.semibold))
-                            .foregroundColor(Color.textSecondary)
-                            .frame(width: 30, height: 30)
-                            .background(Color.obsidianElevated)
-                            .clipShape(Circle())
+                    ObsidianCompactIconButton(
+                        icon: "xmark",
+                        accessibilityLabel: "Close route planner",
+                        accentColor: Color.textSecondary,
+                        accessibilityIdentifier: "routePlannerToolbarCloseButton"
+                    ) {
+                        dismiss()
                     }
-                    .accessibilityLabel("Close")
-                    .accessibilityIdentifier("routePlannerCloseButton")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: recompute) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.obsidianCaption.weight(.semibold))
-                            .foregroundColor(Color.electricViolet)
-                            .frame(width: 30, height: 30)
-                            .background(Color.obsidianElevated)
-                            .clipShape(Circle())
+                    ObsidianCompactIconButton(
+                        icon: "arrow.triangle.2.circlepath",
+                        accessibilityLabel: "Recompute route",
+                        accentColor: Color.electricViolet,
+                        accessibilityIdentifier: "routePlannerToolbarRecomputeButton"
+                    ) {
+                        recompute()
                     }
                     .disabled(isComputing)
-                    .accessibilityLabel("Recompute route")
-                    .accessibilityIdentifier("routePlannerRecomputeButton")
                 }
             }
         }
@@ -124,6 +121,31 @@ struct RoutePlannerSheet: View {
     }
 
     // MARK: - States
+
+    private var routePlannerActionRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                dismiss()
+            } label: {
+                Label("Close", systemImage: "xmark")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ObsidianSecondaryButtonStyle())
+            .accessibilityIdentifier("routePlannerCloseButton")
+
+            Button {
+                recompute()
+            } label: {
+                Label(isComputing ? "Updating" : "Refresh", systemImage: "arrow.triangle.2.circlepath")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ObsidianPrimaryButtonStyle())
+            .disabled(isComputing)
+            .accessibilityIdentifier("routePlannerRecomputeButton")
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 12)
+    }
 
     private var filterPicker: some View {
         HStack(spacing: 6) {
