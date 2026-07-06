@@ -28,20 +28,12 @@ struct MessageTemplatesManagerView: View {
                     editingTemplate = nil
                     showingCreator = true
                 } label: {
-                    Label("New", systemImage: "plus")
-                        .font(.obsidianFootnote)
+                    Image(systemName: "plus")
+                        .font(.obsidianCallout)
                         .fontWeight(.semibold)
-                        .foregroundColor(Color.electricViolet)
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 38)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.electricViolet.opacity(0.14))
-                        )
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(Color.electricViolet.opacity(0.22), lineWidth: 0.5)
-                        )
+                        .foregroundColor(Color.statusNotInterested)
+                        .frame(width: 42, height: 42)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Create message template")
