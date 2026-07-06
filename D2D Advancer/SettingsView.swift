@@ -1337,161 +1337,160 @@ struct AppPreferencesView: View {
     @ObservedObject private var preferences = AppPreferences.shared
     
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "App Preferences",
-                        subtitle: "Default values for new leads, follow-ups, map, and backups.",
-                        icon: "slider.horizontal.3"
-                    )
-                    .accessibilityIdentifier("appPreferencesScreen")
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ObsidianScreenTitle(
+                    title: "App Preferences",
+                    subtitle: "Default values for new leads, follow-ups, map, and backups.",
+                    icon: "slider.horizontal.3"
+                )
+                .accessibilityIdentifier("appPreferencesScreen")
 
-                    MoreSectionGroup(
-                        title: "Lead Defaults",
+                MoreSectionGroup(
+                    title: "Lead Defaults",
+                    icon: "person.badge.plus",
+                    subtitle: "Starting values for new leads."
+                ) {
+                    PreferenceCardView(
                         icon: "person.badge.plus",
-                        subtitle: "Starting values for new leads."
-                    ) {
-                        PreferenceCardView(
-                            icon: "person.badge.plus",
-                            iconColor: Color.electricViolet,
-                            title: "Default Lead Status",
-                            subtitle: "For every new lead",
-                            trailingContent: {
-                                preferenceMenu(
-                                    title: "Default lead status",
-                                    selection: $preferences.defaultLeadStatus,
-                                    options: [
-                                        (value: "not_contacted", label: "Not Contacted"),
-                                        (value: "interested", label: "Interested"),
-                                        (value: "not_interested", label: "Not Interested"),
-                                        (value: "not_home", label: "Not Home"),
-                                        (value: "converted", label: "Converted")
-                                    ],
-                                    accessibilityIdentifier: "appPreferenceLeadStatusPicker"
-                                )
-                            }
-                        )
+                        iconColor: Color.electricViolet,
+                        title: "Default Lead Status",
+                        subtitle: "For every new lead",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default lead status",
+                                selection: $preferences.defaultLeadStatus,
+                                options: [
+                                    (value: "not_contacted", label: "Not Contacted"),
+                                    (value: "interested", label: "Interested"),
+                                    (value: "not_interested", label: "Not Interested"),
+                                    (value: "not_home", label: "Not Home"),
+                                    (value: "converted", label: "Converted")
+                                ],
+                                accessibilityIdentifier: "appPreferenceLeadStatusPicker"
+                            )
+                        }
+                    )
 
-                        preferencesDivider
+                    preferencesDivider
 
-                        PreferenceCardView(
-                            icon: "arrow.up.arrow.down",
-                            iconColor: Color.statusNotHome,
-                            title: "Default Lead Sort",
-                            subtitle: "Default list order",
-                            trailingContent: {
-                                preferenceMenu(
-                                    title: "Default lead sort",
-                                    selection: $preferences.leadSortPreference,
-                                    options: [
-                                        (value: "date", label: "Date Updated"),
-                                        (value: "name", label: "Name"),
-                                        (value: "status", label: "Status")
-                                    ],
-                                    accessibilityIdentifier: "appPreferenceLeadSortPicker"
-                                )
-                            }
-                        )
-                    }
+                    PreferenceCardView(
+                        icon: "arrow.up.arrow.down",
+                        iconColor: Color.statusNotHome,
+                        title: "Default Lead Sort",
+                        subtitle: "Default list order",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default lead sort",
+                                selection: $preferences.leadSortPreference,
+                                options: [
+                                    (value: "date", label: "Date Updated"),
+                                    (value: "name", label: "Name"),
+                                    (value: "status", label: "Status")
+                                ],
+                                accessibilityIdentifier: "appPreferenceLeadSortPicker"
+                            )
+                        }
+                    )
+                }
 
-                    MoreSectionGroup(
-                        title: "Follow-up Defaults",
+                MoreSectionGroup(
+                    title: "Follow-up Defaults",
+                    icon: "clock.badge.checkmark",
+                    subtitle: "Reminder timing and visit type.",
+                    accentColor: Color.statusInterested
+                ) {
+                    PreferenceCardView(
                         icon: "clock.badge.checkmark",
-                        subtitle: "Reminder timing and visit type.",
-                        accentColor: Color.statusInterested
-                    ) {
-                        PreferenceCardView(
-                            icon: "clock.badge.checkmark",
-                            iconColor: Color.statusInterested,
-                            title: "Default Follow-up Time",
-                            subtitle: "Default reminder window",
-                            trailingContent: {
-                                preferenceMenu(
-                                    title: "Default follow-up time",
-                                    selection: $preferences.defaultFollowUpTime,
-                                    options: [
-                                        (value: "1_hour", label: "1 Hour"),
-                                        (value: "4_hours", label: "4 Hours"),
-                                        (value: "1_day", label: "1 Day"),
-                                        (value: "3_days", label: "3 Days"),
-                                        (value: "1_week", label: "1 Week")
-                                    ],
-                                    accessibilityIdentifier: "appPreferenceFollowUpTimePicker"
-                                )
-                            }
-                        )
+                        iconColor: Color.statusInterested,
+                        title: "Default Follow-up Time",
+                        subtitle: "Default reminder window",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default follow-up time",
+                                selection: $preferences.defaultFollowUpTime,
+                                options: [
+                                    (value: "1_hour", label: "1 Hour"),
+                                    (value: "4_hours", label: "4 Hours"),
+                                    (value: "1_day", label: "1 Day"),
+                                    (value: "3_days", label: "3 Days"),
+                                    (value: "1_week", label: "1 Week")
+                                ],
+                                accessibilityIdentifier: "appPreferenceFollowUpTimePicker"
+                            )
+                        }
+                    )
 
-                        preferencesDivider
+                    preferencesDivider
 
-                        PreferenceCardView(
-                            icon: "door.left.hand.open",
-                            iconColor: Color.electricViolet,
-                            title: "Default Check-in Type",
-                            subtitle: "Default follow-up method",
-                            trailingContent: {
-                                preferenceMenu(
-                                    title: "Default check-in type",
-                                    selection: $preferences.defaultCheckInType,
-                                    options: [
-                                        (value: "door_knock", label: "Door Knock"),
-                                        (value: "phone_call", label: "Phone Call"),
-                                        (value: "text_message", label: "Text Message"),
-                                        (value: "email", label: "Email")
-                                    ],
-                                    accessibilityIdentifier: "appPreferenceCheckInTypePicker"
-                                )
-                            }
-                        )
-                    }
+                    PreferenceCardView(
+                        icon: "door.left.hand.open",
+                        iconColor: Color.electricViolet,
+                        title: "Default Check-in Type",
+                        subtitle: "Default follow-up method",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default check-in type",
+                                selection: $preferences.defaultCheckInType,
+                                options: [
+                                    (value: "door_knock", label: "Door Knock"),
+                                    (value: "phone_call", label: "Phone Call"),
+                                    (value: "text_message", label: "Text Message"),
+                                    (value: "email", label: "Email")
+                                ],
+                                accessibilityIdentifier: "appPreferenceCheckInTypePicker"
+                            )
+                        }
+                    )
+                }
 
-                    MoreSectionGroup(
-                        title: "Map & Backup",
+                MoreSectionGroup(
+                    title: "Map & Backup",
+                    icon: "map",
+                    subtitle: "Map mode and backup rhythm.",
+                    accentColor: Color.dataCyan
+                ) {
+                    PreferenceCardView(
                         icon: "map",
-                        subtitle: "Map mode and backup rhythm.",
-                        accentColor: Color.dataCyan
-                    ) {
-                        PreferenceCardView(
-                            icon: "map",
-                            iconColor: .cyan,
-                            title: "Default Map Type",
-                            subtitle: "Opening map style",
-                            trailingContent: {
-                                preferenceMenu(
-                                    title: "Default map type",
-                                    selection: $preferences.mapDefaultView,
-                                    options: [
-                                        (value: "standard", label: "Standard"),
-                                        (value: "satellite", label: "Satellite"),
-                                        (value: "hybrid", label: "Hybrid")
-                                    ],
-                                    accessibilityIdentifier: "appPreferenceMapTypePicker"
-                                )
-                            }
-                        )
+                        iconColor: .cyan,
+                        title: "Default Map Type",
+                        subtitle: "Opening map style",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default map type",
+                                selection: $preferences.mapDefaultView,
+                                options: [
+                                    (value: "standard", label: "Standard"),
+                                    (value: "satellite", label: "Satellite"),
+                                    (value: "hybrid", label: "Hybrid")
+                                ],
+                                accessibilityIdentifier: "appPreferenceMapTypePicker"
+                            )
+                        }
+                    )
 
-                        preferencesDivider
+                    preferencesDivider
 
-                        PreferenceCardView(
-                            icon: "icloud.and.arrow.up",
-                            iconColor: .indigo,
-                            title: "Auto Backup Frequency",
-                            subtitle: "Automatic backup rhythm",
-                            trailingContent: {
-                                preferenceMenu(
-                                    title: "Auto backup frequency",
-                                    selection: $preferences.autoBackupFrequency,
-                                    options: [
-                                        (value: "daily", label: "Daily"),
-                                        (value: "weekly", label: "Weekly"),
-                                        (value: "monthly", label: "Monthly"),
-                                        (value: "never", label: "Never")
-                                    ],
-                                    accessibilityIdentifier: "appPreferenceBackupFrequencyPicker"
-                                )
-                            }
-                        )
-                    }
+                    PreferenceCardView(
+                        icon: "icloud.and.arrow.up",
+                        iconColor: .indigo,
+                        title: "Auto Backup Frequency",
+                        subtitle: "Automatic backup rhythm",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Auto backup frequency",
+                                selection: $preferences.autoBackupFrequency,
+                                options: [
+                                    (value: "daily", label: "Daily"),
+                                    (value: "weekly", label: "Weekly"),
+                                    (value: "monthly", label: "Monthly"),
+                                    (value: "never", label: "Never")
+                                ],
+                                accessibilityIdentifier: "appPreferenceBackupFrequencyPicker"
+                            )
+                        }
+                    )
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 18)
@@ -1499,8 +1498,7 @@ struct AppPreferencesView: View {
         }
         .obsidianScreenBackground()
         .navigationTitle("App Preferences")
-            .obsidianInlineNavigation()
-        }
+        .obsidianInlineNavigation()
     }
 
     private var preferencesDivider: some View {
