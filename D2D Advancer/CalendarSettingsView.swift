@@ -94,7 +94,7 @@ struct CalendarSettingsView: View {
                     icon: "exclamationmark.triangle.fill",
                     iconColor: Color.statusNotHome,
                     title: "Calendar Access",
-                    subtitle: "Permission is required before appointments can sync",
+                    subtitle: "Required to sync appointments",
                     trailingContent: {
                         Button("Allow") {
                             requestAccess()

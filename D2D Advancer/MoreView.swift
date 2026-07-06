@@ -120,7 +120,7 @@ struct MoreView: View {
                 }
                 .sheet(isPresented: $showingCloudProviderSheet) {
                     CloudProviderSheet()
-                        .presentationDetents([.medium])
+                        .presentationDetents([.height(360)])
                 }
                 .sheet(isPresented: $showingAuthentication) {
                     AuthenticationSheetWrapper(isPresented: $showingAuthentication)
@@ -1723,20 +1723,14 @@ struct SyncSettingsView: View {
 
                     Spacer(minLength: 0)
 
-                    Button {
+                    ObsidianCompactIconButton(
+                        icon: "xmark",
+                        accessibilityLabel: "Close sync settings",
+                        accentColor: Color.textSecondary,
+                        accessibilityIdentifier: "syncSettingsCloseButton"
+                    ) {
                         dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.obsidianCallout)
-                            .fontWeight(.semibold)
-                            .foregroundColor(Color.textSecondary)
-                            .frame(width: 38, height: 38)
-                            .background(Color.textSecondary.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
-                    .buttonStyle(PlainButtonStyle())
-                    .accessibilityLabel("Close sync settings")
-                    .accessibilityIdentifier("syncSettingsCloseButton")
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)

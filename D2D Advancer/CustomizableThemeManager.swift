@@ -654,19 +654,20 @@ private struct ObsidianToolbarIconButton: View {
     let action: () -> Void
 
     var body: some View {
-        ObsidianIconButtonFace(
-            icon: icon,
-            accentColor: accentColor,
-            backgroundColor: backgroundColor,
-            foregroundColor: foregroundColor,
-            borderColor: borderColor,
-            size: size
-        )
-        .onTapGesture(perform: action)
-        .accessibilityElement()
+        Button(action: action) {
+            ObsidianIconButtonFace(
+                icon: icon,
+                accentColor: accentColor,
+                backgroundColor: backgroundColor,
+                foregroundColor: foregroundColor,
+                borderColor: borderColor,
+                size: size
+            )
+        }
+        .buttonStyle(.plain)
+        .frame(width: size, height: size)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier ?? accessibilityLabel)
-        .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -702,6 +703,8 @@ private struct ObsidianIconButtonFace: View {
 }
 
 struct ObsidianBackButton: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var accessibilityLabel: String = "Back"
     var accessibilityIdentifier: String? = nil
     let action: () -> Void
@@ -711,9 +714,9 @@ struct ObsidianBackButton: View {
             icon: "chevron.left",
             accessibilityLabel: accessibilityLabel,
             accentColor: Color.textPrimary,
-            backgroundColor: .clear,
+            backgroundColor: Color.obsidianSurface,
             foregroundColor: Color.textPrimary,
-            borderColor: .clear,
+            borderColor: Color.obsidianBorder.opacity(colorScheme == .dark ? 0.65 : 0.45),
             accessibilityIdentifier: accessibilityIdentifier,
             action: action
         )
