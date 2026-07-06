@@ -14,14 +14,24 @@ struct QuickFilterChipsView: View {
                 HStack(spacing: 8) {
                     // Status chips
                     ForEach(quickStatuses, id: \.self) { status in
-                        chip(title: status.displayName, icon: status.icon, isSelected: searchFilterManager.currentFilter.selectedStatuses.contains(status)) {
+                        chip(
+                            title: quickStatusTitle(for: status),
+                            icon: status.icon,
+                            isSelected: searchFilterManager.currentFilter.selectedStatuses.contains(status),
+                            accessibilityLabel: status.displayName
+                        ) {
                             toggleStatus(status)
                         }
                         .accessibilityIdentifier("quickFilterStatus_\(status.rawValue)")
                     }
 
                     // Has Follow-up
-                    chip(title: "Has Follow-up", icon: "calendar.badge.clock", isSelected: searchFilterManager.currentFilter.hasFollowUp == true) {
+                    chip(
+                        title: "Follow-up",
+                        icon: "calendar.badge.clock",
+                        isSelected: searchFilterManager.currentFilter.hasFollowUp == true,
+                        accessibilityLabel: "Has Follow-up"
+                    ) {
                         toggleHasFollowUp()
                     }
                     .accessibilityIdentifier("quickFilterHasFollowUp")
@@ -110,6 +120,17 @@ struct QuickFilterChipsView: View {
         return false
     }
 
+    private func quickStatusTitle(for status: LeadStatus) -> String {
+        switch status {
+        case .closed:
+            return "Sold"
+        case .notInterested:
+            return "Pass"
+        default:
+            return status.displayName
+        }
+    }
+
     private func toggleStatus(_ status: LeadStatus) {
         var set = searchFilterManager.currentFilter.selectedStatuses
         if set.contains(status) {
@@ -140,7 +161,13 @@ struct QuickFilterChipsView: View {
     }
 
     @ViewBuilder
-    private func chip(title: String, icon: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func chip(
+        title: String,
+        icon: String,
+        isSelected: Bool,
+        accessibilityLabel: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             if isSelected {
                 HStack(spacing: 6) {
@@ -171,6 +198,7 @@ struct QuickFilterChipsView: View {
             }
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel(accessibilityLabel ?? title)
     }
 }
 
