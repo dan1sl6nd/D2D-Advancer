@@ -618,21 +618,63 @@ struct ObsidianCompactIconButton: View {
     let accessibilityLabel: String
     var accentColor: Color = .electricViolet
     var accessibilityIdentifier: String? = nil
+    var size: CGFloat = 42
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.obsidianCallout)
-                .fontWeight(.semibold)
-                .foregroundColor(accentColor)
-                .frame(width: 38, height: 38)
-                .background(accentColor.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            ZStack {
+                Circle()
+                    .fill(accentColor.opacity(0.14))
+                    .overlay(
+                        Circle()
+                            .stroke(accentColor.opacity(0.22), lineWidth: 0.5)
+                    )
+
+                Image(systemName: icon)
+                    .font(.obsidianCallout)
+                    .fontWeight(.semibold)
+                    .foregroundColor(accentColor)
+            }
+                .frame(width: size, height: size)
+                .contentShape(Circle())
         }
         .buttonStyle(PlainButtonStyle())
+        .frame(width: size, height: size)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier ?? accessibilityLabel)
+    }
+}
+
+struct ObsidianBackButton: View {
+    var accessibilityLabel: String = "Back"
+    var accessibilityIdentifier: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        ObsidianCompactIconButton(
+            icon: "chevron.left",
+            accessibilityLabel: accessibilityLabel,
+            accentColor: Color.textPrimary,
+            accessibilityIdentifier: accessibilityIdentifier,
+            action: action
+        )
+    }
+}
+
+struct ObsidianCloseButton: View {
+    var accessibilityLabel: String = "Close"
+    var accessibilityIdentifier: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        ObsidianCompactIconButton(
+            icon: "xmark",
+            accessibilityLabel: accessibilityLabel,
+            accentColor: Color.textPrimary,
+            accessibilityIdentifier: accessibilityIdentifier,
+            action: action
+        )
     }
 }
 

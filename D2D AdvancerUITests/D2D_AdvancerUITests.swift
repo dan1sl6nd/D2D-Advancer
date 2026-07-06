@@ -1987,8 +1987,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         scrollToIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
+        waitForIdentifiedElement(app, "appointmentTypesBackButton", timeout: 8)
         waitForIdentifiedElement(app, "appointmentTypesCreateButton", timeout: 8)
-        waitForIdentifiedElement(app, "appointmentTypesDoneButton", timeout: 8)
 
         tapButton(app, "appointmentTypesCreateButton", timeout: 8)
         waitForIdentifiedElement(app, "customAppointmentTypeEditor", timeout: 10)

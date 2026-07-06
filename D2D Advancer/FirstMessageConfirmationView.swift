@@ -193,14 +193,14 @@ struct FirstMessageConfirmationView: View {
                 
                 Spacer()
                 
-                Button {
+                ObsidianCompactIconButton(
+                    icon: "plus",
+                    accessibilityLabel: "Add new template",
+                    accessibilityIdentifier: "firstMessageAddTemplateButton",
+                    size: 36
+                ) {
                     showingCustomTemplateCreator = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Color.electricViolet)
                 }
-                .accessibilityLabel("Add new template")
             }
             
             if initialTemplates.isEmpty {

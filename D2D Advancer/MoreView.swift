@@ -982,26 +982,30 @@ struct OverviewContentView: View {
             subtitle: "Active sales work by outcome.",
             accentColor: Color.electricViolet
         ) {
-            StatCardView(
-                title: "Active Leads",
-                value: "\(statistics.activeLeadsCount)",
-                icon: "person.3.fill",
-                color: Color.electricViolet
-            )
+            VStack(spacing: 12) {
+                StatCardView(
+                    title: "Active Leads",
+                    value: "\(statistics.activeLeadsCount)",
+                    icon: "person.3.fill",
+                    color: Color.electricViolet
+                )
 
-            StatCardView(
-                title: "Converted",
-                value: "\(statistics.convertedCount)",
-                icon: "checkmark.circle.fill",
-                color: Color.statusInterested
-            )
+                StatCardView(
+                    title: "Converted",
+                    value: "\(statistics.convertedCount)",
+                    icon: "checkmark.circle.fill",
+                    color: Color.statusInterested
+                )
 
-            StatCardView(
-                title: "Interested",
-                value: "\(statistics.interestedCount)",
-                icon: "heart.fill",
-                color: Color.statusNotHome
-            )
+                StatCardView(
+                    title: "Interested",
+                    value: "\(statistics.interestedCount)",
+                    icon: "heart.fill",
+                    color: Color.statusNotHome
+                )
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Statistics overview")
@@ -1014,16 +1018,18 @@ struct OverviewContentView: View {
             subtitle: "Only statuses with useful customer information.",
             accentColor: Color.statusInterested
         ) {
-            // Show only statuses where we have lead information
-            // Includes: notContacted, interested, converted
-            // Excludes: notHome (no info), notInterested (no info)
-            ForEach(Lead.Status.allCases.filter { $0 != .notHome && $0 != .notInterested }, id: \.self) { status in
-                StatusProgressCardView(
-                    status: status,
-                    count: statistics.statusCounts[status] ?? 0,
-                    total: statistics.activeLeadsCount
-                )
+            VStack(spacing: 12) {
+                // Show only statuses where we have lead information.
+                ForEach(Lead.Status.allCases.filter { $0 != .notHome && $0 != .notInterested }, id: \.self) { status in
+                    StatusProgressCardView(
+                        status: status,
+                        count: statistics.statusCounts[status] ?? 0,
+                        total: statistics.activeLeadsCount
+                    )
+                }
             }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Status breakdown charts")
@@ -1036,26 +1042,30 @@ struct OverviewContentView: View {
             subtitle: "Recent work that needs attention.",
             accentColor: Color.statusNotHome
         ) {
-            RecentActivityCardView(
-                title: "Leads added today",
-                count: statistics.leadsAddedToday,
-                icon: "plus.circle.fill",
-                color: Color.electricViolet
-            )
+            VStack(spacing: 12) {
+                RecentActivityCardView(
+                    title: "Leads added today",
+                    count: statistics.leadsAddedToday,
+                    icon: "plus.circle.fill",
+                    color: Color.electricViolet
+                )
 
-            RecentActivityCardView(
-                title: "Leads updated this week",
-                count: statistics.leadsUpdatedThisWeek,
-                icon: "pencil.circle.fill",
-                color: Color.statusNotHome
-            )
+                RecentActivityCardView(
+                    title: "Leads updated this week",
+                    count: statistics.leadsUpdatedThisWeek,
+                    icon: "pencil.circle.fill",
+                    color: Color.statusNotHome
+                )
 
-            RecentActivityCardView(
-                title: "Follow ups due this week",
-                count: statistics.followUpsDueThisWeek,
-                icon: "clock.circle.fill",
-                color: Color.electricViolet
-            )
+                RecentActivityCardView(
+                    title: "Follow ups due this week",
+                    count: statistics.followUpsDueThisWeek,
+                    icon: "clock.circle.fill",
+                    color: Color.electricViolet
+                )
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Recent activity summary")
@@ -1312,13 +1322,13 @@ struct UserInfoCardView: View {
             }
         }
         .padding(14)
-        .background(Color.obsidianSurface)
+        .background(Color.obsidianElevated)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
+        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
     }
 }
 
@@ -1382,13 +1392,13 @@ struct StatCardView: View {
             Spacer()
         }
         .padding(14)
-        .background(Color.obsidianSurface)
+        .background(Color.obsidianElevated)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
+        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
     }
 }
 
@@ -1445,13 +1455,13 @@ struct StatusProgressCardView: View {
             }
         }
         .padding(14)
-        .background(Color.obsidianSurface)
+        .background(Color.obsidianElevated)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
+        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
     }
 
     private var statusIcon: String {

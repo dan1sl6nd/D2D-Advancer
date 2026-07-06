@@ -1497,15 +1497,12 @@ struct TeamWorkspaceView: View {
 
     private var teamHeader: some View {
         HStack(spacing: 12) {
-            Button(action: { dismiss() }) {
-                Image(systemName: "chevron.left.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(.textPrimary)
-                    .frame(width: 34, height: 34)
+            ObsidianBackButton(
+                accessibilityLabel: "Back to More",
+                accessibilityIdentifier: "teamBackToMoreButton"
+            ) {
+                dismiss()
             }
-            .buttonStyle(PlainButtonStyle())
-            .accessibilityLabel("Back to More")
-            .accessibilityIdentifier("teamBackToMoreButton")
 
             Text("Team")
                 .font(.displayMedium)
@@ -1513,10 +1510,15 @@ struct TeamWorkspaceView: View {
 
             Spacer()
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-        .padding(.bottom, 14)
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 12)
         .background(Color.obsidianBackground(for: colorScheme))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.obsidianBorder.opacity(0.35))
+                .frame(height: 0.5)
+        }
     }
 
     private func statusCard(_ text: String, color: Color = Color.statusInterested) -> some View {

@@ -166,73 +166,32 @@ struct AddLeadView: View {
         .navigationTitle("Add Lead")
         .obsidianInlineNavigation()
         .navigationBarBackButtonHidden(true)
-        .safeAreaInset(edge: .bottom) {
-            // Card-based button design
-            HStack(spacing: 16) {
-                Button(action: {
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                ObsidianBackButton(accessibilityIdentifier: "addLeadBackButton") {
                     dismiss()
-                }) {
-                    HStack {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                        Text("Cancel")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(Color.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.obsidianSurface)
-                            .shadow(color: Color.black, radius: 2, x: 0, y: 1)
-                    )
                 }
-                .accessibilityIdentifier("addLeadCancelButton")
-                
-                Button(action: {
-                    saveLead()
-                }) {
-                    HStack {
-                        Image(systemName: paywallManager.isPremium ? "checkmark.circle.fill" : "lock.fill")
-                            .font(.title3)
-                        Text(selectedTechnicianForJob == nil ? "Add Lead" : "Add & Send Job")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        usableAddress == nil ? Color.textSecondary : Color.electricViolet,
-                                        usableAddress == nil ? Color.textSecondary.opacity(0.8) : Color.electricVioletDeep
-                                    ]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .shadow(color: usableAddress == nil ? .clear : Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
-                    )
-                }
-                .accessibilityIdentifier("addLeadSaveButton")
-                .disabled(usableAddress == nil)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(Color.obsidianElevated)
-                    .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: -3)
-            )
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
-            .background(
-                Color.obsidianBlack
-                    .ignoresSafeArea(edges: .bottom)
+        }
+        .safeAreaInset(edge: .bottom) {
+            ObsidianBottomActionBar(
+                isPrimaryDisabled: usableAddress == nil,
+                primaryAccessibilityIdentifier: "addLeadSaveButton",
+                secondaryAccessibilityIdentifier: "addLeadCancelButton",
+                primaryAction: saveLead,
+                secondaryAction: { dismiss() },
+                primaryLabel: {
+                    Label(
+                        selectedTechnicianForJob == nil ? "Add Lead" : "Add & Send Job",
+                        systemImage: paywallManager.isPremium ? "checkmark.circle.fill" : "lock.fill"
+                    )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                },
+                secondaryLabel: {
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                        .lineLimit(1)
+                }
             )
         }
         .sheet(isPresented: $showingDatePicker) {

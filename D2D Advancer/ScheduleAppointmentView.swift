@@ -276,7 +276,7 @@ struct AppointmentDetailsSection: View {
                         }
                         .padding(.vertical, 12)
                         .padding(.horizontal, 8)
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, minHeight: 76)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(Color.electricViolet.opacity(0.1))
@@ -375,7 +375,7 @@ struct AppointmentTypeWrapperChip: View {
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 76)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(isSelected ? typeWrapper.color.opacity(0.2) : Color.obsidianSurface)

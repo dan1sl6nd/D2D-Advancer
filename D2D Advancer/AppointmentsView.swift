@@ -632,6 +632,13 @@ struct SelectLeadForAppointmentView: View {
             .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ObsidianBackButton(accessibilityIdentifier: "appointmentLeadPickerBackButton") {
+                        dismiss()
+                    }
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 Button(action: {
                     dismiss()
@@ -799,6 +806,13 @@ struct AppointmentDetailView: View {
             .navigationTitle("Appointment Details")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ObsidianBackButton(accessibilityIdentifier: "appointmentDetailBackButton") {
+                        dismiss()
+                    }
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 appointmentDetailBottomBar
             }

@@ -1350,13 +1350,13 @@ struct AppPreferencesView: View {
                     MoreSectionGroup(
                         title: "Lead Defaults",
                         icon: "person.badge.plus",
-                        subtitle: "Control how new leads appear by default."
+                        subtitle: "Starting values for new leads."
                     ) {
                         PreferenceCardView(
                             icon: "person.badge.plus",
                             iconColor: Color.electricViolet,
                             title: "Default Lead Status",
-                            subtitle: "Status assigned to new leads",
+                            subtitle: "For every new lead",
                             trailingContent: {
                                 preferenceMenu(
                                     title: "Default lead status",
@@ -1379,7 +1379,7 @@ struct AppPreferencesView: View {
                             icon: "arrow.up.arrow.down",
                             iconColor: Color.statusNotHome,
                             title: "Default Lead Sort",
-                            subtitle: "How leads are sorted in lists",
+                            subtitle: "Default list order",
                             trailingContent: {
                                 preferenceMenu(
                                     title: "Default lead sort",
@@ -1398,14 +1398,14 @@ struct AppPreferencesView: View {
                     MoreSectionGroup(
                         title: "Follow-up Defaults",
                         icon: "clock.badge.checkmark",
-                        subtitle: "Default reminders and check-in style.",
+                        subtitle: "Reminder timing and visit type.",
                         accentColor: Color.statusInterested
                     ) {
                         PreferenceCardView(
                             icon: "clock.badge.checkmark",
                             iconColor: Color.statusInterested,
                             title: "Default Follow-up Time",
-                            subtitle: "Time interval for new follow-ups",
+                            subtitle: "Default reminder window",
                             trailingContent: {
                                 preferenceMenu(
                                     title: "Default follow-up time",
@@ -1428,7 +1428,7 @@ struct AppPreferencesView: View {
                             icon: "door.left.hand.open",
                             iconColor: Color.electricViolet,
                             title: "Default Check-in Type",
-                            subtitle: "Method used for follow-up check-ins",
+                            subtitle: "Default follow-up method",
                             trailingContent: {
                                 preferenceMenu(
                                     title: "Default check-in type",
@@ -1448,14 +1448,14 @@ struct AppPreferencesView: View {
                     MoreSectionGroup(
                         title: "Map & Backup",
                         icon: "map",
-                        subtitle: "Default map mode and backup frequency.",
+                        subtitle: "Map mode and backup rhythm.",
                         accentColor: Color.dataCyan
                     ) {
                         PreferenceCardView(
                             icon: "map",
                             iconColor: .cyan,
                             title: "Default Map Type",
-                            subtitle: "Map style when opening map view",
+                            subtitle: "Opening map style",
                             trailingContent: {
                                 preferenceMenu(
                                     title: "Default map type",
@@ -1476,7 +1476,7 @@ struct AppPreferencesView: View {
                             icon: "icloud.and.arrow.up",
                             iconColor: .indigo,
                             title: "Auto Backup Frequency",
-                            subtitle: "How often data is automatically backed up",
+                            subtitle: "Automatic backup rhythm",
                             trailingContent: {
                                 preferenceMenu(
                                     title: "Auto backup frequency",
@@ -1495,7 +1495,7 @@ struct AppPreferencesView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 18)
-            .padding(.bottom, 112)
+            .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
         .navigationTitle("App Preferences")
@@ -1541,7 +1541,7 @@ struct AppPreferencesView: View {
             }
             .foregroundColor(Color.electricViolet)
             .padding(.horizontal, 12)
-            .frame(minHeight: 44)
+            .frame(minHeight: 38)
             .background(Color.electricViolet.opacity(0.12))
             .clipShape(Capsule())
             .contentShape(Capsule())
@@ -1835,12 +1835,13 @@ struct PreferenceCardView<TrailingContent: View>: View {
     }
     
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            ObsidianIconTile(icon: icon, tint: iconColor, size: 42)
+        HStack(alignment: .center, spacing: 12) {
+            ObsidianIconTile(icon: icon, tint: iconColor, size: 34)
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(title)
-                    .font(.obsidianCallout)
+                    .font(.obsidianFootnote)
+                    .fontWeight(.semibold)
                     .foregroundColor(Color.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
@@ -1849,21 +1850,22 @@ struct PreferenceCardView<TrailingContent: View>: View {
                     Text(subtitle)
                         .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
-                        .lineLimit(2)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
                 }
-
-                trailingContent()
-                    .font(.obsidianCallout)
-                    .foregroundColor(Color.electricViolet)
-                    .multilineTextAlignment(.trailing)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .trailing)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            trailingContent()
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.electricViolet)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(minWidth: 112, alignment: .trailing)
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .background(Color.obsidianSurface)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(

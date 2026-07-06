@@ -111,20 +111,16 @@ struct LeadsListView: View {
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("leadsSortButton")
 
-                            Button {
+                            ObsidianCompactIconButton(
+                                icon: sortAscending ? "arrow.up" : "arrow.down",
+                                accessibilityLabel: sortAscending ? "Sort ascending" : "Sort descending",
+                                accentColor: Color.textSecondary,
+                                accessibilityIdentifier: "leadsSortDirectionButton",
+                                size: 36
+                            ) {
                                 sortAscending.toggle()
-                            } label: {
-                                Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                                    .font(.nano)
-                                    .foregroundColor(.textSecondary)
-                                    .frame(width: 28, height: 28)
-                                    .background(Color.obsidianBorder.opacity(0.2))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                    .accessibilityIdentifier("leadsSortDirectionButton")
                             }
-                            .accessibilityLabel(sortAscending ? "Sort ascending" : "Sort descending")
                             .accessibilityHint("Toggles the lead list sort direction.")
-                            .accessibilityIdentifier("leadsSortDirectionButton")
                         }
                     }
                     tabSelectionSection
@@ -862,24 +858,16 @@ struct FilterBar: View {
             .accessibilityValue(sortBy.rawValue)
             .accessibilityHint("Chooses the lead sort field.")
 
-            Button(action: {
+            ObsidianCompactIconButton(
+                icon: sortAscending ? "arrow.up" : "arrow.down",
+                accessibilityLabel: sortAscending ? "Sort ascending" : "Sort descending",
+                accentColor: Color.textSecondary,
+                accessibilityIdentifier: "leadsSortDirectionButton",
+                size: 36
+            ) {
                 sortAscending.toggle()
-            }) {
-                Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                    .font(.micro)
-                    .foregroundColor(Color.textSecondary)
-                    .padding(8)
-                    .background(Color.obsidianSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
-                    )
-                    .accessibilityIdentifier("leadsSortDirectionButton")
             }
-            .accessibilityLabel(sortAscending ? "Sort ascending" : "Sort descending")
             .accessibilityHint("Toggles the lead list sort direction.")
-            .accessibilityIdentifier("leadsSortDirectionButton")
 
             Spacer()
         }

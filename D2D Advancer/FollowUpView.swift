@@ -452,6 +452,13 @@ struct FollowUpDetailView: View {
             .navigationTitle("Follow-Up")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ObsidianBackButton(accessibilityIdentifier: "followUpDetailBackButton") {
+                        dismiss()
+                    }
+                }
+            }
             .sheet(item: $leadForMessaging) { lead in
                 MessageSelectionView(lead: lead)
             }

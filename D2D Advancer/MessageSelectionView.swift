@@ -67,6 +67,13 @@ struct MessageSelectionView: View {
             .navigationTitle("Send Follow-up")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ObsidianBackButton(accessibilityIdentifier: "messageSelectionBackButton") {
+                        dismiss()
+                    }
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !canSendMessage,
@@ -312,11 +319,24 @@ struct MessageSelectionView: View {
                 Button {
                     showingCustomTemplateCreator = true
                 } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .semibold))
+                    Label("New", systemImage: "plus")
+                        .font(.obsidianFootnote)
+                        .fontWeight(.semibold)
                         .foregroundColor(Color.electricViolet)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 38)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.electricViolet.opacity(0.14))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.electricViolet.opacity(0.2), lineWidth: 0.5)
+                        )
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel("Add new template")
+                .accessibilityIdentifier("messageSelectionAddTemplateButton")
             }
             
             if availableTemplates.isEmpty {

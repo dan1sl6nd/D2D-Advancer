@@ -68,6 +68,13 @@ struct CustomAppointmentTypeCreatorView: View {
             .navigationTitle(editingType != nil ? "Edit Type" : "Create Type")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ObsidianBackButton(accessibilityIdentifier: "customAppointmentTypeBackButton") {
+                        dismiss()
+                    }
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !isValidType,

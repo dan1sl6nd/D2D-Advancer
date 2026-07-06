@@ -91,6 +91,13 @@ struct AddCheckInView: View {
             .navigationTitle("Record Check-in")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ObsidianBackButton(accessibilityIdentifier: "addCheckInBackButton") {
+                        dismiss()
+                    }
+                }
+            }
             .accessibilityIdentifier("addCheckInScreen")
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(

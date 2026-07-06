@@ -117,6 +117,13 @@ struct AppointmentFormView: View {
             .navigationTitle(mode.navigationTitle)
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ObsidianBackButton(accessibilityIdentifier: mode == .create ? "appointmentCreateBackButton" : "appointmentEditBackButton") {
+                        onCancel()
+                    }
+                }
+            }
             .accessibilityIdentifier(mode == .create ? "appointmentCreateForm" : "appointmentEditForm")
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(

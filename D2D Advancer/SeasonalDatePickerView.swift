@@ -48,6 +48,13 @@ struct SeasonalDatePickerView: View {
             .navigationTitle("Follow Up Date")
             .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ObsidianBackButton(accessibilityIdentifier: "seasonalDatePickerBackButton") {
+                        dismiss()
+                    }
+                }
+            }
             .accessibilityIdentifier("seasonalDatePickerScreen")
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
