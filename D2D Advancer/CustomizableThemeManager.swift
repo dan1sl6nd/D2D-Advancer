@@ -1024,6 +1024,9 @@ struct ObsidianBottomActionBar<PrimaryLabel: View, SecondaryLabel: View>: View {
         HStack(spacing: 12) {
             Button(action: secondaryAction) {
                 secondaryLabel
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .allowsTightening(true)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(ObsidianSecondaryButtonStyle())
@@ -1031,6 +1034,9 @@ struct ObsidianBottomActionBar<PrimaryLabel: View, SecondaryLabel: View>: View {
 
             Button(action: primaryAction) {
                 primaryLabel
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .allowsTightening(true)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(ObsidianPrimaryButtonStyle())
