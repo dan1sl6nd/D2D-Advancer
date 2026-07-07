@@ -64,16 +64,10 @@ struct MessageSelectionView: View {
             }
             .accessibilityIdentifier("messageSelectionScreen")
             .obsidianScreenBackground()
-            .navigationTitle("Send Follow-up")
-            .obsidianInlineNavigation()
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    ObsidianBackButton(accessibilityIdentifier: "messageSelectionBackButton") {
-                        dismiss()
-                    }
-                }
-            }
+            .obsidianPushedNavigation(
+                "Send Follow-up",
+                backButtonAccessibilityIdentifier: "messageSelectionBackButton"
+            )
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !canSendMessage,
