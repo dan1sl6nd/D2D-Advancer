@@ -124,6 +124,8 @@ final class D2D_AdvancerUITests: XCTestCase {
             XCTFail("\(screenName) back button has invalid geometry. screen=\(screenFrame), button=\(buttonFrame)")
             return
         }
+        XCTAssertEqual(buttonFrame.width, 44, accuracy: 4, "\(screenName) back button should use the shared 44pt circular control width")
+        XCTAssertEqual(buttonFrame.height, 44, accuracy: 4, "\(screenName) back button should use the shared 44pt circular control height")
 
         let normalizedRect = CGRect(
             x: clamp((buttonFrame.minX + buttonFrame.width * 0.1) / screenFrame.width, lower: 0, upper: 0.98),
@@ -2124,6 +2126,12 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Appointment Types")
         try assertDarkFilledBackButton(app, identifier: "appointmentTypesBackButton", screenName: "Appointment Types")
+
+        scrollToButton(app, "appointmentTypesCreateButton", direction: .down).tap()
+        waitForIdentifiedElement(app, "customAppointmentTypeEditor", timeout: 10)
+        try assertLightTopChrome(app, screenName: "Appointment Type Editor")
+        try assertDarkFilledBackButton(app, identifier: "customAppointmentTypeBackButton", screenName: "Appointment Type Editor")
+        tapButton(app, "customAppointmentTypeBackButton", timeout: 8)
     }
 
     @MainActor
