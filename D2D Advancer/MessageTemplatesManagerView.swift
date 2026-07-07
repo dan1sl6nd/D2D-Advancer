@@ -21,18 +21,15 @@ struct MessageTemplatesManagerView: View {
         }
         .obsidianScreenBackground()
         .accessibilityIdentifier("messageTemplatesScreen")
-        .obsidianPushedNavigation("Message Templates", backButtonAccessibilityIdentifier: "messageTemplatesBackButton")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                ObsidianCompactIconButton(
-                    icon: "plus",
-                    accessibilityLabel: "Create message template",
-                    accentColor: Color.electricViolet,
-                    accessibilityIdentifier: "messageTemplateToolbarCreateButton"
-                ) {
-                    editingTemplate = nil
-                    showingCreator = true
-                }
+        .obsidianPushedNavigation("Message Templates", backButtonAccessibilityIdentifier: "messageTemplatesBackButton") {
+            ObsidianCompactIconButton(
+                icon: "plus",
+                accessibilityLabel: "Create message template",
+                accentColor: Color.electricViolet,
+                accessibilityIdentifier: "messageTemplateToolbarCreateButton"
+            ) {
+                editingTemplate = nil
+                showingCreator = true
             }
         }
         .sheet(isPresented: $showingCreator, onDismiss: { editingTemplate = nil }) {

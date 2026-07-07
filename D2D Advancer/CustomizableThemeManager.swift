@@ -1178,22 +1178,56 @@ struct ObsidianInlineNavigationModifier: ViewModifier {
     }
 }
 
-struct ObsidianPushedNavigationModifier: ViewModifier {
+private struct ObsidianPushedNavigationHeader<Trailing: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let title: String
+    var backButtonAccessibilityIdentifier: String?
+    let trailing: Trailing
+    let onBack: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ObsidianBackButton(accessibilityIdentifier: backButtonAccessibilityIdentifier) {
+                onBack()
+            }
+            .frame(width: 52, alignment: .leading)
+
+            Text(title)
+                .font(.obsidianHeadline)
+                .foregroundColor(.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(maxWidth: .infinity)
+
+            trailing
+                .frame(width: 52, alignment: .trailing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .top))
+    }
+}
+
+struct ObsidianPushedNavigationModifier<Trailing: View>: ViewModifier {
     @Environment(\.dismiss) private var dismiss
 
     let title: String
     var backButtonAccessibilityIdentifier: String?
+    let trailing: Trailing
 
     func body(content: Content) -> some View {
         content
-            .navigationTitle(title)
-            .obsidianInlineNavigation()
             .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    ObsidianBackButton(accessibilityIdentifier: backButtonAccessibilityIdentifier) {
-                        dismiss()
-                    }
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                ObsidianPushedNavigationHeader(
+                    title: title,
+                    backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
+                    trailing: trailing
+                ) {
+                    dismiss()
                 }
             }
     }
@@ -1263,7 +1297,22 @@ extension View {
         modifier(
             ObsidianPushedNavigationModifier(
                 title: title,
-                backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier
+                backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
+                trailing: EmptyView()
+            )
+        )
+    }
+
+    func obsidianPushedNavigation<Trailing: View>(
+        _ title: String,
+        backButtonAccessibilityIdentifier: String? = nil,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        modifier(
+            ObsidianPushedNavigationModifier(
+                title: title,
+                backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
+                trailing: trailing()
             )
         )
     }
