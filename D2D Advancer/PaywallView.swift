@@ -8,13 +8,12 @@ struct PaywallView: View {
     @State private var selectedPlan: PaywallManager.SubscriptionPlan = PaywallManager.shared.experience.recommendedPlan
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             Color.obsidianBackground(for: colorScheme)
                 .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 26) {
-                    topBar
                     headerSection
                     planSection
                     includedSection
@@ -22,10 +21,16 @@ struct PaywallView: View {
                     Spacer(minLength: 150)
                 }
                 .padding(.horizontal, 22)
-                .padding(.top, 14)
+                .padding(.top, 70)
             }
+            .accessibilityIdentifier("paywallScreen")
+
+            topBar
+                .padding(.horizontal, 22)
+                .padding(.top, 14)
+                .background(Color.obsidianBackground(for: colorScheme))
+                .zIndex(1)
         }
-        .accessibilityIdentifier("paywallScreen")
         .safeAreaInset(edge: .bottom) {
             purchaseBar
         }

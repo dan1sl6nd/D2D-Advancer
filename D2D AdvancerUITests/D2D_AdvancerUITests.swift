@@ -2094,7 +2094,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "paywallPurchaseStatusBanner", timeout: 8)
         waitForTextContaining(app, "unavailable", timeout: 8)
 
-        tapIdentifiedElement(app, "paywallCloseButton", timeout: 8)
+        let closeButton = waitForIdentifiedElement(app, "paywallCloseButton", timeout: 8)
+        tapElement(app, closeButton, description: "paywallCloseButton")
         XCTAssertTrue(
             app.descendants(matching: .any)["paywallScreen"].waitForNonExistence(timeout: 5),
             "Paywall should dismiss cleanly from the close button"
