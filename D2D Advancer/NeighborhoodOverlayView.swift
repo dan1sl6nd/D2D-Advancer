@@ -306,8 +306,11 @@ struct NeighborhoodLegendView: View {
                 .padding(.bottom, 28)
             }
             .obsidianScreenBackground()
-            .navigationTitle("Area Score Legend")
-            .obsidianInlineNavigation()
+            .obsidianPushedNavigation(
+                "Area Score Legend",
+                backButtonAccessibilityIdentifier: "neighborhoodLegendBackButton",
+                onBack: { dismiss() }
+            )
             .safeAreaInset(edge: .bottom) {
                 Button {
                     dismiss()

@@ -362,19 +362,19 @@ struct IconPickerView: View {
                 }
             }
             .obsidianScreenBackground()
-            .navigationTitle("Choose Icon")
-            .obsidianInlineNavigation()
             .accessibilityIdentifier("customAppointmentTypeIconPicker")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    ObsidianCompactIconButton(
-                        icon: "checkmark",
-                        accessibilityLabel: "Done choosing icon",
-                        accentColor: Color.electricViolet,
-                        accessibilityIdentifier: "customAppointmentTypeIconPickerDoneButton"
-                    ) {
-                        dismiss()
-                    }
+            .obsidianPushedNavigation(
+                "Choose Icon",
+                backButtonAccessibilityIdentifier: "customAppointmentTypeIconPickerBackButton",
+                onBack: { dismiss() }
+            ) {
+                ObsidianCompactIconButton(
+                    icon: "checkmark",
+                    accessibilityLabel: "Done choosing icon",
+                    accentColor: Color.electricViolet,
+                    accessibilityIdentifier: "customAppointmentTypeIconPickerDoneButton"
+                ) {
+                    dismiss()
                 }
             }
         }

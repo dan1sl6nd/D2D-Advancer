@@ -127,8 +127,11 @@ struct AddCheckInView: View {
                         Spacer(minLength: 20)
                     }
                     .obsidianScreenBackground()
-                    .navigationTitle("Next Follow-up")
-                    .obsidianInlineNavigation()
+                    .obsidianPushedNavigation(
+                        "Next Follow-up",
+                        backButtonAccessibilityIdentifier: "addCheckInDateBackButton",
+                        onBack: { showingDatePicker = false }
+                    )
                     .accessibilityIdentifier("addCheckInNextFollowUpDatePicker")
                     .safeAreaInset(edge: .bottom) {
                         ObsidianBottomActionBar(

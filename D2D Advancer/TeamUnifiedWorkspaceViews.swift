@@ -59,6 +59,7 @@ struct TeamFieldMapSheet: View {
     let summary: TeamWorkspaceSurfaceSummary
     @Binding var selectedRepUserId: String?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
     @State private var selectedLead: TeamLead?
     @State private var selectedCluster: TeamLeadClusterSelection?
 
@@ -96,8 +97,11 @@ struct TeamFieldMapSheet: View {
                 }
             }
             .background(Color.obsidianBackground(for: colorScheme))
-            .navigationTitle(summary.role == .owner ? "Team Field Map" : "My Field Map")
-            .obsidianInlineNavigation()
+            .obsidianPushedNavigation(
+                summary.role == .owner ? "Team Field Map" : "My Field Map",
+                backButtonAccessibilityIdentifier: "teamUnifiedFieldMapBackButton",
+                onBack: { dismiss() }
+            )
         }
         .sheet(item: $selectedLead) { lead in
             TeamLeadDetailSheet(initialLead: lead)

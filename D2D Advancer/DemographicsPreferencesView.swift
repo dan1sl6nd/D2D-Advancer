@@ -150,19 +150,11 @@ struct DemographicsPreferencesView: View {
                 .padding(.top, 18)
             }
             .obsidianScreenBackground()
-            .navigationTitle("Target Demographics")
-            .obsidianInlineNavigation()
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    ObsidianCompactIconButton(
-                        icon: "xmark",
-                        accessibilityLabel: "Close demographics preferences",
-                        accentColor: Color.textSecondary
-                    ) {
-                        dismiss()
-                    }
-                }
-            }
+            .obsidianPushedNavigation(
+                "Target Demographics",
+                backButtonAccessibilityIdentifier: "demographicsPreferencesBackButton",
+                onBack: { dismiss() }
+            )
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     primaryAction: {

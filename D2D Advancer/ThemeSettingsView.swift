@@ -45,9 +45,8 @@ struct ThemeSettingsView: View {
                 }
                 .obsidianListRow()
             }
-            .navigationTitle("Theme")
-            .obsidianInlineNavigation()
             .obsidianListScreen()
+            .obsidianPushedNavigation("Theme", backButtonAccessibilityIdentifier: "themeSettingsBackButton")
         }
     }
 }

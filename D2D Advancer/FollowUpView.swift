@@ -808,8 +808,11 @@ struct RescheduleFollowUpView: View {
                 .padding(.bottom, 28)
             }
             .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
-            .navigationTitle("Reschedule")
-            .obsidianInlineNavigation()
+            .obsidianPushedNavigation(
+                "Reschedule",
+                backButtonAccessibilityIdentifier: "followUpRescheduleBackButton",
+                onBack: { dismiss() }
+            )
             .accessibilityIdentifier("followUpRescheduleSheet")
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(

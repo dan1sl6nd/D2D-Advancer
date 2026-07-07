@@ -3837,8 +3837,14 @@ struct StatusChangeSheet: View {
                 .padding(.bottom, 28)
             }
             .background(screenBackground.ignoresSafeArea())
-            .navigationTitle("Change Status")
-            .obsidianInlineNavigation()
+            .obsidianPushedNavigation(
+                "Change Status",
+                backButtonAccessibilityIdentifier: "statusChangeBackButton",
+                onBack: {
+                    dismiss()
+                    onCancel()
+                }
+            )
             .safeAreaInset(edge: .bottom) {
                 Button {
                     dismiss()

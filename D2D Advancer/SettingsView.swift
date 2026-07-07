@@ -108,8 +108,7 @@ struct SettingsView: View {
                 .padding(.bottom, 112)
             }
             .obsidianScreenBackground()
-            .navigationTitle("Settings")
-            .obsidianInlineNavigation()
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingOnboarding) {
                 OnboardingView(isPresented: $showingOnboarding)
                     .interactiveDismissDisabled()

@@ -54,26 +54,17 @@ struct AreaRecommendationsView: View {
                 }
             }
             .obsidianScreenBackground()
-            .navigationTitle("Best Areas")
-            .obsidianInlineNavigation()
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    ObsidianCompactIconButton(
-                        icon: "xmark",
-                        accessibilityLabel: "Close area recommendations",
-                        accentColor: Color.textSecondary
-                    ) {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    ObsidianCompactIconButton(
-                        icon: "slider.horizontal.3",
-                        accessibilityLabel: "Adjust target demographics",
-                        action: { showingPreferences = true }
-                    )
-                }
+            .obsidianPushedNavigation(
+                "Best Areas",
+                backButtonAccessibilityIdentifier: "areaRecommendationsBackButton",
+                onBack: { dismiss() }
+            ) {
+                ObsidianCompactIconButton(
+                    icon: "slider.horizontal.3",
+                    accessibilityLabel: "Adjust target demographics",
+                    action: { showingPreferences = true }
+                )
+                .accessibilityIdentifier("areaRecommendationsPreferencesButton")
             }
         }
         .sheet(isPresented: $showingPreferences) {

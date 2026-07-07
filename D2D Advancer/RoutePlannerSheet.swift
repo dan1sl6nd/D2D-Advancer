@@ -90,30 +90,20 @@ struct RoutePlannerSheet: View {
                     }
                 }
             }
-            .navigationTitle("Route Planner")
-            .obsidianInlineNavigation()
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    ObsidianCompactIconButton(
-                        icon: "xmark",
-                        accessibilityLabel: "Close route planner",
-                        accentColor: Color.textSecondary,
-                        accessibilityIdentifier: "routePlannerToolbarCloseButton"
-                    ) {
-                        dismiss()
-                    }
+            .obsidianPushedNavigation(
+                "Route Planner",
+                backButtonAccessibilityIdentifier: "routePlannerToolbarCloseButton",
+                onBack: { dismiss() }
+            ) {
+                ObsidianCompactIconButton(
+                    icon: "arrow.triangle.2.circlepath",
+                    accessibilityLabel: "Recompute route",
+                    accentColor: Color.electricViolet,
+                    accessibilityIdentifier: "routePlannerToolbarRecomputeButton"
+                ) {
+                    recompute()
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    ObsidianCompactIconButton(
-                        icon: "arrow.triangle.2.circlepath",
-                        accessibilityLabel: "Recompute route",
-                        accentColor: Color.electricViolet,
-                        accessibilityIdentifier: "routePlannerToolbarRecomputeButton"
-                    ) {
-                        recompute()
-                    }
-                    .disabled(isComputing)
-                }
+                .disabled(isComputing)
             }
         }
         .onAppear(perform: recompute)

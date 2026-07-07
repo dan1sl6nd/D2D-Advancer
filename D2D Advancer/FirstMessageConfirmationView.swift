@@ -48,8 +48,14 @@ struct FirstMessageConfirmationView: View {
             }
             .accessibilityIdentifier("firstMessageConfirmationScreen")
             .obsidianScreenBackground()
-            .navigationTitle("First Message")
-            .obsidianInlineNavigation()
+            .obsidianPushedNavigation(
+                "First Message",
+                backButtonAccessibilityIdentifier: "firstMessageBackButton",
+                onBack: {
+                    dismiss()
+                    onCompletion()
+                }
+            )
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !canSendMessage,

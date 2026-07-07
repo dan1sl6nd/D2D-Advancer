@@ -284,15 +284,15 @@ struct TeamLeadDetailSheet: View {
 
                 copyToastOverlay
             }
-            .navigationTitle("Team Lead Detail")
-            .obsidianInlineNavigation()
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    TeamToolbarDoneButton {
-                        dismiss()
-                    }
-                    .accessibilityIdentifier("teamLeadDetailCloseButton")
+            .obsidianPushedNavigation(
+                "Team Lead Detail",
+                backButtonAccessibilityIdentifier: "teamLeadDetailBackButton",
+                onBack: { dismiss() }
+            ) {
+                TeamToolbarDoneButton {
+                    dismiss()
                 }
+                .accessibilityIdentifier("teamLeadDetailCloseButton")
             }
             .accessibilityIdentifier("teamLeadDetailSheet")
         }

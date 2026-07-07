@@ -57,15 +57,15 @@ struct TeamRepDetailSheet: View {
                 .padding(.bottom, 24)
             }
             .obsidianScreenBackground()
-            .navigationTitle(title)
-            .obsidianInlineNavigation()
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    TeamToolbarDoneButton {
-                        dismiss()
-                    }
-                    .accessibilityIdentifier("teamRepDetailCloseButton")
+            .obsidianPushedNavigation(
+                title,
+                backButtonAccessibilityIdentifier: "teamRepDetailBackButton",
+                onBack: { dismiss() }
+            ) {
+                TeamToolbarDoneButton {
+                    dismiss()
                 }
+                .accessibilityIdentifier("teamRepDetailCloseButton")
             }
         }
         .sheet(item: $selectedLead) { lead in

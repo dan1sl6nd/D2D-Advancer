@@ -157,19 +157,11 @@ struct NeighborhoodDetailView: View {
                 .padding(.bottom, 40)
             }
             .obsidianScreenBackground()
-            .navigationTitle("Area Details")
-            .obsidianInlineNavigation()
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    ObsidianCompactIconButton(
-                        icon: "xmark",
-                        accessibilityLabel: "Close area details",
-                        accentColor: Color.textSecondary
-                    ) {
-                        dismiss()
-                    }
-                }
-            }
+            .obsidianPushedNavigation(
+                "Area Details",
+                backButtonAccessibilityIdentifier: "neighborhoodDetailBackButton",
+                onBack: { dismiss() }
+            )
             .sheet(isPresented: $isEditingNotes) {
                 notesEditorSheet
             }

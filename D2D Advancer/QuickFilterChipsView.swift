@@ -272,8 +272,11 @@ struct QuickFilterPresetPickerSheet: View {
                 .padding(.bottom, 96)
             }
             .background(screenBackground.ignoresSafeArea())
-            .navigationTitle("Filter Presets")
-            .obsidianInlineNavigation()
+            .obsidianPushedNavigation(
+                "Filter Presets",
+                backButtonAccessibilityIdentifier: "quickFilterPresetPickerBackButton",
+                onBack: { dismiss() }
+            )
             .safeAreaInset(edge: .bottom) {
                 Button(action: { dismiss() }) {
                     Label("Close", systemImage: "xmark.circle.fill")
@@ -389,8 +392,11 @@ struct SavePresetSheet: View {
                 .padding(.bottom, 28)
             }
             .background(screenBackground.ignoresSafeArea())
-            .navigationTitle("Save Preset")
-            .obsidianInlineNavigation()
+            .obsidianPushedNavigation(
+                "Save Preset",
+                backButtonAccessibilityIdentifier: "quickFilterSavePresetBackButton",
+                onBack: { dismiss() }
+            )
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: trimmedPresetName.isEmpty,

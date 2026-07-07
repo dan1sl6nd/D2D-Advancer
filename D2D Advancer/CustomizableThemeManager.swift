@@ -1194,20 +1194,20 @@ private struct ObsidianPushedNavigationHeader<Trailing: View>: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 68)
+                .padding(.horizontal, 108)
                 .frame(maxWidth: .infinity)
 
             HStack(spacing: 12) {
                 ObsidianBackButton(accessibilityIdentifier: backButtonAccessibilityIdentifier) {
                     onBack()
                 }
-                .frame(width: 52, alignment: .leading)
+                .frame(width: 92, alignment: .leading)
                 .accessibilityIdentifierIfPresent(backButtonAccessibilityIdentifier)
 
                 Spacer(minLength: 12)
 
                 trailing
-                    .frame(width: 52, alignment: .trailing)
+                    .frame(width: 92, alignment: .trailing)
             }
         }
         .padding(.horizontal, 16)
