@@ -1022,14 +1022,14 @@ struct LeadServiceCategoryPicker: View {
 
                 Spacer()
 
-                Button(action: onAddCategory) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.obsidianFootnote)
-                        .foregroundColor(Color.electricViolet)
-                }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Add service category")
-                .accessibilityIdentifier("addLeadServiceCategoryAddButton")
+                ObsidianCompactIconButton(
+                    icon: "plus",
+                    accessibilityLabel: "Add service category",
+                    accentColor: Color.electricViolet,
+                    accessibilityIdentifier: "addLeadServiceCategoryAddButton",
+                    size: 44,
+                    action: onAddCategory
+                )
             }
 
             if categories.isEmpty {

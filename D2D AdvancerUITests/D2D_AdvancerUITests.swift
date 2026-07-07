@@ -1426,7 +1426,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         denySystemPermissionIfPresented(timeout: 2)
 
         waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
-        tapIdentifiedElement(app, "appointmentsScheduleButton", timeout: 12)
+        tapButton(app, "appointmentsScheduleButton", timeout: 12)
 
         waitForIdentifiedElement(app, "appointmentLeadPickerSheet", timeout: 8)
         waitForText(app, "Select Customer", timeout: 8)

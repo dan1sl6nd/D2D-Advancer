@@ -86,7 +86,8 @@ struct AppointmentsView: View {
                         ObsidianCompactIconButton(
                             icon: "plus",
                             accessibilityLabel: "Schedule appointment",
-                            accessibilityIdentifier: "appointmentsScheduleButton"
+                            accessibilityIdentifier: "appointmentsScheduleButton",
+                            size: 44
                         ) {
                             guard paywallManager.gateAction() else { return }
                             showingScheduleView = true

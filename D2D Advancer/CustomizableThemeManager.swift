@@ -637,6 +637,7 @@ struct ObsidianCompactIconButton: View {
         }
         .buttonStyle(PlainButtonStyle())
         .frame(width: size, height: size)
+        .contentShape(Rectangle())
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier ?? accessibilityLabel)
     }
@@ -666,6 +667,7 @@ private struct ObsidianToolbarIconButton: View {
         }
         .buttonStyle(.plain)
         .frame(width: size, height: size)
+        .contentShape(Rectangle())
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier ?? accessibilityLabel)
     }
@@ -684,21 +686,23 @@ private struct ObsidianIconButtonFace: View {
         let resolvedForeground = foregroundColor ?? accentColor
         let resolvedBorder = borderColor ?? accentColor.opacity(0.22)
 
-        Image(systemName: icon)
-            .font(.obsidianCallout)
-            .fontWeight(.semibold)
-            .foregroundColor(resolvedForeground)
-            .frame(width: size, height: size)
-            .background(
-                Circle()
-                    .fill(resolvedBackground)
-            )
-            .overlay(
-                Circle()
-                    .stroke(resolvedBorder, lineWidth: 0.5)
-            )
-            .clipShape(Circle())
-            .contentShape(Circle())
+        ZStack {
+            Circle()
+                .fill(resolvedBackground)
+
+            Image(systemName: icon)
+                .font(.obsidianCallout)
+                .fontWeight(.semibold)
+                .foregroundColor(resolvedForeground)
+                .symbolRenderingMode(.monochrome)
+        }
+        .frame(width: size, height: size)
+        .overlay(
+            Circle()
+                .stroke(resolvedBorder, lineWidth: 0.5)
+        )
+        .clipShape(Circle())
+        .contentShape(Circle())
     }
 }
 
@@ -716,7 +720,7 @@ struct ObsidianBackButton: View {
             accentColor: backFill,
             backgroundColor: backFill,
             foregroundColor: backForeground,
-            borderColor: Color.clear,
+            borderColor: backBorder,
             accessibilityIdentifier: accessibilityIdentifier,
             size: 44,
             action: action
@@ -724,11 +728,15 @@ struct ObsidianBackButton: View {
     }
 
     private var backFill: Color {
-        colorScheme == .dark ? .white : Color.textPrimary
+        colorScheme == .dark ? .white : Color.obsidianSurface
     }
 
     private var backForeground: Color {
-        colorScheme == .dark ? .black : .white
+        colorScheme == .dark ? .black : Color.textPrimary
+    }
+
+    private var backBorder: Color {
+        colorScheme == .dark ? Color.clear : Color.obsidianBorder.opacity(0.7)
     }
 }
 
