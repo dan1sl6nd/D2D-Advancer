@@ -399,6 +399,35 @@ final class D2D_AdvancerUITests: XCTestCase {
             : appFrame
     }
 
+    private func scrollDirectionToReveal(
+        _ element: XCUIElement,
+        in app: XCUIApplication,
+        excludingBottomChrome: Bool = true
+    ) -> ScrollDirection? {
+        guard element.exists else { return nil }
+
+        let elementFrame = element.frame
+        let availableFrame = availableTapFrame(in: app, excludingBottomChrome: excludingBottomChrome)
+        guard isFinite(elementFrame), isFinite(availableFrame) else { return nil }
+
+        if elementFrame.maxY < availableFrame.minY {
+            return .up
+        }
+        if elementFrame.minY > availableFrame.maxY {
+            return .down
+        }
+
+        let visibleFrame = elementFrame.intersection(availableFrame)
+        guard !visibleFrame.isNull, !visibleFrame.isEmpty else { return nil }
+
+        let minimumVisibleHeight = excludingBottomChrome ? min(CGFloat(44), elementFrame.height) : CGFloat(2)
+        if visibleFrame.height < minimumVisibleHeight {
+            return elementFrame.midY < availableFrame.midY ? .up : .down
+        }
+
+        return nil
+    }
+
     private func relaunch(_ app: XCUIApplication, opening tabArgument: String) {
         let tabArguments = [
             "-openMapTabForUITests",
@@ -564,7 +593,7 @@ final class D2D_AdvancerUITests: XCTestCase {
     ) {
         let element = waitForIdentifiedElement(app, identifier, timeout: timeout)
         for _ in 0..<maxSwipes where !hasVisibleTapFrame(element, in: app, excludingBottomChrome: true) {
-            dragContent(app, direction: direction)
+            dragContent(app, direction: scrollDirectionToReveal(element, in: app) ?? direction)
         }
         tapElement(app, element, description: identifier, excludingBottomChrome: true)
     }
@@ -712,8 +741,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         requireHittable: Bool = true
     ) -> XCUIElement {
         let element = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
-        for _ in 0..<maxSwipes where !element.exists || (requireHittable && !hasVisibleTapFrame(element, in: app, excludingBottomChrome: true)) {
-            dragContent(app, direction: direction)
+        for _ in 0..<(maxSwipes * 2) where !element.exists || (requireHittable && !hasVisibleTapFrame(element, in: app, excludingBottomChrome: true)) {
+            dragContent(app, direction: scrollDirectionToReveal(element, in: app) ?? direction)
         }
         XCTAssertTrue(element.waitForExistence(timeout: 3), "Expected element to exist after scrolling: \(identifier)")
         if requireHittable {

@@ -47,16 +47,10 @@ struct ServiceCategoryCreatorView: View {
                 .padding(.bottom, 28)
             }
             .obsidianScreenBackground()
-            .navigationTitle(editingCategory != nil ? "Edit Service" : "Add Service")
-            .obsidianInlineNavigation()
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    ObsidianBackButton(accessibilityIdentifier: "serviceCategoryBackButton") {
-                        dismiss()
-                    }
-                }
-            }
+            .obsidianPushedNavigation(
+                editingCategory != nil ? "Edit Service" : "Add Service",
+                backButtonAccessibilityIdentifier: "serviceCategoryBackButton"
+            )
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !isValidCategory,
