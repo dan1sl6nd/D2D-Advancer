@@ -1000,14 +1000,9 @@ final class D2D_AdvancerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["addLeadButton"].waitForExistence(timeout: 12), "Map add lead button should be ready before creating a team lead")
         tapButton(app, "addLeadButton", timeout: 12)
         typeText(name, into: app.textFields["addLeadNameField"])
+        dismissKeyboardIfPresent(app)
 
-        let statusMenu = app.buttons["addLeadStatusMenu"]
-        for _ in 0..<6 where !statusMenu.isHittable {
-            app.swipeUp()
-        }
-        XCTAssertTrue(statusMenu.waitForExistence(timeout: 8), "Status menu should exist")
-        statusMenu.tap()
-        tapButton(app, "Interested", timeout: 8)
+        selectAddLeadStatus(app, rawValue: "interested", displayName: "Interested")
 
         tapButton(app, "addLeadSaveButton", timeout: 8)
         denySystemPermissionIfPresented(timeout: 2)
@@ -1030,15 +1025,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         }
 
         typeText(name, into: app.textFields["addLeadNameField"])
-        typeText("5551234567", into: app.textFields["addLeadPhoneField"])
         dismissKeyboardIfPresent(app)
 
-        let notHomeButton = app.buttons["Not Home"]
-        for _ in 0..<6 where !notHomeButton.isHittable {
-            app.swipeUp()
-        }
-        XCTAssertTrue(notHomeButton.waitForExistence(timeout: 8), "Not Home status should be available")
-        notHomeButton.tap()
+        selectAddLeadStatus(app, rawValue: "not_home", displayName: "Not Home")
+        let phoneField = scrollToIdentifiedElement(app, "addLeadPhoneField", direction: .up)
+        typeText("5551234567", into: phoneField)
 
         tapButton(app, "addLeadSaveButton", timeout: 10)
         denySystemPermissionIfPresented(timeout: 2)
@@ -1046,6 +1037,29 @@ final class D2D_AdvancerUITests: XCTestCase {
             tapButton(app, "firstMessageSkipButton", timeout: 8)
         }
         XCTAssertTrue(app.buttons["addLeadButton"].waitForExistence(timeout: 15), "Saving a Not Home lead should return to the map")
+    }
+
+    private func selectAddLeadStatus(_ app: XCUIApplication, rawValue: String, displayName: String) {
+        let optionIdentifier = "addLeadStatusOption_\(rawValue)"
+        for _ in 0..<10 {
+            let statusOption = app.buttons[optionIdentifier]
+            if statusOption.exists, hasVisibleTapFrame(statusOption, in: app, excludingBottomChrome: true) {
+                tapElement(app, statusOption, description: optionIdentifier, excludingBottomChrome: true)
+                return
+            }
+
+            let selectedStatus = app.buttons["addLeadStatusMenu"]
+            if selectedStatus.exists,
+               hasVisibleTapFrame(selectedStatus, in: app, excludingBottomChrome: true),
+               selectedStatus.label.localizedCaseInsensitiveContains(displayName) {
+                return
+            }
+
+            dragContent(app, direction: .down)
+        }
+
+        screenshot(app, name: "Add Lead missing \(displayName) status")
+        XCTFail("\(displayName) status chip should be selectable before saving")
     }
 
     private func createPersonalLeadThroughUI(_ app: XCUIApplication, name: String) {
