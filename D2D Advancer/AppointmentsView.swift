@@ -804,16 +804,10 @@ struct AppointmentDetailView: View {
                 }
                 .background(Color.obsidianBackground(for: colorScheme))
             }
-            .navigationTitle("Appointment Details")
-            .obsidianInlineNavigation()
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    ObsidianBackButton(accessibilityIdentifier: "appointmentDetailBackButton") {
-                        dismiss()
-                    }
-                }
-            }
+            .obsidianPushedNavigation(
+                "Appointment Details",
+                backButtonAccessibilityIdentifier: "appointmentDetailBackButton"
+            )
             .safeAreaInset(edge: .bottom) {
                 appointmentDetailBottomBar
             }

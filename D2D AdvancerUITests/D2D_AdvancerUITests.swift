@@ -1777,6 +1777,7 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         waitForIdentifiedElement(app, "appointmentDetailScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Appointment Details")
+        try assertDarkFilledBackButton(app, identifier: "appointmentDetailBackButton", screenName: "Appointment Details")
         waitForIdentifiedElement(app, "appointmentDetailCancelButton", timeout: 8)
         waitForIdentifiedElement(app, "appointmentDetailCompleteButton", timeout: 8)
         waitForIdentifiedElement(app, "appointmentDetailEditButton", timeout: 8)
