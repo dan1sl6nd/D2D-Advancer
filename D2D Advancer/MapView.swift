@@ -3258,7 +3258,8 @@ private struct MapToolsSheet: View {
                 Text("Change views without crowding the map.")
                     .font(.obsidianFootnote)
                     .foregroundColor(Color.textSecondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
