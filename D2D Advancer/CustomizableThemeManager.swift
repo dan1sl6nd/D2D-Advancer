@@ -1042,6 +1042,7 @@ struct ObsidianBottomActionBar<PrimaryLabel: View, SecondaryLabel: View>: View {
         .padding(.vertical, 12)
         .background(
             Color.obsidianBackground(for: colorScheme)
+                .ignoresSafeArea(edges: .bottom)
                 .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: -3)
         )
     }
@@ -1187,28 +1188,23 @@ private struct ObsidianPushedNavigationHeader<Trailing: View>: View {
     let onBack: () -> Void
 
     var body: some View {
-        ZStack {
+        HStack(spacing: 12) {
+            ObsidianBackButton(accessibilityIdentifier: backButtonAccessibilityIdentifier) {
+                onBack()
+            }
+            .frame(width: 44, height: 44)
+            .accessibilityIdentifierIfPresent(backButtonAccessibilityIdentifier)
+
             Text(title)
-                .font(.obsidianHeadline)
+                .font(.displayMedium)
                 .foregroundColor(.textPrimary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.82)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 76)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .minimumScaleFactor(0.72)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack {
-                ObsidianBackButton(accessibilityIdentifier: backButtonAccessibilityIdentifier) {
-                    onBack()
-                }
-                .frame(width: 44, height: 44)
-                .accessibilityIdentifierIfPresent(backButtonAccessibilityIdentifier)
-
-                Spacer()
-
-                trailing
-                    .fixedSize(horizontal: true, vertical: false)
-            }
+            trailing
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)

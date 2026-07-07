@@ -161,6 +161,7 @@ struct AddLeadView: View {
                 }
             }
             .padding()
+            .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
         .obsidianPushedNavigation(

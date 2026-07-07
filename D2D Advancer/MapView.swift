@@ -317,6 +317,7 @@ struct MapView: View {
     @State private var showingLookAround = false
     @State private var showingRoutePlanner = false
     @State private var showingMapTools = false
+    @State private var mapToolsDetent: PresentationDetent = .large
     @State private var lookAroundCoordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0)
     @State private var longPressCoordinate: CLLocationCoordinate2D?
     @State private var longPressAddress: String?
@@ -581,8 +582,13 @@ struct MapView: View {
                     },
                     onOpenTeamMap: openTeamFieldMap
                 )
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.medium, .large], selection: $mapToolsDetent)
                 .presentationDragIndicator(.visible)
+            }
+            .onChange(of: showingMapTools) { _, isShowing in
+                if isShowing {
+                    mapToolsDetent = .large
+                }
             }
             .sheet(
                 isPresented: $isSearching,
