@@ -2374,9 +2374,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapButton(app, "quickAction_away", timeout: 8)
         waitForIdentifiedElement(app, "quickLeadToast", timeout: 15)
         waitForTextContaining(app, "Not Home", timeout: 8)
-        waitForIdentifiedElement(app, "quickLeadUndoButton", timeout: 8)
+        let undoButton = waitForIdentifiedElement(app, "quickLeadUndoButton", timeout: 8)
+        XCTAssertGreaterThanOrEqual(undoButton.frame.width, 44, "Undo quick action should have a 44pt minimum tap width")
+        XCTAssertGreaterThanOrEqual(undoButton.frame.height, 44, "Undo quick action should have a 44pt minimum tap height")
 
-        tapIdentifiedElement(app, "quickLeadUndoButton", timeout: 8)
+        tapButton(app, "quickLeadUndoButton", timeout: 8)
         XCTAssertTrue(
             app.descendants(matching: .any)["quickLeadToast"].waitForNonExistence(timeout: 5),
             "Undo should dismiss the quick-lead toast"
@@ -2392,7 +2394,18 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         tapButton(app, "tab_Leads", timeout: 12)
         waitForIdentifiedElement(app, "leadsScreen", timeout: 12)
-        waitForTextContaining(app, "Not Interested", timeout: 12)
+        tapMenuChoice(app, label: "Inactive leads", timeout: 8)
+
+        let passFilterChip = waitForIdentifiedElement(app, "quickFilterStatus_not_interested", timeout: 8)
+        XCTAssertGreaterThanOrEqual(passFilterChip.frame.height, 44, "Pass filter chip should have a 44pt minimum tap height")
+        tapButton(app, "quickFilterStatus_not_interested", timeout: 8)
+
+        let passLeadRow = waitForIdentifiedElement(app, "personalLeadRow", timeout: 12)
+        let passLeadStatus = (passLeadRow.value as? String) ?? ""
+        XCTAssertTrue(
+            passLeadStatus.contains("Status: Not Interested"),
+            "Pass quick action should create an inactive Not Interested lead. value=\(passLeadStatus)"
+        )
     }
 
     @MainActor

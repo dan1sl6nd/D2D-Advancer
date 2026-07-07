@@ -50,6 +50,7 @@ struct QuickFilterChipsView: View {
                         }
                         .font(.themeCaption)
                         .foregroundColor(Color.textSecondary)
+                        .frame(minHeight: 32)
                         .glassChip()
                     }
                     .accessibilityIdentifier("quickFilterClearButton")
@@ -63,6 +64,7 @@ struct QuickFilterChipsView: View {
                         }
                         .font(.themeCaption)
                         .foregroundColor(Color.textSecondary)
+                        .frame(minHeight: 32)
                         .glassChip()
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -178,6 +180,7 @@ struct QuickFilterChipsView: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
+                .frame(minHeight: 44)
                 .background(Color.electricViolet)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
@@ -189,6 +192,7 @@ struct QuickFilterChipsView: View {
                 .foregroundColor(Color.textSecondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
+                .frame(minHeight: 44)
                 .background(Color.obsidianSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
