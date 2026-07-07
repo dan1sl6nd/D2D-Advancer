@@ -628,7 +628,7 @@ struct SelectLeadForAppointmentView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 20)
-                .padding(.bottom, 96)
+                .padding(.bottom, 28)
             }
             .obsidianScreenBackground()
             .obsidianPushedNavigation(

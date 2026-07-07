@@ -62,7 +62,7 @@ struct CustomAppointmentTypeCreatorView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 18)
-                .padding(.bottom, 112)
+                .padding(.bottom, 28)
             }
             .obsidianScreenBackground()
             .obsidianPushedNavigation(

@@ -48,7 +48,7 @@ struct CustomTemplateCreatorView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 18)
-                    .padding(.bottom, 96)
+                    .padding(.bottom, 28)
                 }
                 .scrollDismissesKeyboard(.immediately)
                 .background(Color.obsidianBackground(for: colorScheme))
