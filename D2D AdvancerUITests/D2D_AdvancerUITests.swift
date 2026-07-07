@@ -2250,25 +2250,37 @@ final class D2D_AdvancerUITests: XCTestCase {
         try assertLightTopChrome(app, screenName: "More")
 
         tapIdentifiedElement(app, "moreCloudStorageButton", timeout: 8)
-        waitForIdentifiedElement(app, "cloudProviderSheet", timeout: 8)
+        let cloudProviderSheet = waitForIdentifiedElement(app, "cloudProviderSheet", timeout: 8)
         try assertLightSurfaceAround(
-            app.descendants(matching: .any)["cloudProviderSheet"].firstMatch,
+            cloudProviderSheet,
             app: app,
             screenName: "Cloud Storage"
         )
         tapIdentifiedElement(app, "cloudProviderCloseButton", timeout: 8)
+        XCTAssertTrue(
+            cloudProviderSheet.waitForNonExistence(timeout: 5),
+            "Cloud Storage sheet should fully dismiss before opening another More modal"
+        )
         waitForText(app, "More", timeout: 8)
 
         let syncSettingsButton = app.descendants(matching: .any)["moreSyncSettingsButton"].firstMatch
         if syncSettingsButton.waitForExistence(timeout: 3) {
-            tapElement(app, syncSettingsButton, description: "moreSyncSettingsButton")
-            waitForIdentifiedElement(app, "syncSettingsSheet", timeout: 8)
+            let syncCloseButton = app.buttons["syncSettingsCloseButton"]
+            for _ in 0..<3 where !syncCloseButton.exists {
+                tapIdentifiedElement(app, "moreSyncSettingsButton", direction: .down, timeout: 4)
+                _ = syncCloseButton.waitForExistence(timeout: 3)
+            }
+            XCTAssertTrue(
+                syncCloseButton.waitForExistence(timeout: 8),
+                "Sync Settings close button should exist after opening the sheet"
+            )
+            let syncSettingsSheet = waitForIdentifiedElement(app, "syncSettingsSheet", timeout: 8)
             try assertLightSurfaceAround(
-                app.descendants(matching: .any)["syncSettingsSheet"].firstMatch,
+                syncSettingsSheet,
                 app: app,
                 screenName: "Sync Settings"
             )
-            tapIdentifiedElement(app, "syncSettingsCloseButton", timeout: 8)
+            tapElement(app, syncCloseButton, description: "syncSettingsCloseButton")
             waitForText(app, "More", timeout: 8)
         }
     }
