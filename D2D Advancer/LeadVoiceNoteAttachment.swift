@@ -560,9 +560,13 @@ struct VoiceRecorderSheet: View {
 
                 actionButton
 
-                Button("Cancel", action: cancel)
-                    .font(.obsidianBody)
-                    .foregroundColor(Color.textSecondary)
+                Button(action: cancel) {
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                        .font(.obsidianTitle)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("voiceRecorderCancelButton")
 
                 Spacer().frame(height: 20)
             }
