@@ -146,7 +146,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         )
     }
 
-    private func assertPushedHeaderTitleCentered(
+    private func assertPushedHeaderTitleLeadingAligned(
         _ app: XCUIApplication,
         title: String,
         backButtonIdentifier: String,
@@ -178,18 +178,18 @@ final class D2D_AdvancerUITests: XCTestCase {
         }
 
         let titleFrame = titleElement.frame
-        let screenCenterX = appFrame.midX
+        let expectedLeadingX = backFrame.maxX + 12
 
         XCTAssertGreaterThanOrEqual(
             titleFrame.minX,
             backFrame.maxX + 8,
-            "\(screenName) centered header title overlaps the back button. title=\(titleFrame), back=\(backFrame)"
+            "\(screenName) header title overlaps the back button. title=\(titleFrame), back=\(backFrame)"
         )
         XCTAssertEqual(
-            titleFrame.midX,
-            screenCenterX,
-            accuracy: 8,
-            "\(screenName) header title should be centered on the screen. title=\(titleFrame), screen=\(appFrame)"
+            titleFrame.minX,
+            expectedLeadingX,
+            accuracy: 12,
+            "\(screenName) header title should start after the shared back button. title=\(titleFrame), back=\(backFrame), screen=\(appFrame)"
         )
     }
 
@@ -2252,21 +2252,21 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForText(app, "Overview", timeout: 10)
         try assertLightTopChrome(app, screenName: "Overview")
         try assertDarkFilledBackButton(app, identifier: "overviewBackButton", screenName: "Overview")
-        assertPushedHeaderTitleCentered(app, title: "Overview", backButtonIdentifier: "overviewBackButton", screenName: "Overview")
+        assertPushedHeaderTitleLeadingAligned(app, title: "Overview", backButtonIdentifier: "overviewBackButton", screenName: "Overview")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "moreMessageTemplatesCard", timeout: 8)
         waitForIdentifiedElement(app, "messageTemplatesScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Message Templates")
         try assertDarkFilledBackButton(app, identifier: "messageTemplatesBackButton", screenName: "Message Templates")
-        assertPushedHeaderTitleCentered(app, title: "Message Templates", backButtonIdentifier: "messageTemplatesBackButton", screenName: "Message Templates")
+        assertPushedHeaderTitleLeadingAligned(app, title: "Message Templates", backButtonIdentifier: "messageTemplatesBackButton", screenName: "Message Templates")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "teamWorkspaceCard", direction: .down, timeout: 8)
         waitForText(app, "Team Workspace", timeout: 10)
         try assertLightTopChrome(app, screenName: "Team Workspace")
         try assertDarkFilledBackButton(app, identifier: "teamWorkspaceBackButton", screenName: "Team Workspace")
-        assertPushedHeaderTitleCentered(app, title: "Team", backButtonIdentifier: "teamWorkspaceBackButton", screenName: "Team Workspace")
+        assertPushedHeaderTitleLeadingAligned(app, title: "Team", backButtonIdentifier: "teamWorkspaceBackButton", screenName: "Team Workspace")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreNotificationsCard", direction: .down)
@@ -2274,7 +2274,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "notificationSettingsScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Notification Settings")
         try assertDarkFilledBackButton(app, identifier: "notificationSettingsBackButton", screenName: "Notification Settings")
-        assertPushedHeaderTitleCentered(app, title: "Notifications", backButtonIdentifier: "notificationSettingsBackButton", screenName: "Notification Settings")
+        assertPushedHeaderTitleLeadingAligned(app, title: "Notifications", backButtonIdentifier: "notificationSettingsBackButton", screenName: "Notification Settings")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreCalendarSettingsCard", direction: .down)
@@ -2282,7 +2282,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForText(app, "Calendar Settings", timeout: 10)
         try assertLightTopChrome(app, screenName: "Calendar Settings")
         try assertDarkFilledBackButton(app, identifier: "calendarSettingsBackButton", screenName: "Calendar Settings")
-        assertPushedHeaderTitleCentered(app, title: "Calendar Settings", backButtonIdentifier: "calendarSettingsBackButton", screenName: "Calendar Settings")
+        assertPushedHeaderTitleLeadingAligned(app, title: "Calendar Settings", backButtonIdentifier: "calendarSettingsBackButton", screenName: "Calendar Settings")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreAppPreferencesCard", direction: .down)
@@ -2290,7 +2290,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "App Preferences")
         try assertDarkFilledBackButton(app, identifier: "appPreferencesBackButton", screenName: "App Preferences")
-        assertPushedHeaderTitleCentered(app, title: "App Preferences", backButtonIdentifier: "appPreferencesBackButton", screenName: "App Preferences")
+        assertPushedHeaderTitleLeadingAligned(app, title: "App Preferences", backButtonIdentifier: "appPreferencesBackButton", screenName: "App Preferences")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down)
@@ -2298,13 +2298,13 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Appointment Types")
         try assertDarkFilledBackButton(app, identifier: "appointmentTypesBackButton", screenName: "Appointment Types")
-        assertPushedHeaderTitleCentered(app, title: "Appointment Types", backButtonIdentifier: "appointmentTypesBackButton", screenName: "Appointment Types")
+        assertPushedHeaderTitleLeadingAligned(app, title: "Appointment Types", backButtonIdentifier: "appointmentTypesBackButton", screenName: "Appointment Types")
 
         scrollToButton(app, "appointmentTypesCreateButton", direction: .down).tap()
         waitForIdentifiedElement(app, "customAppointmentTypeEditor", timeout: 10)
         try assertLightTopChrome(app, screenName: "Appointment Type Editor")
         try assertDarkFilledBackButton(app, identifier: "customAppointmentTypeBackButton", screenName: "Appointment Type Editor")
-        assertPushedHeaderTitleCentered(app, title: "Create Type", backButtonIdentifier: "customAppointmentTypeBackButton", screenName: "Appointment Type Editor")
+        assertPushedHeaderTitleLeadingAligned(app, title: "Create Type", backButtonIdentifier: "customAppointmentTypeBackButton", screenName: "Appointment Type Editor")
         tapButton(app, "customAppointmentTypeBackButton", timeout: 8)
     }
 
