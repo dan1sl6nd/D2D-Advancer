@@ -1195,29 +1195,37 @@ private struct ObsidianPushedNavigationHeader<Trailing: View>: View {
     let trailing: Trailing
     let onBack: () -> Void
 
-    var body: some View {
-        HStack(spacing: 12) {
-            ObsidianBackButton(accessibilityIdentifier: backButtonAccessibilityIdentifier) {
-                onBack()
-            }
-            .frame(width: 44, height: 44)
-            .accessibilityIdentifierIfPresent(backButtonAccessibilityIdentifier)
+    private let horizontalPadding: CGFloat = 16
+    private let titleSideClearance: CGFloat = 92
 
+    var body: some View {
+        ZStack {
             Text(title)
                 .font(.displayMedium)
                 .foregroundColor(.textPrimary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.72)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .minimumScaleFactor(0.62)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, titleSideClearance)
                 .layoutPriority(1)
 
-            trailing
-                .fixedSize(horizontal: true, vertical: false)
+            HStack(spacing: 12) {
+                ObsidianBackButton(accessibilityIdentifier: backButtonAccessibilityIdentifier) {
+                    onBack()
+                }
+                .frame(width: 44, height: 44)
+                .accessibilityIdentifierIfPresent(backButtonAccessibilityIdentifier)
+
+                Spacer(minLength: 0)
+
+                trailing
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
         .frame(maxWidth: .infinity)
         .frame(height: 44)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, horizontalPadding)
         .padding(.top, 10)
         .padding(.bottom, 12)
         .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .top))
