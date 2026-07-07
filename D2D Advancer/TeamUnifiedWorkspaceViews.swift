@@ -103,6 +103,7 @@ struct TeamFieldMapSheet: View {
                 onBack: { dismiss() }
             )
         }
+        .obsidianModalBackground()
         .sheet(item: $selectedLead) { lead in
             TeamLeadDetailSheet(initialLead: lead)
         }

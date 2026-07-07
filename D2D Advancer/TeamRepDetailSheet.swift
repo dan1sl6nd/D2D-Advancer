@@ -68,6 +68,7 @@ struct TeamRepDetailSheet: View {
                 .accessibilityIdentifier("teamRepDetailCloseButton")
             }
         }
+        .obsidianModalBackground()
         .sheet(item: $selectedLead) { lead in
             TeamLeadDetailSheet(initialLead: lead)
         }

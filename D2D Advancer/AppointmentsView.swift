@@ -850,6 +850,7 @@ struct AppointmentDetailView: View {
             }
             .id(refreshId)
         }
+        .obsidianModalBackground()
         .accessibilityIdentifier("appointmentDetailScreen")
     }
 

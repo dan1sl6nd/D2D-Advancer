@@ -106,6 +106,7 @@ struct RoutePlannerSheet: View {
                 .disabled(isComputing)
             }
         }
+        .obsidianModalBackground()
         .onAppear(perform: recompute)
         .accessibilityIdentifier("routePlannerSheet")
     }

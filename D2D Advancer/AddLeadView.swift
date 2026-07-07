@@ -190,6 +190,7 @@ struct AddLeadView: View {
                 }
             )
         }
+        .obsidianModalBackground()
         .sheet(isPresented: $showingDatePicker) {
             SeasonalDatePickerView(selectedDate: $followUpDate)
         }

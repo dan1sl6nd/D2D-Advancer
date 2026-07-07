@@ -296,6 +296,7 @@ struct TeamLeadDetailSheet: View {
             }
             .accessibilityIdentifier("teamLeadDetailSheet")
         }
+        .obsidianModalBackground()
         .onDisappear {
             copyToastDismissTask?.cancel()
             copyToastDismissTask = nil

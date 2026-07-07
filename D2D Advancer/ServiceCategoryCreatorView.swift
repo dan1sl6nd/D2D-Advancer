@@ -78,6 +78,7 @@ struct ServiceCategoryCreatorView: View {
                 Text(saveErrorMessage ?? "Please try again.")
             }
         }
+        .obsidianModalBackground()
     }
     
     private var categoryDetailsCard: some View {

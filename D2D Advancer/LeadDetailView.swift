@@ -93,6 +93,7 @@ struct LeadDetailView: View {
             backButtonAccessibilityIdentifier: "leadDetailBackButton",
             onBack: { dismiss() }
         )
+        .obsidianModalBackground()
         .overlay(alignment: .bottom) {
             copyToastOverlay
                 .padding(.bottom, 96)

@@ -466,6 +466,7 @@ struct FollowUpDetailView: View {
                 RescheduleFollowUpView(lead: lead, currentDate: lead.followUpDate ?? Date())
             }
         }
+        .obsidianModalBackground()
     }
 
     private var followUpHeaderSection: some View {

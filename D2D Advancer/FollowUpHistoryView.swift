@@ -64,6 +64,7 @@ struct FollowUpHistoryView: View {
             .sheet(isPresented: $showingAddCheckIn) {
                 AddCheckInView(lead: lead)
             }
+            .obsidianModalBackground()
             .onAppear {
                 migrateCheckInOutcomes()
             }

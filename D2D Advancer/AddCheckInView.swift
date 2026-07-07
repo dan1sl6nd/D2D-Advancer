@@ -145,8 +145,10 @@ struct AddCheckInView: View {
                     }
                 }
                 .presentationDetents([.height(250)])
+                .obsidianModalBackground()
             }
         }
+        .obsidianModalBackground()
     }
     
     private func saveCheckIn() {

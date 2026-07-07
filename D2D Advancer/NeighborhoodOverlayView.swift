@@ -324,6 +324,7 @@ struct NeighborhoodLegendView: View {
                 .background(Color.obsidianBackground(for: colorScheme))
             }
         }
+        .obsidianModalBackground()
     }
 }
 

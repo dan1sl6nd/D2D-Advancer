@@ -153,6 +153,7 @@ struct AppointmentFormView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
             }
+            .obsidianModalBackground()
             .alert(
                 "Appointment not saved",
                 isPresented: Binding(

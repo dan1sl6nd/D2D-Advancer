@@ -572,6 +572,7 @@ struct VoiceRecorderSheet: View {
             }
             .padding(.horizontal, 24)
         }
+        .obsidianModalBackground()
         // Prevent swipe-down dismissal while recording — if the user swipes
         // away mid-record we'd leave the recorder running invisibly and the
         // audio session active. Forcing them to use Stop/Cancel guarantees

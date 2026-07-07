@@ -99,6 +99,7 @@ struct CustomAppointmentTypeCreatorView: View {
                 Text(saveErrorMessage ?? "Please try again.")
             }
         }
+        .obsidianModalBackground()
     }
     
     private var typeDetailsCard: some View {
@@ -378,6 +379,7 @@ struct IconPickerView: View {
                 }
             }
         }
+        .obsidianModalBackground()
     }
 }
 
