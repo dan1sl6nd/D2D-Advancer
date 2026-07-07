@@ -1811,6 +1811,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapElement(app, followUpRow, description: "created follow-up row")
         waitForIdentifiedElement(app, "followUpDetailScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Follow-Up Detail")
+        try assertDarkFilledBackButton(app, identifier: "followUpDetailBackButton", screenName: "Follow-Up Detail")
         waitForIdentifiedElement(app, "followUpDetailCompleteButton", timeout: 8)
         waitForIdentifiedElement(app, "followUpDetailDoneButton", timeout: 8)
         waitForIdentifiedElement(app, "followUpDetailCheckInButton", timeout: 8)
