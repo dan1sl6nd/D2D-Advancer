@@ -44,18 +44,13 @@ struct SeasonalDatePickerView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .obsidianScreenBackground()
-            .navigationTitle("Follow Up Date")
-            .obsidianInlineNavigation()
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    ObsidianBackButton(accessibilityIdentifier: "seasonalDatePickerBackButton") {
-                        dismiss()
-                    }
-                }
-            }
             .accessibilityIdentifier("seasonalDatePickerScreen")
+            .obsidianScreenBackground()
+            .obsidianPushedNavigation(
+                "Follow Up Date",
+                backButtonAccessibilityIdentifier: "seasonalDatePickerBackButton",
+                onBack: { dismiss() }
+            )
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !hasSelection,
@@ -217,7 +212,7 @@ struct SeasonalPresetCard: View {
                         .foregroundColor(isSelected ? .white : Color.textPrimary)
                         .lineLimit(1)
 
-                    Text("\(preset.year)")
+                    Text(verbatim: "\(preset.year)")
                         .font(.obsidianSmall)
                         .foregroundColor(isSelected ? .white.opacity(0.8) : Color.textSecondary)
                 }

@@ -688,8 +688,11 @@ struct CreateAccountFromGuestView: View {
             .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
-        .navigationTitle("Create Account")
-        .obsidianInlineNavigation()
+        .obsidianPushedNavigation(
+            "Create Account",
+            backButtonAccessibilityIdentifier: "createAccountBackButton",
+            onBack: { dismiss() }
+        )
         .safeAreaInset(edge: .bottom) {
             ObsidianBottomActionBar(
                 isPrimaryDisabled: !isFormValid || userAccountManager.authStatus == .loading,

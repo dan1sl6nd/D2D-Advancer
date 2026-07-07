@@ -162,17 +162,12 @@ struct AddLeadView: View {
             }
             .padding()
         }
-        .background(Color.obsidianBackground(for: colorScheme))
-        .navigationTitle("Add Lead")
-        .obsidianInlineNavigation()
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                ObsidianBackButton(accessibilityIdentifier: "addLeadBackButton") {
-                    dismiss()
-                }
-            }
-        }
+        .obsidianScreenBackground()
+        .obsidianPushedNavigation(
+            "Add Lead",
+            backButtonAccessibilityIdentifier: "addLeadBackButton",
+            onBack: { dismiss() }
+        )
         .safeAreaInset(edge: .bottom) {
             ObsidianBottomActionBar(
                 isPrimaryDisabled: usableAddress == nil,

@@ -115,6 +115,10 @@ final class D2D_AdvancerUITests: XCTestCase {
     private func assertDarkFilledBackButton(_ app: XCUIApplication, identifier: String, screenName: String) throws {
         let backButton = app.buttons[identifier]
         XCTAssertTrue(backButton.waitForExistence(timeout: 5), "\(screenName) back button should exist")
+        try assertDarkFilledBackButtonElement(backButton, app: app, screenName: screenName)
+    }
+
+    private func assertDarkFilledBackButtonElement(_ backButton: XCUIElement, app: XCUIApplication, screenName: String) throws {
         XCTAssertTrue(hasVisibleTapFrame(backButton, in: app), "\(screenName) back button should be visibly tappable")
 
         let screenshot = XCUIScreen.main.screenshot()
@@ -140,6 +144,44 @@ final class D2D_AdvancerUITests: XCTestCase {
             0.55,
             "\(screenName) back button should use the dark filled circle style in light mode. luminance=\(buttonLuminance)"
         )
+    }
+
+    private func topLeadingHeaderButton(
+        _ app: XCUIApplication,
+        identifier: String,
+        fallbackLabel: String = "Back",
+        timeout: TimeInterval = 5
+    ) -> XCUIElement {
+        let identifiedButton = app.buttons[identifier]
+        if identifiedButton.waitForExistence(timeout: min(timeout, 2)) {
+            return identifiedButton
+        }
+
+        let labelButton = app.buttons[fallbackLabel]
+        if labelButton.waitForExistence(timeout: timeout) {
+            let appFrame = app.windows.firstMatch.frame
+            guard isFinite(appFrame) else { return labelButton }
+
+            let predicate = NSPredicate(format: "label == %@ OR identifier == %@", fallbackLabel, fallbackLabel)
+            let candidates = app.buttons.matching(predicate).allElementsBoundByIndex
+                .filter { button in
+                    guard button.exists, hasVisibleTapFrame(button, in: app) else { return false }
+                    let frame = button.frame
+                    return isFinite(frame)
+                        && frame.minX < appFrame.midX
+                        && frame.minY < 180
+                        && frame.width <= 72
+                        && frame.height <= 72
+                }
+
+            return candidates.min { lhs, rhs in
+                let lhsScore = lhs.frame.minY * 4 + lhs.frame.minX
+                let rhsScore = rhs.frame.minY * 4 + rhs.frame.minX
+                return lhsScore < rhsScore
+            } ?? labelButton
+        }
+
+        return identifiedButton
     }
 
     private func assertLightSurfaceAround(_ element: XCUIElement, app: XCUIApplication, screenName: String) throws {
@@ -1874,6 +1916,11 @@ final class D2D_AdvancerUITests: XCTestCase {
             app: app,
             screenName: "Message Template Editor"
         )
+        try assertDarkFilledBackButton(
+            app,
+            identifier: "customTemplateCloseButton",
+            screenName: "Message Template Editor"
+        )
 
         let templateTitle = "UI Template \(Int(Date().timeIntervalSince1970))"
         typeText(templateTitle, into: app.textFields["customTemplateTitleField"], timeout: 8)
@@ -1890,6 +1937,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         try assertLightSurfaceAround(
             app.descendants(matching: .any)["customTemplatePreviewSheet"].firstMatch,
             app: app,
+            screenName: "Message Template Preview"
+        )
+        try assertDarkFilledBackButton(
+            app,
+            identifier: "customTemplatePreviewCloseButton",
             screenName: "Message Template Preview"
         )
         let previewCloseByIdentifier = app.descendants(matching: .any)
@@ -1936,13 +1988,19 @@ final class D2D_AdvancerUITests: XCTestCase {
             app: app,
             screenName: "Sync Settings"
         )
+        let syncSettingsBackButton = topLeadingHeaderButton(
+            app,
+            identifier: "syncSettingsCloseButton",
+            timeout: 8
+        )
+        try assertDarkFilledBackButtonElement(syncSettingsBackButton, app: app, screenName: "Sync Settings")
         waitForIdentifiedElement(app, "syncSettingsAutoSyncToggle", timeout: 8)
 
         for interval in ["30min", "1hour", "3hours", "6hours", "1day"] {
             waitForIdentifiedElement(app, "syncSettingsInterval_\(interval)", timeout: 8)
         }
 
-        tapIdentifiedElement(app, "syncSettingsCloseButton", timeout: 8)
+        tapElement(app, syncSettingsBackButton, description: "syncSettingsCloseButton")
         XCTAssertFalse(
             app.descendants(matching: .any)["syncSettingsSheet"].waitForExistence(timeout: 5),
             "Sync settings sheet should close cleanly"

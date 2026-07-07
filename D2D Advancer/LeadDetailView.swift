@@ -87,17 +87,12 @@ struct LeadDetailView: View {
 
             leadDetailBottomBar
         }
-        .navigationTitle(isEditing ? "Edit Lead" : "Lead Details")
-        .obsidianInlineNavigation()
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                ObsidianBackButton(accessibilityIdentifier: "leadDetailBackButton") {
-                    dismiss()
-                }
-            }
-        }
-        .background(Color.obsidianBackground(for: colorScheme))
+        .obsidianScreenBackground()
+        .obsidianPushedNavigation(
+            isEditing ? "Edit Lead" : "Lead Details",
+            backButtonAccessibilityIdentifier: "leadDetailBackButton",
+            onBack: { dismiss() }
+        )
         .overlay(alignment: .bottom) {
             copyToastOverlay
                 .padding(.bottom, 96)

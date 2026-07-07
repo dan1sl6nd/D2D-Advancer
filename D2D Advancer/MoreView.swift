@@ -1706,39 +1706,14 @@ struct SyncSettingsView: View {
 
         NavigationStack {
             VStack(spacing: 0) {
-                HStack(alignment: .top, spacing: 12) {
-                    ObsidianIconTile(icon: "arrow.triangle.2.circlepath", tint: Color.electricViolet, size: 42)
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Sync Settings")
-                            .font(.obsidianHeadline)
-                            .foregroundColor(Color.textPrimary)
-                            .accessibilityIdentifier("syncSettingsSheet")
-
-                        Text("Choose how often your data syncs automatically.")
-                            .font(.obsidianFootnote)
-                            .foregroundColor(Color.textSecondary)
-                            .lineLimit(2)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    ObsidianCompactIconButton(
-                        icon: "xmark",
-                        accessibilityLabel: "Close sync settings",
-                        accentColor: Color.textSecondary,
-                        accessibilityIdentifier: "syncSettingsCloseButton"
-                    ) {
-                        dismiss()
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 18)
-                .background(screenBackground.ignoresSafeArea(edges: .top))
-                
                 ScrollView {
                     VStack(spacing: 16) {
+                        ObsidianScreenTitle(
+                            title: "Sync Settings",
+                            subtitle: "Choose how often your data syncs automatically.",
+                            icon: "arrow.triangle.2.circlepath"
+                        )
+
                         // Auto-sync toggle
                         modernSectionCard(title: "Automatic Sync", icon: "arrow.triangle.2.circlepath") {
                             VStack(spacing: 16) {
@@ -1790,11 +1765,17 @@ struct SyncSettingsView: View {
                         }
                     }
                     .padding(.horizontal, 20)
+                    .padding(.top, 18)
                     .padding(.bottom, 40)
                 }
+                .accessibilityIdentifier("syncSettingsSheet")
             }
             .background(screenBackground.ignoresSafeArea())
-            .navigationBarHidden(true)
+            .obsidianPushedNavigation(
+                "Sync Settings",
+                backButtonAccessibilityIdentifier: "syncSettingsCloseButton",
+                onBack: { dismiss() }
+            )
         }
         .presentationDetents([.large])
         .obsidianModalBackground()

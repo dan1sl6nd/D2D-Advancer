@@ -630,16 +630,12 @@ struct SelectLeadForAppointmentView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 96)
             }
-            .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
-            .obsidianInlineNavigation()
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    ObsidianBackButton(accessibilityIdentifier: "appointmentLeadPickerBackButton") {
-                        dismiss()
-                    }
-                }
-            }
+            .obsidianScreenBackground()
+            .obsidianPushedNavigation(
+                "Select Lead",
+                backButtonAccessibilityIdentifier: "appointmentLeadPickerBackButton",
+                onBack: { dismiss() }
+            )
             .safeAreaInset(edge: .bottom) {
                 Button(action: {
                     dismiss()

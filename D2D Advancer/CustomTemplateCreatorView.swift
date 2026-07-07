@@ -35,24 +35,31 @@ struct CustomTemplateCreatorView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                editorHeader
-
                 ScrollView {
                     VStack(spacing: 16) {
+                        ObsidianScreenTitle(
+                            title: editingTemplate != nil ? "Edit Template" : "Create Template",
+                            subtitle: "Build a reusable reply for SMS, email, or both.",
+                            icon: editingTemplate != nil ? "square.and.pencil" : "plus.message.fill"
+                        )
+
                         templateDetailsCard
                         messageContentCard
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 4)
+                    .padding(.top, 18)
                     .padding(.bottom, 96)
                 }
                 .scrollDismissesKeyboard(.immediately)
                 .background(Color.obsidianBackground(for: colorScheme))
+                .accessibilityIdentifier("customTemplateEditorSheet")
             }
             .background(Color.obsidianBackground(for: colorScheme))
-            .navigationBarHidden(true)
-            .navigationBarBackButtonHidden(true)
-            .accessibilityIdentifier("customTemplateEditorSheet")
+            .obsidianPushedNavigation(
+                editingTemplate != nil ? "Edit Template" : "Create Template",
+                backButtonAccessibilityIdentifier: "customTemplateCloseButton",
+                onBack: { dismiss() }
+            )
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: !isValidTemplate,
@@ -92,42 +99,6 @@ struct CustomTemplateCreatorView: View {
         .presentationBackground(Color.obsidianBackground(for: colorScheme))
     }
 
-    private var editorHeader: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ObsidianIconTile(
-                icon: editingTemplate != nil ? "square.and.pencil" : "plus.message.fill",
-                tint: Color.electricViolet,
-                size: 42
-            )
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(editingTemplate != nil ? "Edit Template" : "Create Template")
-                    .font(.obsidianHeadline)
-                    .foregroundColor(Color.textPrimary)
-
-                Text("Build a reusable reply for SMS, email, or both.")
-                    .font(.obsidianFootnote)
-                    .foregroundColor(Color.textSecondary)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 0)
-
-            ObsidianCompactIconButton(
-                icon: "xmark",
-                accessibilityLabel: "Close template editor",
-                accentColor: Color.textSecondary,
-                accessibilityIdentifier: "customTemplateCloseButton"
-            ) {
-                dismiss()
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
-        .padding(.bottom, 18)
-        .background(Color.obsidianBackground(for: colorScheme))
-    }
-    
     private func saveTemplate() {
         let template = MessageTemplate(
             id: editingTemplate?.id ?? UUID().uuidString,
@@ -442,56 +413,32 @@ struct PreviewTemplateView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                previewHeader
-
                 ScrollView {
                     VStack(spacing: 16) {
+                        ObsidianScreenTitle(
+                            title: "Template Preview",
+                            subtitle: "Review the final message with sample customer data.",
+                            icon: "eye.fill"
+                        )
+
                         templateHeaderCard
                         messagePreviewCard
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 4)
+                    .padding(.top, 18)
                     .padding(.bottom, 28)
                 }
                 .background(Color.obsidianBackground(for: colorScheme))
+                .accessibilityIdentifier("customTemplatePreviewSheet")
             }
             .background(Color.obsidianBackground(for: colorScheme))
-            .navigationBarHidden(true)
-            .navigationBarBackButtonHidden(true)
-            .accessibilityIdentifier("customTemplatePreviewSheet")
+            .obsidianPushedNavigation(
+                "Template Preview",
+                backButtonAccessibilityIdentifier: "customTemplatePreviewCloseButton",
+                onBack: { dismiss() }
+            )
         }
         .presentationBackground(Color.obsidianBackground(for: colorScheme))
-    }
-
-    private var previewHeader: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ObsidianIconTile(icon: "eye.fill", tint: Color.electricViolet, size: 42)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Template Preview")
-                    .font(.obsidianHeadline)
-                    .foregroundColor(Color.textPrimary)
-
-                Text("Review the final message with sample customer data.")
-                    .font(.obsidianFootnote)
-                    .foregroundColor(Color.textSecondary)
-                    .lineLimit(2)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            ObsidianCompactIconButton(
-                icon: "xmark",
-                accessibilityLabel: "Close preview",
-                accentColor: Color.textSecondary,
-                accessibilityIdentifier: "customTemplatePreviewCloseButton"
-            ) {
-                dismiss()
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
-        .padding(.bottom, 18)
-        .background(Color.obsidianBackground(for: colorScheme))
     }
 
     private var templateHeaderCard: some View {
