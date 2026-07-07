@@ -189,7 +189,8 @@ struct FollowUpView: View {
         ObsidianEmptyState(
             icon: "calendar.badge.clock",
             title: "No Follow Ups",
-            message: "Set a follow-up date on any lead and it will appear here in priority order."
+            message: "Set a follow-up date on any lead and it will appear here in priority order.",
+            verticalOffset: -56
         )
     }
 

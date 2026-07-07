@@ -571,6 +571,7 @@ struct ObsidianEmptyState: View {
     var actionTitle: String?
     var actionIcon: String?
     var action: (() -> Void)?
+    var verticalOffset: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 18) {
@@ -609,6 +610,7 @@ struct ObsidianEmptyState: View {
             Spacer(minLength: 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .offset(y: verticalOffset)
         .accessibilityElement(children: .combine)
     }
 }
@@ -1201,8 +1203,8 @@ private struct ObsidianPushedNavigationHeader<Trailing: View>: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 68)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .layoutPriority(1)
 
             HStack(spacing: 12) {

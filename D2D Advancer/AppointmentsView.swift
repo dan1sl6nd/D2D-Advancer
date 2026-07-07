@@ -308,7 +308,8 @@ struct AppointmentsView: View {
             action: selectedView == .active ? {
                 guard paywallManager.gateAction() else { return }
                 showingScheduleView = true
-            } : nil
+            } : nil,
+            verticalOffset: -56
         )
     }
     
