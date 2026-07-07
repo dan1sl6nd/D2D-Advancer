@@ -112,6 +112,34 @@ final class D2D_AdvancerUITests: XCTestCase {
         )
     }
 
+    private func assertDarkFilledBackButton(_ app: XCUIApplication, identifier: String, screenName: String) throws {
+        let backButton = app.buttons[identifier]
+        XCTAssertTrue(backButton.waitForExistence(timeout: 5), "\(screenName) back button should exist")
+        XCTAssertTrue(hasVisibleTapFrame(backButton, in: app), "\(screenName) back button should be visibly tappable")
+
+        let screenshot = XCUIScreen.main.screenshot()
+        let screenFrame = app.frame
+        let buttonFrame = backButton.frame
+        guard isFinite(screenFrame), isFinite(buttonFrame) else {
+            XCTFail("\(screenName) back button has invalid geometry. screen=\(screenFrame), button=\(buttonFrame)")
+            return
+        }
+
+        let normalizedRect = CGRect(
+            x: clamp((buttonFrame.minX + buttonFrame.width * 0.1) / screenFrame.width, lower: 0, upper: 0.98),
+            y: clamp((buttonFrame.minY + buttonFrame.height * 0.1) / screenFrame.height, lower: 0, upper: 0.98),
+            width: clamp((buttonFrame.width * 0.8) / screenFrame.width, lower: 0.01, upper: 0.2),
+            height: clamp((buttonFrame.height * 0.8) / screenFrame.height, lower: 0.01, upper: 0.2)
+        )
+        let buttonLuminance = try averageLuminance(in: screenshot, normalizedRect: normalizedRect)
+
+        XCTAssertLessThan(
+            buttonLuminance,
+            0.55,
+            "\(screenName) back button should use the dark filled circle style in light mode. luminance=\(buttonLuminance)"
+        )
+    }
+
     private func assertLightSurfaceAround(_ element: XCUIElement, app: XCUIApplication, screenName: String) throws {
         XCTAssertTrue(element.exists, "\(screenName) anchor element should exist before sampling light surface")
 
@@ -2055,40 +2083,47 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapIdentifiedElement(app, "moreOverviewCard", timeout: 8)
         waitForText(app, "Overview", timeout: 10)
         try assertLightTopChrome(app, screenName: "Overview")
+        try assertDarkFilledBackButton(app, identifier: "overviewBackButton", screenName: "Overview")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "moreMessageTemplatesCard", timeout: 8)
         waitForIdentifiedElement(app, "messageTemplatesScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Message Templates")
+        try assertDarkFilledBackButton(app, identifier: "messageTemplatesBackButton", screenName: "Message Templates")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "teamWorkspaceCard", direction: .down, timeout: 8)
         waitForText(app, "Team Workspace", timeout: 10)
         try assertLightTopChrome(app, screenName: "Team Workspace")
+        try assertDarkFilledBackButton(app, identifier: "teamWorkspaceBackButton", screenName: "Team Workspace")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreNotificationsCard", direction: .down)
         tapIdentifiedElement(app, "moreNotificationsCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "notificationSettingsScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Notification Settings")
+        try assertDarkFilledBackButton(app, identifier: "notificationSettingsBackButton", screenName: "Notification Settings")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreCalendarSettingsCard", direction: .down)
         tapIdentifiedElement(app, "moreCalendarSettingsCard", direction: .down, timeout: 8)
         waitForText(app, "Calendar Settings", timeout: 10)
         try assertLightTopChrome(app, screenName: "Calendar Settings")
+        try assertDarkFilledBackButton(app, identifier: "calendarSettingsBackButton", screenName: "Calendar Settings")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreAppPreferencesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppPreferencesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "App Preferences")
+        try assertDarkFilledBackButton(app, identifier: "appPreferencesBackButton", screenName: "App Preferences")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Appointment Types")
+        try assertDarkFilledBackButton(app, identifier: "appointmentTypesBackButton", screenName: "Appointment Types")
     }
 
     @MainActor

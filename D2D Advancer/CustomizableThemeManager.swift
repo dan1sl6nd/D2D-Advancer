@@ -728,15 +728,15 @@ struct ObsidianBackButton: View {
     }
 
     private var backFill: Color {
-        colorScheme == .dark ? .white : Color.obsidianSurface
+        colorScheme == .dark ? .white : Color.textPrimary
     }
 
     private var backForeground: Color {
-        colorScheme == .dark ? .black : Color.textPrimary
+        colorScheme == .dark ? .black : .white
     }
 
     private var backBorder: Color {
-        colorScheme == .dark ? Color.clear : Color.obsidianBorder.opacity(0.7)
+        Color.clear
     }
 }
 
