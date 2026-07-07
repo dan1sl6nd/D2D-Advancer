@@ -748,7 +748,7 @@ struct TeamCommandCenterCard: View {
             Spacer()
         }
         .padding(12)
-        .background(Color.obsidianBlack.opacity(0.42))
+        .background(Color.obsidianElevated)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -829,7 +829,7 @@ struct TeamTechnicianJobBoard: View {
                 }
             }
             .padding(12)
-            .background(Color.obsidianBlack.opacity(0.42))
+            .background(Color.obsidianElevated)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -1194,7 +1194,7 @@ struct TeamRepFilterChip: View {
             .foregroundColor(isSelected ? .white : Color.textSecondary)
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
-            .background(isSelected ? Color.electricViolet : Color.obsidianBlack.opacity(0.45))
+            .background(isSelected ? Color.electricViolet : Color.obsidianElevated)
             .clipShape(Capsule())
         }
         .buttonStyle(PlainButtonStyle())
