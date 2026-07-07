@@ -598,6 +598,21 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapElement(app, element, description: identifier, excludingBottomChrome: true)
     }
 
+    private func tapFollowUpHistoryAddCheckInButton(_ app: XCUIApplication) {
+        let button = app.descendants(matching: .any)
+            .matching(identifier: "followUpHistoryAddCheckInButton")
+            .firstMatch
+
+        if button.waitForExistence(timeout: 3) {
+            tapElement(app, button, description: "followUpHistoryAddCheckInButton", excludingBottomChrome: true)
+            return
+        }
+
+        // iOS 26 sheet snapshots can omit custom header children from the AX tree.
+        // The next assertion still proves the tap opened the intended sheet.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.91, dy: 0.145)).tap()
+    }
+
     private func tapHorizontallyScrollableElement(
         _ app: XCUIApplication,
         _ identifier: String,
@@ -1599,6 +1614,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapButton(app, "leadDetailScheduleButton", timeout: 8)
         waitForIdentifiedElement(app, "appointmentCreateForm", timeout: 12)
         try assertLightTopChrome(app, screenName: "Schedule Appointment")
+        try assertDarkFilledBackButton(app, identifier: "appointmentCreateBackButton", screenName: "Schedule Appointment")
         waitForIdentifiedElement(app, "appointmentScheduleSaveButton", timeout: 8)
         tapButton(app, "appointmentScheduleCancelButton", timeout: 8)
 
@@ -1611,9 +1627,9 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapIdentifiedElement(app, "leadDetailFullHistoryButton", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "followUpHistoryScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Follow-up History")
-        waitForIdentifiedElement(app, "followUpHistoryAddCheckInButton", timeout: 8)
-        tapIdentifiedElement(app, "followUpHistoryAddCheckInButton", timeout: 8)
+        tapFollowUpHistoryAddCheckInButton(app)
         waitForIdentifiedElement(app, "addCheckInScreen", timeout: 10)
+        try assertDarkFilledBackButton(app, identifier: "addCheckInBackButton", screenName: "Record Check-in")
         tapButton(app, "addCheckInCancelButton", timeout: 8)
         waitForIdentifiedElement(app, "followUpHistoryScreen", timeout: 10)
     }

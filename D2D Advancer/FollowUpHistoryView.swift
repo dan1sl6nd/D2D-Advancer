@@ -4,6 +4,7 @@ import CoreData
 struct FollowUpHistoryView: View {
     let lead: Lead
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.dismiss) private var dismiss
     @State private var showingAddCheckIn = false
     
     @FetchRequest private var checkIns: FetchedResults<FollowUpCheckIn>
@@ -46,19 +47,19 @@ struct FollowUpHistoryView: View {
                     }
                 }
             }
-            .obsidianScreenBackground()
-            .navigationTitle("Follow-up History")
-            .obsidianInlineNavigation()
             .accessibilityIdentifier("followUpHistoryScreen")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    ObsidianCompactIconButton(
-                        icon: "plus",
-                        accessibilityLabel: "Add follow-up check-in",
-                        accessibilityIdentifier: "followUpHistoryAddCheckInButton",
-                        action: { showingAddCheckIn = true }
-                    )
-                }
+            .obsidianScreenBackground()
+            .obsidianPushedNavigation(
+                "Follow-up History",
+                backButtonAccessibilityIdentifier: "followUpHistoryBackButton",
+                onBack: { dismiss() }
+            ) {
+                ObsidianCompactIconButton(
+                    icon: "plus",
+                    accessibilityLabel: "Add follow-up check-in",
+                    accessibilityIdentifier: "followUpHistoryAddCheckInButton",
+                    action: { showingAddCheckIn = true }
+                )
             }
             .sheet(isPresented: $showingAddCheckIn) {
                 AddCheckInView(lead: lead)

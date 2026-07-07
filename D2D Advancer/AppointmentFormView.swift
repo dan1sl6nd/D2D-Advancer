@@ -113,18 +113,13 @@ struct AppointmentFormView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .obsidianScreenBackground()
-            .navigationTitle(mode.navigationTitle)
-            .obsidianInlineNavigation()
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    ObsidianBackButton(accessibilityIdentifier: mode == .create ? "appointmentCreateBackButton" : "appointmentEditBackButton") {
-                        onCancel()
-                    }
-                }
-            }
             .accessibilityIdentifier(mode == .create ? "appointmentCreateForm" : "appointmentEditForm")
+            .obsidianScreenBackground()
+            .obsidianPushedNavigation(
+                mode.navigationTitle,
+                backButtonAccessibilityIdentifier: mode == .create ? "appointmentCreateBackButton" : "appointmentEditBackButton",
+                onBack: onCancel
+            )
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: title.isEmpty || isProcessing,

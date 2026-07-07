@@ -87,18 +87,13 @@ struct AddCheckInView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .obsidianScreenBackground()
-            .navigationTitle("Record Check-in")
-            .obsidianInlineNavigation()
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    ObsidianBackButton(accessibilityIdentifier: "addCheckInBackButton") {
-                        dismiss()
-                    }
-                }
-            }
             .accessibilityIdentifier("addCheckInScreen")
+            .obsidianScreenBackground()
+            .obsidianPushedNavigation(
+                "Record Check-in",
+                backButtonAccessibilityIdentifier: "addCheckInBackButton",
+                onBack: { dismiss() }
+            )
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     primaryAccessibilityIdentifier: "addCheckInSaveButton",

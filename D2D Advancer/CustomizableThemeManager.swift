@@ -1216,6 +1216,7 @@ struct ObsidianPushedNavigationModifier<Trailing: View>: ViewModifier {
     let title: String
     var backButtonAccessibilityIdentifier: String?
     let trailing: Trailing
+    var onBack: (() -> Void)?
 
     func body(content: Content) -> some View {
         content
@@ -1227,7 +1228,11 @@ struct ObsidianPushedNavigationModifier<Trailing: View>: ViewModifier {
                     backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
                     trailing: trailing
                 ) {
-                    dismiss()
+                    if let onBack {
+                        onBack()
+                    } else {
+                        dismiss()
+                    }
                 }
             }
     }
@@ -1298,7 +1303,23 @@ extension View {
             ObsidianPushedNavigationModifier(
                 title: title,
                 backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
-                trailing: EmptyView()
+                trailing: EmptyView(),
+                onBack: nil
+            )
+        )
+    }
+
+    func obsidianPushedNavigation(
+        _ title: String,
+        backButtonAccessibilityIdentifier: String? = nil,
+        onBack: @escaping () -> Void
+    ) -> some View {
+        modifier(
+            ObsidianPushedNavigationModifier(
+                title: title,
+                backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
+                trailing: EmptyView(),
+                onBack: onBack
             )
         )
     }
@@ -1312,7 +1333,24 @@ extension View {
             ObsidianPushedNavigationModifier(
                 title: title,
                 backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
-                trailing: trailing()
+                trailing: trailing(),
+                onBack: nil
+            )
+        )
+    }
+
+    func obsidianPushedNavigation<Trailing: View>(
+        _ title: String,
+        backButtonAccessibilityIdentifier: String? = nil,
+        onBack: @escaping () -> Void,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        modifier(
+            ObsidianPushedNavigationModifier(
+                title: title,
+                backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
+                trailing: trailing(),
+                onBack: onBack
             )
         )
     }
