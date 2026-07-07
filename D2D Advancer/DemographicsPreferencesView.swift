@@ -145,9 +145,9 @@ struct DemographicsPreferencesView: View {
                             .padding(.horizontal, 20)
                     }
 
-                    Spacer(minLength: 80)
                 }
                 .padding(.top, 18)
+                .padding(.bottom, 28)
             }
             .obsidianScreenBackground()
             .obsidianPushedNavigation(
