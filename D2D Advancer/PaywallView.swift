@@ -18,7 +18,7 @@ struct PaywallView: View {
                     planSection
                     includedSection
 
-                    Spacer(minLength: 150)
+                    Spacer(minLength: 28)
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 70)
