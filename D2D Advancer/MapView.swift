@@ -690,9 +690,10 @@ struct MapView: View {
 
     private func scheduleOpeningMapLeadRenderUpdate() {
         scheduleMapLeadRenderUpdate(
-            after: 0.22,
+            after: 0.12,
             maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
-            expandAfter: 1.0
+            expandAfter: 1.45,
+            usePreviewIfCacheEmpty: true
         )
     }
 
@@ -700,14 +701,16 @@ struct MapView: View {
         scheduleMapLeadRenderUpdate(
             after: delay,
             maxRenderedLeads: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
-            expandAfter: 0.55
+            expandAfter: 0.75,
+            usePreviewIfCacheEmpty: true
         )
     }
 
     private func scheduleMapLeadRenderUpdate(
         after delay: TimeInterval,
         maxRenderedLeads: Int,
-        expandAfter expansionDelay: TimeInterval?
+        expandAfter expansionDelay: TimeInterval?,
+        usePreviewIfCacheEmpty: Bool = false
     ) {
         guard isVisible else { return }
 
@@ -733,7 +736,8 @@ struct MapView: View {
                 mode: mode,
                 region: region,
                 fallbackCenter: fallbackCenter,
-                maxRenderedLeads: maxRenderedLeads
+                maxRenderedLeads: maxRenderedLeads,
+                usePreviewIfCacheEmpty: usePreviewIfCacheEmpty
             )
             guard !Task.isCancelled else { return }
 
@@ -776,7 +780,8 @@ struct MapView: View {
                 mode: mode,
                 region: region,
                 fallbackCenter: fallbackCenter,
-                maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+                maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
+                usePreviewIfCacheEmpty: false
             )
             guard !Task.isCancelled, selectedMapMode == mode else { return }
 
@@ -793,11 +798,20 @@ struct MapView: View {
         mode: MapWorkflowMode,
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
-        maxRenderedLeads: Int
+        maxRenderedLeads: Int,
+        usePreviewIfCacheEmpty: Bool
     ) async -> MapLeadRenderSnapshot {
         let cache: MapLeadPinCache
         if cachedPins.isReady {
             cache = cachedPins
+        } else if usePreviewIfCacheEmpty {
+            cache = await MapLeadPinCache.loadOpeningPreview(
+                from: persistentStoreCoordinator,
+                mode: mode,
+                region: region,
+                fallbackCenter: fallbackCenter,
+                limit: maxRenderedLeads
+            )
         } else {
             cache = await MapLeadPinCache.load(from: persistentStoreCoordinator)
         }
@@ -3447,6 +3461,227 @@ private struct MapLeadPinCache {
             }
         }
     }
+
+    static func loadOpeningPreview(
+        from persistentStoreCoordinator: NSPersistentStoreCoordinator,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        limit: Int,
+        now: Date = Date()
+    ) async -> MapLeadPinCache {
+        await withCheckedContinuation { continuation in
+            let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+            context.persistentStoreCoordinator = persistentStoreCoordinator
+            context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+
+            context.perform {
+                do {
+                    let priorityLeads = try fetchPreviewLeads(
+                        in: context,
+                        predicate: priorityPredicate(for: mode, now: now),
+                        limit: max(limit, 80)
+                    )
+                    let viewportLeads = try fetchPreviewLeads(
+                        in: context,
+                        predicate: NSCompoundPredicate(andPredicateWithSubpredicates: [
+                            coordinatePredicate(for: region, fallbackCenter: fallbackCenter),
+                            modePredicate(for: mode, now: now)
+                        ]),
+                        limit: max(limit * 2, 140)
+                    )
+
+                    var pins: [MapLeadPin] = []
+                    var seenObjectIDs = Set<NSManagedObjectID>()
+                    for lead in priorityLeads + viewportLeads {
+                        guard let pin = MapLeadPin(lead: lead),
+                              seenObjectIDs.insert(pin.objectID).inserted else { continue }
+                        pins.append(pin)
+                    }
+
+                    continuation.resume(returning: MapLeadPinCache(
+                        pins: pins,
+                        totalLeadCount: 0,
+                        isReady: false
+                    ))
+                } catch {
+                    AppLog.warning("Map", "Could not load opening map pin preview: \(error.localizedDescription)")
+                    continuation.resume(returning: .empty)
+                }
+            }
+        }
+    }
+
+    private static func fetchPreviewLeads(
+        in context: NSManagedObjectContext,
+        predicate: NSPredicate,
+        limit: Int
+    ) throws -> [Lead] {
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+        request.predicate = predicate
+        request.sortDescriptors = [
+            NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false),
+            NSSortDescriptor(keyPath: \Lead.createdDate, ascending: false)
+        ]
+        request.fetchLimit = limit
+        request.fetchBatchSize = min(limit, 120)
+        request.includesPendingChanges = false
+        request.relationshipKeyPathsForPrefetching = []
+        return try context.fetch(request)
+    }
+
+    private static func priorityPredicate(for mode: MapWorkflowMode, now: Date) -> NSPredicate {
+        switch mode {
+        case .all:
+            return NSCompoundPredicate(orPredicateWithSubpredicates: [
+                soldPredicate,
+                interestedPredicate,
+                highValuePredicate,
+                duePredicate(now: now)
+            ])
+        case .hot:
+            return hotPredicate(now: now)
+        case .due:
+            return duePredicate(now: now)
+        case .today:
+            return todayPredicate(now: now)
+        case .sold:
+            return soldPredicate
+        case .next:
+            return NSCompoundPredicate(andPredicateWithSubpredicates: [
+                activeLeadPredicate,
+                NSCompoundPredicate(orPredicateWithSubpredicates: [
+                    interestedPredicate,
+                    highValuePredicate,
+                    duePredicate(now: now)
+                ])
+            ])
+        }
+    }
+
+    private static func modePredicate(for mode: MapWorkflowMode, now: Date) -> NSPredicate {
+        switch mode {
+        case .all:
+            return NSPredicate(value: true)
+        case .hot:
+            return hotPredicate(now: now)
+        case .due:
+            return duePredicate(now: now)
+        case .today:
+            return todayPredicate(now: now)
+        case .sold:
+            return soldPredicate
+        case .next:
+            return activeLeadPredicate
+        }
+    }
+
+    private static var soldPredicate: NSPredicate {
+        NSPredicate(format: "status == %@", Lead.Status.converted.rawValue)
+    }
+
+    private static var interestedPredicate: NSPredicate {
+        NSPredicate(format: "status == %@", Lead.Status.interested.rawValue)
+    }
+
+    private static var activeLeadPredicate: NSPredicate {
+        NSPredicate(format: "status == nil OR status IN %@", Lead.Status.activeFollowUpRawValues)
+    }
+
+    private static var highValuePredicate: NSPredicate {
+        NSCompoundPredicate(orPredicateWithSubpredicates: [
+            NSPredicate(format: "priority > 0"),
+            NSPredicate(format: "price > 0"),
+            NSPredicate(format: "estimatedValue > 0")
+        ])
+    }
+
+    private static func hotPredicate(now: Date) -> NSPredicate {
+        NSCompoundPredicate(andPredicateWithSubpredicates: [
+            activeLeadPredicate,
+            NSCompoundPredicate(orPredicateWithSubpredicates: [
+                interestedPredicate,
+                highValuePredicate,
+                duePredicate(now: now)
+            ])
+        ])
+    }
+
+    private static func duePredicate(now: Date, calendar: Calendar = .current) -> NSPredicate {
+        let dueCutoff = calendar.date(byAdding: .hour, value: 12, to: now) ?? now
+        return NSCompoundPredicate(andPredicateWithSubpredicates: [
+            activeLeadPredicate,
+            NSPredicate(format: "followUpDate != nil AND followUpDate <= %@", dueCutoff as NSDate)
+        ])
+    }
+
+    private static func todayPredicate(now: Date, calendar: Calendar = .current) -> NSPredicate {
+        let start = calendar.startOfDay(for: now)
+        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? now
+        return NSPredicate(format: "createdDate >= %@ AND createdDate < %@", start as NSDate, end as NSDate)
+    }
+
+    private static func coordinatePredicate(
+        for region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D
+    ) -> NSPredicate {
+        let expandedRegion = expandedPreviewRegion(region, fallbackCenter: fallbackCenter)
+        let latitudeHalfSpan = expandedRegion.span.latitudeDelta / 2
+        let longitudeHalfSpan = expandedRegion.span.longitudeDelta / 2
+        let minLatitude = max(-90, expandedRegion.center.latitude - latitudeHalfSpan)
+        let maxLatitude = min(90, expandedRegion.center.latitude + latitudeHalfSpan)
+        let minLongitude = expandedRegion.center.longitude - longitudeHalfSpan
+        let maxLongitude = expandedRegion.center.longitude + longitudeHalfSpan
+
+        let latitudePredicate = NSPredicate(
+            format: "latitude >= %lf AND latitude <= %lf",
+            minLatitude,
+            maxLatitude
+        )
+
+        let longitudePredicate: NSPredicate
+        if minLongitude < -180 {
+            longitudePredicate = NSCompoundPredicate(orPredicateWithSubpredicates: [
+                NSPredicate(format: "longitude >= %lf", minLongitude + 360),
+                NSPredicate(format: "longitude <= %lf", maxLongitude)
+            ])
+        } else if maxLongitude > 180 {
+            longitudePredicate = NSCompoundPredicate(orPredicateWithSubpredicates: [
+                NSPredicate(format: "longitude >= %lf", minLongitude),
+                NSPredicate(format: "longitude <= %lf", maxLongitude - 360)
+            ])
+        } else {
+            longitudePredicate = NSPredicate(
+                format: "longitude >= %lf AND longitude <= %lf",
+                minLongitude,
+                maxLongitude
+            )
+        }
+
+        return NSCompoundPredicate(andPredicateWithSubpredicates: [
+            latitudePredicate,
+            longitudePredicate,
+            NSPredicate(format: "latitude != 0 OR longitude != 0")
+        ])
+    }
+
+    private static func expandedPreviewRegion(
+        _ region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D
+    ) -> MKCoordinateRegion {
+        let center = CLLocationCoordinate2DIsValid(region.center) ? region.center : fallbackCenter
+        let latitudeDelta = min(max(normalizedDelta(region.span.latitudeDelta) * 2.2, 0.02), 180)
+        let longitudeDelta = min(max(normalizedDelta(region.span.longitudeDelta) * 2.2, 0.02), 360)
+        return MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta)
+        )
+    }
+
+    private static func normalizedDelta(_ delta: CLLocationDegrees) -> CLLocationDegrees {
+        guard delta.isFinite, delta > 0 else { return 0.03 }
+        return min(max(delta, 0.003), 180)
+    }
 }
 
 private struct MapLeadRenderSnapshot {
@@ -3644,9 +3879,9 @@ private struct MapLeadPinRenderCandidate {
 }
 
 enum MapLeadVisibilityPolicy {
-    static let openingRenderedLeadBudget = 90
-    static let interactiveRenderedLeadBudget = 180
-    static let defaultRenderedLeadBudget = 320
+    static let openingRenderedLeadBudget = 64
+    static let interactiveRenderedLeadBudget = 140
+    static let defaultRenderedLeadBudget = 260
     private static let viewportPaddingMultiplier = 1.8
 
     static func visibleLeads<Leads: Collection>(
