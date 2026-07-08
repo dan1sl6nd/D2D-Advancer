@@ -165,19 +165,7 @@ struct LeadInfoCard: View {
     let lead: Lead
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "person.crop.circle.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-
-                Text("Customer Information")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Customer", icon: "person.crop.circle.fill") {
             VStack(alignment: .leading, spacing: 8) {
                 Text(lead.displayName)
                     .font(.obsidianCallout)
@@ -204,7 +192,6 @@ struct LeadInfoCard: View {
                 }
             }
         }
-        .surfaceCard()
     }
 }
 
@@ -221,19 +208,7 @@ struct AppointmentDetailsSection: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "calendar.badge.plus")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-
-                Text("Appointment Details")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Appointment Details", icon: "calendar.badge.plus") {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Type")
                     .font(.obsidianFootnote)
@@ -266,10 +241,10 @@ struct AppointmentDetailsSection: View {
                     }) {
                         VStack(spacing: 4) {
                             Image(systemName: "plus.circle")
-                                .font(.title3)
+                                .font(.obsidianCallout)
 
                             Text("Add New")
-                                .font(.caption)
+                                .font(.obsidianSmall)
                                 .fontWeight(.medium)
                                 .multilineTextAlignment(.center)
                                 .lineLimit(2)
@@ -278,13 +253,13 @@ struct AppointmentDetailsSection: View {
                         .padding(.horizontal, 8)
                         .frame(maxWidth: .infinity, minHeight: 76)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .fill(Color.electricViolet.opacity(0.1))
                         )
                         .foregroundColor(Color.electricViolet)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.electricViolet.opacity(0.4), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.electricViolet.opacity(0.35), lineWidth: 0.5)
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -302,7 +277,6 @@ struct AppointmentDetailsSection: View {
             LeadNotesEditor(title: "Notes", text: $notes, minHeight: 88)
                 .accessibilityIdentifier("appointmentNotesField")
         }
-        .surfaceCard()
         .sheet(isPresented: $showingCustomTypeCreator) {
             CustomAppointmentTypeCreatorView()
         }
@@ -377,13 +351,13 @@ struct AppointmentTypeWrapperChip: View {
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, minHeight: 76)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(isSelected ? typeWrapper.color.opacity(0.2) : Color.obsidianSurface)
             )
             .foregroundColor(isSelected ? typeWrapper.color : Color.textPrimary)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(typeWrapper.color.opacity(isSelected ? 0.8 : 0.3), lineWidth: isSelected ? 2 : 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(typeWrapper.color.opacity(isSelected ? 0.8 : 0.3), lineWidth: isSelected ? 1.5 : 0.5)
             )
             .overlay(
                 // Show custom indicator for custom types
@@ -464,13 +438,13 @@ struct AppointmentTypeChip: View {
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(isSelected ? type.color.opacity(0.2) : Color.obsidianSurface)
             )
             .foregroundColor(isSelected ? type.color : Color.textPrimary)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(type.color.opacity(isSelected ? 0.8 : 0.3), lineWidth: isSelected ? 2 : 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(type.color.opacity(isSelected ? 0.8 : 0.3), lineWidth: isSelected ? 1.5 : 0.5)
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -484,19 +458,7 @@ struct DateTimeSection: View {
     let endDate: Date
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "clock")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-
-                Text("Date & Time")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Date & Time", icon: "clock") {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Start Date & Time")
                     .font(.obsidianFootnote)
@@ -521,21 +483,22 @@ struct DateTimeSection: View {
                 } label: {
                     HStack {
                         Text(durationOptions.first(where: { $0.1 == duration })?.0 ?? "1 hour")
+                            .font(.obsidianCallout)
                             .foregroundColor(Color.textPrimary)
 
                         Spacer()
 
                         Image(systemName: "chevron.down")
                             .foregroundColor(Color.textSecondary)
-                            .font(.caption)
+                            .font(.micro)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color.obsidianSurface)
-                    .cornerRadius(8)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                     )
                 }
             }
@@ -550,7 +513,6 @@ struct DateTimeSection: View {
                     .foregroundColor(Color.textSecondary)
             }
         }
-        .surfaceCard()
     }
 }
 
@@ -559,19 +521,7 @@ struct LocationSection: View {
     let lead: Lead
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "location")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-
-                Text("Location")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Location", icon: "location") {
             VStack(alignment: .leading, spacing: 8) {
                 LeadFormTextField(
                     title: "Address",
@@ -587,23 +537,20 @@ struct LocationSection: View {
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "location.fill")
-                                .font(.caption2)
+                                .font(.micro)
                             Text("Use customer address")
-                                .font(.caption)
+                                .font(.obsidianSmall)
                         }
                         .foregroundColor(Color.textSecondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.obsidianSurface)
-                        )
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.obsidianElevated)
+                        .clipShape(Capsule())
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
             }
         }
-        .surfaceCard()
     }
 }
 
