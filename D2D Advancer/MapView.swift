@@ -708,11 +708,12 @@ struct MapView: View {
         )
     }
 
-    private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 0.30) {
+    private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 0.05) {
         guard !isVisible else { return }
-        guard !mapLeadPinCache.isReady else { return }
+        guard !mapLeadPinCache.isReady || !mapLeadRenderSnapshot.isReady else { return }
         guard mapLeadCachePrewarmTask == nil else { return }
-        guard let persistentStoreCoordinator = viewContext.persistentStoreCoordinator else { return }
+        let persistentStoreCoordinator = viewContext.persistentStoreCoordinator
+        guard mapLeadPinCache.isReady || persistentStoreCoordinator != nil else { return }
 
         mapLeadCachePrewarmTask = Task { @MainActor in
             if delay > 0 {
@@ -723,14 +724,34 @@ struct MapView: View {
                 return
             }
 
-            let cache = await MapLeadPinCache.load(from: persistentStoreCoordinator)
+            let cache: MapLeadPinCache
+            if mapLeadPinCache.isReady {
+                cache = mapLeadPinCache
+            } else if let persistentStoreCoordinator {
+                cache = await MapLeadPinCache.load(from: persistentStoreCoordinator)
+            } else {
+                cache = .empty
+            }
             guard !Task.isCancelled else {
                 mapLeadCachePrewarmTask = nil
                 return
             }
 
             if cache.isReady {
+                let snapshot = await MapLeadRenderSnapshot.makeAsync(
+                    from: cache,
+                    mode: selectedMapMode,
+                    region: visibleMapRegion,
+                    fallbackCenter: locationManager.region.center,
+                    maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget
+                )
+                guard !Task.isCancelled else {
+                    mapLeadCachePrewarmTask = nil
+                    return
+                }
+
                 mapLeadPinCache = cache
+                mapLeadRenderSnapshot = snapshot
                 if isVisible {
                     scheduleInteractiveMapLeadRenderUpdate(after: 0.02)
                 }
@@ -859,7 +880,7 @@ struct MapView: View {
             cache = await MapLeadPinCache.load(from: persistentStoreCoordinator)
         }
 
-        return MapLeadRenderSnapshot.make(
+        return await MapLeadRenderSnapshot.makeAsync(
             from: cache,
             mode: mode,
             region: region,
@@ -3772,6 +3793,28 @@ private struct MapLeadRenderSnapshot {
             cache: cache
         )
     }
+
+    static func makeAsync(
+        from cache: MapLeadPinCache,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
+        now: Date = Date()
+    ) async -> MapLeadRenderSnapshot {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: make(
+                    from: cache,
+                    mode: mode,
+                    region: region,
+                    fallbackCenter: fallbackCenter,
+                    maxRenderedLeads: maxRenderedLeads,
+                    now: now
+                ))
+            }
+        }
+    }
 }
 
 private enum MapLeadPinVisibilityPolicy {
@@ -3807,9 +3850,9 @@ private enum MapLeadPinVisibilityPolicy {
             }
 
             if contains(pin, in: renderRegion) {
-                insert(candidate, into: &viewportCandidates, limit: maxRenderedLeads)
+                viewportCandidates.append(candidate)
             } else if isMapPriorityLead(pin, now: now) {
-                insert(candidate, into: &priorityOutsideViewportCandidates, limit: maxRenderedLeads)
+                priorityOutsideViewportCandidates.append(candidate)
             }
         }
 
@@ -3891,22 +3934,6 @@ private enum MapLeadPinVisibilityPolicy {
         if raw > 180 { return raw - 360 }
         if raw < -180 { return raw + 360 }
         return raw
-    }
-
-    private static func insert(_ candidate: MapLeadPinRenderCandidate, into candidates: inout [MapLeadPinRenderCandidate], limit: Int) {
-        guard limit > 0 else { return }
-
-        if candidates.count < limit {
-            candidates.append(candidate)
-            return
-        }
-
-        guard let weakestIndex = candidates.indices.min(by: { candidates[$0].sortKey < candidates[$1].sortKey }),
-              candidate.sortKey > candidates[weakestIndex].sortKey else {
-            return
-        }
-
-        candidates[weakestIndex] = candidate
     }
 
     private static func sortedPins(from candidates: [MapLeadPinRenderCandidate]) -> [MapLeadPin] {
@@ -3992,9 +4019,9 @@ enum MapLeadVisibilityPolicy {
             }
 
             if contains(lead, in: renderRegion) {
-                insert(candidate, into: &viewportCandidates, limit: maxRenderedLeads)
+                viewportCandidates.append(candidate)
             } else if isMapPriorityLead(lead, now: now) {
-                insert(candidate, into: &priorityOutsideViewportCandidates, limit: maxRenderedLeads)
+                priorityOutsideViewportCandidates.append(candidate)
             }
         }
 
@@ -4099,22 +4126,6 @@ enum MapLeadVisibilityPolicy {
         if raw > 180 { return raw - 360 }
         if raw < -180 { return raw + 360 }
         return raw
-    }
-
-    private static func insert(_ candidate: LeadRenderCandidate, into candidates: inout [LeadRenderCandidate], limit: Int) {
-        guard limit > 0 else { return }
-
-        if candidates.count < limit {
-            candidates.append(candidate)
-            return
-        }
-
-        guard let weakestIndex = candidates.indices.min(by: { candidates[$0].sortKey < candidates[$1].sortKey }),
-              candidate.sortKey > candidates[weakestIndex].sortKey else {
-            return
-        }
-
-        candidates[weakestIndex] = candidate
     }
 
     private static func sortedLeads(from candidates: [LeadRenderCandidate]) -> [Lead] {
