@@ -505,9 +505,6 @@ struct MoreView: View {
             }
             .buttonStyle(PlainButtonStyle())
             .accessibilityIdentifier("moreAccountCard")
-        } else if userAccountManager.isAppleAuthed {
-            accountRow(showChevron: false)
-                .accessibilityIdentifier("moreAccountCard")
         } else if CloudSyncProvider.current == .firebase {
             Button {
                 showingAuthentication = true
@@ -517,8 +514,13 @@ struct MoreView: View {
             .buttonStyle(PlainButtonStyle())
             .accessibilityIdentifier("moreAccountCard")
         } else {
-            accountRow(showChevron: false)
-                .accessibilityIdentifier("moreAccountCard")
+            Button {
+                showingCloudProviderSheet = true
+            } label: {
+                accountRow(showChevron: true)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreAccountCard")
         }
     }
 
