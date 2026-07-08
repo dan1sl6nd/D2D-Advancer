@@ -869,7 +869,7 @@ struct AdvancedMapView: UIViewRepresentable {
         }
 
         private struct LeadAnnotationSignature: Equatable, Hashable {
-            let id: String
+            let objectID: NSManagedObjectID
             let latitude: Double
             let longitude: Double
             let status: String
@@ -881,7 +881,7 @@ struct AdvancedMapView: UIViewRepresentable {
             let estimatedValue: Double
 
             init(lead: Lead) {
-                self.id = lead.objectID.uriRepresentation().absoluteString
+                self.objectID = lead.objectID
                 self.latitude = lead.latitude
                 self.longitude = lead.longitude
                 self.status = lead.status ?? ""

@@ -288,6 +288,8 @@ enum MapLaunchCenteringPolicy {
 }
 
 struct MapView: View {
+    let isVisible: Bool
+
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var locationManager = LocationManager.shared
@@ -358,11 +360,18 @@ struct MapView: View {
         var id: Int { hashValue }
     }
 
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)],
-        animation: .default
-    )
+    @FetchRequest
     private var leads: FetchedResults<Lead>
+
+    init(isVisible: Bool = true) {
+        self.isVisible = isVisible
+
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)]
+        request.fetchBatchSize = 250
+        request.includesPendingChanges = true
+        _leads = FetchRequest(fetchRequest: request, animation: nil)
+    }
 
     private var workflowStatusText: String? {
         switch teamService.syncWriteState {
@@ -420,36 +429,51 @@ struct MapView: View {
             .navigationBarHidden(true)
             .ignoresSafeArea(.all, edges: .top)
             .onAppear {
+                guard isVisible else { return }
                 if !isRunningUITests {
                     prepareLaunchMapCentering()
                 }
                 scheduleOpeningMapLeadRenderUpdate()
             }
             .onDisappear {
-                mapLeadRenderTask?.cancel()
-                mapLeadRenderTask = nil
-                mapLeadExpansionTask?.cancel()
-                mapLeadExpansionTask = nil
+                cancelMapLeadRenderTasks()
+            }
+            .onChange(of: isVisible) { _, isVisible in
+                if isVisible {
+                    if !isRunningUITests {
+                        prepareLaunchMapCentering()
+                    }
+                    scheduleOpeningMapLeadRenderUpdate()
+                } else {
+                    cancelMapLeadRenderTasks()
+                }
             }
             .onChange(of: selectedMapMode) { _, _ in
+                guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.03)
             }
             .onChange(of: visibleMapRegion.center.latitude) { _, _ in
+                guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: visibleMapRegion.center.longitude) { _, _ in
+                guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: visibleMapRegion.span.latitudeDelta) { _, _ in
+                guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: visibleMapRegion.span.longitudeDelta) { _, _ in
+                guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: leads.count) { _, _ in
+                guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.08)
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
+                guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.12)
             }
             .sheet(item: $selectedLead) { lead in
@@ -660,9 +684,9 @@ struct MapView: View {
 
     private func scheduleOpeningMapLeadRenderUpdate() {
         scheduleMapLeadRenderUpdate(
-            after: 0.04,
+            after: 0.22,
             maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
-            expandAfter: 0.65
+            expandAfter: 1.0
         )
     }
 
@@ -679,6 +703,8 @@ struct MapView: View {
         maxRenderedLeads: Int,
         expandAfter expansionDelay: TimeInterval?
     ) {
+        guard isVisible else { return }
+
         mapLeadRenderTask?.cancel()
         mapLeadExpansionTask?.cancel()
         mapLeadExpansionTask = nil
@@ -693,9 +719,8 @@ struct MapView: View {
             }
             guard !Task.isCancelled else { return }
 
-            let sourceLeads = Array(leads)
             let snapshot = MapLeadRenderSnapshot.make(
-                from: sourceLeads,
+                from: leads,
                 mode: mode,
                 region: region,
                 fallbackCenter: fallbackCenter,
@@ -722,6 +747,8 @@ struct MapView: View {
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D
     ) {
+        guard isVisible else { return }
+
         mapLeadExpansionTask?.cancel()
         mapLeadExpansionTask = Task { @MainActor in
             if delay > 0 {
@@ -729,9 +756,8 @@ struct MapView: View {
             }
             guard !Task.isCancelled, selectedMapMode == mode else { return }
 
-            let sourceLeads = Array(leads)
             let snapshot = MapLeadRenderSnapshot.make(
-                from: sourceLeads,
+                from: leads,
                 mode: mode,
                 region: region,
                 fallbackCenter: fallbackCenter,
@@ -786,24 +812,31 @@ struct MapView: View {
             }
         )
         .onChangeCompat(of: onboardingManager.showOnboarding) { isPresented in
-            if !isPresented && !isRunningUITests {
+            if isVisible && !isPresented && !isRunningUITests {
                 prepareLaunchMapCentering()
             }
         }
         .onChange(of: locationManager.authorizationStatus) { _, newStatus in
-            guard !isRunningUITests else { return }
+            guard isVisible, !isRunningUITests else { return }
             if newStatus == .authorizedWhenInUse || newStatus == .authorizedAlways {
                 prepareLaunchMapCentering()
             }
         }
         .onReceive(locationManager.$location) { location in
-            guard !isRunningUITests, location != nil else { return }
+            guard isVisible, !isRunningUITests, location != nil else { return }
             centerMapOnLaunchIfPossible()
         }
         .onChange(of: scenePhase) { _, newPhase in
-            guard !isRunningUITests, newPhase == .active else { return }
+            guard isVisible, !isRunningUITests, newPhase == .active else { return }
             refreshLaunchMapCenteringAfterForeground()
         }
+    }
+
+    private func cancelMapLeadRenderTasks() {
+        mapLeadRenderTask?.cancel()
+        mapLeadRenderTask = nil
+        mapLeadExpansionTask?.cancel()
+        mapLeadExpansionTask = nil
     }
     private var overlayControls: some View {
         GeometryReader { geometry in
@@ -3209,14 +3242,14 @@ private struct MapLeadRenderSnapshot {
         isReady: false
     )
 
-    static func make(
-        from leads: [Lead],
+    static func make<Leads: Collection>(
+        from leads: Leads,
         mode: MapWorkflowMode,
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
         maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
         now: Date = Date()
-    ) -> MapLeadRenderSnapshot {
+    ) -> MapLeadRenderSnapshot where Leads.Element == Lead {
         MapLeadRenderSnapshot(
             renderedLeads: MapLeadVisibilityPolicy.visibleLeads(
                 from: leads,
@@ -3234,30 +3267,30 @@ private struct MapLeadRenderSnapshot {
 }
 
 enum MapLeadVisibilityPolicy {
-    static let openingRenderedLeadBudget = 160
-    static let interactiveRenderedLeadBudget = 260
-    static let defaultRenderedLeadBudget = 450
+    static let openingRenderedLeadBudget = 90
+    static let interactiveRenderedLeadBudget = 180
+    static let defaultRenderedLeadBudget = 320
     private static let viewportPaddingMultiplier = 1.8
 
-    static func visibleLeads(
-        from leads: [Lead],
+    static func visibleLeads<Leads: Collection>(
+        from leads: Leads,
         mode: MapWorkflowMode,
         now: Date = Date()
-    ) -> [Lead] {
+    ) -> [Lead] where Leads.Element == Lead {
         LeadClusterSummary.sortedLeads(
             leads.filter { mode.includes($0, now: now) },
             now: now
         )
     }
 
-    static func visibleLeads(
-        from leads: [Lead],
+    static func visibleLeads<Leads: Collection>(
+        from leads: Leads,
         mode: MapWorkflowMode,
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
         maxRenderedLeads: Int = defaultRenderedLeadBudget,
         now: Date = Date()
-    ) -> [Lead] {
+    ) -> [Lead] where Leads.Element == Lead {
         let matchingLeads = leads.filter { mode.includes($0, now: now) && hasUsableCoordinate($0) }
         guard matchingLeads.count > maxRenderedLeads else {
             return LeadClusterSummary.sortedLeads(matchingLeads, now: now)
@@ -3292,12 +3325,16 @@ enum MapLeadVisibilityPolicy {
         return selectedLeads
     }
 
-    static func matchingLeadCount(
-        from leads: [Lead],
+    static func matchingLeadCount<Leads: Collection>(
+        from leads: Leads,
         mode: MapWorkflowMode,
         now: Date = Date()
-    ) -> Int {
-        leads.reduce(into: 0) { count, lead in
+    ) -> Int where Leads.Element == Lead {
+        if mode == .all {
+            return leads.count
+        }
+
+        return leads.reduce(into: 0) { count, lead in
             if mode.includes(lead, now: now) {
                 count += 1
             }

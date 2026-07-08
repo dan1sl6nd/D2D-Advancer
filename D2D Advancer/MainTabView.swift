@@ -7,6 +7,7 @@ struct MainTabView: View {
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var teamService = TeamFirebaseService.shared
     @State private var didApplyRoleDefaultTab = false
+    @State private var shouldKeepMapAlive = false
 
     @FetchRequest(
         sortDescriptors: [],
@@ -53,22 +54,7 @@ struct MainTabView: View {
             } else {
                 VStack(spacing: 0) {
                     // Content area
-                    Group {
-                        switch router.selectedTab {
-                        case 0:
-                            MapView()
-                        case 1:
-                            LeadsListView()
-                        case 2:
-                            FollowUpView()
-                        case 3:
-                            AppointmentsView()
-                        case 4:
-                            MoreView()
-                        default:
-                            MapView()
-                        }
-                    }
+                    tabContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     // Obsidian tab bar
@@ -136,6 +122,10 @@ struct MainTabView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mainTabView")
         .onAppear {
+            if router.selectedTab == 0 {
+                shouldKeepMapAlive = true
+            }
+
             if isRunningUITests {
                 print("🧪 MainTabView: Skipping startup side effects for UI tests")
                 if shouldLoadTeamWorkspace {
@@ -174,6 +164,45 @@ struct MainTabView: View {
         }
         .onChange(of: teamService.currentMember?.workType) { _, _ in
             applyDefaultTabForRoleIfNeeded()
+        }
+        .onChange(of: router.selectedTab) { _, newTab in
+            if newTab == 0 {
+                shouldKeepMapAlive = true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tabContent: some View {
+        ZStack {
+            if shouldKeepMapAlive || router.selectedTab == 0 {
+                MapView(isVisible: router.selectedTab == 0)
+                    .opacity(router.selectedTab == 0 ? 1 : 0)
+                    .allowsHitTesting(router.selectedTab == 0)
+                    .accessibilityHidden(router.selectedTab != 0)
+                    .zIndex(router.selectedTab == 0 ? 1 : 0)
+            }
+
+            if router.selectedTab != 0 {
+                nonMapTabContent
+                    .zIndex(2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var nonMapTabContent: some View {
+        switch router.selectedTab {
+        case 1:
+            LeadsListView()
+        case 2:
+            FollowUpView()
+        case 3:
+            AppointmentsView()
+        case 4:
+            MoreView()
+        default:
+            EmptyView()
         }
     }
 
