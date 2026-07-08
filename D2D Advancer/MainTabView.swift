@@ -8,6 +8,7 @@ struct MainTabView: View {
     @ObservedObject private var teamService = TeamFirebaseService.shared
     @State private var didApplyRoleDefaultTab = false
     @State private var shouldKeepMapAlive = false
+    @State private var mapPrewarmTask: Task<Void, Never>?
 
     @FetchRequest(
         sortDescriptors: [],
@@ -124,6 +125,8 @@ struct MainTabView: View {
         .onAppear {
             if router.selectedTab == 0 {
                 shouldKeepMapAlive = true
+            } else {
+                scheduleMapPrewarmIfNeeded()
             }
 
             if isRunningUITests {
@@ -167,8 +170,16 @@ struct MainTabView: View {
         }
         .onChange(of: router.selectedTab) { _, newTab in
             if newTab == 0 {
+                mapPrewarmTask?.cancel()
+                mapPrewarmTask = nil
                 shouldKeepMapAlive = true
+            } else {
+                scheduleMapPrewarmIfNeeded()
             }
+        }
+        .onDisappear {
+            mapPrewarmTask?.cancel()
+            mapPrewarmTask = nil
         }
     }
 
@@ -232,6 +243,19 @@ struct MainTabView: View {
             router.selectedTab = defaultTab
         }
         didApplyRoleDefaultTab = true
+    }
+
+    private func scheduleMapPrewarmIfNeeded() {
+        guard !isRunningUITests else { return }
+        guard !shouldKeepMapAlive else { return }
+        guard mapPrewarmTask == nil else { return }
+
+        mapPrewarmTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            guard !Task.isCancelled else { return }
+            shouldKeepMapAlive = true
+            mapPrewarmTask = nil
+        }
     }
 
     private func initializeLocationServices() {

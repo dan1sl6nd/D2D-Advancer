@@ -3250,17 +3250,19 @@ private struct MapLeadRenderSnapshot {
         maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
         now: Date = Date()
     ) -> MapLeadRenderSnapshot where Leads.Element == Lead {
-        MapLeadRenderSnapshot(
-            renderedLeads: MapLeadVisibilityPolicy.visibleLeads(
-                from: leads,
-                mode: mode,
-                region: region,
-                fallbackCenter: fallbackCenter,
-                maxRenderedLeads: maxRenderedLeads,
-                now: now
-            ),
+        let renderResult = MapLeadVisibilityPolicy.renderedLeadSelection(
+            from: leads,
+            mode: mode,
+            region: region,
+            fallbackCenter: fallbackCenter,
+            maxRenderedLeads: maxRenderedLeads,
+            now: now
+        )
+
+        return MapLeadRenderSnapshot(
+            renderedLeads: renderResult.renderedLeads,
             totalLeadCount: leads.count,
-            matchingLeadCount: MapLeadVisibilityPolicy.matchingLeadCount(from: leads, mode: mode, now: now),
+            matchingLeadCount: renderResult.matchingLeadCount,
             isReady: true
         )
     }
@@ -3291,29 +3293,77 @@ enum MapLeadVisibilityPolicy {
         maxRenderedLeads: Int = defaultRenderedLeadBudget,
         now: Date = Date()
     ) -> [Lead] where Leads.Element == Lead {
-        let matchingLeads = leads.filter { mode.includes($0, now: now) && hasUsableCoordinate($0) }
-        guard matchingLeads.count > maxRenderedLeads else {
-            return LeadClusterSummary.sortedLeads(matchingLeads, now: now)
-        }
+        renderedLeadSelection(
+            from: leads,
+            mode: mode,
+            region: region,
+            fallbackCenter: fallbackCenter,
+            maxRenderedLeads: maxRenderedLeads,
+            now: now
+        ).renderedLeads
+    }
 
-        let sortedLeads = LeadClusterSummary.sortedLeads(matchingLeads, now: now)
-        guard maxRenderedLeads > 0 else { return [] }
-
+    static func renderedLeadSelection<Leads: Collection>(
+        from leads: Leads,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int = defaultRenderedLeadBudget,
+        now: Date = Date()
+    ) -> MapLeadSelection where Leads.Element == Lead {
+        var matchingLeadCount = 0
+        var matchingCoordinateCount = 0
+        var allCandidates: [LeadRenderCandidate] = []
+        var viewportCandidates: [LeadRenderCandidate] = []
+        var priorityOutsideViewportCandidates: [LeadRenderCandidate] = []
         let renderRegion = normalizedRegion(region, fallbackCenter: fallbackCenter)
-        let viewportLeads = sortedLeads.filter { lead in
-            contains(lead, in: renderRegion)
+
+        for lead in leads {
+            guard mode.includes(lead, now: now) else { continue }
+            matchingLeadCount += 1
+            guard hasUsableCoordinate(lead) else { continue }
+            matchingCoordinateCount += 1
+
+            let candidate = LeadRenderCandidate(
+                lead: lead,
+                sortKey: LeadClusterSummary.prioritySortKey(for: lead, now: now)
+            )
+
+            if allCandidates.count < maxRenderedLeads {
+                allCandidates.append(candidate)
+            }
+
+            if contains(lead, in: renderRegion) {
+                insert(candidate, into: &viewportCandidates, limit: maxRenderedLeads)
+            } else if isMapPriorityLead(lead, now: now) {
+                insert(candidate, into: &priorityOutsideViewportCandidates, limit: maxRenderedLeads)
+            }
         }
 
+        guard maxRenderedLeads > 0 else {
+            return MapLeadSelection(renderedLeads: [], matchingLeadCount: matchingLeadCount)
+        }
+
+        if matchingCoordinateCount <= maxRenderedLeads {
+            return MapLeadSelection(
+                renderedLeads: sortedLeads(from: allCandidates),
+                matchingLeadCount: matchingLeadCount
+            )
+        }
+
+        let viewportLeads = sortedLeads(from: viewportCandidates)
         if viewportLeads.count >= maxRenderedLeads {
-            return Array(viewportLeads.prefix(maxRenderedLeads))
+            return MapLeadSelection(
+                renderedLeads: Array(viewportLeads.prefix(maxRenderedLeads)),
+                matchingLeadCount: matchingLeadCount
+            )
         }
 
         var selectedLeads = viewportLeads
-        var selectedObjectIDs = Set(viewportLeads.map(\.objectID))
+        var selectedObjectIDs = Set(selectedLeads.map(\.objectID))
         let remainingBudget = maxRenderedLeads - selectedLeads.count
-
         if remainingBudget > 0 {
-            let priorityOutsideViewport = sortedLeads.lazy.filter { lead in
+            let priorityOutsideViewport = sortedLeads(from: priorityOutsideViewportCandidates).lazy.filter { lead in
                 !selectedObjectIDs.contains(lead.objectID) && isMapPriorityLead(lead, now: now)
             }
             for lead in priorityOutsideViewport.prefix(remainingBudget) {
@@ -3322,7 +3372,10 @@ enum MapLeadVisibilityPolicy {
             }
         }
 
-        return selectedLeads
+        return MapLeadSelection(
+            renderedLeads: selectedLeads,
+            matchingLeadCount: matchingLeadCount
+        )
     }
 
     static func matchingLeadCount<Leads: Collection>(
@@ -3389,6 +3442,38 @@ enum MapLeadVisibilityPolicy {
         if raw < -180 { return raw + 360 }
         return raw
     }
+
+    private static func insert(_ candidate: LeadRenderCandidate, into candidates: inout [LeadRenderCandidate], limit: Int) {
+        guard limit > 0 else { return }
+
+        if candidates.count < limit {
+            candidates.append(candidate)
+            return
+        }
+
+        guard let weakestIndex = candidates.indices.min(by: { candidates[$0].sortKey < candidates[$1].sortKey }),
+              candidate.sortKey > candidates[weakestIndex].sortKey else {
+            return
+        }
+
+        candidates[weakestIndex] = candidate
+    }
+
+    private static func sortedLeads(from candidates: [LeadRenderCandidate]) -> [Lead] {
+        candidates
+            .sorted { $0.sortKey > $1.sortKey }
+            .map(\.lead)
+    }
+}
+
+struct MapLeadSelection {
+    let renderedLeads: [Lead]
+    let matchingLeadCount: Int
+}
+
+private struct LeadRenderCandidate {
+    let lead: Lead
+    let sortKey: LeadClusterSortKey
 }
 
 private struct MapToolsSheet: View {

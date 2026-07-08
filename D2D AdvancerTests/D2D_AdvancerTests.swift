@@ -2481,6 +2481,45 @@ struct D2D_AdvancerTests {
     }
 
     @MainActor
+    @Test func mapLeadRenderSelectionKeepsSmallSetsCompleteAndCountsAllMatches() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 43.55, longitude: -79.70),
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        )
+
+        func makeLead(_ name: String, status: Lead.Status, latitude: Double, longitude: Double) -> Lead {
+            let lead = Lead.create(in: context)
+            lead.name = name
+            lead.status = status.rawValue
+            lead.latitude = latitude
+            lead.longitude = longitude
+            lead.updatedDate = now
+            return lead
+        }
+
+        let viewportLead = makeLead("Viewport", status: .notContacted, latitude: 43.55, longitude: -79.70)
+        let outsideLead = makeLead("Outside", status: .notContacted, latitude: 43.62, longitude: -79.78)
+        let soldOutsideLead = makeLead("Sold Outside", status: .converted, latitude: 43.63, longitude: -79.79)
+        let interestedOutsideLead = makeLead("Interested Outside", status: .interested, latitude: 43.64, longitude: -79.80)
+        let invalidCoordinateLead = makeLead("Invalid", status: .notContacted, latitude: 0, longitude: 0)
+
+        let selection = MapLeadVisibilityPolicy.renderedLeadSelection(
+            from: [viewportLead, outsideLead, soldOutsideLead, interestedOutsideLead, invalidCoordinateLead],
+            mode: .all,
+            region: region,
+            fallbackCenter: region.center,
+            maxRenderedLeads: 10,
+            now: now
+        )
+
+        #expect(selection.matchingLeadCount == 5)
+        #expect(Set(selection.renderedLeads.compactMap(\.name)) == ["Viewport", "Outside", "Sold Outside", "Interested Outside"])
+    }
+
+    @MainActor
     @Test func mapLeadVisibilityPolicySortsSoldThenInterestedBeforeOtherLeads() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext

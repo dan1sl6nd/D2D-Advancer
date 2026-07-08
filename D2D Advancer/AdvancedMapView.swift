@@ -1473,11 +1473,15 @@ struct LeadClusterSummary {
 
     static func sortedLeads(_ leads: [Lead], now: Date = Date()) -> [Lead] {
         leads.sorted { lhs, rhs in
-            let lhsScore = priorityScore(for: lhs, now: now)
-            let rhsScore = priorityScore(for: rhs, now: now)
-            if lhsScore != rhsScore { return lhsScore > rhsScore }
-            return (lhs.updatedDate ?? lhs.createdDate ?? .distantPast) > (rhs.updatedDate ?? rhs.createdDate ?? .distantPast)
+            prioritySortKey(for: lhs, now: now) > prioritySortKey(for: rhs, now: now)
         }
+    }
+
+    static func prioritySortKey(for lead: Lead, now: Date = Date()) -> LeadClusterSortKey {
+        LeadClusterSortKey(
+            score: priorityScore(for: lead, now: now),
+            date: lead.updatedDate ?? lead.createdDate ?? .distantPast
+        )
     }
 
     static func isUrgent(_ lead: Lead) -> Bool {
@@ -1499,7 +1503,7 @@ struct LeadClusterSummary {
         lead.leadStatus.allowsActiveFollowUp && lead.priority > 0
     }
 
-    private static func priorityScore(for lead: Lead, now: Date) -> Int {
+    static func priorityScore(for lead: Lead, now: Date) -> Int {
         var score = 0
         if isPriorityActionable(lead) { score += 600 + Int(lead.priority) }
         if isFollowUpDue(lead, now: now) { score += 520 }
@@ -1534,6 +1538,18 @@ struct LeadClusterSummary {
         case .notInterested:
             return 1
         }
+    }
+}
+
+struct LeadClusterSortKey: Comparable {
+    let score: Int
+    let date: Date
+
+    static func < (lhs: LeadClusterSortKey, rhs: LeadClusterSortKey) -> Bool {
+        if lhs.score != rhs.score {
+            return lhs.score < rhs.score
+        }
+        return lhs.date < rhs.date
     }
 }
 
