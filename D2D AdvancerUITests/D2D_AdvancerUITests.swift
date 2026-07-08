@@ -469,6 +469,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         in app: XCUIApplication,
         excludingBottomChrome: Bool = false
     ) -> Bool {
+        guard element.exists else { return false }
         let appFrame = app.windows.firstMatch.frame
         let elementFrame = element.frame
         guard isFinite(appFrame), isFinite(elementFrame) else { return false }
@@ -2714,7 +2715,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "streetViewProvider_apple", timeout: 8)
         tapIdentifiedElement(app, "streetViewProvider_google", timeout: 8)
         waitForText(app, "Google Street View", timeout: 8)
-        tapIdentifiedElement(app, "streetViewCloseButton", timeout: 8)
+        let closeButton = waitForIdentifiedElement(app, "streetViewCloseButton", timeout: 8)
+        tapElement(app, closeButton, description: "streetViewCloseButton")
         XCTAssertTrue(
             app.descendants(matching: .any)["lookAroundSheet"].waitForNonExistence(timeout: 8),
             "Street View sheet should dismiss cleanly"
