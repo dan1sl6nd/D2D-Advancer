@@ -623,8 +623,8 @@ struct AdvancedMapView: UIViewRepresentable {
     
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: AdvancedMapView
-        private static let annotationBatchSize = 72
-        private static let annotationBatchDelay: TimeInterval = 0.035
+        private static let annotationBatchSize = 32
+        private static let annotationBatchDelay: TimeInterval = 0.05
         private var currentAnnotations: [LeadMapAnnotation] = []
         private var currentSearchPinAnnotation: MKPointAnnotation?
         private var currentAnnotationSignature: [LeadAnnotationSignature] = []

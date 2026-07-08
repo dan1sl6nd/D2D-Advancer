@@ -701,9 +701,9 @@ struct MapView: View {
     private func scheduleOpeningMapLeadRenderUpdate() {
         let hasWarmCache = mapLeadPinCache.isReady
         scheduleMapLeadRenderUpdate(
-            after: hasWarmCache ? 0.02 : 0.10,
+            after: hasWarmCache ? 0.18 : 0.35,
             maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
-            expandAfter: hasWarmCache ? 1.9 : 2.4,
+            expandAfter: hasWarmCache ? 2.8 : 3.4,
             usePreviewIfCacheEmpty: true
         )
     }
@@ -3528,7 +3528,7 @@ private struct MapLeadPinCache {
                     let priorityLeads = try fetchPreviewLeads(
                         in: context,
                         predicate: priorityPredicate(for: mode, now: now),
-                        limit: max(limit, 80)
+                        limit: max(limit, 48)
                     )
                     let viewportLeads = try fetchPreviewLeads(
                         in: context,
@@ -3536,7 +3536,7 @@ private struct MapLeadPinCache {
                             coordinatePredicate(for: region, fallbackCenter: fallbackCenter),
                             modePredicate(for: mode, now: now)
                         ]),
-                        limit: max(limit * 2, 140)
+                        limit: max(limit * 2, 80)
                     )
 
                     var pins: [MapLeadPin] = []
@@ -3927,7 +3927,7 @@ private struct MapLeadPinRenderCandidate {
 }
 
 enum MapLeadVisibilityPolicy {
-    static let openingRenderedLeadBudget = 64
+    static let openingRenderedLeadBudget = 36
     static let interactiveRenderedLeadBudget = 140
     static let defaultRenderedLeadBudget = 260
     private static let viewportPaddingMultiplier = 1.8
