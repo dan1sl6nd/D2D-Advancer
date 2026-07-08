@@ -136,7 +136,7 @@ struct TeamWorkspaceView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
-                    .padding(.bottom, 112)
+                    .padding(.bottom, 28)
                 }
                 .id(teamService.activeTeam?.id ?? "team-setup")
                 .scrollDismissesKeyboard(.immediately)
