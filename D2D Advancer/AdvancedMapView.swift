@@ -14,17 +14,17 @@ struct AdvancedMapView: UIViewRepresentable {
     let launchCenteringResetToken: Int
     let launchLocationCenterRevision: Int
 
-    let leads: [Lead]
+    let leads: [MapLeadPin]
     @Binding var searchPin: SearchPin?
     let showsUserLocation: Bool
     let shouldFollowUserLocationOnLaunch: Bool
     let needsLaunchLocationCenteringConfirmation: Bool
     let hasLaunchLocationCandidate: Bool
     let onLaunchCenteringConfirmed: () -> Void
-    let onLeadTap: (Lead) -> Void
-    let onLeadClusterTap: ([Lead], CLLocationCoordinate2D) -> Void
+    let onLeadTap: (MapLeadPin) -> Void
+    let onLeadClusterTap: ([MapLeadPin], CLLocationCoordinate2D) -> Void
     let onSearchPinTap: (SearchPin) -> Void
-    let onLongPress: (CLLocationCoordinate2D?, Lead?) -> Void
+    let onLongPress: (CLLocationCoordinate2D?, MapLeadPin?) -> Void
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -793,8 +793,8 @@ struct AdvancedMapView: UIViewRepresentable {
             )
         }
         
-        func updateAnnotationsIfNeeded(mapView: MKMapView, leads: [Lead]) {
-            let newSignature = leads.map { LeadAnnotationSignature(lead: $0) }
+        func updateAnnotationsIfNeeded(mapView: MKMapView, leads: [MapLeadPin]) {
+            let newSignature = leads.map { LeadAnnotationSignature(pin: $0) }
             guard newSignature != currentAnnotationSignature else { return }
 
             let previousSignatureByAnnotation = Dictionary(
@@ -815,8 +815,8 @@ struct AdvancedMapView: UIViewRepresentable {
                 return !newSignatureSet.contains(signature)
             }
 
-            let newAnnotations = zip(leads, newSignature).map { lead, signature in
-                previousAnnotationsBySignature[signature] ?? LeadMapAnnotation(lead: lead)
+            let newAnnotations = zip(leads, newSignature).map { pin, signature in
+                previousAnnotationsBySignature[signature] ?? LeadMapAnnotation(pin: pin)
             }
             let annotationsToAdd = zip(newAnnotations, newSignature).compactMap { annotation, signature in
                 previousSignatureSet.contains(signature) ? nil : annotation
@@ -880,17 +880,17 @@ struct AdvancedMapView: UIViewRepresentable {
             let price: Double
             let estimatedValue: Double
 
-            init(lead: Lead) {
-                self.objectID = lead.objectID
-                self.latitude = lead.latitude
-                self.longitude = lead.longitude
-                self.status = lead.status ?? ""
-                self.name = lead.name ?? ""
-                self.address = lead.address ?? ""
-                self.priority = lead.priority
-                self.followUpDate = lead.followUpDate?.timeIntervalSince1970 ?? 0
-                self.price = lead.price
-                self.estimatedValue = lead.estimatedValue
+            init(pin: MapLeadPin) {
+                self.objectID = pin.objectID
+                self.latitude = pin.latitude
+                self.longitude = pin.longitude
+                self.status = pin.status.rawValue
+                self.name = pin.name
+                self.address = pin.address
+                self.priority = pin.priority
+                self.followUpDate = pin.followUpDate?.timeIntervalSince1970 ?? 0
+                self.price = pin.price
+                self.estimatedValue = pin.estimatedValue
             }
         }
 
@@ -908,19 +908,19 @@ struct AdvancedMapView: UIViewRepresentable {
             // Check if long press is on an annotation
             let annotationsAtPoint = mapView.annotations.compactMap { $0 as? LeadMapAnnotation }
             
-            var tappedLead: Lead? = nil
+            var tappedPin: MapLeadPin? = nil
             for annotation in annotationsAtPoint {
                 let annotationPoint = mapView.convert(annotation.coordinate, toPointTo: mapView)
                 if location.distance(to: annotationPoint) < 20 { // 20 points tolerance
-                    tappedLead = annotation.lead
+                    tappedPin = annotation.pin
                     break
                 }
             }
             
-            if let lead = tappedLead {
-                parent.onLongPress(nil, lead) // Pass Lead object
+            if let pin = tappedPin {
+                parent.onLongPress(nil, pin)
             } else {
-                parent.onLongPress(coordinate, nil) // Pass coordinate for new lead
+                parent.onLongPress(coordinate, nil)
             }
         }
         
@@ -941,8 +941,8 @@ struct AdvancedMapView: UIViewRepresentable {
                 let clusterID = "LeadCluster"
                 let clusterView = mapView.dequeueReusableAnnotationView(withIdentifier: clusterID) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(annotation: cluster, reuseIdentifier: clusterID)
                 clusterView.annotation = cluster
-                let leads = cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.lead }
-                let summary = LeadClusterSummary(leads: leads)
+                let pins = cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.pin }
+                let summary = MapLeadPinClusterSummary(pins: pins)
                 clusterView.glyphText = summary.glyphText
                 clusterView.markerTintColor = summary.uiColor
                 clusterView.glyphTintColor = .white
@@ -955,7 +955,7 @@ struct AdvancedMapView: UIViewRepresentable {
                 return nil
             }
 
-            let lead = leadAnnotation.lead
+            let pin = leadAnnotation.pin
             let identifier = "LeadAnnotation"
             let annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
 
@@ -964,10 +964,10 @@ struct AdvancedMapView: UIViewRepresentable {
             annotationView.clusteringIdentifier = LeadClusterDisplayPolicy.clusteringIdentifier(
                 for: LeadClusterDisplayPolicy.mode(for: mapView.region)
             )
-            annotationView.displayPriority = displayPriority(for: lead)
+            annotationView.displayPriority = displayPriority(for: pin)
 
             // Customize based on lead status
-            switch lead.leadStatus {
+            switch pin.status {
             case .notContacted:
                 annotationView.markerTintColor = .gray
                 annotationView.glyphImage = UIImage(systemName: "person.circle")
@@ -998,25 +998,25 @@ struct AdvancedMapView: UIViewRepresentable {
             }
         }
 
-        private func displayPriority(for lead: Lead) -> MKFeatureDisplayPriority {
-            LeadMapAnnotationPriorityPolicy.displayPriority(for: lead)
+        private func displayPriority(for pin: MapLeadPin) -> MKFeatureDisplayPriority {
+            LeadMapAnnotationPriorityPolicy.displayPriority(for: pin)
         }
         
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
             if let cluster = view.annotation as? MKClusterAnnotation {
-                let leads = LeadClusterSummary.sortedLeads(
-                    cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.lead }
+                let pins = MapLeadPinClusterSummary.sortedPins(
+                    cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.pin }
                 )
-                guard !leads.isEmpty else { return }
+                guard !pins.isEmpty else { return }
                 mapView.deselectAnnotation(cluster, animated: false)
 
                 if shouldOpenClusterSheet(mapView: mapView, cluster: cluster) {
-                    parent.onLeadClusterTap(leads, cluster.coordinate)
+                    parent.onLeadClusterTap(pins, cluster.coordinate)
                 } else {
                     zoomIntoCluster(cluster, on: mapView)
                 }
             } else if let leadAnnotation = view.annotation as? LeadMapAnnotation {
-                parent.onLeadTap(leadAnnotation.lead)
+                parent.onLeadTap(leadAnnotation.pin)
             } else if view.annotation is MKPointAnnotation,
                       let pin = parent.searchPin {
                 mapView.deselectAnnotation(view.annotation, animated: false)
@@ -1050,12 +1050,12 @@ struct AdvancedMapView: UIViewRepresentable {
 
         private func shouldOpenClusterSheet(mapView: MKMapView, cluster: MKClusterAnnotation) -> Bool {
             let maxSpan = max(mapView.region.span.latitudeDelta, mapView.region.span.longitudeDelta)
-            let leads = cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.lead }
+            let pins = cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.pin }
             return LeadClusterInteractionPolicy.route(
                 mapSpan: maxSpan,
                 coordinateSpread: coordinateSpread(for: cluster),
                 memberCount: cluster.memberAnnotations.count,
-                containsUrgentLead: leads.contains(where: LeadClusterSummary.isUrgent)
+                containsUrgentLead: pins.contains(where: MapLeadPinClusterSummary.isUrgent)
             ) == .openSheet
         }
 
@@ -1299,6 +1299,22 @@ enum LeadMapAnnotationPriorityPolicy {
         return .defaultLow
     }
 
+    static func displayPriority(for pin: MapLeadPin) -> MKFeatureDisplayPriority {
+        if pin.status == .converted {
+            return .required
+        }
+
+        if pin.status == .interested {
+            return interestedPriority
+        }
+
+        if MapLeadPinClusterSummary.isUrgent(pin) {
+            return .defaultHigh
+        }
+
+        return .defaultLow
+    }
+
     static func clusterDisplayPriority(for summary: LeadClusterSummary) -> MKFeatureDisplayPriority {
         if summary.soldCount > 0 {
             return .required
@@ -1314,10 +1330,26 @@ enum LeadMapAnnotationPriorityPolicy {
 
         return .defaultHigh
     }
+
+    static func clusterDisplayPriority(for summary: MapLeadPinClusterSummary) -> MKFeatureDisplayPriority {
+        if summary.soldCount > 0 {
+            return .required
+        }
+
+        if summary.pins.contains(where: { $0.status == .interested }) {
+            return interestedPriority
+        }
+
+        if summary.isUrgent {
+            return .defaultHigh
+        }
+
+        return .defaultHigh
+    }
 }
 
 class LeadMapAnnotation: NSObject, MKAnnotation {
-    let lead: Lead
+    let pin: MapLeadPin
     // Cache coordinate at creation time so accessing a deleted managed object won't crash
     private let cachedCoordinate: CLLocationCoordinate2D
     private let cachedTitle: String?
@@ -1335,17 +1367,11 @@ class LeadMapAnnotation: NSObject, MKAnnotation {
         return cachedSubtitle
     }
     
-    init(lead: Lead) {
-        self.lead = lead
-        self.cachedCoordinate = lead.coordinate
-        if let name = lead.name, !name.isEmpty {
-            self.cachedTitle = name
-        } else if let address = lead.address, !address.isEmpty {
-            self.cachedTitle = address
-        } else {
-            self.cachedTitle = lead.displayName
-        }
-        self.cachedSubtitle = lead.leadStatus.displayName
+    init(pin: MapLeadPin) {
+        self.pin = pin
+        self.cachedCoordinate = pin.coordinate
+        self.cachedTitle = pin.title
+        self.cachedSubtitle = pin.subtitle
         super.init()
     }
 }
@@ -1521,6 +1547,159 @@ struct LeadClusterSummary {
         }
         if max(lead.price, lead.estimatedValue) > 0 {
             score += min(120, Int(max(lead.price, lead.estimatedValue) / 100))
+        }
+        return score
+    }
+
+    private static func statusRank(_ status: Lead.Status) -> Int {
+        switch status {
+        case .converted:
+            return 5
+        case .interested:
+            return 4
+        case .notHome:
+            return 3
+        case .notContacted:
+            return 2
+        case .notInterested:
+            return 1
+        }
+    }
+}
+
+struct MapLeadPinClusterSummary {
+    let pins: [MapLeadPin]
+    private let now: Date
+
+    init(pins: [MapLeadPin], now: Date = Date()) {
+        self.pins = pins
+        self.now = now
+    }
+
+    var count: Int {
+        pins.count
+    }
+
+    var glyphText: String {
+        count > 99 ? "99+" : "\(count)"
+    }
+
+    var isUrgent: Bool {
+        pins.contains(where: Self.isUrgent)
+    }
+
+    var dueFollowUpCount: Int {
+        pins.filter { Self.isFollowUpDue($0, now: now) }.count
+    }
+
+    var hotLeadCount: Int {
+        pins.filter { Self.isHotLead($0, now: now) }.count
+    }
+
+    var soldCount: Int {
+        pins.filter { $0.status == .converted }.count
+    }
+
+    var interestedCount: Int {
+        pins.filter { $0.status == .interested }.count
+    }
+
+    var uiColor: UIColor {
+        if soldCount > 0 {
+            return .systemGreen
+        }
+        if interestedCount > 0 {
+            return .systemOrange
+        }
+        if dueFollowUpCount > 0 || pins.contains(where: { Self.isPriorityActionable($0) }) {
+            return .systemPink
+        }
+        if hotLeadCount > 0 {
+            return .systemOrange
+        }
+        guard let dominant = dominantStatus else {
+            return .systemPurple
+        }
+        switch dominant {
+        case .notContacted:
+            return .systemGray
+        case .notHome:
+            return .brown
+        case .interested:
+            return .systemOrange
+        case .converted:
+            return .systemGreen
+        case .notInterested:
+            return .systemRed
+        }
+    }
+
+    var sortedPins: [MapLeadPin] {
+        Self.sortedPins(pins, now: now)
+    }
+
+    static func sortedPins(_ pins: [MapLeadPin], now: Date = Date()) -> [MapLeadPin] {
+        pins.sorted { lhs, rhs in
+            prioritySortKey(for: lhs, now: now) > prioritySortKey(for: rhs, now: now)
+        }
+    }
+
+    static func prioritySortKey(for pin: MapLeadPin, now: Date = Date()) -> LeadClusterSortKey {
+        LeadClusterSortKey(
+            score: priorityScore(for: pin, now: now),
+            date: pin.updatedDate ?? pin.createdDate ?? .distantPast
+        )
+    }
+
+    static func isUrgent(_ pin: MapLeadPin) -> Bool {
+        isHotLead(pin, now: Date())
+    }
+
+    static func isFollowUpDue(_ pin: MapLeadPin, now: Date) -> Bool {
+        guard let followUpDate = pin.followUpDate else { return false }
+        guard pin.status != .converted && pin.status != .notInterested else { return false }
+        return followUpDate <= now
+    }
+
+    private var dominantStatus: Lead.Status? {
+        Lead.Status.allCases
+            .map { status in (status, pins.filter { $0.status == status }.count) }
+            .filter { $0.1 > 0 }
+            .sorted { lhs, rhs in
+                if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
+                return Self.statusRank(lhs.0) > Self.statusRank(rhs.0)
+            }
+            .first?
+            .0
+    }
+
+    private static func isHotLead(_ pin: MapLeadPin, now: Date) -> Bool {
+        guard pin.status.allowsActiveFollowUp else { return false }
+        return isPriorityActionable(pin) || pin.status == .interested || isFollowUpDue(pin, now: now)
+    }
+
+    private static func isPriorityActionable(_ pin: MapLeadPin) -> Bool {
+        pin.status.allowsActiveFollowUp && pin.priority > 0
+    }
+
+    private static func priorityScore(for pin: MapLeadPin, now: Date) -> Int {
+        var score = 0
+        if isPriorityActionable(pin) { score += 600 + Int(pin.priority) }
+        if isFollowUpDue(pin, now: now) { score += 520 }
+        switch pin.status {
+        case .converted:
+            score += 2_000
+        case .interested:
+            score += 1_500
+        case .notHome:
+            score += 260
+        case .notContacted:
+            score += 180
+        case .notInterested:
+            score += 20
+        }
+        if max(pin.price, pin.estimatedValue) > 0 {
+            score += min(120, Int(max(pin.price, pin.estimatedValue) / 100))
         }
         return score
     }

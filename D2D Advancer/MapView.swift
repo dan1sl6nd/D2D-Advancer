@@ -62,6 +62,23 @@ enum MapWorkflowMode: String, CaseIterable, Identifiable {
             return lead.leadStatus != .notInterested && lead.leadStatus != .converted
         }
     }
+
+    func includes(_ pin: MapLeadPin, now: Date = Date()) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .hot:
+            return LeadMapWorkflowPolicy.isHotLead(pin, now: now)
+        case .due:
+            return LeadMapWorkflowPolicy.isFollowUpDue(pin, now: now)
+        case .today:
+            return Calendar.current.isDate(pin.createdDate ?? .distantPast, inSameDayAs: now)
+        case .sold:
+            return pin.status == .converted
+        case .next:
+            return pin.status != .notInterested && pin.status != .converted
+        }
+    }
 }
 
 enum MapAddressSource {
@@ -343,6 +360,7 @@ struct MapView: View {
     @State private var selectedMapMode: MapWorkflowMode = .all
     @State private var visibleMapRegion: MKCoordinateRegion = LocationManager.shared.region
     @State private var mapLeadRenderSnapshot = MapLeadRenderSnapshot.empty
+    @State private var mapLeadPinCache = MapLeadPinCache.empty
     @State private var mapLeadRenderTask: Task<Void, Never>?
     @State private var mapLeadExpansionTask: Task<Void, Never>?
 
@@ -360,17 +378,8 @@ struct MapView: View {
         var id: Int { hashValue }
     }
 
-    @FetchRequest
-    private var leads: FetchedResults<Lead>
-
     init(isVisible: Bool = true) {
         self.isVisible = isVisible
-
-        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)]
-        request.fetchBatchSize = 250
-        request.includesPendingChanges = true
-        _leads = FetchRequest(fetchRequest: request, animation: nil)
     }
 
     private var workflowStatusText: String? {
@@ -468,12 +477,9 @@ struct MapView: View {
                 guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
-            .onChange(of: leads.count) { _, _ in
-                guard isVisible else { return }
-                scheduleInteractiveMapLeadRenderUpdate(after: 0.08)
-            }
             .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
                 guard isVisible else { return }
+                mapLeadPinCache = .empty
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.12)
             }
             .sheet(item: $selectedLead) { lead in
@@ -709,6 +715,8 @@ struct MapView: View {
         mapLeadExpansionTask?.cancel()
         mapLeadExpansionTask = nil
 
+        guard let persistentStoreCoordinator = viewContext.persistentStoreCoordinator else { return }
+
         let mode = selectedMapMode
         let region = visibleMapRegion
         let fallbackCenter = locationManager.region.center
@@ -719,8 +727,9 @@ struct MapView: View {
             }
             guard !Task.isCancelled else { return }
 
-            let snapshot = MapLeadRenderSnapshot.make(
-                from: leads,
+            let snapshot = await loadMapLeadSnapshotIfNeeded(
+                persistentStoreCoordinator: persistentStoreCoordinator,
+                cachedPins: mapLeadPinCache,
                 mode: mode,
                 region: region,
                 fallbackCenter: fallbackCenter,
@@ -728,6 +737,9 @@ struct MapView: View {
             )
             guard !Task.isCancelled else { return }
 
+            if snapshot.cache.isReady {
+                mapLeadPinCache = snapshot.cache
+            }
             mapLeadRenderSnapshot = snapshot
 
             if let expansionDelay {
@@ -756,8 +768,11 @@ struct MapView: View {
             }
             guard !Task.isCancelled, selectedMapMode == mode else { return }
 
-            let snapshot = MapLeadRenderSnapshot.make(
-                from: leads,
+            guard let persistentStoreCoordinator = viewContext.persistentStoreCoordinator else { return }
+
+            let snapshot = await loadMapLeadSnapshotIfNeeded(
+                persistentStoreCoordinator: persistentStoreCoordinator,
+                cachedPins: mapLeadPinCache,
                 mode: mode,
                 region: region,
                 fallbackCenter: fallbackCenter,
@@ -765,8 +780,35 @@ struct MapView: View {
             )
             guard !Task.isCancelled, selectedMapMode == mode else { return }
 
+            if snapshot.cache.isReady {
+                mapLeadPinCache = snapshot.cache
+            }
             mapLeadRenderSnapshot = snapshot
         }
+    }
+
+    private func loadMapLeadSnapshotIfNeeded(
+        persistentStoreCoordinator: NSPersistentStoreCoordinator,
+        cachedPins: MapLeadPinCache,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int
+    ) async -> MapLeadRenderSnapshot {
+        let cache: MapLeadPinCache
+        if cachedPins.isReady {
+            cache = cachedPins
+        } else {
+            cache = await MapLeadPinCache.load(from: persistentStoreCoordinator)
+        }
+
+        return MapLeadRenderSnapshot.make(
+            from: cache,
+            mode: mode,
+            region: region,
+            fallbackCenter: fallbackCenter,
+            maxRenderedLeads: maxRenderedLeads
+        )
     }
 
     private var mapView: some View {
@@ -780,7 +822,7 @@ struct MapView: View {
             visibleRegion: $visibleMapRegion,
             launchCenteringResetToken: launchCenteringResetToken,
             launchLocationCenterRevision: locationManager.initialMapCenterRevision,
-            leads: mapLeadRenderSnapshot.renderedLeads,
+            leads: mapLeadRenderSnapshot.renderedPins,
             searchPin: $searchPin,
             showsUserLocation: !isRunningUITests && LocationManager.isAuthorized(locationManager.authorizationStatus),
             shouldFollowUserLocationOnLaunch: !isRunningUITests
@@ -798,17 +840,20 @@ struct MapView: View {
                 didRequestLaunchLocationCenter = true
                 didConfirmVisibleMapCenteredOnLaunch = true
             },
-            onLeadTap: { lead in
-                selectedLead = lead
+            onLeadTap: { pin in
+                selectedLead = lead(for: pin)
             },
-            onLeadClusterTap: { leads, coordinate in
-                selectedLeadCluster = LeadClusterSelection(leads: leads, coordinate: coordinate)
+            onLeadClusterTap: { pins, coordinate in
+                let leads = leads(for: pins)
+                if !leads.isEmpty {
+                    selectedLeadCluster = LeadClusterSelection(leads: leads, coordinate: coordinate)
+                }
             },
             onSearchPinTap: { pin in
                 handleSearchPinTap(pin)
             },
-            onLongPress: { coordinate, lead in
-                handleLongPress(coordinate: coordinate, lead: lead)
+            onLongPress: { coordinate, pin in
+                handleLongPress(coordinate: coordinate, lead: pin.flatMap(lead(for:)))
             }
         )
         .onChangeCompat(of: onboardingManager.showOnboarding) { isPresented in
@@ -1003,21 +1048,14 @@ struct MapView: View {
             impactFeedback.impactOccurred()
         }
 
-        // Find leads near this coordinate or matching the address
+        // Find leads near this coordinate or matching the address. Keep this out
+        // of the map render path so the first map frame stays lightweight.
         let threshold = 0.0005 // ~50 meters
-        let nearbyLeads = leads.filter { lead in
-            let latDiff = abs(lead.latitude - pin.coordinate.latitude)
-            let lonDiff = abs(lead.longitude - pin.coordinate.longitude)
-            if latDiff < threshold && lonDiff < threshold { return true }
-            // Also match by address text
-            if let addr = lead.address?.lowercased(), !addr.isEmpty {
-                let pinAddr = pin.title.lowercased()
-                if addr.contains(pinAddr) || pinAddr.contains(addr) { return true }
-            }
-            return false
-        }
-
-        matchingLeadsForPin = Array(nearbyLeads)
+        matchingLeadsForPin = fetchMatchingLeads(
+            near: pin.coordinate,
+            title: pin.title,
+            threshold: threshold
+        )
 
         guard searchPin == pin else { return }
         showingSearchPinActions = true
@@ -1596,7 +1634,7 @@ struct MapView: View {
     }
 
     private func focusNextBestLead(openDetail: Bool) {
-        let sourceLeads = Array(leads)
+        let sourceLeads = fetchLeadsForMapAction()
         let targetCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
         guard let lead = LeadWorkflowScorer.nextBestLead(from: sourceLeads, near: targetCoordinate) else {
             toastMessage = "No open leads need attention"
@@ -1611,6 +1649,78 @@ struct MapView: View {
             return
         }
         focusLead(lead, openDetail: openDetail)
+    }
+
+    private func lead(for pin: MapLeadPin) -> Lead? {
+        do {
+            return try viewContext.existingObject(with: pin.objectID) as? Lead
+        } catch {
+            AppLog.warning("Map", "Could not load tapped lead: \(error.localizedDescription)")
+            scheduleInteractiveMapLeadRenderUpdate(after: 0.05)
+            return nil
+        }
+    }
+
+    private func leads(for pins: [MapLeadPin]) -> [Lead] {
+        pins.compactMap(lead(for:))
+    }
+
+    private func fetchLeadsForMapAction() -> [Lead] {
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+        request.sortDescriptors = []
+        request.fetchBatchSize = 200
+        request.relationshipKeyPathsForPrefetching = []
+
+        do {
+            return try viewContext.fetch(request)
+        } catch {
+            AppLog.warning("Map", "Could not fetch leads for map action: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private func fetchMatchingLeads(
+        near coordinate: CLLocationCoordinate2D,
+        title: String,
+        threshold: Double
+    ) -> [Lead] {
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let latitudeMin = coordinate.latitude - threshold
+        let latitudeMax = coordinate.latitude + threshold
+        let longitudeMin = coordinate.longitude - threshold
+        let longitudeMax = coordinate.longitude + threshold
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let coordinatePredicate = NSPredicate(
+            format: "latitude >= %lf AND latitude <= %lf AND longitude >= %lf AND longitude <= %lf",
+            latitudeMin,
+            latitudeMax,
+            longitudeMin,
+            longitudeMax
+        )
+
+        if trimmedTitle.isEmpty {
+            request.predicate = coordinatePredicate
+        } else {
+            request.predicate = NSCompoundPredicate(
+                orPredicateWithSubpredicates: [
+                    coordinatePredicate,
+                    NSPredicate(format: "address CONTAINS[cd] %@", trimmedTitle)
+                ]
+            )
+        }
+
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)]
+        request.fetchLimit = 25
+        request.fetchBatchSize = 25
+        request.relationshipKeyPathsForPrefetching = []
+
+        do {
+            return try viewContext.fetch(request)
+        } catch {
+            AppLog.warning("Map", "Could not fetch nearby leads: \(error.localizedDescription)")
+            return []
+        }
     }
 
     private func focusLead(_ lead: Lead, openDetail: Bool) {
@@ -3181,6 +3291,21 @@ enum LeadMapWorkflowPolicy {
         let dueCutoff = calendar.date(byAdding: .hour, value: 12, to: now) ?? now
         return followUpDate <= dueCutoff
     }
+
+    static func isHotLead(_ pin: MapLeadPin, now: Date = Date()) -> Bool {
+        guard pin.status.allowsActiveFollowUp else { return false }
+        return pin.priority > 0
+            || pin.status == .interested
+            || isFollowUpDue(pin, now: now)
+            || max(pin.price, pin.estimatedValue) > 0
+    }
+
+    static func isFollowUpDue(_ pin: MapLeadPin, now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        guard pin.status.allowsActiveFollowUp else { return false }
+        guard let followUpDate = pin.followUpDate else { return false }
+        let dueCutoff = calendar.date(byAdding: .hour, value: 12, to: now) ?? now
+        return followUpDate <= dueCutoff
+    }
 }
 
 private enum LeadWorkflowScorer {
@@ -3229,29 +3354,126 @@ private enum LeadWorkflowScorer {
     }
 }
 
+struct MapLeadPin: Identifiable, Hashable {
+    let objectID: NSManagedObjectID
+    let idValue: UUID?
+    let latitude: Double
+    let longitude: Double
+    let status: Lead.Status
+    let name: String
+    let address: String
+    let priority: Int16
+    let followUpDate: Date?
+    let createdDate: Date?
+    let updatedDate: Date?
+    let price: Double
+    let estimatedValue: Double
+
+    var id: NSManagedObjectID { objectID }
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    var title: String {
+        if !name.isEmpty { return name }
+        if !address.isEmpty { return address }
+        if let idValue { return idValue.uuidString }
+        return "Lead"
+    }
+
+    var subtitle: String {
+        status.displayName
+    }
+
+    init?(lead: Lead) {
+        let coordinate = lead.coordinate
+        guard CLLocationCoordinate2DIsValid(coordinate),
+              (-90...90).contains(lead.latitude),
+              (-180...180).contains(lead.longitude),
+              (lead.latitude != 0 || lead.longitude != 0) else {
+            return nil
+        }
+
+        self.objectID = lead.objectID
+        self.idValue = lead.id
+        self.latitude = lead.latitude
+        self.longitude = lead.longitude
+        self.status = lead.leadStatus
+        self.name = lead.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.address = lead.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.priority = lead.priority
+        self.followUpDate = lead.followUpDate
+        self.createdDate = lead.createdDate
+        self.updatedDate = lead.updatedDate
+        self.price = lead.price
+        self.estimatedValue = lead.estimatedValue
+    }
+}
+
+private struct MapLeadPinCache {
+    let pins: [MapLeadPin]
+    let totalLeadCount: Int
+    let isReady: Bool
+
+    static let empty = MapLeadPinCache(pins: [], totalLeadCount: 0, isReady: false)
+    static let readyEmpty = MapLeadPinCache(pins: [], totalLeadCount: 0, isReady: true)
+
+    static func load(from persistentStoreCoordinator: NSPersistentStoreCoordinator) async -> MapLeadPinCache {
+        await withCheckedContinuation { continuation in
+            let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+            context.persistentStoreCoordinator = persistentStoreCoordinator
+            context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+
+            context.perform {
+                let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+                request.sortDescriptors = []
+                request.fetchBatchSize = 500
+                request.includesPendingChanges = false
+                request.relationshipKeyPathsForPrefetching = []
+
+                do {
+                    let leads = try context.fetch(request)
+                    let pins = leads.compactMap(MapLeadPin.init)
+                    continuation.resume(returning: MapLeadPinCache(
+                        pins: pins,
+                        totalLeadCount: leads.count,
+                        isReady: true
+                    ))
+                } catch {
+                    AppLog.warning("Map", "Could not load lightweight map pins: \(error.localizedDescription)")
+                    continuation.resume(returning: MapLeadPinCache.readyEmpty)
+                }
+            }
+        }
+    }
+}
+
 private struct MapLeadRenderSnapshot {
-    let renderedLeads: [Lead]
+    let renderedPins: [MapLeadPin]
     let totalLeadCount: Int
     let matchingLeadCount: Int
     let isReady: Bool
+    let cache: MapLeadPinCache
 
     static let empty = MapLeadRenderSnapshot(
-        renderedLeads: [],
+        renderedPins: [],
         totalLeadCount: 0,
         matchingLeadCount: 0,
-        isReady: false
+        isReady: false,
+        cache: .empty
     )
 
-    static func make<Leads: Collection>(
-        from leads: Leads,
+    static func make(
+        from cache: MapLeadPinCache,
         mode: MapWorkflowMode,
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
         maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
         now: Date = Date()
-    ) -> MapLeadRenderSnapshot where Leads.Element == Lead {
-        let renderResult = MapLeadVisibilityPolicy.renderedLeadSelection(
-            from: leads,
+    ) -> MapLeadRenderSnapshot {
+        let renderResult = MapLeadPinVisibilityPolicy.renderedPinSelection(
+            from: cache.pins,
             mode: mode,
             region: region,
             fallbackCenter: fallbackCenter,
@@ -3260,12 +3482,165 @@ private struct MapLeadRenderSnapshot {
         )
 
         return MapLeadRenderSnapshot(
-            renderedLeads: renderResult.renderedLeads,
-            totalLeadCount: leads.count,
+            renderedPins: renderResult.renderedPins,
+            totalLeadCount: cache.totalLeadCount,
             matchingLeadCount: renderResult.matchingLeadCount,
-            isReady: true
+            isReady: cache.isReady,
+            cache: cache
         )
     }
+}
+
+private enum MapLeadPinVisibilityPolicy {
+    private static let viewportPaddingMultiplier = 1.8
+
+    static func renderedPinSelection<Pins: Collection>(
+        from pins: Pins,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
+        now: Date = Date()
+    ) -> MapLeadPinSelection where Pins.Element == MapLeadPin {
+        var matchingLeadCount = 0
+        var matchingCoordinateCount = 0
+        var allCandidates: [MapLeadPinRenderCandidate] = []
+        var viewportCandidates: [MapLeadPinRenderCandidate] = []
+        var priorityOutsideViewportCandidates: [MapLeadPinRenderCandidate] = []
+        let renderRegion = normalizedRegion(region, fallbackCenter: fallbackCenter)
+
+        for pin in pins {
+            guard mode.includes(pin, now: now) else { continue }
+            matchingLeadCount += 1
+            matchingCoordinateCount += 1
+
+            let candidate = MapLeadPinRenderCandidate(
+                pin: pin,
+                sortKey: MapLeadPinClusterSummary.prioritySortKey(for: pin, now: now)
+            )
+
+            if allCandidates.count < maxRenderedLeads {
+                allCandidates.append(candidate)
+            }
+
+            if contains(pin, in: renderRegion) {
+                insert(candidate, into: &viewportCandidates, limit: maxRenderedLeads)
+            } else if isMapPriorityLead(pin, now: now) {
+                insert(candidate, into: &priorityOutsideViewportCandidates, limit: maxRenderedLeads)
+            }
+        }
+
+        guard maxRenderedLeads > 0 else {
+            return MapLeadPinSelection(renderedPins: [], matchingLeadCount: matchingLeadCount)
+        }
+
+        if matchingCoordinateCount <= maxRenderedLeads {
+            return MapLeadPinSelection(
+                renderedPins: sortedPins(from: allCandidates),
+                matchingLeadCount: matchingLeadCount
+            )
+        }
+
+        let viewportPins = sortedPins(from: viewportCandidates)
+        if viewportPins.count >= maxRenderedLeads {
+            return MapLeadPinSelection(
+                renderedPins: Array(viewportPins.prefix(maxRenderedLeads)),
+                matchingLeadCount: matchingLeadCount
+            )
+        }
+
+        var selectedPins = viewportPins
+        var selectedObjectIDs = Set(selectedPins.map(\.objectID))
+        let remainingBudget = maxRenderedLeads - selectedPins.count
+        if remainingBudget > 0 {
+            let priorityOutsideViewport = sortedPins(from: priorityOutsideViewportCandidates).lazy.filter { pin in
+                !selectedObjectIDs.contains(pin.objectID) && isMapPriorityLead(pin, now: now)
+            }
+            for pin in priorityOutsideViewport.prefix(remainingBudget) {
+                selectedPins.append(pin)
+                selectedObjectIDs.insert(pin.objectID)
+            }
+        }
+
+        return MapLeadPinSelection(
+            renderedPins: selectedPins,
+            matchingLeadCount: matchingLeadCount
+        )
+    }
+
+    private static func isMapPriorityLead(_ pin: MapLeadPin, now: Date) -> Bool {
+        pin.status == .converted
+            || pin.status == .interested
+            || LeadMapWorkflowPolicy.isFollowUpDue(pin, now: now)
+            || pin.priority > 0
+    }
+
+    private static func normalizedRegion(
+        _ region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D
+    ) -> MKCoordinateRegion {
+        let center = CLLocationCoordinate2DIsValid(region.center) ? region.center : fallbackCenter
+        let latitudeDelta = normalizedDelta(region.span.latitudeDelta)
+        let longitudeDelta = normalizedDelta(region.span.longitudeDelta)
+        return MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(
+                latitudeDelta: latitudeDelta * viewportPaddingMultiplier,
+                longitudeDelta: longitudeDelta * viewportPaddingMultiplier
+            )
+        )
+    }
+
+    private static func normalizedDelta(_ delta: CLLocationDegrees) -> CLLocationDegrees {
+        guard delta.isFinite, delta > 0 else { return 0.03 }
+        return min(max(delta, 0.003), 180)
+    }
+
+    private static func contains(_ pin: MapLeadPin, in region: MKCoordinateRegion) -> Bool {
+        let latitudeHalfSpan = region.span.latitudeDelta / 2
+        let longitudeHalfSpan = region.span.longitudeDelta / 2
+        return abs(pin.latitude - region.center.latitude) <= latitudeHalfSpan
+            && abs(longitudeDistance(pin.longitude, region.center.longitude)) <= longitudeHalfSpan
+    }
+
+    private static func longitudeDistance(_ lhs: CLLocationDegrees, _ rhs: CLLocationDegrees) -> CLLocationDegrees {
+        let raw = lhs - rhs
+        if raw > 180 { return raw - 360 }
+        if raw < -180 { return raw + 360 }
+        return raw
+    }
+
+    private static func insert(_ candidate: MapLeadPinRenderCandidate, into candidates: inout [MapLeadPinRenderCandidate], limit: Int) {
+        guard limit > 0 else { return }
+
+        if candidates.count < limit {
+            candidates.append(candidate)
+            return
+        }
+
+        guard let weakestIndex = candidates.indices.min(by: { candidates[$0].sortKey < candidates[$1].sortKey }),
+              candidate.sortKey > candidates[weakestIndex].sortKey else {
+            return
+        }
+
+        candidates[weakestIndex] = candidate
+    }
+
+    private static func sortedPins(from candidates: [MapLeadPinRenderCandidate]) -> [MapLeadPin] {
+        candidates
+            .sorted { $0.sortKey > $1.sortKey }
+            .map(\.pin)
+    }
+}
+
+private struct MapLeadPinSelection {
+    let renderedPins: [MapLeadPin]
+    let matchingLeadCount: Int
+}
+
+private struct MapLeadPinRenderCandidate {
+    let pin: MapLeadPin
+    let sortKey: LeadClusterSortKey
 }
 
 enum MapLeadVisibilityPolicy {
