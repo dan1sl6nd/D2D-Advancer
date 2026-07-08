@@ -178,7 +178,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         }
 
         let titleFrame = titleElement.frame
-        let expectedLeadingX = backFrame.maxX + 12
+        let expectedCenterX = appFrame.midX
 
         XCTAssertGreaterThanOrEqual(
             titleFrame.minX,
@@ -186,10 +186,10 @@ final class D2D_AdvancerUITests: XCTestCase {
             "\(screenName) header title overlaps the back button. title=\(titleFrame), back=\(backFrame)"
         )
         XCTAssertEqual(
-            titleFrame.minX,
-            expectedLeadingX,
+            titleFrame.midX,
+            expectedCenterX,
             accuracy: 12,
-            "\(screenName) header title should start after the shared back button. title=\(titleFrame), back=\(backFrame), screen=\(appFrame)"
+            "\(screenName) header title should be centered in the shared top chrome. title=\(titleFrame), back=\(backFrame), screen=\(appFrame)"
         )
     }
 

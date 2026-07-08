@@ -1196,24 +1196,29 @@ private struct ObsidianPushedNavigationHeader<Trailing: View>: View {
     let onBack: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            ObsidianBackButton(accessibilityIdentifier: backButtonAccessibilityIdentifier) {
-                onBack()
+        ZStack {
+            HStack(spacing: 0) {
+                ObsidianBackButton(accessibilityIdentifier: backButtonAccessibilityIdentifier) {
+                    onBack()
+                }
+                .frame(width: 44, height: 44)
+                .accessibilityIdentifierIfPresent(backButtonAccessibilityIdentifier)
+
+                Spacer(minLength: 0)
+
+                trailing
+                    .fixedSize(horizontal: true, vertical: false)
             }
-            .frame(width: 44, height: 44)
-            .accessibilityIdentifierIfPresent(backButtonAccessibilityIdentifier)
 
             Text(title)
                 .font(.displayMedium)
                 .foregroundColor(.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 72)
                 .layoutPriority(1)
-
-            trailing
-                .fixedSize(horizontal: true, vertical: false)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 44)
