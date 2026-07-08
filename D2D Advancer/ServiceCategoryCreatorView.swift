@@ -112,13 +112,11 @@ struct ServiceCategoryCreatorView: View {
                             .font(.title2)
                             .foregroundColor(selectedIcon == icon ? .white : colorForName(selectedColor))
                             .frame(width: 44, height: 44)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(selectedIcon == icon ? colorForName(selectedColor) : Color.obsidianElevated)
-                            )
+                            .background(selectedIcon == icon ? colorForName(selectedColor) : Color.obsidianElevated)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(selectedIcon == icon ? colorForName(selectedColor) : Color.clear, lineWidth: 2)
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(selectedIcon == icon ? colorForName(selectedColor) : Color.obsidianBorder.opacity(0.35), lineWidth: selectedIcon == icon ? 1.5 : 0.5)
                             )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -139,12 +137,12 @@ struct ServiceCategoryCreatorView: View {
                     Button(action: {
                         selectedColor = color
                     }) {
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(colorForName(color))
                             .frame(width: 44, height: 44)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(selectedColor == color ? Color.textPrimary : Color.clear, lineWidth: 3)
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(selectedColor == color ? Color.textPrimary : Color.clear, lineWidth: 2)
                             )
                             .overlay(
                                 selectedColor == color ?
@@ -173,10 +171,8 @@ struct ServiceCategoryCreatorView: View {
                     .font(.title2)
                     .foregroundColor(colorForName(selectedColor))
                     .frame(width: 40, height: 40)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(colorForName(selectedColor).opacity(0.1))
-                    )
+                    .background(colorForName(selectedColor).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(name.isEmpty ? "Service Name" : name)
@@ -192,7 +188,7 @@ struct ServiceCategoryCreatorView: View {
             }
             .padding(16)
             .background(Color.obsidianElevated)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
     

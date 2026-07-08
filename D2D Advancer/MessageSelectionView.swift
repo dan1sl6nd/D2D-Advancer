@@ -138,19 +138,7 @@ struct MessageSelectionView: View {
     }
     
     private var leadInfoHeader: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "person.circle.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-
-                Text("Customer Information")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-                
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Customer", icon: "person.circle.fill") {
             VStack(spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 8) {
@@ -207,23 +195,10 @@ struct MessageSelectionView: View {
                 }
             }
         }
-        .surfaceCard()
     }
     
     private var messageTypeSelector: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "message.circle.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-                
-                Text("Message Type")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-                
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Message Type", icon: "message.circle.fill") {
             HStack(spacing: 12) {
                 ForEach(MessageType.allCases, id: \.self) { type in
                     Button(action: {
@@ -243,36 +218,21 @@ struct MessageSelectionView: View {
                         .padding(.vertical, 12)
                         .padding(.horizontal, 20)
                         .frame(maxWidth: .infinity)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(messageType == type ? Color.electricViolet : Color.obsidianSurface)
-                        )
+                        .background(messageType == type ? Color.electricViolet : Color.obsidianElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(messageType == type ? Color.electricViolet : Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(messageType == type ? Color.electricViolet : Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
             }
         }
-        .surfaceCard()
     }
     
     private var categorySelector: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "tag.circle.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-                
-                Text("Message Category")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-                
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Message Category", icon: "tag.circle.fill") {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(MessageTemplate.MessageCategory.allCases, id: \.self) { category in
@@ -288,49 +248,27 @@ struct MessageSelectionView: View {
                 .padding(.horizontal, 4)
             }
         }
-        .surfaceCard()
     }
     
     private var templatesList: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        LeadFormSectionCard(title: "Message Templates", icon: "doc.text.fill") {
             HStack {
-                Image(systemName: "doc.text.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-                
-                Text("Message Templates")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-                
-                Spacer()
-                
                 if !availableTemplates.isEmpty {
                     Text("\(availableTemplates.count) templates")
                         .font(.micro)
                         .foregroundColor(Color.textSecondary)
                 }
-                
-                Button {
+
+                Spacer()
+
+                ObsidianCompactIconButton(
+                    icon: "plus",
+                    accessibilityLabel: "Add new template",
+                    accessibilityIdentifier: "messageSelectionAddTemplateButton",
+                    size: 36
+                ) {
                     showingCustomTemplateCreator = true
-                } label: {
-                    Label("New", systemImage: "plus")
-                        .font(.obsidianFootnote)
-                        .fontWeight(.semibold)
-                        .foregroundColor(Color.electricViolet)
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 38)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.electricViolet.opacity(0.14))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(Color.electricViolet.opacity(0.2), lineWidth: 0.5)
-                        )
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Add new template")
-                .accessibilityIdentifier("messageSelectionAddTemplateButton")
             }
             
             if availableTemplates.isEmpty {
@@ -381,23 +319,10 @@ struct MessageSelectionView: View {
                 }
             }
         }
-        .surfaceCard()
     }
     
     private var customMessageSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "pencil.circle.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-                
-                Text("Custom Message")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-                
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Custom Message", icon: "pencil.circle.fill") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Edit or write your own message")
                     .font(.obsidianFootnote)
@@ -423,55 +348,6 @@ struct MessageSelectionView: View {
                         }
                     )
             }
-        }
-        .surfaceCard()
-    }
-    
-    private var sendButton: some View {
-        VStack(spacing: 16) {
-            if messageType == .sms && (lead.phone?.isEmpty ?? true) {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(Color.statusNotInterested)
-                    Text("No phone number available for SMS")
-                        .font(.obsidianFootnote)
-                        .foregroundColor(Color.statusNotInterested)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.statusNotInterested.opacity(0.1))
-                .cornerRadius(8)
-            } else if messageType == .email && (lead.email?.isEmpty ?? true) {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(Color.statusNotInterested)
-                    Text("No email address available")
-                        .font(.obsidianFootnote)
-                        .foregroundColor(Color.statusNotInterested)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.statusNotInterested.opacity(0.1))
-                .cornerRadius(8)
-            }
-            
-            Button(action: sendMessage) {
-                HStack(spacing: 12) {
-                    Image(systemName: messageType.icon)
-                        .font(.obsidianAction)
-                    Text("Send \(messageType.rawValue)")
-                        .font(.obsidianAction)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(canSendMessage ? Color.electricViolet : Color.textSecondary)
-                        .shadow(color: canSendMessage ? Color.electricViolet.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
-                )
-                .foregroundColor(.white)
-            }
-            .disabled(!canSendMessage)
         }
     }
     
@@ -526,7 +402,6 @@ struct TemplateCardView: View {
     let onDelete: (() -> Void)?
     
     @State private var offset: CGFloat = 0
-    @State private var showingActions = false
     
     init(template: MessageTemplate, isSelected: Bool, personalizedMessage: String, action: @escaping () -> Void, onEdit: (() -> Void)? = nil, onDelete: (() -> Void)? = nil) {
         self.template = template

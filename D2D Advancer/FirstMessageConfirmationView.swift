@@ -136,19 +136,7 @@ struct FirstMessageConfirmationView: View {
     }
     
     private var leadInfoSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "person.circle.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-                
-                Text("Lead Information")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-                
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Lead Information", icon: "person.circle.fill") {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: "person.fill")
@@ -183,20 +171,11 @@ struct FirstMessageConfirmationView: View {
                 }
             }
         }
-        .surfaceCard()
     }
     
     private var templatesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        LeadFormSectionCard(title: "Choose a Template", icon: "doc.text.fill") {
             HStack {
-                Image(systemName: "doc.text.fill")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-                
-                Text("Choose a Template")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-                
                 Spacer()
                 
                 ObsidianCompactIconButton(
@@ -272,44 +251,6 @@ struct FirstMessageConfirmationView: View {
                     }
             }
         }
-        .surfaceCard()
-    }
-    
-    private var actionButtonsSection: some View {
-        VStack(spacing: 12) {
-            // Send Message Button
-            Button(action: {
-                showingMessageComposer = true
-            }) {
-                HStack {
-                    Image(systemName: "message.fill")
-                        .font(.obsidianCallout)
-                    Text("Send Message")
-                        .font(.obsidianCallout)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(canSendMessage ? Color.electricViolet : Color.textSecondary)
-                        .shadow(color: canSendMessage ? Color.electricViolet.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
-                )
-                .foregroundColor(.white)
-            }
-            .disabled(!canSendMessage)
-            
-            // Skip Button
-            Button(action: {
-                dismiss()
-                onCompletion()
-            }) {
-                Text("Skip for now")
-                    .font(.obsidianCallout)
-                    .foregroundColor(Color.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-            }
-        }
     }
     
     private var canSendMessage: Bool {
@@ -321,196 +262,6 @@ struct FirstMessageConfirmationView: View {
         return customMessage.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
-
-struct TemplateCard: View {
-    let template: MessageTemplate
-    let isSelected: Bool
-    let personalizedMessage: String
-    let action: () -> Void
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(template.title)
-                    .font(.obsidianCallout)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(Color.electricViolet)
-                        .font(.obsidianCallout)
-                }
-            }
-            
-            Text(personalizedMessage)
-                .font(.obsidianBody)
-                .foregroundColor(Color.textSecondary)
-                .multilineTextAlignment(.leading)
-                .lineLimit(3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Color.electricViolet.opacity(0.1) : Color.obsidianSurface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? Color.electricViolet : Color.clear, lineWidth: 1.5)
-        )
-        .onTapGesture {
-            action()
-        }
-    }
-}
-
-struct EnhancedTemplateCard: View {
-    let template: MessageTemplate
-    let isSelected: Bool
-    let personalizedMessage: String
-    let action: () -> Void
-    let onEdit: (() -> Void)?
-    let onDelete: (() -> Void)?
-    
-    @State private var offset: CGFloat = 0
-    @State private var showingActions = false
-    
-    init(template: MessageTemplate, isSelected: Bool, personalizedMessage: String, action: @escaping () -> Void, onEdit: (() -> Void)? = nil, onDelete: (() -> Void)? = nil) {
-        self.template = template
-        self.isSelected = isSelected
-        self.personalizedMessage = personalizedMessage
-        self.action = action
-        self.onEdit = onEdit
-        self.onDelete = onDelete
-    }
-    
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            // Background action buttons (shown when swiped)
-            if template.isCustom && offset < -10 {
-                HStack(spacing: 0) {
-                    Button(action: {
-                        withAnimation(.spring()) {
-                            offset = 0
-                        }
-                        onEdit?()
-                    }) {
-                        VStack {
-                            Image(systemName: "pencil")
-                                .font(.obsidianAction)
-                            Text("Edit")
-                                .font(.micro)
-                        }
-                        .foregroundColor(.white)
-                        .frame(width: 80)
-                        .frame(maxHeight: .infinity)
-                        .background(Color.electricViolet)
-                    }
-                    
-                    Button(action: {
-                        withAnimation(.spring()) {
-                            offset = 0
-                        }
-                        onDelete?()
-                    }) {
-                        VStack {
-                            Image(systemName: "trash")
-                                .font(.obsidianAction)
-                            Text("Delete")
-                                .font(.micro)
-                        }
-                        .foregroundColor(.white)
-                        .frame(width: 80)
-                        .frame(maxHeight: .infinity)
-                        .background(Color.statusNotInterested)
-                    }
-                }
-                .cornerRadius(8, corners: [.topRight, .bottomRight])
-            }
-            
-            // Main card content
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    HStack(spacing: 8) {
-                        Image(systemName: template.category.icon)
-                            .foregroundColor(template.category == .urgent ? Color.statusNotInterested : Color.electricViolet)
-                            .font(.system(size: 16, weight: .medium))
-                        
-                        Text(template.title)
-                            .font(.obsidianCallout)
-                            .fontWeight(.semibold)
-                    }
-                    
-                    Spacer()
-                    
-                    if template.isCustom {
-                        Text("CUSTOM")
-                            .font(.micro)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Color.electricViolet)
-                            .cornerRadius(4)
-                    }
-                    
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(Color.electricViolet)
-                            .font(.obsidianCallout)
-                    }
-                }
-                
-                Text(personalizedMessage)
-                    .font(.obsidianBody)
-                    .foregroundColor(Color.textSecondary)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? Color.electricViolet.opacity(0.1) : Color.obsidianSurface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color.electricViolet : Color.clear, lineWidth: 1.5)
-            )
-            .offset(x: offset, y: 0)
-            .onTapGesture {
-                action()
-            }
-        }
-        .contentShape(Rectangle())
-        .gesture(
-            template.isCustom ? 
-            DragGesture(minimumDistance: 5)
-                .onChanged { value in
-                    let translation = value.translation.width
-                    if translation < 0 {
-                        offset = max(translation, -160)
-                    } else if offset < 0 {
-                        offset = min(translation + offset, 0)
-                    }
-                }
-                .onEnded { value in
-                    withAnimation(.spring()) {
-                        if value.translation.width < -50 {
-                            offset = -160
-                        } else {
-                            offset = 0
-                        }
-                    }
-                }
-            : nil
-        )
-        .clipped()
-    }
-}
-
 
 // Enhanced MessageComposeView with completion callback
 struct FirstMessageComposeView: UIViewControllerRepresentable {

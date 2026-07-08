@@ -149,11 +149,11 @@ struct CustomAppointmentTypeCreatorView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color.obsidianSurface)
-                    .cornerRadius(10)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -210,10 +210,10 @@ struct CustomAppointmentTypeCreatorView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(selectedColorObj.opacity(0.15))
-                .cornerRadius(10)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(selectedColorObj.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(selectedColorObj.opacity(0.35), lineWidth: 0.5)
                 )
             }
         }
@@ -406,13 +406,11 @@ struct IconSelectionChip: View {
             .padding(.vertical, 12)
             .padding(.horizontal, 6)
             .frame(minWidth: 85, minHeight: 75)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.electricViolet.opacity(0.15) : Color.obsidianSurface)
-            )
+            .background(isSelected ? Color.electricViolet.opacity(0.15) : Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.electricViolet : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? Color.electricViolet : Color.obsidianBorder.opacity(0.35), lineWidth: isSelected ? 1.5 : 0.5)
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -444,8 +442,12 @@ struct IconSearchBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color.obsidianSurface)
-        .cornerRadius(10)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+        )
         .accessibilityIdentifier("customAppointmentTypeIconSearchBar")
     }
 }

@@ -9,20 +9,14 @@ struct DemographicsPreferencesView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(spacing: 20) {
+                LazyVStack(spacing: 16) {
                     ObsidianScreenTitle(
                         title: "Target Demographics",
                         subtitle: "Set the customer profile used for area recommendations.",
                         icon: "person.2.crop.square.stack.fill"
                     )
-                    .padding(.horizontal, 20)
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Quick Profiles")
-                            .font(.obsidianTitle)
-                            .foregroundColor(.textPrimary)
-                            .padding(.horizontal, 20)
-
+                    LeadFormSectionCard(title: "Quick Profiles", icon: "person.2.crop.square.stack.fill") {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
                                 ForEach(TargetDemographicsPreferences.TargetProfile.allCases, id: \.self) { profile in
@@ -35,20 +29,11 @@ struct DemographicsPreferencesView: View {
                                     )
                                 }
                             }
-                            .padding(.horizontal, 20)
+                            .padding(.horizontal, 2)
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Image(systemName: "dollarsign.circle.fill")
-                                .foregroundColor(Color.statusInterested)
-                            Text("Target Income Range")
-                                .font(.obsidianTitle)
-                                .foregroundColor(.textPrimary)
-                        }
-                        .padding(.horizontal, 20)
-
+                    LeadFormSectionCard(title: "Target Income Range", icon: "dollarsign.circle.fill") {
                         VStack(spacing: 16) {
                             HStack {
                                 Text("Min")
@@ -78,21 +63,9 @@ struct DemographicsPreferencesView: View {
                                     .frame(width: 80, alignment: .trailing)
                             }
                         }
-                        .padding(16)
-                        .surfaceCard()
-                        .padding(.horizontal, 20)
                     }
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Image(systemName: "house.circle.fill")
-                                .foregroundColor(Color.electricViolet)
-                            Text("Target Home Value Range")
-                                .font(.obsidianTitle)
-                                .foregroundColor(.textPrimary)
-                        }
-                        .padding(.horizontal, 20)
-
+                    LeadFormSectionCard(title: "Target Home Value Range", icon: "house.circle.fill") {
                         VStack(spacing: 16) {
                             HStack {
                                 Text("Min")
@@ -122,30 +95,16 @@ struct DemographicsPreferencesView: View {
                                     .frame(width: 90, alignment: .trailing)
                             }
                         }
-                        .padding(16)
-                        .surfaceCard()
-                        .padding(.horizontal, 20)
                     }
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Image(systemName: "person.crop.circle.fill")
-                                .foregroundColor(Color.statusNotHome)
-                            Text("Homeownership")
-                                .font(.obsidianTitle)
-                                .foregroundColor(.textPrimary)
-                        }
-                        .padding(.horizontal, 20)
-
+                    LeadFormSectionCard(title: "Homeownership", icon: "person.crop.circle.fill") {
                         Toggle("Prefer Homeowners", isOn: $preferences.preferHomeowners)
                             .font(.obsidianBody)
                             .foregroundColor(.textPrimary)
-                            .padding(16)
-                            .surfaceCard()
-                            .padding(.horizontal, 20)
                     }
 
                 }
+                .padding(.horizontal, 16)
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
@@ -214,13 +173,11 @@ struct ProfileCard: View {
             }
             .frame(width: 140)
             .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.obsidianSurface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(isSelected ? Color.electricViolet : Color.clear, lineWidth: 2)
-                    )
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? Color.electricViolet : Color.obsidianBorder.opacity(0.35), lineWidth: isSelected ? 1.5 : 0.5)
             )
         }
         .buttonStyle(PlainButtonStyle())

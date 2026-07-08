@@ -75,19 +75,7 @@ struct SeasonalDatePickerView: View {
     }
     
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "calendar.badge.clock")
-                    .foregroundColor(Color.electricViolet)
-                    .font(.obsidianCallout)
-
-                Text("Choose Follow-Up Time")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-
-                Spacer()
-            }
-
+        LeadFormSectionCard(title: "Choose Follow-Up Time", icon: "calendar.badge.clock") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Select a seasonal period for your follow-up, and we'll automatically choose a date that matches today's date.")
                     .font(.obsidianFootnote)
@@ -102,25 +90,16 @@ struct SeasonalDatePickerView: View {
                         .font(.obsidianSmall)
                         .foregroundColor(Color.electricViolet)
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.electricViolet.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
-        .surfaceCard()
     }
     
     private var seasonalPresetsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "leaf.fill")
-                    .foregroundColor(Color.statusInterested)
-                    .font(.obsidianCallout)
-
-                Text("Seasonal Presets")
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Seasonal Presets", icon: "leaf.fill") {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 12) {
                 ForEach(Array(presets.prefix(8).enumerated()), id: \.element.id) { index, preset in
                     SeasonalPresetCard(
@@ -135,18 +114,13 @@ struct SeasonalDatePickerView: View {
             }
             .clipped()
         }
-        .surfaceCard()
     }
 
     private var customDateSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        LeadFormSectionCard(title: "Custom Date", icon: "calendar") {
             HStack {
-                Image(systemName: "calendar")
-                    .foregroundColor(Color.electricViolet)
+                Text("Use exact date")
                     .font(.obsidianCallout)
-
-                Text("Custom Date")
-                    .font(.obsidianTitle)
                     .foregroundColor(Color.textPrimary)
 
                 Spacer()
@@ -172,7 +146,6 @@ struct SeasonalDatePickerView: View {
                     .accessibilityIdentifier("seasonalDatePickerCustomDatePicker")
             }
         }
-        .surfaceCard()
     }
 
     private func saveDate() {
