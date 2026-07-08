@@ -427,22 +427,17 @@ struct AddLeadView: View {
                                 }
                             }
                         } label: {
-                            HStack {
-                                Text(selectedTechnicianForJob?.displayName ?? "Select technician")
-                                    .foregroundColor(selectedTechnicianForJob == nil ? Color.textSecondary : Color.textPrimary)
-                                Spacer()
-                                Image(systemName: "chevron.down")
-                                    .foregroundColor(Color.textSecondary)
-                                    .font(.caption)
+                            technicianInputSurface {
+                                HStack {
+                                    Text(selectedTechnicianForJob?.displayName ?? "Select technician")
+                                        .foregroundColor(selectedTechnicianForJob == nil ? Color.textSecondary : Color.textPrimary)
+                                        .lineLimit(2)
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
+                                        .foregroundColor(Color.textSecondary)
+                                        .font(.caption)
+                                }
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.obsidianSurface)
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
-                            )
                         }
                         .accessibilityIdentifier("addLeadTechnicianMenu")
                     }
@@ -450,44 +445,34 @@ struct AddLeadView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         fieldLabel(title: "Approx. Arrival", icon: "calendar.badge.clock")
 
-                        DatePicker("Approx. Arrival", selection: $technicianArrivalDate, displayedComponents: [.date, .hourAndMinute])
-                            .labelsHidden()
-                            .datePickerStyle(.compact)
-                            .tint(Color.electricViolet)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Color.obsidianSurface)
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
-                            )
-                            .accessibilityIdentifier("addLeadTechnicianArrivalDatePicker")
+                        technicianInputSurface(verticalPadding: 10) {
+                            DatePicker("Approx. Arrival", selection: $technicianArrivalDate, displayedComponents: [.date, .hourAndMinute])
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(Color.electricViolet)
+                        }
+                        .accessibilityIdentifier("addLeadTechnicianArrivalDatePicker")
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
                         fieldLabel(title: "Job Window", icon: "timer")
 
-                        Stepper(value: $technicianJobDurationHours, in: 1...12) {
-                            HStack {
-                                Text("\(technicianJobDurationHours) hr window")
-                                    .font(.obsidianFootnote)
-                                    .foregroundColor(Color.textPrimary)
-                                Spacer()
-                                Text(technicianJobEndDate.formatted(date: .omitted, time: .shortened))
-                                    .font(.micro)
-                                    .foregroundColor(Color.textSecondary)
+                        technicianInputSurface {
+                            Stepper(value: $technicianJobDurationHours, in: 1...12) {
+                                HStack {
+                                    Text("\(technicianJobDurationHours) hr window")
+                                        .font(.obsidianFootnote)
+                                        .foregroundColor(Color.textPrimary)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Text(technicianJobEndDate.formatted(date: .omitted, time: .shortened))
+                                        .font(.micro)
+                                        .foregroundColor(Color.textSecondary)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
+                                }
                             }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(Color.obsidianSurface)
-                        .cornerRadius(16)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
-                        )
                         .accessibilityIdentifier("addLeadTechnicianDurationStepper")
                     }
                 }
@@ -506,6 +491,23 @@ struct AddLeadView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(Color.textPrimary)
         }
+    }
+
+    private func technicianInputSurface<Content: View>(
+        verticalPadding: CGFloat = 12,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, verticalPadding)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
     private func statusColor(for status: Lead.Status) -> Color {
         switch status {

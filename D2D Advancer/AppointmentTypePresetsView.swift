@@ -117,7 +117,8 @@ struct AppointmentTypePresetsView: View {
                     Text("Create a reusable appointment label.")
                         .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 0)
@@ -156,8 +157,9 @@ struct DefaultTypeChip: View {
                 Text(type.rawValue)
                     .font(.obsidianCallout)
                     .foregroundColor(Color.textPrimary)
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .minimumScaleFactor(0.78)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text("Built-in")
                     .font(.obsidianFootnote)
@@ -193,8 +195,9 @@ struct CustomTypeChip: View {
                         Text(customType.name)
                             .font(.obsidianCallout)
                             .foregroundColor(Color.textPrimary)
-                            .lineLimit(1)
+                            .lineLimit(2)
                             .minimumScaleFactor(0.78)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         Text("Custom")
                             .font(.obsidianFootnote)

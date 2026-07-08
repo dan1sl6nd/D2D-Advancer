@@ -112,7 +112,6 @@ struct SeasonalDatePickerView: View {
                     .accessibilityIdentifier("seasonalPreset_\(index)")
                 }
             }
-            .clipped()
         }
     }
 
@@ -183,7 +182,9 @@ struct SeasonalPresetCard: View {
                     Text(preset.season.rawValue)
                         .font(.obsidianFootnote)
                         .foregroundColor(isSelected ? .white : Color.textPrimary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.82)
+                        .multilineTextAlignment(.center)
 
                     Text(verbatim: "\(preset.year)")
                         .font(.obsidianSmall)
@@ -196,18 +197,20 @@ struct SeasonalPresetCard: View {
                         .font(.micro)
                         .foregroundColor(isSelected ? .white.opacity(0.9) : Color.textSecondary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.82)
 
                     Text(formattedTime(preset.calculatedDate))
                         .font(.micro)
                         .foregroundColor(isSelected ? .white.opacity(0.7) : Color.textSecondary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.82)
                 }
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity)
-            .frame(minHeight: 100, maxHeight: 120)
-            .clipped()
+            .frame(minHeight: 100)
+            .fixedSize(horizontal: false, vertical: true)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(
