@@ -340,6 +340,8 @@ struct MapView: View {
     @State private var selectedTeamRepUserId: String?
     @State private var selectedMapMode: MapWorkflowMode = .all
     @State private var visibleMapRegion: MKCoordinateRegion = LocationManager.shared.region
+    @State private var mapLeadRenderSnapshot = MapLeadRenderSnapshot.empty
+    @State private var mapLeadRenderTask: Task<Void, Never>?
 
     private var isRunningUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
@@ -361,51 +363,6 @@ struct MapView: View {
     )
     private var leads: FetchedResults<Lead>
 
-    private var interestedCount: Int {
-        leads.filter { $0.status == "interested" }.count
-    }
-
-    private var notHomeCount: Int {
-        leads.filter { $0.status == "not_home" }.count
-    }
-
-    private var notInterestedCount: Int {
-        leads.filter { $0.status == "not_interested" }.count
-    }
-
-    private var soldCount: Int {
-        leads.filter { $0.status == "converted" }.count
-    }
-
-    private var todayCount: Int {
-        let startOfDay = Calendar.current.startOfDay(for: Date())
-        return leads.filter { ($0.createdDate ?? .distantPast) >= startOfDay }.count
-    }
-
-    private var allLeads: [Lead] {
-        Array(leads)
-    }
-
-    private var visibleMapLeads: [Lead] {
-        MapLeadVisibilityPolicy.visibleLeads(
-            from: allLeads,
-            mode: selectedMapMode,
-            region: visibleMapRegion,
-            fallbackCenter: locationManager.region.center
-        )
-    }
-
-    private var matchingMapLeadCount: Int {
-        MapLeadVisibilityPolicy.matchingLeadCount(from: allLeads, mode: selectedMapMode)
-    }
-
-    private var nextBestLead: Lead? {
-        LeadWorkflowScorer.nextBestLead(
-            from: allLeads,
-            near: locationManager.location?.coordinate ?? locationManager.region.center
-        )
-    }
-
     private var workflowStatusText: String? {
         switch teamService.syncWriteState {
         case .pending, .failed:
@@ -419,7 +376,10 @@ struct MapView: View {
         }
 
         if selectedMapMode != .all {
-            return "\(matchingMapLeadCount) \(selectedMapMode.title.lowercased()) leads"
+            if !mapLeadRenderSnapshot.isReady {
+                return "Loading \(selectedMapMode.title.lowercased()) leads"
+            }
+            return "\(mapLeadRenderSnapshot.matchingLeadCount) \(selectedMapMode.title.lowercased()) leads"
         }
 
         return nil
@@ -462,6 +422,32 @@ struct MapView: View {
                 if !isRunningUITests {
                     prepareLaunchMapCentering()
                 }
+                scheduleMapLeadRenderUpdate(after: 0.12)
+            }
+            .onDisappear {
+                mapLeadRenderTask?.cancel()
+                mapLeadRenderTask = nil
+            }
+            .onChange(of: selectedMapMode) { _, _ in
+                scheduleMapLeadRenderUpdate(after: 0.03)
+            }
+            .onChange(of: visibleMapRegion.center.latitude) { _, _ in
+                scheduleMapLeadRenderUpdate(after: 0.18)
+            }
+            .onChange(of: visibleMapRegion.center.longitude) { _, _ in
+                scheduleMapLeadRenderUpdate(after: 0.18)
+            }
+            .onChange(of: visibleMapRegion.span.latitudeDelta) { _, _ in
+                scheduleMapLeadRenderUpdate(after: 0.18)
+            }
+            .onChange(of: visibleMapRegion.span.longitudeDelta) { _, _ in
+                scheduleMapLeadRenderUpdate(after: 0.18)
+            }
+            .onChange(of: leads.count) { _, _ in
+                scheduleMapLeadRenderUpdate(after: 0.08)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
+                scheduleMapLeadRenderUpdate(after: 0.12)
             }
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
@@ -682,6 +668,32 @@ struct MapView: View {
             }
     }
 
+    private func scheduleMapLeadRenderUpdate(after delay: TimeInterval) {
+        mapLeadRenderTask?.cancel()
+
+        let mode = selectedMapMode
+        let region = visibleMapRegion
+        let fallbackCenter = locationManager.region.center
+
+        mapLeadRenderTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled else { return }
+
+            let sourceLeads = Array(leads)
+            let snapshot = MapLeadRenderSnapshot.make(
+                from: sourceLeads,
+                mode: mode,
+                region: region,
+                fallbackCenter: fallbackCenter
+            )
+            guard !Task.isCancelled else { return }
+
+            mapLeadRenderSnapshot = snapshot
+        }
+    }
+
     private var mapView: some View {
         AdvancedMapView(
             region: $locationManager.region,
@@ -693,7 +705,7 @@ struct MapView: View {
             visibleRegion: $visibleMapRegion,
             launchCenteringResetToken: launchCenteringResetToken,
             launchLocationCenterRevision: locationManager.initialMapCenterRevision,
-            leads: visibleMapLeads,
+            leads: mapLeadRenderSnapshot.renderedLeads,
             searchPin: $searchPin,
             showsUserLocation: !isRunningUITests && LocationManager.isAuthorized(locationManager.authorizationStatus),
             shouldFollowUserLocationOnLaunch: !isRunningUITests
@@ -1234,10 +1246,14 @@ struct MapView: View {
     }
 
     private var mapSummaryText: String {
-        if selectedMapMode == .all {
-            return "\(NumberFormatter.localizedString(from: NSNumber(value: allLeads.count), number: .decimal)) leads"
+        guard mapLeadRenderSnapshot.isReady else {
+            return "Loading leads"
         }
-        return "\(NumberFormatter.localizedString(from: NSNumber(value: matchingMapLeadCount), number: .decimal)) \(selectedMapMode.title.lowercased())"
+
+        if selectedMapMode == .all {
+            return "\(NumberFormatter.localizedString(from: NSNumber(value: mapLeadRenderSnapshot.totalLeadCount), number: .decimal)) leads"
+        }
+        return "\(NumberFormatter.localizedString(from: NSNumber(value: mapLeadRenderSnapshot.matchingLeadCount), number: .decimal)) \(selectedMapMode.title.lowercased())"
     }
 
     private var toastOverlay: some View {
@@ -1498,7 +1514,9 @@ struct MapView: View {
     }
 
     private func focusNextBestLead(openDetail: Bool) {
-        guard let lead = nextBestLead else {
+        let sourceLeads = Array(leads)
+        let targetCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
+        guard let lead = LeadWorkflowScorer.nextBestLead(from: sourceLeads, near: targetCoordinate) else {
             toastMessage = "No open leads need attention"
             withAnimation {
                 showToast = true
@@ -1786,6 +1804,7 @@ struct MapView: View {
 
 	        do {
 	            try viewContext.save()
+                scheduleMapLeadRenderUpdate(after: 0.03)
 	            UserDataSyncManager.shared.syncWithServer()
 	        } catch {
 	            viewContext.rollback()
@@ -3128,8 +3147,43 @@ private enum LeadWorkflowScorer {
     }
 }
 
+private struct MapLeadRenderSnapshot {
+    let renderedLeads: [Lead]
+    let totalLeadCount: Int
+    let matchingLeadCount: Int
+    let isReady: Bool
+
+    static let empty = MapLeadRenderSnapshot(
+        renderedLeads: [],
+        totalLeadCount: 0,
+        matchingLeadCount: 0,
+        isReady: false
+    )
+
+    static func make(
+        from leads: [Lead],
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        now: Date = Date()
+    ) -> MapLeadRenderSnapshot {
+        MapLeadRenderSnapshot(
+            renderedLeads: MapLeadVisibilityPolicy.visibleLeads(
+                from: leads,
+                mode: mode,
+                region: region,
+                fallbackCenter: fallbackCenter,
+                now: now
+            ),
+            totalLeadCount: leads.count,
+            matchingLeadCount: MapLeadVisibilityPolicy.matchingLeadCount(from: leads, mode: mode, now: now),
+            isReady: true
+        )
+    }
+}
+
 enum MapLeadVisibilityPolicy {
-    static let defaultRenderedLeadBudget = 900
+    static let defaultRenderedLeadBudget = 450
     private static let viewportPaddingMultiplier = 1.8
 
     static func visibleLeads(
