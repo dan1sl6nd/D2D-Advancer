@@ -1016,7 +1016,7 @@ struct BenefitRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .foregroundColor(.green)
+                .foregroundColor(Color.statusInterested)
                 .font(.obsidianSubheadline)
 
             VStack(alignment: .leading, spacing: 2) {

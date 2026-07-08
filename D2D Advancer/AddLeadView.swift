@@ -132,7 +132,7 @@ struct AddLeadView: View {
                             .foregroundColor(.electricViolet)
                         Text("Previous draft restored")
                             .font(.obsidianCaption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.textSecondary)
                         Spacer()
                         Button("Clear") {
                             name = ""; phone = ""; email = ""; notes = ""; priceText = ""; price = 0
