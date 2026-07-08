@@ -417,6 +417,7 @@ struct OnboardingView: View {
     @StateObject private var locationManager = OnboardingLocationManager()
     @Environment(\.dismiss) private var dismiss
     @Binding var isPresented: Bool
+    private let heroCardHeight: CGFloat = 132
 
     private let gridColumns = [
         GridItem(.flexible(), spacing: 16),
@@ -549,11 +550,11 @@ struct OnboardingView: View {
     }
 
     private var welcomeContent: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 18) {
             ZStack {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(Color.obsidianSurface)
-                    .frame(height: 180)
+                    .frame(height: heroCardHeight)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
                             .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
@@ -588,11 +589,11 @@ struct OnboardingView: View {
     }
 
     private var locationPermissionContent: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 18) {
             ZStack {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(Color.obsidianSurface)
-                    .frame(height: 180)
+                    .frame(height: heroCardHeight)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
                             .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
@@ -632,11 +633,11 @@ struct OnboardingView: View {
     }
 
     private var notificationPermissionContent: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 18) {
             ZStack {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(Color.obsidianSurface)
-                    .frame(height: 180)
+                    .frame(height: heroCardHeight)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
                             .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
@@ -1032,6 +1033,7 @@ private struct FeatureHighlightRow: View {
                 Text(subtitle)
                     .font(.obsidianFootnote)
                     .foregroundColor(.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()

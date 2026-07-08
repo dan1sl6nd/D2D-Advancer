@@ -1453,6 +1453,17 @@ final class D2D_AdvancerUITests: XCTestCase {
 
     private func chooseRequiredOnboardingPreferences(_ app: XCUIApplication) {
         waitForText(app, "Welcome to D2D Advancer")
+        let lastWelcomeSubtitle = app.staticTexts["Schedule reminders and send proven scripts in one tap."]
+        let continueButton = app.buttons["onboardingContinueButton"]
+        XCTAssertTrue(lastWelcomeSubtitle.waitForExistence(timeout: 8), "Welcome onboarding should show the final benefit subtitle")
+        XCTAssertTrue(continueButton.waitForExistence(timeout: 8), "Welcome onboarding should show the continue button")
+        XCTAssertTrue(isFinite(lastWelcomeSubtitle.frame), "Welcome final benefit subtitle should have a valid frame")
+        XCTAssertTrue(isFinite(continueButton.frame), "Welcome continue button should have a valid frame")
+        XCTAssertLessThanOrEqual(
+            lastWelcomeSubtitle.frame.maxY,
+            continueButton.frame.minY - 12,
+            "Welcome onboarding final benefit should not be clipped or crowded by the bottom action bar"
+        )
         tapButton(app, "onboardingContinueButton")
 
         waitForText(app, "What's your main focus?")
