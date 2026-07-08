@@ -363,6 +363,7 @@ struct MapView: View {
     @State private var mapLeadPinCache = MapLeadPinCache.empty
     @State private var mapLeadRenderTask: Task<Void, Never>?
     @State private var mapLeadExpansionTask: Task<Void, Never>?
+    @State private var mapLeadCachePrewarmTask: Task<Void, Never>?
 
     private var isRunningUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
@@ -438,7 +439,10 @@ struct MapView: View {
             .navigationBarHidden(true)
             .ignoresSafeArea(.all, edges: .top)
             .onAppear {
-                guard isVisible else { return }
+                guard isVisible else {
+                    scheduleHiddenMapLeadCachePrewarm()
+                    return
+                }
                 if !isRunningUITests {
                     prepareLaunchMapCentering()
                 }
@@ -446,6 +450,7 @@ struct MapView: View {
             }
             .onDisappear {
                 cancelMapLeadRenderTasks()
+                cancelMapLeadCachePrewarm()
             }
             .onChange(of: isVisible) { _, isVisible in
                 if isVisible {
@@ -455,6 +460,7 @@ struct MapView: View {
                     scheduleOpeningMapLeadRenderUpdate()
                 } else {
                     cancelMapLeadRenderTasks()
+                    scheduleHiddenMapLeadCachePrewarm()
                 }
             }
             .onChange(of: selectedMapMode) { _, _ in
@@ -478,9 +484,13 @@ struct MapView: View {
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
-                guard isVisible else { return }
                 mapLeadPinCache = .empty
-                scheduleInteractiveMapLeadRenderUpdate(after: 0.12)
+                cancelMapLeadCachePrewarm()
+                if isVisible {
+                    scheduleInteractiveMapLeadRenderUpdate(after: 0.12)
+                } else {
+                    scheduleHiddenMapLeadCachePrewarm(after: 0.45)
+                }
             }
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
@@ -689,12 +699,45 @@ struct MapView: View {
     }
 
     private func scheduleOpeningMapLeadRenderUpdate() {
+        let hasWarmCache = mapLeadPinCache.isReady
         scheduleMapLeadRenderUpdate(
-            after: 0.12,
+            after: hasWarmCache ? 0.02 : 0.10,
             maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
-            expandAfter: 1.45,
+            expandAfter: hasWarmCache ? 1.9 : 2.4,
             usePreviewIfCacheEmpty: true
         )
+    }
+
+    private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 0.30) {
+        guard !isVisible else { return }
+        guard !mapLeadPinCache.isReady else { return }
+        guard mapLeadCachePrewarmTask == nil else { return }
+        guard let persistentStoreCoordinator = viewContext.persistentStoreCoordinator else { return }
+
+        mapLeadCachePrewarmTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled else {
+                mapLeadCachePrewarmTask = nil
+                return
+            }
+
+            let cache = await MapLeadPinCache.load(from: persistentStoreCoordinator)
+            guard !Task.isCancelled else {
+                mapLeadCachePrewarmTask = nil
+                return
+            }
+
+            if cache.isReady {
+                mapLeadPinCache = cache
+                if isVisible {
+                    scheduleInteractiveMapLeadRenderUpdate(after: 0.02)
+                }
+            }
+
+            mapLeadCachePrewarmTask = nil
+        }
     }
 
     private func scheduleInteractiveMapLeadRenderUpdate(after delay: TimeInterval) {
@@ -896,6 +939,11 @@ struct MapView: View {
         mapLeadRenderTask = nil
         mapLeadExpansionTask?.cancel()
         mapLeadExpansionTask = nil
+    }
+
+    private func cancelMapLeadCachePrewarm() {
+        mapLeadCachePrewarmTask?.cancel()
+        mapLeadCachePrewarmTask = nil
     }
     private var overlayControls: some View {
         GeometryReader { geometry in

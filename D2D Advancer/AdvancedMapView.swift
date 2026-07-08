@@ -623,10 +623,14 @@ struct AdvancedMapView: UIViewRepresentable {
     
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: AdvancedMapView
+        private static let annotationBatchSize = 72
+        private static let annotationBatchDelay: TimeInterval = 0.035
         private var currentAnnotations: [LeadMapAnnotation] = []
         private var currentSearchPinAnnotation: MKPointAnnotation?
         private var currentAnnotationSignature: [LeadAnnotationSignature] = []
         private var currentLeadClusteringMode: LeadClusterDisplayPolicy.Mode?
+        private var annotationUpdateGeneration = 0
+        private var pendingAnnotationWorkItems: [DispatchWorkItem] = []
         var isUserInteracting = false
         var userHasInteracted = false
         var isProgrammaticChange = false
@@ -650,6 +654,7 @@ struct AdvancedMapView: UIViewRepresentable {
         deinit {
             updateTimer?.invalidate()
             startupCenterVerificationWorkItem?.cancel()
+            cancelPendingAnnotationUpdates()
         }
 
         func resetStartupCenterVerification() {
@@ -797,6 +802,10 @@ struct AdvancedMapView: UIViewRepresentable {
             let newSignature = leads.map { LeadAnnotationSignature(pin: $0) }
             guard newSignature != currentAnnotationSignature else { return }
 
+            annotationUpdateGeneration += 1
+            let generation = annotationUpdateGeneration
+            cancelPendingAnnotationUpdates()
+
             let previousSignatureByAnnotation = Dictionary(
                 uniqueKeysWithValues: zip(currentAnnotations, currentAnnotationSignature)
                     .map { annotation, signature in (ObjectIdentifier(annotation), signature) }
@@ -826,7 +835,7 @@ struct AdvancedMapView: UIViewRepresentable {
                 mapView.removeAnnotations(annotationsToRemove)
             }
             if !annotationsToAdd.isEmpty {
-                mapView.addAnnotations(annotationsToAdd)
+                addAnnotationsInBatches(annotationsToAdd, to: mapView, generation: generation)
             }
             currentAnnotations = newAnnotations
             currentAnnotationSignature = newSignature
@@ -839,11 +848,63 @@ struct AdvancedMapView: UIViewRepresentable {
             let nextMode = LeadClusterDisplayPolicy.mode(for: mapView.region)
             guard currentLeadClusteringMode != nextMode else { return }
 
+            annotationUpdateGeneration += 1
+            let generation = annotationUpdateGeneration
+            cancelPendingAnnotationUpdates()
+
             currentLeadClusteringMode = nextMode
             guard !currentAnnotations.isEmpty else { return }
 
             mapView.removeAnnotations(currentAnnotations)
-            mapView.addAnnotations(currentAnnotations)
+            addAnnotationsInBatches(currentAnnotations, to: mapView, generation: generation)
+        }
+
+        private func cancelPendingAnnotationUpdates() {
+            pendingAnnotationWorkItems.forEach { $0.cancel() }
+            pendingAnnotationWorkItems.removeAll()
+        }
+
+        private func addAnnotationsInBatches(
+            _ annotations: [LeadMapAnnotation],
+            to mapView: MKMapView,
+            generation: Int
+        ) {
+            guard !annotations.isEmpty else { return }
+
+            if annotations.count <= Self.annotationBatchSize {
+                mapView.addAnnotations(annotations)
+                return
+            }
+
+            var batchIndex = 0
+            var startIndex = annotations.startIndex
+            while startIndex < annotations.endIndex {
+                let endIndex = annotations.index(
+                    startIndex,
+                    offsetBy: Self.annotationBatchSize,
+                    limitedBy: annotations.endIndex
+                ) ?? annotations.endIndex
+                let batch = Array(annotations[startIndex..<endIndex])
+
+                if batchIndex == 0 {
+                    mapView.addAnnotations(batch)
+                } else {
+                    let workItem = DispatchWorkItem { [weak self, weak mapView] in
+                        guard let self,
+                              let mapView,
+                              self.annotationUpdateGeneration == generation else { return }
+                        mapView.addAnnotations(batch)
+                    }
+                    pendingAnnotationWorkItems.append(workItem)
+                    DispatchQueue.main.asyncAfter(
+                        deadline: .now() + (Double(batchIndex) * Self.annotationBatchDelay),
+                        execute: workItem
+                    )
+                }
+
+                batchIndex += 1
+                startIndex = endIndex
+            }
         }
 
         func updateSearchPin(mapView: MKMapView, searchPin: SearchPin?) {
