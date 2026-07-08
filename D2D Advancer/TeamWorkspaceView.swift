@@ -163,6 +163,8 @@ struct TeamWorkspaceView: View {
                 Button("Done") {
                     focusedInput = nil
                 }
+                .font(.obsidianFootnote.weight(.semibold))
+                .foregroundColor(Color.electricViolet)
                 .accessibilityIdentifier("teamKeyboardDoneButton")
             }
         }
@@ -444,7 +446,12 @@ struct TeamWorkspaceView: View {
                         self.selectedRepUserId = nil
                     }
                     .font(.micro)
+                    .fontWeight(.semibold)
                     .foregroundColor(Color.electricViolet)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.electricViolet.opacity(0.12))
+                    .clipShape(Capsule())
                     .buttonStyle(PlainButtonStyle())
                     Spacer()
                 }

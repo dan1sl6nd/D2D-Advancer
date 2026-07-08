@@ -42,7 +42,7 @@ struct AuthenticationView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 24)
-                .padding(.bottom, 32)
+                .padding(.bottom, 24)
             }
         }
         .presentationBackground(screenBackground)
@@ -403,7 +403,7 @@ struct ForgotPasswordSheet: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 24)
-                .padding(.bottom, 32)
+                .padding(.bottom, 24)
             }
         }
         .presentationBackground(screenBackground)
