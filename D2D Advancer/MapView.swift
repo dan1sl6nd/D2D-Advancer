@@ -342,6 +342,7 @@ struct MapView: View {
     @State private var visibleMapRegion: MKCoordinateRegion = LocationManager.shared.region
     @State private var mapLeadRenderSnapshot = MapLeadRenderSnapshot.empty
     @State private var mapLeadRenderTask: Task<Void, Never>?
+    @State private var mapLeadExpansionTask: Task<Void, Never>?
 
     private var isRunningUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
@@ -422,32 +423,34 @@ struct MapView: View {
                 if !isRunningUITests {
                     prepareLaunchMapCentering()
                 }
-                scheduleMapLeadRenderUpdate(after: 0.12)
+                scheduleOpeningMapLeadRenderUpdate()
             }
             .onDisappear {
                 mapLeadRenderTask?.cancel()
                 mapLeadRenderTask = nil
+                mapLeadExpansionTask?.cancel()
+                mapLeadExpansionTask = nil
             }
             .onChange(of: selectedMapMode) { _, _ in
-                scheduleMapLeadRenderUpdate(after: 0.03)
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.03)
             }
             .onChange(of: visibleMapRegion.center.latitude) { _, _ in
-                scheduleMapLeadRenderUpdate(after: 0.18)
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: visibleMapRegion.center.longitude) { _, _ in
-                scheduleMapLeadRenderUpdate(after: 0.18)
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: visibleMapRegion.span.latitudeDelta) { _, _ in
-                scheduleMapLeadRenderUpdate(after: 0.18)
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: visibleMapRegion.span.longitudeDelta) { _, _ in
-                scheduleMapLeadRenderUpdate(after: 0.18)
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: leads.count) { _, _ in
-                scheduleMapLeadRenderUpdate(after: 0.08)
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.08)
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
-                scheduleMapLeadRenderUpdate(after: 0.12)
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.12)
             }
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
@@ -653,23 +656,32 @@ struct MapView: View {
                     )
                 }
             }
-            .task {
-                await loadTeamWorkspaceUntilAvailable()
-            }
-            .onChange(of: userAccountManager.isLoggedIn) { _, _ in
-                Task {
-                    await loadTeamWorkspaceUntilAvailable()
-                }
-            }
-            .onChange(of: firebaseService.currentUser?.uid) { _, _ in
-                Task {
-                    await loadTeamWorkspaceUntilAvailable()
-                }
-            }
     }
 
-    private func scheduleMapLeadRenderUpdate(after delay: TimeInterval) {
+    private func scheduleOpeningMapLeadRenderUpdate() {
+        scheduleMapLeadRenderUpdate(
+            after: 0.04,
+            maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
+            expandAfter: 0.65
+        )
+    }
+
+    private func scheduleInteractiveMapLeadRenderUpdate(after delay: TimeInterval) {
+        scheduleMapLeadRenderUpdate(
+            after: delay,
+            maxRenderedLeads: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
+            expandAfter: 0.55
+        )
+    }
+
+    private func scheduleMapLeadRenderUpdate(
+        after delay: TimeInterval,
+        maxRenderedLeads: Int,
+        expandAfter expansionDelay: TimeInterval?
+    ) {
         mapLeadRenderTask?.cancel()
+        mapLeadExpansionTask?.cancel()
+        mapLeadExpansionTask = nil
 
         let mode = selectedMapMode
         let region = visibleMapRegion
@@ -686,9 +698,46 @@ struct MapView: View {
                 from: sourceLeads,
                 mode: mode,
                 region: region,
-                fallbackCenter: fallbackCenter
+                fallbackCenter: fallbackCenter,
+                maxRenderedLeads: maxRenderedLeads
             )
             guard !Task.isCancelled else { return }
+
+            mapLeadRenderSnapshot = snapshot
+
+            if let expansionDelay {
+                scheduleExpandedMapLeadRenderUpdate(
+                    after: expansionDelay,
+                    mode: mode,
+                    region: region,
+                    fallbackCenter: fallbackCenter
+                )
+            }
+        }
+    }
+
+    private func scheduleExpandedMapLeadRenderUpdate(
+        after delay: TimeInterval,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D
+    ) {
+        mapLeadExpansionTask?.cancel()
+        mapLeadExpansionTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled, selectedMapMode == mode else { return }
+
+            let sourceLeads = Array(leads)
+            let snapshot = MapLeadRenderSnapshot.make(
+                from: sourceLeads,
+                mode: mode,
+                region: region,
+                fallbackCenter: fallbackCenter,
+                maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+            )
+            guard !Task.isCancelled, selectedMapMode == mode else { return }
 
             mapLeadRenderSnapshot = snapshot
         }
@@ -1803,9 +1852,9 @@ struct MapView: View {
         lead.applyLeadStatus(status, autoSave: false)
 
 	        do {
-	            try viewContext.save()
-                scheduleMapLeadRenderUpdate(after: 0.03)
-	            UserDataSyncManager.shared.syncWithServer()
+            try viewContext.save()
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.03)
+            UserDataSyncManager.shared.syncWithServer()
 	        } catch {
 	            viewContext.rollback()
 	            ErrorHandler.shared.handle(error, context: "Update Map Lead Status")
@@ -3165,6 +3214,7 @@ private struct MapLeadRenderSnapshot {
         mode: MapWorkflowMode,
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
         now: Date = Date()
     ) -> MapLeadRenderSnapshot {
         MapLeadRenderSnapshot(
@@ -3173,6 +3223,7 @@ private struct MapLeadRenderSnapshot {
                 mode: mode,
                 region: region,
                 fallbackCenter: fallbackCenter,
+                maxRenderedLeads: maxRenderedLeads,
                 now: now
             ),
             totalLeadCount: leads.count,
@@ -3183,6 +3234,8 @@ private struct MapLeadRenderSnapshot {
 }
 
 enum MapLeadVisibilityPolicy {
+    static let openingRenderedLeadBudget = 160
+    static let interactiveRenderedLeadBudget = 260
     static let defaultRenderedLeadBudget = 450
     private static let viewportPaddingMultiplier = 1.8
 

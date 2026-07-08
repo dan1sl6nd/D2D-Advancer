@@ -70,7 +70,6 @@ struct MainTabView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .animation(.easeInOut(duration: 0.2), value: router.selectedTab)
 
                     // Obsidian tab bar
                     HStack(spacing: 0) {

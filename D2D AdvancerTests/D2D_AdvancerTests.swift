@@ -2431,6 +2431,56 @@ struct D2D_AdvancerTests {
     }
 
     @MainActor
+    @Test func mapLeadVisibilityPolicyOpeningBudgetKeepsFirstPaintSmallAndPrioritized() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 43.55, longitude: -79.70),
+            span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+        )
+
+        var leads: [Lead] = []
+        for index in 0..<420 {
+            let lead = Lead.create(in: context)
+            lead.name = "Open \(index)"
+            lead.status = Lead.Status.notContacted.rawValue
+            lead.latitude = 43.55 + (Double(index % 30) * 0.0002)
+            lead.longitude = -79.70 - (Double(index % 30) * 0.0002)
+            lead.updatedDate = now.addingTimeInterval(TimeInterval(-index))
+            leads.append(lead)
+        }
+
+        let soldLead = Lead.create(in: context)
+        soldLead.name = "Sold"
+        soldLead.status = Lead.Status.converted.rawValue
+        soldLead.latitude = 43.5501
+        soldLead.longitude = -79.7001
+        soldLead.updatedDate = now.addingTimeInterval(-500)
+        leads.append(soldLead)
+
+        let interestedLead = Lead.create(in: context)
+        interestedLead.name = "Interested"
+        interestedLead.status = Lead.Status.interested.rawValue
+        interestedLead.latitude = 43.5502
+        interestedLead.longitude = -79.7002
+        interestedLead.updatedDate = now.addingTimeInterval(-400)
+        leads.append(interestedLead)
+
+        let rendered = MapLeadVisibilityPolicy.visibleLeads(
+            from: leads,
+            mode: .all,
+            region: region,
+            fallbackCenter: region.center,
+            maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
+            now: now
+        )
+
+        #expect(rendered.count == MapLeadVisibilityPolicy.openingRenderedLeadBudget)
+        #expect(rendered.prefix(2).map { $0.name ?? "" } == ["Sold", "Interested"])
+    }
+
+    @MainActor
     @Test func mapLeadVisibilityPolicySortsSoldThenInterestedBeforeOtherLeads() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
