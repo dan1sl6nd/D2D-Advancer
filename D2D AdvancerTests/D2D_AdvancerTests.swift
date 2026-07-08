@@ -1284,6 +1284,29 @@ struct D2D_AdvancerTests {
         )
     }
 
+    @Test func advancedMapViewPublishesVisibleRegionOnlyWhenRegionChanges() async throws {
+        let previousRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 43.559700, longitude: -79.707200),
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        )
+        let sameRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 43.559701, longitude: -79.707201),
+            span: MKCoordinateSpan(latitudeDelta: 0.01005, longitudeDelta: 0.01005)
+        )
+        let movedRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 43.570000, longitude: -79.710000),
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        )
+        let zoomedRegion = MKCoordinateRegion(
+            center: previousRegion.center,
+            span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+        )
+
+        #expect(!AdvancedMapView.shouldPublishVisibleRegion(sameRegion, previousRegion: previousRegion))
+        #expect(AdvancedMapView.shouldPublishVisibleRegion(movedRegion, previousRegion: previousRegion))
+        #expect(AdvancedMapView.shouldPublishVisibleRegion(zoomedRegion, previousRegion: previousRegion))
+    }
+
     @Test func launchMapCenteringUsesCenteredUserLocationMargins() async throws {
         let launchMargins = AdvancedMapView.userLocationViewportPadding(
             forHeight: 852,
@@ -2327,7 +2350,7 @@ struct D2D_AdvancerTests {
     }
 
     @MainActor
-    @Test func mapLeadVisibilityPolicyDoesNotCapDisplayedLeads() throws {
+    @Test func mapLeadVisibilityPolicyKeepsUnboundedFilteringAvailable() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
         let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -2355,6 +2378,56 @@ struct D2D_AdvancerTests {
 
         #expect(MapLeadVisibilityPolicy.visibleLeads(from: leads, mode: .all, now: now).count == leads.count)
         #expect(MapLeadVisibilityPolicy.visibleLeads(from: leads, mode: .next, now: now).count == 1_750)
+    }
+
+    @MainActor
+    @Test func mapLeadVisibilityPolicyBoundsRenderedViewportAndKeepsPriorityOrder() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 43.55, longitude: -79.70),
+            span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+        )
+
+        var leads: [Lead] = []
+        for index in 0..<120 {
+            let lead = Lead.create(in: context)
+            lead.name = "Open \(index)"
+            lead.status = Lead.Status.notContacted.rawValue
+            lead.latitude = 43.55 + (Double(index % 20) * 0.0002)
+            lead.longitude = -79.70 - (Double(index % 20) * 0.0002)
+            lead.updatedDate = now.addingTimeInterval(TimeInterval(-index))
+            leads.append(lead)
+        }
+
+        let soldLead = Lead.create(in: context)
+        soldLead.name = "Sold"
+        soldLead.status = Lead.Status.converted.rawValue
+        soldLead.latitude = 43.5501
+        soldLead.longitude = -79.7001
+        soldLead.updatedDate = now.addingTimeInterval(-500)
+        leads.append(soldLead)
+
+        let interestedLead = Lead.create(in: context)
+        interestedLead.name = "Interested"
+        interestedLead.status = Lead.Status.interested.rawValue
+        interestedLead.latitude = 43.5502
+        interestedLead.longitude = -79.7002
+        interestedLead.updatedDate = now.addingTimeInterval(-400)
+        leads.append(interestedLead)
+
+        let rendered = MapLeadVisibilityPolicy.visibleLeads(
+            from: leads,
+            mode: .all,
+            region: region,
+            fallbackCenter: region.center,
+            maxRenderedLeads: 40,
+            now: now
+        )
+
+        #expect(rendered.count == 40)
+        #expect(rendered.prefix(2).map { $0.name ?? "" } == ["Sold", "Interested"])
     }
 
     @MainActor
@@ -3181,6 +3254,7 @@ struct D2D_AdvancerTests {
             pitch: .constant(0),
             animateNextUpdate: .constant(false),
             is3DModeEnabled: .constant(false),
+            visibleRegion: .constant(region),
             launchCenteringResetToken: 0,
             launchLocationCenterRevision: 0,
             leads: [],

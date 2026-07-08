@@ -339,6 +339,7 @@ struct MapView: View {
     @State private var showingTeamFieldMap = false
     @State private var selectedTeamRepUserId: String?
     @State private var selectedMapMode: MapWorkflowMode = .all
+    @State private var visibleMapRegion: MKCoordinateRegion = LocationManager.shared.region
 
     private var isRunningUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
@@ -388,8 +389,14 @@ struct MapView: View {
     private var visibleMapLeads: [Lead] {
         MapLeadVisibilityPolicy.visibleLeads(
             from: allLeads,
-            mode: selectedMapMode
+            mode: selectedMapMode,
+            region: visibleMapRegion,
+            fallbackCenter: locationManager.region.center
         )
+    }
+
+    private var matchingMapLeadCount: Int {
+        MapLeadVisibilityPolicy.matchingLeadCount(from: allLeads, mode: selectedMapMode)
     }
 
     private var nextBestLead: Lead? {
@@ -412,7 +419,7 @@ struct MapView: View {
         }
 
         if selectedMapMode != .all {
-            return "\(visibleMapLeads.count) \(selectedMapMode.title.lowercased()) leads"
+            return "\(matchingMapLeadCount) \(selectedMapMode.title.lowercased()) leads"
         }
 
         return nil
@@ -683,6 +690,7 @@ struct MapView: View {
             pitch: $mapPitch,
             animateNextUpdate: $triggerMapAnimation,
             is3DModeEnabled: $is3DModeEnabled,
+            visibleRegion: $visibleMapRegion,
             launchCenteringResetToken: launchCenteringResetToken,
             launchLocationCenterRevision: locationManager.initialMapCenterRevision,
             leads: visibleMapLeads,
@@ -1229,7 +1237,7 @@ struct MapView: View {
         if selectedMapMode == .all {
             return "\(NumberFormatter.localizedString(from: NSNumber(value: allLeads.count), number: .decimal)) leads"
         }
-        return "\(NumberFormatter.localizedString(from: NSNumber(value: visibleMapLeads.count), number: .decimal)) \(selectedMapMode.title.lowercased())"
+        return "\(NumberFormatter.localizedString(from: NSNumber(value: matchingMapLeadCount), number: .decimal)) \(selectedMapMode.title.lowercased())"
     }
 
     private var toastOverlay: some View {
@@ -3121,6 +3129,9 @@ private enum LeadWorkflowScorer {
 }
 
 enum MapLeadVisibilityPolicy {
+    static let defaultRenderedLeadBudget = 900
+    private static let viewportPaddingMultiplier = 1.8
+
     static func visibleLeads(
         from leads: [Lead],
         mode: MapWorkflowMode,
@@ -3130,6 +3141,109 @@ enum MapLeadVisibilityPolicy {
             leads.filter { mode.includes($0, now: now) },
             now: now
         )
+    }
+
+    static func visibleLeads(
+        from leads: [Lead],
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int = defaultRenderedLeadBudget,
+        now: Date = Date()
+    ) -> [Lead] {
+        let matchingLeads = leads.filter { mode.includes($0, now: now) && hasUsableCoordinate($0) }
+        guard matchingLeads.count > maxRenderedLeads else {
+            return LeadClusterSummary.sortedLeads(matchingLeads, now: now)
+        }
+
+        let sortedLeads = LeadClusterSummary.sortedLeads(matchingLeads, now: now)
+        guard maxRenderedLeads > 0 else { return [] }
+
+        let renderRegion = normalizedRegion(region, fallbackCenter: fallbackCenter)
+        let viewportLeads = sortedLeads.filter { lead in
+            contains(lead, in: renderRegion)
+        }
+
+        if viewportLeads.count >= maxRenderedLeads {
+            return Array(viewportLeads.prefix(maxRenderedLeads))
+        }
+
+        var selectedLeads = viewportLeads
+        var selectedObjectIDs = Set(viewportLeads.map(\.objectID))
+        let remainingBudget = maxRenderedLeads - selectedLeads.count
+
+        if remainingBudget > 0 {
+            let priorityOutsideViewport = sortedLeads.lazy.filter { lead in
+                !selectedObjectIDs.contains(lead.objectID) && isMapPriorityLead(lead, now: now)
+            }
+            for lead in priorityOutsideViewport.prefix(remainingBudget) {
+                selectedLeads.append(lead)
+                selectedObjectIDs.insert(lead.objectID)
+            }
+        }
+
+        return selectedLeads
+    }
+
+    static func matchingLeadCount(
+        from leads: [Lead],
+        mode: MapWorkflowMode,
+        now: Date = Date()
+    ) -> Int {
+        leads.reduce(into: 0) { count, lead in
+            if mode.includes(lead, now: now) {
+                count += 1
+            }
+        }
+    }
+
+    private static func isMapPriorityLead(_ lead: Lead, now: Date) -> Bool {
+        lead.leadStatus == .converted
+            || lead.leadStatus == .interested
+            || LeadClusterSummary.isFollowUpDue(lead, now: now)
+            || lead.priority > 0
+    }
+
+    private static func hasUsableCoordinate(_ lead: Lead) -> Bool {
+        CLLocationCoordinate2DIsValid(lead.coordinate)
+            && (-90...90).contains(lead.latitude)
+            && (-180...180).contains(lead.longitude)
+            && (lead.latitude != 0 || lead.longitude != 0)
+    }
+
+    private static func normalizedRegion(
+        _ region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D
+    ) -> MKCoordinateRegion {
+        let center = CLLocationCoordinate2DIsValid(region.center) ? region.center : fallbackCenter
+        let latitudeDelta = normalizedDelta(region.span.latitudeDelta)
+        let longitudeDelta = normalizedDelta(region.span.longitudeDelta)
+        return MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(
+                latitudeDelta: latitudeDelta * viewportPaddingMultiplier,
+                longitudeDelta: longitudeDelta * viewportPaddingMultiplier
+            )
+        )
+    }
+
+    private static func normalizedDelta(_ delta: CLLocationDegrees) -> CLLocationDegrees {
+        guard delta.isFinite, delta > 0 else { return 0.03 }
+        return min(max(delta, 0.003), 180)
+    }
+
+    private static func contains(_ lead: Lead, in region: MKCoordinateRegion) -> Bool {
+        let latitudeHalfSpan = region.span.latitudeDelta / 2
+        let longitudeHalfSpan = region.span.longitudeDelta / 2
+        return abs(lead.latitude - region.center.latitude) <= latitudeHalfSpan
+            && abs(longitudeDistance(lead.longitude, region.center.longitude)) <= longitudeHalfSpan
+    }
+
+    private static func longitudeDistance(_ lhs: CLLocationDegrees, _ rhs: CLLocationDegrees) -> CLLocationDegrees {
+        let raw = lhs - rhs
+        if raw > 180 { return raw - 360 }
+        if raw < -180 { return raw + 360 }
+        return raw
     }
 }
 

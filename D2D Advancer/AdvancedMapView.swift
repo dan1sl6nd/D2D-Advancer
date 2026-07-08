@@ -10,6 +10,7 @@ struct AdvancedMapView: UIViewRepresentable {
     @Binding var pitch: Double
     @Binding var animateNextUpdate: Bool
     @Binding var is3DModeEnabled: Bool
+    @Binding var visibleRegion: MKCoordinateRegion
     let launchCenteringResetToken: Int
     let launchLocationCenterRevision: Int
 
@@ -578,6 +579,14 @@ struct AdvancedMapView: UIViewRepresentable {
         }
 
         return true
+    }
+
+    nonisolated static func shouldPublishVisibleRegion(
+        _ currentRegion: MKCoordinateRegion,
+        previousRegion: MKCoordinateRegion
+    ) -> Bool {
+        isMeaningfullyDifferent(currentRegion.center, from: previousRegion.center)
+            || isSpanMeaningfullyDifferent(currentRegion.span, from: previousRegion.span)
     }
 
     private static func renderedMapType(for mapType: MKMapType, is3DModeEnabled: Bool) -> MKMapType {
@@ -1199,6 +1208,12 @@ struct AdvancedMapView: UIViewRepresentable {
                     }
                     if abs(currentCamera.pitch - self.parent.pitch) > 1.0 {
                         self.parent.pitch = currentCamera.pitch
+                    }
+                    if AdvancedMapView.shouldPublishVisibleRegion(
+                        currentRegion,
+                        previousRegion: self.parent.visibleRegion
+                    ) {
+                        self.parent.visibleRegion = currentRegion
                     }
 
                     // Only sync center, NEVER sync span — prevents zoom feedback loop.

@@ -627,7 +627,7 @@ struct LeadsListView: View {
             }
             hasMoreData = hasMore
             isLoadingMore = false
-            if !reset { currentPage += 1 }
+            currentPage = reset ? 1 : currentPage + 1
             print("📊 Fetched \(fetchedLeads.count) leads for page \(pageToLoad)")
         } catch {
             print("❌ Failed to fetch leads: \(error)")
