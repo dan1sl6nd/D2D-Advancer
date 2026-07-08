@@ -1074,10 +1074,10 @@ struct SurfaceCardModifier: ViewModifier {
         content
             .padding(12)
             .background(Color.obsidianSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.obsidianBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
             )
     }
 }
@@ -1088,10 +1088,10 @@ struct ElevatedCardModifier: ViewModifier {
         content
             .padding(12)
             .background(Color.obsidianElevated)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.obsidianBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
             )
             .shadow(color: glowColor.opacity(0.2), radius: 16, x: 0, y: 4)
     }
@@ -1108,7 +1108,7 @@ struct AccentCardModifier: ViewModifier {
                     endPoint: .bottomTrailing
                 )
             )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -1119,9 +1119,9 @@ struct ObsidianChipModifier: ViewModifier {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(Color.obsidianSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(Capsule())
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                Capsule()
                     .stroke(Color.obsidianBorder, lineWidth: 1)
             )
     }
@@ -1139,7 +1139,7 @@ struct ObsidianGradientButtonModifier: ViewModifier {
                     endPoint: .bottomTrailing
                 )
             )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: .electricViolet.opacity(0.25), radius: 8)
     }
 }
@@ -1399,7 +1399,7 @@ struct ObsidianPrimaryButtonStyle: ButtonStyle {
                     endPoint: .bottomTrailing
                 )
             )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: .electricViolet.opacity(0.25), radius: 8, x: 0, y: 4)
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
@@ -1415,9 +1415,9 @@ struct ObsidianSecondaryButtonStyle: ButtonStyle {
             .padding(.vertical, 12)
             .frame(minHeight: 44)
             .background(Color.obsidianElevated)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.obsidianBorder, lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
@@ -1444,9 +1444,9 @@ struct ObsidianDangerButtonStyle: ButtonStyle {
             .padding(.vertical, 12)
             .frame(minHeight: 44)
             .background(Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.statusNotInterested.opacity(0.3), lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
@@ -1493,11 +1493,11 @@ struct ObsidianTextFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
             .padding(12)
-            .background(Color.obsidianSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.obsidianBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
             )
             .foregroundColor(.textPrimary)
     }

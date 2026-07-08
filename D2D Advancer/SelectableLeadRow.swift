@@ -90,14 +90,21 @@ struct SelectableLeadRow: View {
                     }
                 }
             }
-            .surfaceCard()
+            .padding(16)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+            )
+            .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 3)
             .overlay(
                 Group {
                     if isSelected {
-                        RoundedRectangle(cornerRadius: 16)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .fill(Color.electricViolet.opacity(0.1))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 16)
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
                                     .stroke(Color.electricViolet, lineWidth: 2)
                             )
                             .allowsHitTesting(false)

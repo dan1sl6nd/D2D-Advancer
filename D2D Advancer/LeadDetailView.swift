@@ -1357,10 +1357,10 @@ struct ModernStatusCard: View {
             .padding(.vertical, 16)
             .padding(.horizontal, 8)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(isSelected ? AnyShapeStyle(status.uiColor.gradient) : AnyShapeStyle(Color.obsidianSurface))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(status.uiColor.opacity(isSelected ? 0 : 0.3), lineWidth: isSelected ? 0 : 1.5)
                     )
             )

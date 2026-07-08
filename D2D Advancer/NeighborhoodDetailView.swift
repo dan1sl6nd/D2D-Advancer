@@ -36,19 +36,19 @@ struct NeighborhoodDetailView: View {
 
                     mapPreviewSection
 
-                    // Score card
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Area Score")
-                                .font(.obsidianSmall)
-                                .foregroundColor(Color.textSecondary)
-
-                            HStack(spacing: 8) {
+                    ObsidianSectionCard(
+                        title: "Area Score",
+                        icon: "gauge.medium",
+                        subtitle: "Door-knocking fit for this recommended area.",
+                        accentColor: scoreColor
+                    ) {
+                        HStack(alignment: .center, spacing: 14) {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(String(format: "%.0f", neighborhood.score))
                                     .font(.displayLarge)
                                     .foregroundColor(scoreColor)
 
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: 4) {
                                     Text("out of 100")
                                         .font(.obsidianSmall)
                                         .foregroundColor(Color.textSecondary)
@@ -57,26 +57,21 @@ struct NeighborhoodDetailView: View {
                                         .font(.obsidianSmall)
                                         .foregroundColor(scoreColor)
                                         .padding(.horizontal, 8)
-                                        .padding(.vertical, 2)
-                                        .background(
-                                            Capsule()
-                                                .fill(scoreColor.opacity(0.15))
-                                        )
+                                        .padding(.vertical, 3)
+                                        .background(Capsule().fill(scoreColor.opacity(0.15)))
                                 }
                             }
-                        }
 
-                        Spacer()
+                            Spacer(minLength: 8)
 
-                        Button(action: {
-                            navigateToArea()
-                        }) {
-                            Label("Navigate", systemImage: "location.fill")
+                            Button(action: {
+                                navigateToArea()
+                            }) {
+                                Label("Navigate", systemImage: "location.fill")
+                            }
+                            .buttonStyle(ObsidianPrimaryButtonStyle())
                         }
-                        .buttonStyle(ObsidianPrimaryButtonStyle())
                     }
-                    .padding(16)
-                    .surfaceCard()
                     .padding(.horizontal, 20)
 
                     ObsidianSectionCard(
@@ -154,7 +149,7 @@ struct NeighborhoodDetailView: View {
                     }
                     .padding(.horizontal, 20)
                 }
-                .padding(.bottom, 40)
+                .padding(.bottom, 24)
             }
             .obsidianScreenBackground()
             .obsidianPushedNavigation(
@@ -361,7 +356,7 @@ struct PerformanceStatsView: View {
             }
             .padding(12)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color.statusInterested.opacity(0.1))
             )
         }
@@ -402,7 +397,7 @@ struct StatBox: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(color.opacity(0.1))
         )
     }

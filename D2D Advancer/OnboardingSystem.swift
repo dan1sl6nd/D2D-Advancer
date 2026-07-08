@@ -967,7 +967,7 @@ private struct MultiSelectionCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(accent.opacity(0.2))
                             .frame(width: 44, height: 44)
 

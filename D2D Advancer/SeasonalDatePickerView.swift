@@ -209,15 +209,15 @@ struct SeasonalPresetCard: View {
             .frame(minHeight: 100, maxHeight: 120)
             .clipped()
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(
                         isSelected ?
                         colorForSeason(preset.season) :
                         Color.obsidianSurface
-                    )
+                )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(
                         isSelected ?
                         colorForSeason(preset.season) :
@@ -225,7 +225,7 @@ struct SeasonalPresetCard: View {
                         lineWidth: isSelected ? 2 : 1
                     )
             )
-            .contentShape(RoundedRectangle(cornerRadius: 12))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(PlainButtonStyle())
     }

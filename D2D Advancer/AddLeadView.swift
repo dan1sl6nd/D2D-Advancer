@@ -147,7 +147,7 @@ struct AddLeadView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                     .background(Color.electricViolet.opacity(0.08))
-                    .cornerRadius(12)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
 
                 headerSection

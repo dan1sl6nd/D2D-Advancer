@@ -968,7 +968,7 @@ struct SimplePricingCard: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(badgeColor)
-                        .cornerRadius(8)
+                        .clipShape(Capsule())
 
                     Spacer()
                 }
@@ -1001,7 +1001,7 @@ struct SimplePricingCard: View {
         }
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(isSelected ? Color.obsidianElevated : Color.obsidianSurface)
                 .stroke(isSelected ? Color.electricViolet : Color.obsidianBorder, lineWidth: isSelected ? 1.5 : 0.5)
         )
@@ -1119,10 +1119,10 @@ extension View {
         self
             .padding(padding)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color.obsidianSurface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .stroke(Color.obsidianBorder, lineWidth: 0.5)
                     )
             )

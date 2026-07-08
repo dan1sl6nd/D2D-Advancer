@@ -171,35 +171,23 @@ struct QuickFilterChipsView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            if isSelected {
-                HStack(spacing: 6) {
-                    Image(systemName: icon)
-                    Text(title)
-                }
-                .font(.themeCaption)
-                .foregroundColor(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .frame(minHeight: 44)
-                .background(Color.electricViolet)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                HStack(spacing: 6) {
-                    Image(systemName: icon)
-                    Text(title)
-                }
-                .font(.themeCaption)
-                .foregroundColor(Color.textSecondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .frame(minHeight: 44)
-                .background(Color.obsidianSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.obsidianBorder, lineWidth: 1)
-                )
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                Text(title)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.86)
             }
+            .font(.themeCaption)
+            .foregroundColor(isSelected ? .white : Color.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .frame(minHeight: 44)
+            .background(isSelected ? Color.electricViolet : Color.obsidianSurface)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(isSelected ? Color.clear : Color.obsidianBorder, lineWidth: 1)
+            )
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityLabel(accessibilityLabel ?? title)

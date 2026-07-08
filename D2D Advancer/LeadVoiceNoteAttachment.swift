@@ -352,7 +352,7 @@ struct LeadVoiceNoteSection: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(tint.opacity(0.12))
             )
         }
@@ -372,11 +372,11 @@ struct LeadVoiceNoteSection: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color.electricViolet.opacity(0.12))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.electricViolet.opacity(0.25), lineWidth: 0.5)
             )
         }
@@ -419,7 +419,7 @@ struct LeadVoiceNoteSection: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
                     .background(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(Color.obsidianElevated)
                     )
             }

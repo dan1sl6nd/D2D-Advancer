@@ -6,25 +6,25 @@ struct FollowUpHistoryView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
     @State private var showingAddCheckIn = false
-    
+
     @FetchRequest private var checkIns: FetchedResults<FollowUpCheckIn>
-    
+
     init(lead: Lead) {
         self.lead = lead
-        
+
         // Create a fetch request for this specific lead's check-ins
         let request: NSFetchRequest<FollowUpCheckIn> = FollowUpCheckIn.fetchRequest()
         request.predicate = NSPredicate(format: "lead == %@", lead)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \FollowUpCheckIn.checkInDate, ascending: false)]
-        
+
         self._checkIns = FetchRequest(fetchRequest: request)
     }
-    
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 leadSummaryHeader
-                
+
                 if checkIns.isEmpty {
                     ObsidianEmptyState(
                         icon: "clock.arrow.circlepath",
@@ -70,69 +70,69 @@ struct FollowUpHistoryView: View {
             }
         }
     }
-    
+
     private var leadSummaryHeader: some View {
-        VStack(spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(lead.displayName)
-                        .font(.obsidianHeadline)
-                        .foregroundColor(.textPrimary)
-                    
-                    if let address = lead.address {
-                        Text(address)
-                            .font(.obsidianFootnote)
+        LeadFormSectionCard(title: "Lead", icon: "person.crop.circle.fill") {
+            VStack(spacing: 14) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(lead.displayName)
+                            .font(.obsidianHeadline)
+                            .foregroundColor(.textPrimary)
+
+                        if let address = lead.address {
+                            Text(address)
+                                .font(.obsidianFootnote)
+                                .foregroundColor(Color.textSecondary)
+                        }
+                    }
+
+                    Spacer()
+
+                    StatusBadge(status: LeadStatus.from(leadStatus: lead.leadStatus))
+                }
+
+                HStack(spacing: 20) {
+                    VStack {
+                        Text("\(lead.checkInCount)")
+                            .font(.obsidianHeadline)
+                            .foregroundColor(Color.electricViolet)
+                        Text("Check-ins")
+                            .font(.obsidianSmall)
                             .foregroundColor(Color.textSecondary)
                     }
-                }
-                
-                Spacer()
-                
-                StatusBadge(status: LeadStatus.from(leadStatus: lead.leadStatus))
-            }
-            
-            HStack(spacing: 20) {
-                VStack {
-                    Text("\(lead.checkInCount)")
-                        .font(.obsidianHeadline)
-                        .foregroundColor(Color.electricViolet)
-                    Text("Check-ins")
-                        .font(.obsidianSmall)
-                        .foregroundColor(Color.textSecondary)
-                }
-                
-                Divider()
-                    .frame(height: 30)
-                
-                VStack {
-                    if let lastCheckIn = lead.lastCheckIn {
-                        Text(lastCheckIn.formattedCheckInDate)
-                            .font(.obsidianFootnote)
-                            .foregroundColor(.textPrimary)
-                    } else {
-                        Text("Never")
-                            .font(.obsidianFootnote)
-                            .foregroundColor(.textPrimary)
+
+                    Divider()
+                        .frame(height: 30)
+
+                    VStack {
+                        if let lastCheckIn = lead.lastCheckIn {
+                            Text(lastCheckIn.formattedCheckInDate)
+                                .font(.obsidianFootnote)
+                                .foregroundColor(.textPrimary)
+                        } else {
+                            Text("Never")
+                                .font(.obsidianFootnote)
+                                .foregroundColor(.textPrimary)
+                        }
+                        Text("Last Contact")
+                            .font(.obsidianSmall)
+                            .foregroundColor(Color.textSecondary)
                     }
-                    Text("Last Contact")
-                        .font(.obsidianSmall)
-                        .foregroundColor(Color.textSecondary)
+
+                    Spacer()
                 }
-                
-                Spacer()
             }
         }
-        .padding(16)
-        .surfaceCard()
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
-    
+
     private func migrateCheckInOutcomes() {
         var hasChanges = false
-        
+
         print("FollowUpHistoryView: Running migration for \(checkIns.count) check-ins...")
-        
+
         for checkIn in checkIns {
             // If the check-in doesn't have an outcome, add a default one
             if checkIn.outcome == nil || checkIn.outcome?.isEmpty == true {
@@ -143,7 +143,7 @@ struct FollowUpHistoryView: View {
                 print("FollowUpHistoryView: Check-in \(checkIn.id?.uuidString ?? "unknown") already has outcome: \(checkIn.outcome ?? "nil")")
             }
         }
-        
+
         if hasChanges {
             print("FollowUpHistoryView: Saving \(checkIns.count) check-ins with new outcomes...")
             do {
@@ -157,11 +157,11 @@ struct FollowUpHistoryView: View {
             print("FollowUpHistoryView: No check-ins needed migration")
         }
     }
-    
+
     private func deleteCheckIn(_ checkIn: FollowUpCheckIn) {
         lead.updatedDate = Date()
         viewContext.delete(checkIn)
-        
+
         do {
             try viewContext.save()
         } catch {
@@ -174,7 +174,7 @@ struct FollowUpHistoryView: View {
 struct CheckInInteractiveRowView: View {
     let checkIn: FollowUpCheckIn
     let onDelete: () -> Void
-    
+
     var body: some View {
         let typeColor = getCheckInColor()
         let outcomeColor = getOutcomeColor()
@@ -247,7 +247,7 @@ struct CheckInInteractiveRowView: View {
         }
         .accessibilityElement(children: .combine)
     }
-    
+
     private func getCheckInIcon() -> String {
         switch checkIn.checkInTypeEnum {
         case .phoneCall: return "phone.fill"
@@ -258,7 +258,7 @@ struct CheckInInteractiveRowView: View {
         case .doorKnock: return "door.left.hand.open"
         }
     }
-    
+
     private func getCheckInColor() -> Color {
         switch checkIn.checkInTypeEnum {
         case .phoneCall: return Color.electricViolet
@@ -283,7 +283,7 @@ struct CheckInInteractiveRowView: View {
         case .converted: return Color.electricViolet
         }
     }
-    
+
     private func getOutcomeText() -> String {
         return checkIn.outcomeEnum?.displayName ?? "Unknown"
     }
@@ -386,20 +386,20 @@ struct CheckInRowView: View {
     lead.name = "John Doe"
     lead.address = "123 Main St, Toronto, ON"
     lead.leadStatus = .interested
-    
+
     // Create sample check-ins
     let checkIn1 = FollowUpCheckIn.create(in: context, for: lead)
     checkIn1.checkInTypeEnum = .doorKnock
     checkIn1.outcomeEnum = .noAnswer
     checkIn1.notes = "No one home, left a business card"
     checkIn1.checkInDate = Calendar.current.date(byAdding: .day, value: -2, to: Date())
-    
+
     let checkIn2 = FollowUpCheckIn.create(in: context, for: lead)
     checkIn2.checkInTypeEnum = .phoneCall
     checkIn2.outcomeEnum = .interested
     checkIn2.notes = "Spoke with homeowner, very interested in our services"
     checkIn2.checkInDate = Calendar.current.date(byAdding: .day, value: -1, to: Date())
-    
+
     return FollowUpHistoryView(lead: lead)
         .environment(\.managedObjectContext, context)
 }
@@ -407,21 +407,21 @@ struct CheckInRowView: View {
 struct SwipeToDeleteCheckInRow: View {
     let checkIn: FollowUpCheckIn
     let onDelete: () -> Void
-    
+
     @State private var offset: CGFloat = 0
     @State private var showingDeleteButton = false
     @State private var initialOffset: CGFloat = 0
-    
+
     private let deleteButtonWidth: CGFloat = 88
     private let swipeThreshold: CGFloat = 50
-    
+
     var body: some View {
         HStack(spacing: 0) {
             // Main content
             CheckInInteractiveRowView(checkIn: checkIn, onDelete: onDelete)
                 .offset(x: offset)
                 .contentShape(Rectangle())
-            
+
             // Delete button (hidden behind the row)
             if showingDeleteButton {
                 Button(action: {
@@ -453,28 +453,28 @@ struct SwipeToDeleteCheckInRow: View {
             DragGesture(minimumDistance: 20)
                 .onChanged { value in
                     let translation = value.translation
-                    
+
                     // Only respond to primarily horizontal gestures
                     if abs(translation.width) > abs(translation.height) {
                         // Calculate cumulative offset from initial position
                         let newOffset = max(min(initialOffset + translation.width, 0), -deleteButtonWidth)
                         offset = newOffset
                     }
-                    
+
                     // Don't update showingDeleteButton here to avoid animation conflicts
                     // It will be updated in onEnded with proper animation
                 }
                 .onEnded { value in
                     let translation = value.translation
-                    
+
                     // Only process primarily horizontal gestures
                     if abs(translation.width) > abs(translation.height) {
                         let velocity = value.velocity.width
-                        
-                        // Calculate final offset from initial position  
+
+                        // Calculate final offset from initial position
                         let finalOffset = initialOffset + translation.width
                         let shouldShowDelete = abs(finalOffset) > swipeThreshold || velocity < -300
-                    
+
                         withAnimation(.easeInOut(duration: 0.3)) {
                             if shouldShowDelete {
                                 offset = -deleteButtonWidth

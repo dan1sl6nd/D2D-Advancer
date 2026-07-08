@@ -1768,7 +1768,7 @@ struct SyncSettingsView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 18)
-                    .padding(.bottom, 40)
+                    .padding(.bottom, 24)
                 }
                 .accessibilityIdentifier("syncSettingsSheet")
             }

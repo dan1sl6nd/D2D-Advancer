@@ -1452,10 +1452,10 @@ struct TeamWorkspaceView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.statusNotHome.opacity(0.10))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(Color.statusNotHome.opacity(0.45), lineWidth: 1)
                 )
         )
@@ -1470,10 +1470,10 @@ struct TeamWorkspaceView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color.obsidianElevated)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                     )
             )
@@ -1582,7 +1582,7 @@ struct TeamWorkspaceView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(disabled ? Color.textMuted : color)
                         .shadow(color: color.opacity(disabled ? 0 : 0.3), radius: 4, x: 0, y: 2)
                 )
@@ -2826,10 +2826,10 @@ private extension View {
             .padding(.horizontal, 12)
             .padding(.vertical, 11)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color.obsidianElevated)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(Color.obsidianBorder.opacity(0.4), lineWidth: 0.5)
                     )
             )
@@ -2846,11 +2846,11 @@ private struct TeamInfoCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.obsidianSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
         )
