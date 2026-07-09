@@ -14,10 +14,10 @@ struct MessageTemplatesManagerView: View {
                 templateSummaryCard
                 customSection
                 defaultsByCategory
-                Spacer(minLength: 40)
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
+            .padding(.bottom, 24)
         }
         .obsidianScreenBackground()
         .accessibilityIdentifier("messageTemplatesScreen")
