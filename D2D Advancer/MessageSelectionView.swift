@@ -385,10 +385,11 @@ struct CategoryButton: View {
                     .font(.obsidianSmall)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            .frame(minHeight: 44)
             .background(isSelected ? Color.electricViolet : Color.obsidianElevated)
             .foregroundColor(isSelected ? .white : Color.textPrimary)
             .clipShape(Capsule())
+            .contentShape(Capsule())
         }
         .buttonStyle(PlainButtonStyle())
     }
