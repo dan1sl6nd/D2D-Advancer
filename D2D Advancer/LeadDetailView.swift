@@ -438,6 +438,8 @@ struct LeadDetailView: View {
                         LeadAnnotationView(lead: lead)
                     }
                 }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
                 .frame(height: 200)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
