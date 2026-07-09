@@ -316,10 +316,24 @@ struct RoutePlannerSheet: View {
                 .accessibilityIdentifier("routePlannerNavigateStopButton")
 
                 Button(action: { toggleVisited(stop: stop) }) {
-                    Image(systemName: isVisited ? "arrow.uturn.backward.circle" : "checkmark.circle")
+                    Image(systemName: isVisited ? "arrow.uturn.backward" : "checkmark")
                         .font(.obsidianCallout)
                         .foregroundColor(isVisited ? Color.textMuted : Color.statusInterested)
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Circle()
+                                .fill(isVisited ? Color.obsidianElevated : Color.statusInterested.opacity(0.14))
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(
+                                    isVisited ? Color.obsidianBorder : Color.statusInterested.opacity(0.32),
+                                    lineWidth: 0.75
+                                )
+                        )
+                        .contentShape(Circle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel(isVisited ? "Mark as not visited" : "Mark as visited")
                 .accessibilityIdentifier("routePlannerVisitedStopButton")
             }

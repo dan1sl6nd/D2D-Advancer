@@ -321,7 +321,10 @@ struct NeighborhoodLegendView: View {
                 .buttonStyle(ObsidianPrimaryButtonStyle())
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.obsidianBackground(for: colorScheme))
+                .background(
+                    Color.obsidianBackground(for: colorScheme)
+                        .ignoresSafeArea(edges: .bottom)
+                )
             }
         }
         .obsidianModalBackground()

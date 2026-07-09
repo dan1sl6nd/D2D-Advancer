@@ -655,6 +655,7 @@ struct SelectLeadForAppointmentView: View {
                 .padding(.vertical, 12)
                 .background(
                     Color.obsidianBackground(for: colorScheme)
+                        .ignoresSafeArea(edges: .bottom)
                         .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: -3)
                 )
             }

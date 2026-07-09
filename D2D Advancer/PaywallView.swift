@@ -363,7 +363,11 @@ struct PaywallView: View {
             .padding(.top, 14)
             .padding(.bottom, 10)
             .background(.ultraThinMaterial)
-            .background(Color.obsidianBackground(for: colorScheme).opacity(0.96))
+            .background(
+                Color.obsidianBackground(for: colorScheme)
+                    .opacity(0.96)
+                    .ignoresSafeArea(edges: .bottom)
+            )
         }
     }
 
