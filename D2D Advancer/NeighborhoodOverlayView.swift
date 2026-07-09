@@ -274,13 +274,6 @@ struct NeighborhoodLegendView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                ObsidianScreenTitle(
-                    title: "Area Score Legend",
-                    subtitle: "How neighborhood recommendation scores are grouped.",
-                    icon: "info.circle.fill"
-                )
-                .padding(.top, 18)
-
                 ObsidianSectionCard(
                     title: "Score Bands",
                     icon: "chart.bar.fill",

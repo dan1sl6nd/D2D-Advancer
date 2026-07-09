@@ -29,12 +29,6 @@ struct SeasonalDatePickerView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "Follow Up Date",
-                        subtitle: "Pick a seasonal preset or set an exact follow-up time.",
-                        icon: "calendar.badge.clock"
-                    )
-
                     headerSection
                     seasonalPresetsSection
                     customDateSection

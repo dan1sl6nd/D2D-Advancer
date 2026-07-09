@@ -49,13 +49,6 @@ struct CustomAppointmentTypeCreatorView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: editingType != nil ? "Edit Type" : "Create Type",
-                        subtitle: "Customize appointment labels used in scheduling.",
-                        icon: "calendar.badge.plus"
-                    )
-                    .accessibilityIdentifier("customAppointmentTypeEditor")
-
                     typeDetailsCard
                     appearanceCard
                     previewCard
@@ -67,6 +60,7 @@ struct CustomAppointmentTypeCreatorView: View {
             .obsidianScreenBackground()
             .obsidianPushedNavigation(
                 editingType != nil ? "Edit Type" : "Create Type",
+                titleAccessibilityIdentifier: "customAppointmentTypeEditor",
                 backButtonAccessibilityIdentifier: "customAppointmentTypeBackButton"
             )
             .safeAreaInset(edge: .bottom) {

@@ -30,13 +30,6 @@ struct ServiceCategoryCreatorView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: editingCategory != nil ? "Edit Service" : "Add Service",
-                        subtitle: "Name, icon, and color used across lead forms.",
-                        icon: "tag.fill"
-                    )
-                    .accessibilityIdentifier("serviceCategoryEditor")
-
                     categoryDetailsCard
                     iconSelectionCard
                     colorSelectionCard
@@ -49,6 +42,7 @@ struct ServiceCategoryCreatorView: View {
             .obsidianScreenBackground()
             .obsidianPushedNavigation(
                 editingCategory != nil ? "Edit Service" : "Add Service",
+                titleAccessibilityIdentifier: "serviceCategoryEditor",
                 backButtonAccessibilityIdentifier: "serviceCategoryBackButton"
             )
             .safeAreaInset(edge: .bottom) {

@@ -13,12 +13,6 @@ struct CalendarSettingsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ObsidianScreenTitle(
-                    title: "Calendar Settings",
-                    subtitle: "Send scheduled appointments to Apple Calendar.",
-                    icon: "calendar"
-                )
-
                 appleCalendarSection
 
                 if calendarService.settings.isEnabled && calendarService.hasWriteAccessOrBetter {

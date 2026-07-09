@@ -18,12 +18,6 @@ struct AddCheckInView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "Record Check-in",
-                        subtitle: "Log the contact method, outcome, notes, and next follow-up.",
-                        icon: "checkmark.circle.fill"
-                    )
-
                     // Lead Information Section
                     modernSectionCard(title: "Lead Information", icon: "person.crop.circle.fill") {
                         VStack(alignment: .leading, spacing: 12) {

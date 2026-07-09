@@ -10,13 +10,6 @@ struct NotificationSettingsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ObsidianScreenTitle(
-                    title: "Notifications",
-                    subtitle: "Control sounds, reminders, and the daily summary.",
-                    icon: "bell.fill"
-                )
-                .accessibilityIdentifier("notificationSettingsScreen")
-
                 permissionSection
                 reminderSection
                 dailySummarySection
@@ -27,7 +20,11 @@ struct NotificationSettingsView: View {
             .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
-        .obsidianPushedNavigation("Notifications", backButtonAccessibilityIdentifier: "notificationSettingsBackButton")
+        .obsidianPushedNavigation(
+            "Notifications",
+            titleAccessibilityIdentifier: "notificationSettingsScreen",
+            backButtonAccessibilityIdentifier: "notificationSettingsBackButton"
+        )
         .onAppear {
             checkPermissionStatus()
         }

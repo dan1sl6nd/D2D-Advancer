@@ -593,12 +593,6 @@ struct SelectLeadForAppointmentView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    ObsidianScreenTitle(
-                        title: "Select Customer",
-                        subtitle: "Pick an interested, scheduled, or converted lead to create the appointment.",
-                        icon: "calendar.badge.plus"
-                    )
-
                     ObsidianSectionCard(
                         title: "Find Lead",
                         icon: "magnifyingglass",

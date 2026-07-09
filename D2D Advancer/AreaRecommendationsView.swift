@@ -29,12 +29,6 @@ struct AreaRecommendationsView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 16) {
-                            ObsidianScreenTitle(
-                                title: "Best Areas",
-                                subtitle: "Recommended neighborhoods for door-to-door.",
-                                icon: "map.circle.fill"
-                            )
-
                             currentPreferencesCard
 
                             ForEach(topNeighborhoods.indices, id: \.self) { index in

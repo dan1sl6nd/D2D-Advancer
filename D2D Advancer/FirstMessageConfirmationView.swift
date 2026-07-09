@@ -23,12 +23,6 @@ struct FirstMessageConfirmationView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "First Message",
-                        subtitle: "Send an initial SMS now, or skip and do it later.",
-                        icon: "message.badge.checkmark.rtl"
-                    )
-
                     headerSection
                     leadInfoSection
                     templatesSection

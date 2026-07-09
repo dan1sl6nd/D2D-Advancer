@@ -10,12 +10,6 @@ struct DemographicsPreferencesView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "Target Demographics",
-                        subtitle: "Set the customer profile used for area recommendations.",
-                        icon: "person.2.crop.square.stack.fill"
-                    )
-
                     LeadFormSectionCard(title: "Quick Profiles", icon: "person.2.crop.square.stack.fill") {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {

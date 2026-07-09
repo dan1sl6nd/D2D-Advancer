@@ -795,11 +795,10 @@ struct RescheduleFollowUpView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "Reschedule",
-                        subtitle: "Move the follow-up reminder for \(lead.displayName).",
-                        icon: "calendar.badge.clock"
-                    )
+                    Text(lead.displayName)
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textSecondary)
+                        .padding(.horizontal, 4)
 
                     changeSummarySection
                     dateSelectionSection
@@ -810,12 +809,12 @@ struct RescheduleFollowUpView: View {
                 .padding(.bottom, 28)
             }
             .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
+            .accessibilityIdentifier("followUpRescheduleSheet")
             .obsidianPushedNavigation(
                 "Reschedule",
                 backButtonAccessibilityIdentifier: "followUpRescheduleBackButton",
                 onBack: { dismiss() }
             )
-            .accessibilityIdentifier("followUpRescheduleSheet")
             .safeAreaInset(edge: .bottom) {
                 ObsidianBottomActionBar(
                     isPrimaryDisabled: newDate <= Date(),

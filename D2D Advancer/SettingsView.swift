@@ -637,12 +637,6 @@ struct CreateAccountFromGuestView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ObsidianScreenTitle(
-                    title: "Create Account",
-                    subtitle: "Save your guest data and sync it from any signed-in device.",
-                    icon: "person.crop.circle.badge.plus"
-                )
-
                 ObsidianSectionCard(
                     title: "Account Information",
                     icon: "person.text.rectangle",
@@ -1319,13 +1313,6 @@ struct AppPreferencesView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ObsidianScreenTitle(
-                    title: "App Preferences",
-                    subtitle: "Default values for new leads, follow-ups, map, and backups.",
-                    icon: "slider.horizontal.3"
-                )
-                .accessibilityIdentifier("appPreferencesScreen")
-
                 MoreSectionGroup(
                     title: "Lead Defaults",
                     icon: "person.badge.plus",
@@ -1477,7 +1464,11 @@ struct AppPreferencesView: View {
             .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
-        .obsidianPushedNavigation("App Preferences", backButtonAccessibilityIdentifier: "appPreferencesBackButton")
+        .obsidianPushedNavigation(
+            "App Preferences",
+            titleAccessibilityIdentifier: "appPreferencesScreen",
+            backButtonAccessibilityIdentifier: "appPreferencesBackButton"
+        )
     }
 
     private var preferencesDivider: some View {

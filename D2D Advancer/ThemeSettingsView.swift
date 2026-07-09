@@ -8,12 +8,6 @@ struct ThemeSettingsView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "Theme",
-                        subtitle: "Control the app appearance used across every screen.",
-                        icon: "paintpalette.fill"
-                    )
-
                     ObsidianSectionCard(
                         title: "Appearance",
                         icon: "moon.fill",

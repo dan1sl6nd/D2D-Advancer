@@ -848,13 +848,6 @@ struct OverviewContentView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ObsidianScreenTitle(
-                    title: "Overview",
-                    subtitle: "Lead volume, conversion health, and current follow-up pressure.",
-                    icon: "chart.bar.fill"
-                )
-                .padding(.horizontal, 4)
-
                 if isLoading {
                     ObsidianStatusBanner(
                         icon: "arrow.clockwise",
@@ -1710,12 +1703,6 @@ struct SyncSettingsView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(spacing: 16) {
-                        ObsidianScreenTitle(
-                            title: "Sync Settings",
-                            subtitle: "Choose how often your data syncs automatically.",
-                            icon: "arrow.triangle.2.circlepath"
-                        )
-
                         // Auto-sync toggle
                         modernSectionCard(title: "Automatic Sync", icon: "arrow.triangle.2.circlepath") {
                             VStack(spacing: 16) {

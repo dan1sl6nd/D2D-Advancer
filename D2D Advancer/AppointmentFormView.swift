@@ -48,12 +48,6 @@ struct AppointmentFormView: View {
             }
         }
 
-        var subtitle: String {
-            switch self {
-            case .create: return "Set the job type, time, and location."
-            case .edit: return "Update the job details and schedule."
-            }
-        }
     }
     
     private var endDate: Date {
@@ -76,12 +70,6 @@ struct AppointmentFormView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: mode.navigationTitle,
-                        subtitle: mode.subtitle,
-                        icon: "calendar.badge.clock"
-                    )
-
                     if mode == .create, let lead = lead {
                         LeadInfoCard(lead: lead)
                     }

@@ -209,12 +209,6 @@ struct QuickFilterPresetPickerSheet: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "Filter Presets",
-                        subtitle: "Save this view or load a saved filter setup.",
-                        icon: "tray.full.fill"
-                    )
-
                     ObsidianSectionCard(
                         title: "Current Filter",
                         icon: "bookmark.fill",
@@ -356,12 +350,6 @@ struct SavePresetSheet: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "Save Preset",
-                        subtitle: "Name this filter setup so you can apply it again fast.",
-                        icon: "bookmark.fill"
-                    )
-
                     ObsidianSectionCard(
                         title: "Preset Details",
                         icon: "tray.full.fill",

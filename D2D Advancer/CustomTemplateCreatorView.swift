@@ -37,12 +37,6 @@ struct CustomTemplateCreatorView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(spacing: 16) {
-                        ObsidianScreenTitle(
-                            title: editingTemplate != nil ? "Edit Template" : "Create Template",
-                            subtitle: "Build a reusable reply for SMS, email, or both.",
-                            icon: editingTemplate != nil ? "square.and.pencil" : "plus.message.fill"
-                        )
-
                         templateDetailsCard
                         messageContentCard
                     }
@@ -415,12 +409,6 @@ struct PreviewTemplateView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(spacing: 16) {
-                        ObsidianScreenTitle(
-                            title: "Template Preview",
-                            subtitle: "Review the final message with sample customer data.",
-                            icon: "eye.fill"
-                        )
-
                         templateHeaderCard
                         messagePreviewCard
                     }

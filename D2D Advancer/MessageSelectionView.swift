@@ -37,12 +37,6 @@ struct MessageSelectionView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ObsidianScreenTitle(
-                        title: "Send Follow-up",
-                        subtitle: "Choose a saved template or write a custom message.",
-                        icon: messageType.icon
-                    )
-
                     leadInfoHeader
                     messageTypeSelector
                     categorySelector

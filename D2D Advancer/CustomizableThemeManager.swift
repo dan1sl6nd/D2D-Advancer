@@ -1193,6 +1193,7 @@ private struct ObsidianPushedNavigationHeader<Trailing: View>: View {
     @Environment(\.colorScheme) private var colorScheme
 
     let title: String
+    var titleAccessibilityIdentifier: String?
     var backButtonAccessibilityIdentifier: String?
     let trailing: Trailing
     let onBack: () -> Void
@@ -1213,6 +1214,7 @@ private struct ObsidianPushedNavigationHeader<Trailing: View>: View {
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
+                .accessibilityIdentifierIfPresent(titleAccessibilityIdentifier)
 
             trailing
                 .fixedSize(horizontal: true, vertical: false)
@@ -1230,6 +1232,7 @@ struct ObsidianPushedNavigationModifier<Trailing: View>: ViewModifier {
     @Environment(\.dismiss) private var dismiss
 
     let title: String
+    var titleAccessibilityIdentifier: String?
     var backButtonAccessibilityIdentifier: String?
     let trailing: Trailing
     var onBack: (() -> Void)?
@@ -1241,6 +1244,7 @@ struct ObsidianPushedNavigationModifier<Trailing: View>: ViewModifier {
             .safeAreaInset(edge: .top, spacing: 0) {
                 ObsidianPushedNavigationHeader(
                     title: title,
+                    titleAccessibilityIdentifier: titleAccessibilityIdentifier,
                     backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
                     trailing: trailing
                 ) {
@@ -1314,10 +1318,15 @@ extension View {
         modifier(ObsidianInlineNavigationModifier())
     }
 
-    func obsidianPushedNavigation(_ title: String, backButtonAccessibilityIdentifier: String? = nil) -> some View {
+    func obsidianPushedNavigation(
+        _ title: String,
+        titleAccessibilityIdentifier: String? = nil,
+        backButtonAccessibilityIdentifier: String? = nil
+    ) -> some View {
         modifier(
             ObsidianPushedNavigationModifier(
                 title: title,
+                titleAccessibilityIdentifier: titleAccessibilityIdentifier,
                 backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
                 trailing: EmptyView(),
                 onBack: nil
@@ -1327,12 +1336,14 @@ extension View {
 
     func obsidianPushedNavigation(
         _ title: String,
+        titleAccessibilityIdentifier: String? = nil,
         backButtonAccessibilityIdentifier: String? = nil,
         onBack: @escaping () -> Void
     ) -> some View {
         modifier(
             ObsidianPushedNavigationModifier(
                 title: title,
+                titleAccessibilityIdentifier: titleAccessibilityIdentifier,
                 backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
                 trailing: EmptyView(),
                 onBack: onBack
@@ -1342,12 +1353,14 @@ extension View {
 
     func obsidianPushedNavigation<Trailing: View>(
         _ title: String,
+        titleAccessibilityIdentifier: String? = nil,
         backButtonAccessibilityIdentifier: String? = nil,
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         modifier(
             ObsidianPushedNavigationModifier(
                 title: title,
+                titleAccessibilityIdentifier: titleAccessibilityIdentifier,
                 backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
                 trailing: trailing(),
                 onBack: nil
@@ -1357,6 +1370,7 @@ extension View {
 
     func obsidianPushedNavigation<Trailing: View>(
         _ title: String,
+        titleAccessibilityIdentifier: String? = nil,
         backButtonAccessibilityIdentifier: String? = nil,
         onBack: @escaping () -> Void,
         @ViewBuilder trailing: () -> Trailing
@@ -1364,6 +1378,7 @@ extension View {
         modifier(
             ObsidianPushedNavigationModifier(
                 title: title,
+                titleAccessibilityIdentifier: titleAccessibilityIdentifier,
                 backButtonAccessibilityIdentifier: backButtonAccessibilityIdentifier,
                 trailing: trailing(),
                 onBack: onBack

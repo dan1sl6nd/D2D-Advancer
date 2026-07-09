@@ -9,13 +9,6 @@ struct AppointmentTypePresetsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ObsidianScreenTitle(
-                    title: "Appointment Types",
-                    subtitle: "Manage the job labels used when scheduling work.",
-                    icon: "calendar.badge.plus"
-                )
-                .accessibilityIdentifier("appointmentTypesScreen")
-
                 defaultTypesCard
                 customTypesCard
             }
@@ -24,7 +17,11 @@ struct AppointmentTypePresetsView: View {
             .padding(.bottom, 28)
         }
         .obsidianScreenBackground()
-        .obsidianPushedNavigation("Appointment Types", backButtonAccessibilityIdentifier: "appointmentTypesBackButton")
+        .obsidianPushedNavigation(
+            "Appointment Types",
+            titleAccessibilityIdentifier: "appointmentTypesScreen",
+            backButtonAccessibilityIdentifier: "appointmentTypesBackButton"
+        )
         .sheet(isPresented: $showingCreateView) {
             CustomAppointmentTypeCreatorView()
         }

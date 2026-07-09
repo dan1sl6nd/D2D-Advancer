@@ -70,14 +70,6 @@ struct RoutePlannerSheet: View {
                 screenBackground.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    ObsidianScreenTitle(
-                        title: "Route Planner",
-                        subtitle: "Order today's stops or leads in the visible map area.",
-                        icon: "point.topleft.down.curvedto.point.bottomright.up"
-                    )
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-
                     filterPicker
                     routePlannerActionRow
 
