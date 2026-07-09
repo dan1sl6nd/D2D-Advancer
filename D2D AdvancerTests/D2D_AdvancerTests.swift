@@ -1307,6 +1307,33 @@ struct D2D_AdvancerTests {
         #expect(AdvancedMapView.shouldPublishVisibleRegion(zoomedRegion, previousRegion: previousRegion))
     }
 
+    @Test func advancedMapViewOnlyRefreshesClusteringAfterUserDrivenRegionChanges() async throws {
+        #expect(
+            !AdvancedMapView.shouldRefreshLeadClusteringAfterRegionChange(
+                changeWasProgrammatic: true,
+                userHasInteracted: false
+            )
+        )
+        #expect(
+            !AdvancedMapView.shouldRefreshLeadClusteringAfterRegionChange(
+                changeWasProgrammatic: true,
+                userHasInteracted: true
+            )
+        )
+        #expect(
+            !AdvancedMapView.shouldRefreshLeadClusteringAfterRegionChange(
+                changeWasProgrammatic: false,
+                userHasInteracted: false
+            )
+        )
+        #expect(
+            AdvancedMapView.shouldRefreshLeadClusteringAfterRegionChange(
+                changeWasProgrammatic: false,
+                userHasInteracted: true
+            )
+        )
+    }
+
     @Test func launchMapCenteringUsesCenteredUserLocationMargins() async throws {
         let launchMargins = AdvancedMapView.userLocationViewportPadding(
             forHeight: 852,

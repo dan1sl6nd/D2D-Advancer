@@ -726,7 +726,7 @@ struct MapView: View {
         )
     }
 
-    private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 0.05) {
+    private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 1.4) {
         guard !isVisible else { return }
         guard !mapLeadPinCache.isReady || !mapLeadRenderSnapshot.isReady else { return }
         guard mapLeadCachePrewarmTask == nil else { return }
@@ -784,8 +784,16 @@ struct MapView: View {
             return
         }
 
+        let guardedDelay: TimeInterval
+        let remainingOpeningGuard = mapLeadOpeningGuardUntil.timeIntervalSinceNow
+        if remainingOpeningGuard > 0 {
+            guardedDelay = max(delay, remainingOpeningGuard + 0.08)
+        } else {
+            guardedDelay = delay
+        }
+
         scheduleMapLeadRenderUpdate(
-            after: delay,
+            after: guardedDelay,
             maxRenderedLeads: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
             expandAfter: 1.8,
             usePreviewIfCacheEmpty: true

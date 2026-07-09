@@ -275,7 +275,6 @@ struct AdvancedMapView: UIViewRepresentable {
 
         if isVisible {
             coordinator.updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
-            coordinator.updateLeadClusteringModeIfNeeded(mapView: mapView)
             coordinator.updateSearchPin(mapView: mapView, searchPin: searchPin)
         } else {
             coordinator.suspendHiddenAnnotationWork()
@@ -590,6 +589,13 @@ struct AdvancedMapView: UIViewRepresentable {
     ) -> Bool {
         isMeaningfullyDifferent(currentRegion.center, from: previousRegion.center)
             || isSpanMeaningfullyDifferent(currentRegion.span, from: previousRegion.span)
+    }
+
+    nonisolated static func shouldRefreshLeadClusteringAfterRegionChange(
+        changeWasProgrammatic: Bool,
+        userHasInteracted: Bool
+    ) -> Bool {
+        userHasInteracted && !changeWasProgrammatic
     }
 
     private static func renderedMapType(for mapType: MKMapType, is3DModeEnabled: Bool) -> MKMapType {
@@ -1130,7 +1136,8 @@ struct AdvancedMapView: UIViewRepresentable {
         private func zoomIntoCluster(_ cluster: MKClusterAnnotation, on mapView: MKMapView) {
             let coordinates = cluster.memberAnnotations.map(\.coordinate)
             guard let region = paddedRegion(containing: coordinates, currentRegion: mapView.region) else { return }
-            isProgrammaticChange = true
+            userHasInteracted = true
+            resetStartupCenterVerification()
             mapView.setRegion(region, animated: true)
         }
 
@@ -1216,11 +1223,17 @@ struct AdvancedMapView: UIViewRepresentable {
         
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             updateTimer?.invalidate()
-            updateLeadClusteringModeIfNeeded(mapView: mapView)
 
             let currentRegion = mapView.region
             let currentCamera = mapView.camera
             let changeWasProgrammatic = isProgrammaticChange
+
+            if AdvancedMapView.shouldRefreshLeadClusteringAfterRegionChange(
+                changeWasProgrammatic: changeWasProgrammatic,
+                userHasInteracted: userHasInteracted
+            ) {
+                updateLeadClusteringModeIfNeeded(mapView: mapView)
+            }
 
             updateTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { [weak self, weak mapView] _ in
                 Task { @MainActor [weak self, weak mapView] in
