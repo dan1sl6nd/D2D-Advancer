@@ -29,11 +29,11 @@ struct LeadAnnotationView: View {
     var body: some View {
         VStack(spacing: 0) {
             Image(systemName: pinIcon)
-                .font(.title2)
+                .font(.obsidianCallout)
                 .foregroundColor(pinColor)
                 .background(
                     Circle()
-                        .fill(Color.white)
+                        .fill(Color.obsidianSurface)
                         .frame(width: 30, height: 30)
                 )
                 .overlay(
@@ -43,10 +43,11 @@ struct LeadAnnotationView: View {
                 )
             
             Image(systemName: "triangle.fill")
-                .font(.caption)
+                .font(.nano)
                 .foregroundColor(pinColor)
                 .offset(y: -2)
         }
+        .shadow(color: pinColor.opacity(0.18), radius: 5, x: 0, y: 2)
     }
     
     private var pinIcon: String {
@@ -65,17 +66,6 @@ struct LeadAnnotationView: View {
     }
     
     private var pinColor: Color {
-        switch lead.leadStatus {
-        case .notContacted:
-            return .gray
-        case .interested:
-            return .orange
-        case .converted:
-            return .green
-        case .notInterested:
-            return .red
-        case .notHome:
-            return .brown
-        }
+        lead.leadStatus.swiftUIColor
     }
 }
