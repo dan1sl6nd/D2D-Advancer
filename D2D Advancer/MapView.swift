@@ -361,7 +361,6 @@ struct MapView: View {
     @State private var mapLeadRenderSnapshot = MapLeadRenderSnapshot.empty
     @State private var mapLeadPinCache = MapLeadPinCache.empty
     @State private var mapLeadRenderTask: Task<Void, Never>?
-    @State private var mapLeadExpansionTask: Task<Void, Never>?
     @State private var mapLeadCachePrewarmTask: Task<Void, Never>?
     @State private var mapLeadOpeningGuardUntil = Date.distantPast
     @State private var pendingMapLeadRenderSignature: MapLeadRenderRequestSignature?
@@ -717,29 +716,20 @@ struct MapView: View {
     private func scheduleOpeningMapLeadRenderUpdate() {
         cancelMapLeadCachePrewarm()
 
-        if MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
+        guard MapLeadOpeningRenderPolicy.shouldScheduleRenderOnOpen(
             cacheIsReady: mapLeadPinCache.isReady,
             snapshotIsReady: mapLeadRenderSnapshot.isReady,
             renderedPinCount: mapLeadRenderSnapshot.renderedPins.count,
             matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount
-        ) {
-            mapLeadOpeningGuardUntil = Date().addingTimeInterval(MapLeadOpeningRenderPolicy.warmSnapshotRefreshDelay)
-            scheduleMapLeadRenderUpdate(
-                after: MapLeadOpeningRenderPolicy.warmSnapshotRefreshDelay,
-                maxRenderedLeads: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
-                expandAfter: MapLeadOpeningRenderPolicy.warmSnapshotExpansionDelay,
-                usePreviewIfCacheEmpty: true
-            )
+        ) else {
+            mapLeadOpeningGuardUntil = .distantPast
             return
         }
 
-        let hasWarmCache = mapLeadPinCache.isReady
-        mapLeadOpeningGuardUntil = Date().addingTimeInterval(hasWarmCache ? 1.0 : 1.65)
+        mapLeadOpeningGuardUntil = Date().addingTimeInterval(2.0)
         scheduleMapLeadRenderUpdate(
-            after: hasWarmCache ? 0.24 : 0.55,
-            maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
-            expandAfter: hasWarmCache ? 5.0 : 6.5,
-            usePreviewIfCacheEmpty: true
+            after: 0.05,
+            maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
         )
     }
 
@@ -753,10 +743,10 @@ struct MapView: View {
 
     private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 0.85) {
         guard !isVisible else { return }
-        let needsCache = !mapLeadPinCache.isReady
-        let needsSnapshot = !mapLeadRenderSnapshot.isReady
-            || mapLeadRenderSnapshot.renderedPins.count > MapLeadVisibilityPolicy.hiddenRetainedLeadBudget
-        guard needsCache || needsSnapshot else { return }
+        guard MapLeadHiddenPrewarmPolicy.shouldPrewarm(
+            cacheIsReady: mapLeadPinCache.isReady,
+            snapshotIsReady: mapLeadRenderSnapshot.isReady
+        ) else { return }
         guard mapLeadCachePrewarmTask == nil else { return }
         let persistentStoreCoordinator = viewContext.persistentStoreCoordinator
         guard mapLeadPinCache.isReady || persistentStoreCoordinator != nil else { return }
@@ -789,7 +779,7 @@ struct MapView: View {
                     mode: selectedMapMode,
                     region: visibleMapRegion,
                     fallbackCenter: locationManager.region.center,
-                    maxRenderedLeads: MapLeadVisibilityPolicy.hiddenRetainedLeadBudget
+                    maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
                 )
                 guard !Task.isCancelled else {
                     mapLeadCachePrewarmTask = nil
@@ -798,9 +788,6 @@ struct MapView: View {
 
                 mapLeadPinCache = cache
                 mapLeadRenderSnapshot = snapshot
-                if isVisible {
-                    scheduleInteractiveMapLeadRenderUpdate(after: 0.02)
-                }
             }
 
             mapLeadCachePrewarmTask = nil
@@ -822,17 +809,13 @@ struct MapView: View {
 
         scheduleMapLeadRenderUpdate(
             after: guardedDelay,
-            maxRenderedLeads: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
-            expandAfter: 1.8,
-            usePreviewIfCacheEmpty: true
+            maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
         )
     }
 
     private func scheduleMapLeadRenderUpdate(
         after delay: TimeInterval,
-        maxRenderedLeads: Int,
-        expandAfter expansionDelay: TimeInterval?,
-        usePreviewIfCacheEmpty: Bool = false
+        maxRenderedLeads: Int
     ) {
         guard isVisible else { return }
 
@@ -846,15 +829,12 @@ struct MapView: View {
             region: region,
             fallbackCenter: fallbackCenter,
             maxRenderedLeads: maxRenderedLeads,
-            usePreviewIfCacheEmpty: usePreviewIfCacheEmpty,
             cacheIsReady: mapLeadPinCache.isReady
         )
 
         guard pendingMapLeadRenderSignature != requestSignature else { return }
 
         mapLeadRenderTask?.cancel()
-        mapLeadExpansionTask?.cancel()
-        mapLeadExpansionTask = nil
         pendingMapLeadRenderSignature = requestSignature
 
         mapLeadRenderTask = Task { @MainActor in
@@ -874,8 +854,7 @@ struct MapView: View {
                 mode: mode,
                 region: region,
                 fallbackCenter: fallbackCenter,
-                maxRenderedLeads: maxRenderedLeads,
-                usePreviewIfCacheEmpty: usePreviewIfCacheEmpty
+                maxRenderedLeads: maxRenderedLeads
             )
             guard !Task.isCancelled else {
                 if pendingMapLeadRenderSignature == requestSignature {
@@ -888,53 +867,10 @@ struct MapView: View {
                 mapLeadPinCache = snapshot.cache
             }
             mapLeadRenderSnapshot = snapshot
+            mapLeadOpeningGuardUntil = .distantPast
             if pendingMapLeadRenderSignature == requestSignature {
                 pendingMapLeadRenderSignature = nil
             }
-
-            if let expansionDelay {
-                scheduleExpandedMapLeadRenderUpdate(
-                    after: expansionDelay,
-                    mode: mode,
-                    region: region,
-                    fallbackCenter: fallbackCenter
-                )
-            }
-        }
-    }
-
-    private func scheduleExpandedMapLeadRenderUpdate(
-        after delay: TimeInterval,
-        mode: MapWorkflowMode,
-        region: MKCoordinateRegion,
-        fallbackCenter: CLLocationCoordinate2D
-    ) {
-        guard isVisible else { return }
-
-        mapLeadExpansionTask?.cancel()
-        mapLeadExpansionTask = Task { @MainActor in
-            if delay > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            }
-            guard !Task.isCancelled, selectedMapMode == mode else { return }
-
-            guard let persistentStoreCoordinator = viewContext.persistentStoreCoordinator else { return }
-
-            let snapshot = await loadMapLeadSnapshotIfNeeded(
-                persistentStoreCoordinator: persistentStoreCoordinator,
-                cachedPins: mapLeadPinCache,
-                mode: mode,
-                region: region,
-                fallbackCenter: fallbackCenter,
-                maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
-                usePreviewIfCacheEmpty: false
-            )
-            guard !Task.isCancelled, selectedMapMode == mode else { return }
-
-            if snapshot.cache.isReady {
-                mapLeadPinCache = snapshot.cache
-            }
-            mapLeadRenderSnapshot = snapshot
         }
     }
 
@@ -944,20 +880,11 @@ struct MapView: View {
         mode: MapWorkflowMode,
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
-        maxRenderedLeads: Int,
-        usePreviewIfCacheEmpty: Bool
+        maxRenderedLeads: Int
     ) async -> MapLeadRenderSnapshot {
         let cache: MapLeadPinCache
         if cachedPins.isReady {
             cache = cachedPins
-        } else if usePreviewIfCacheEmpty {
-            cache = await MapLeadPinCache.loadOpeningPreview(
-                from: persistentStoreCoordinator,
-                mode: mode,
-                region: region,
-                fallbackCenter: fallbackCenter,
-                limit: maxRenderedLeads
-            )
         } else {
             cache = await MapLeadPinCache.load(from: persistentStoreCoordinator)
         }
@@ -1041,8 +968,6 @@ struct MapView: View {
     private func cancelMapLeadRenderTasks() {
         mapLeadRenderTask?.cancel()
         mapLeadRenderTask = nil
-        mapLeadExpansionTask?.cancel()
-        mapLeadExpansionTask = nil
         pendingMapLeadRenderSignature = nil
     }
 
@@ -1525,6 +1450,8 @@ struct MapView: View {
         .mapOverlayCapsule()
         .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
         .accessibilityLabel(mapSummaryText)
+        .accessibilityValue("\(mapLeadRenderSnapshot.renderedPins.count) rendered pins")
+        .accessibilityIdentifier("mapLeadSummary")
     }
 
     private var mapSummaryText: String {
@@ -3600,225 +3527,6 @@ private struct MapLeadPinCache {
         }
     }
 
-    static func loadOpeningPreview(
-        from persistentStoreCoordinator: NSPersistentStoreCoordinator,
-        mode: MapWorkflowMode,
-        region: MKCoordinateRegion,
-        fallbackCenter: CLLocationCoordinate2D,
-        limit: Int,
-        now: Date = Date()
-    ) async -> MapLeadPinCache {
-        await withCheckedContinuation { continuation in
-            let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
-            context.persistentStoreCoordinator = persistentStoreCoordinator
-            context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-            context.undoManager = nil
-
-            context.perform {
-                do {
-                    let priorityLeads = try fetchPreviewLeads(
-                        in: context,
-                        predicate: priorityPredicate(for: mode, now: now),
-                        limit: max(limit, 48)
-                    )
-                    let viewportLeads = try fetchPreviewLeads(
-                        in: context,
-                        predicate: NSCompoundPredicate(andPredicateWithSubpredicates: [
-                            coordinatePredicate(for: region, fallbackCenter: fallbackCenter),
-                            modePredicate(for: mode, now: now)
-                        ]),
-                        limit: max(limit * 2, 80)
-                    )
-
-                    var pins: [MapLeadPin] = []
-                    var seenObjectIDs = Set<NSManagedObjectID>()
-                    for lead in priorityLeads + viewportLeads {
-                        guard let pin = MapLeadPin(lead: lead),
-                              seenObjectIDs.insert(pin.objectID).inserted else { continue }
-                        pins.append(pin)
-                    }
-
-                    continuation.resume(returning: MapLeadPinCache(
-                        pins: pins,
-                        totalLeadCount: 0,
-                        isReady: false
-                    ))
-                } catch {
-                    AppLog.warning("Map", "Could not load opening map pin preview: \(error.localizedDescription)")
-                    continuation.resume(returning: .empty)
-                }
-            }
-        }
-    }
-
-    private static func fetchPreviewLeads(
-        in context: NSManagedObjectContext,
-        predicate: NSPredicate,
-        limit: Int
-    ) throws -> [Lead] {
-        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
-        request.predicate = predicate
-        request.sortDescriptors = []
-        request.fetchLimit = limit
-        request.fetchBatchSize = min(limit, 80)
-        request.includesPendingChanges = false
-        request.includesSubentities = false
-        request.relationshipKeyPathsForPrefetching = []
-        return try context.fetch(request)
-    }
-
-    private static func priorityPredicate(for mode: MapWorkflowMode, now: Date) -> NSPredicate {
-        switch mode {
-        case .all:
-            return NSCompoundPredicate(orPredicateWithSubpredicates: [
-                soldPredicate,
-                interestedPredicate,
-                highValuePredicate,
-                duePredicate(now: now)
-            ])
-        case .hot:
-            return hotPredicate(now: now)
-        case .due:
-            return duePredicate(now: now)
-        case .today:
-            return todayPredicate(now: now)
-        case .sold:
-            return soldPredicate
-        case .next:
-            return NSCompoundPredicate(andPredicateWithSubpredicates: [
-                activeLeadPredicate,
-                NSCompoundPredicate(orPredicateWithSubpredicates: [
-                    interestedPredicate,
-                    highValuePredicate,
-                    duePredicate(now: now)
-                ])
-            ])
-        }
-    }
-
-    private static func modePredicate(for mode: MapWorkflowMode, now: Date) -> NSPredicate {
-        switch mode {
-        case .all:
-            return NSPredicate(value: true)
-        case .hot:
-            return hotPredicate(now: now)
-        case .due:
-            return duePredicate(now: now)
-        case .today:
-            return todayPredicate(now: now)
-        case .sold:
-            return soldPredicate
-        case .next:
-            return activeLeadPredicate
-        }
-    }
-
-    private static var soldPredicate: NSPredicate {
-        NSPredicate(format: "status == %@", Lead.Status.converted.rawValue)
-    }
-
-    private static var interestedPredicate: NSPredicate {
-        NSPredicate(format: "status == %@", Lead.Status.interested.rawValue)
-    }
-
-    private static var activeLeadPredicate: NSPredicate {
-        NSPredicate(format: "status == nil OR status IN %@", Lead.Status.activeFollowUpRawValues)
-    }
-
-    private static var highValuePredicate: NSPredicate {
-        NSCompoundPredicate(orPredicateWithSubpredicates: [
-            NSPredicate(format: "priority > 0"),
-            NSPredicate(format: "price > 0"),
-            NSPredicate(format: "estimatedValue > 0")
-        ])
-    }
-
-    private static func hotPredicate(now: Date) -> NSPredicate {
-        NSCompoundPredicate(andPredicateWithSubpredicates: [
-            activeLeadPredicate,
-            NSCompoundPredicate(orPredicateWithSubpredicates: [
-                interestedPredicate,
-                highValuePredicate,
-                duePredicate(now: now)
-            ])
-        ])
-    }
-
-    private static func duePredicate(now: Date, calendar: Calendar = .current) -> NSPredicate {
-        let dueCutoff = calendar.date(byAdding: .hour, value: 12, to: now) ?? now
-        return NSCompoundPredicate(andPredicateWithSubpredicates: [
-            activeLeadPredicate,
-            NSPredicate(format: "followUpDate != nil AND followUpDate <= %@", dueCutoff as NSDate)
-        ])
-    }
-
-    private static func todayPredicate(now: Date, calendar: Calendar = .current) -> NSPredicate {
-        let start = calendar.startOfDay(for: now)
-        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? now
-        return NSPredicate(format: "createdDate >= %@ AND createdDate < %@", start as NSDate, end as NSDate)
-    }
-
-    private static func coordinatePredicate(
-        for region: MKCoordinateRegion,
-        fallbackCenter: CLLocationCoordinate2D
-    ) -> NSPredicate {
-        let expandedRegion = expandedPreviewRegion(region, fallbackCenter: fallbackCenter)
-        let latitudeHalfSpan = expandedRegion.span.latitudeDelta / 2
-        let longitudeHalfSpan = expandedRegion.span.longitudeDelta / 2
-        let minLatitude = max(-90, expandedRegion.center.latitude - latitudeHalfSpan)
-        let maxLatitude = min(90, expandedRegion.center.latitude + latitudeHalfSpan)
-        let minLongitude = expandedRegion.center.longitude - longitudeHalfSpan
-        let maxLongitude = expandedRegion.center.longitude + longitudeHalfSpan
-
-        let latitudePredicate = NSPredicate(
-            format: "latitude >= %lf AND latitude <= %lf",
-            minLatitude,
-            maxLatitude
-        )
-
-        let longitudePredicate: NSPredicate
-        if minLongitude < -180 {
-            longitudePredicate = NSCompoundPredicate(orPredicateWithSubpredicates: [
-                NSPredicate(format: "longitude >= %lf", minLongitude + 360),
-                NSPredicate(format: "longitude <= %lf", maxLongitude)
-            ])
-        } else if maxLongitude > 180 {
-            longitudePredicate = NSCompoundPredicate(orPredicateWithSubpredicates: [
-                NSPredicate(format: "longitude >= %lf", minLongitude),
-                NSPredicate(format: "longitude <= %lf", maxLongitude - 360)
-            ])
-        } else {
-            longitudePredicate = NSPredicate(
-                format: "longitude >= %lf AND longitude <= %lf",
-                minLongitude,
-                maxLongitude
-            )
-        }
-
-        return NSCompoundPredicate(andPredicateWithSubpredicates: [
-            latitudePredicate,
-            longitudePredicate,
-            NSPredicate(format: "latitude != 0 OR longitude != 0")
-        ])
-    }
-
-    private static func expandedPreviewRegion(
-        _ region: MKCoordinateRegion,
-        fallbackCenter: CLLocationCoordinate2D
-    ) -> MKCoordinateRegion {
-        let center = CLLocationCoordinate2DIsValid(region.center) ? region.center : fallbackCenter
-        let latitudeDelta = min(max(normalizedDelta(region.span.latitudeDelta) * 2.2, 0.02), 180)
-        let longitudeDelta = min(max(normalizedDelta(region.span.longitudeDelta) * 2.2, 0.02), 360)
-        return MKCoordinateRegion(
-            center: center,
-            span: MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta)
-        )
-    }
-
-    private static func normalizedDelta(_ delta: CLLocationDegrees) -> CLLocationDegrees {
-        guard delta.isFinite, delta > 0 else { return 0.03 }
-        return min(max(delta, 0.003), 180)
-    }
 }
 
 private struct MapLeadRenderRequestSignature: Equatable {
@@ -3828,7 +3536,6 @@ private struct MapLeadRenderRequestSignature: Equatable {
     let latitudeSpanBucket: Int
     let longitudeSpanBucket: Int
     let maxRenderedLeads: Int
-    let usePreviewIfCacheEmpty: Bool
     let cacheIsReady: Bool
 
     init(
@@ -3836,7 +3543,6 @@ private struct MapLeadRenderRequestSignature: Equatable {
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
         maxRenderedLeads: Int,
-        usePreviewIfCacheEmpty: Bool,
         cacheIsReady: Bool
     ) {
         let center = CLLocationCoordinate2DIsValid(region.center) ? region.center : fallbackCenter
@@ -3846,7 +3552,6 @@ private struct MapLeadRenderRequestSignature: Equatable {
         self.latitudeSpanBucket = Self.spanBucket(region.span.latitudeDelta)
         self.longitudeSpanBucket = Self.spanBucket(region.span.longitudeDelta)
         self.maxRenderedLeads = maxRenderedLeads
-        self.usePreviewIfCacheEmpty = usePreviewIfCacheEmpty
         self.cacheIsReady = cacheIsReady
     }
 
@@ -4075,9 +3780,6 @@ private struct MapLeadPinRenderCandidate {
 }
 
 enum MapLeadOpeningRenderPolicy {
-    static let warmSnapshotRefreshDelay: TimeInterval = 1.15
-    static let warmSnapshotExpansionDelay: TimeInterval = 4.0
-
     static func shouldPreserveSnapshotOnOpen(
         cacheIsReady: Bool,
         snapshotIsReady: Bool,
@@ -4095,12 +3797,29 @@ enum MapLeadOpeningRenderPolicy {
 
         return matchingLeadCount <= renderedPinCount
     }
+
+    static func shouldScheduleRenderOnOpen(
+        cacheIsReady: Bool,
+        snapshotIsReady: Bool,
+        renderedPinCount: Int,
+        matchingLeadCount: Int
+    ) -> Bool {
+        !shouldPreserveSnapshotOnOpen(
+            cacheIsReady: cacheIsReady,
+            snapshotIsReady: snapshotIsReady,
+            renderedPinCount: renderedPinCount,
+            matchingLeadCount: matchingLeadCount
+        )
+    }
+}
+
+enum MapLeadHiddenPrewarmPolicy {
+    static func shouldPrewarm(cacheIsReady: Bool, snapshotIsReady: Bool) -> Bool {
+        !cacheIsReady || !snapshotIsReady
+    }
 }
 
 enum MapLeadVisibilityPolicy {
-    static let openingRenderedLeadBudget = 24
-    static let hiddenRetainedLeadBudget = 32
-    static let interactiveRenderedLeadBudget = 96
     static let defaultRenderedLeadBudget = 180
     private static let viewportPaddingMultiplier = 1.8
 
@@ -5005,11 +4724,11 @@ struct StatusChangeSheet: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 14) {
-                    ObsidianScreenTitle(
-                        title: "Change Status",
-                        subtitle: leadSubtitle,
-                        icon: "flag.fill"
-                    )
+                    Text(leadSubtitle)
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 4)
 
                     ObsidianSectionCard(
                         title: "Lead Status",

@@ -2480,6 +2480,42 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testMapLargeDatasetColdOpenReachesOneStableSnapshot() throws {
+        let app = makeApp()
+        app.launchArguments.removeAll { $0 == "-resetUITestLeads" }
+        app.launchArguments.append("-openMoreTabForUITests")
+        app.launchArguments.append("-seedMapPerformanceLeads")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        XCTAssertTrue(
+            app.staticTexts["2000 leads"].waitForExistence(timeout: 15),
+            "The large-map fixture should finish before measuring the Map transition"
+        )
+
+        tapButton(app, "tab_Map", timeout: 8)
+        let summary = app.descendants(matching: .any)["mapLeadSummary"].firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 2), "Map lead summary should appear immediately")
+
+        let stableSnapshot = expectation(
+            for: NSPredicate(format: "value == %@", "180 rendered pins"),
+            evaluatedWith: summary
+        )
+        wait(for: [stableSnapshot], timeout: 3)
+        screenshot(app, name: "Map - 2000 lead stable opening snapshot")
+
+        app.terminate()
+        let cleanupApp = makeApp()
+        cleanupApp.launchArguments.append("-openMoreTabForUITests")
+        cleanupApp.launch()
+        XCTAssertTrue(
+            cleanupApp.staticTexts["0 leads"].waitForExistence(timeout: 12),
+            "The performance fixture should be removed after the regression test"
+        )
+        cleanupApp.terminate()
+    }
+
+    @MainActor
     func testMapToolsAndQuickActionSheetsSmoke() throws {
         let app = makeApp()
         app.launch()

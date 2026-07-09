@@ -94,6 +94,12 @@ struct D2D_AdvancerApp: App {
             Self.resetUITestLeadsWhenReady(using: persistenceController)
         }
 
+        #if DEBUG
+        if launchArguments.contains("-seedMapPerformanceLeads") {
+            Self.seedMapPerformanceLeadsWhenReady(using: persistenceController)
+        }
+        #endif
+
         if isRunningUITests {
             UIView.setAnimationsEnabled(false)
             if launchArguments.contains("-openTeamWorkspaceForUITests") {
@@ -273,6 +279,81 @@ struct D2D_AdvancerApp: App {
             print("🧪 UI test lead reset failed: \(error)")
         }
     }
+
+    #if DEBUG
+    private static func seedMapPerformanceLeadsWhenReady(
+        using persistenceController: PersistenceController,
+        attemptsRemaining: Int = 40
+    ) {
+        guard persistenceController.hasPersistentStore else {
+            guard attemptsRemaining > 0 else {
+                print("Map performance fixture skipped: Core Data store was not ready")
+                return
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                seedMapPerformanceLeadsWhenReady(
+                    using: persistenceController,
+                    attemptsRemaining: attemptsRemaining - 1
+                )
+            }
+            return
+        }
+
+        let context = persistenceController.container.newBackgroundContext()
+        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        context.undoManager = nil
+
+        context.perform {
+            let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+            request.predicate = NSCompoundPredicate(orPredicateWithSubpredicates: [
+                NSPredicate(format: "name BEGINSWITH %@", "Map Perf "),
+                NSPredicate(format: "name BEGINSWITH %@", "UI Map Perf ")
+            ])
+            request.fetchBatchSize = 500
+
+            do {
+                try context.fetch(request).forEach(context.delete)
+
+                let now = Date()
+                let centerLatitude = 37.7858
+                let centerLongitude = -122.4064
+                for index in 0..<2_000 {
+                    let row = index / 50
+                    let column = index % 50
+                    let lead = Lead.create(in: context)
+                    lead.id = UUID()
+                    lead.name = "UI Map Perf \(index)"
+                    lead.address = "\(1000 + index) Performance Test Way"
+                    lead.latitude = centerLatitude + (Double(row - 20) * 0.00045)
+                    lead.longitude = centerLongitude + (Double(column - 25) * 0.00045)
+                    lead.createdDate = now.addingTimeInterval(TimeInterval(-index * 30))
+                    lead.updatedDate = now.addingTimeInterval(TimeInterval(-index))
+                    lead.priority = index.isMultiple(of: 17) ? 2 : 0
+                    lead.estimatedValue = index.isMultiple(of: 23) ? Double(800 + index) : 0
+
+                    switch index % 20 {
+                    case 0:
+                        lead.status = Lead.Status.converted.rawValue
+                    case 1, 2:
+                        lead.status = Lead.Status.interested.rawValue
+                    case 3:
+                        lead.status = Lead.Status.notHome.rawValue
+                        lead.followUpDate = now.addingTimeInterval(-3_600)
+                    default:
+                        lead.status = Lead.Status.notContacted.rawValue
+                    }
+                }
+
+                try context.save()
+                print("Map performance fixture ready: 2000 leads")
+            } catch {
+                context.rollback()
+                print("Map performance fixture failed: \(error.localizedDescription)")
+            }
+        }
+    }
+    #endif
 
     private func requestNotificationAuthorization() {
         // Set up notification categories first

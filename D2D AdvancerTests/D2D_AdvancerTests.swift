@@ -2458,10 +2458,11 @@ struct D2D_AdvancerTests {
     }
 
     @MainActor
-    @Test func mapLeadVisibilityPolicyOpeningBudgetKeepsFirstPaintSmallAndPrioritized() throws {
+    @Test func mapLeadVisibilityPolicyHonorsExplicitBudgetAndKeepsPriorityOrder() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
         let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let renderBudget = 24
         let region = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 43.55, longitude: -79.70),
             span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
@@ -2499,11 +2500,11 @@ struct D2D_AdvancerTests {
             mode: .all,
             region: region,
             fallbackCenter: region.center,
-            maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
+            maxRenderedLeads: renderBudget,
             now: now
         )
 
-        #expect(rendered.count == MapLeadVisibilityPolicy.openingRenderedLeadBudget)
+        #expect(rendered.count == renderBudget)
         #expect(rendered.prefix(2).map { $0.name ?? "" } == ["Sold", "Interested"])
     }
 
@@ -2512,7 +2513,7 @@ struct D2D_AdvancerTests {
             MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
                 cacheIsReady: true,
                 snapshotIsReady: true,
-                renderedPinCount: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
+                renderedPinCount: MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
                 matchingLeadCount: 2_000
             )
         )
@@ -2528,7 +2529,7 @@ struct D2D_AdvancerTests {
             MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
                 cacheIsReady: true,
                 snapshotIsReady: true,
-                renderedPinCount: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
+                renderedPinCount: 24,
                 matchingLeadCount: 2_000
             )
         )
@@ -2536,10 +2537,33 @@ struct D2D_AdvancerTests {
             !MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
                 cacheIsReady: false,
                 snapshotIsReady: true,
-                renderedPinCount: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
+                renderedPinCount: MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
                 matchingLeadCount: 2_000
             )
         )
+
+        #expect(
+            !MapLeadOpeningRenderPolicy.shouldScheduleRenderOnOpen(
+                cacheIsReady: true,
+                snapshotIsReady: true,
+                renderedPinCount: MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
+                matchingLeadCount: 2_000
+            )
+        )
+        #expect(
+            MapLeadOpeningRenderPolicy.shouldScheduleRenderOnOpen(
+                cacheIsReady: false,
+                snapshotIsReady: false,
+                renderedPinCount: 0,
+                matchingLeadCount: 0
+            )
+        )
+    }
+
+    @Test func mapLeadHiddenPrewarmPolicyDoesNotReplaceAWarmSnapshot() {
+        #expect(!MapLeadHiddenPrewarmPolicy.shouldPrewarm(cacheIsReady: true, snapshotIsReady: true))
+        #expect(MapLeadHiddenPrewarmPolicy.shouldPrewarm(cacheIsReady: false, snapshotIsReady: true))
+        #expect(MapLeadHiddenPrewarmPolicy.shouldPrewarm(cacheIsReady: true, snapshotIsReady: false))
     }
 
     @MainActor

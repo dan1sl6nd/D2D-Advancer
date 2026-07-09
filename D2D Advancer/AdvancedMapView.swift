@@ -873,29 +873,12 @@ struct AdvancedMapView: UIViewRepresentable {
         }
 
         func updateHiddenAnnotationsIfNeeded(mapView: MKMapView, leads: [MapLeadPin]) {
-            defer {
-                suspendHiddenAnnotationWork(mapView: mapView)
-            }
-
-            guard leads.count <= MapLeadVisibilityPolicy.hiddenRetainedLeadBudget
-                || currentAnnotations.count <= MapLeadVisibilityPolicy.hiddenRetainedLeadBudget else {
-                return
-            }
-
             updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
         }
 
         private func cancelPendingAnnotationUpdates() {
             pendingAnnotationWorkItems.forEach { $0.cancel() }
             pendingAnnotationWorkItems.removeAll()
-        }
-
-        func suspendHiddenAnnotationWork(mapView: MKMapView) {
-            cancelPendingAnnotationUpdates()
-            // The map view is kept alive behind other tabs. Retaining the current
-            // annotation set avoids paying a full remove/re-add cost every time
-            // the user opens the map tab.
-            currentLeadClusteringMode = LeadClusterDisplayPolicy.mode(for: mapView.region)
         }
 
         private func addAnnotationsInBatches(
