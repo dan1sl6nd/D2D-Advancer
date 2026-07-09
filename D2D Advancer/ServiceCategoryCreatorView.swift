@@ -109,7 +109,7 @@ struct ServiceCategoryCreatorView: View {
                         selectedIcon = icon
                     }) {
                         Image(systemName: icon)
-                            .font(.title2)
+                            .font(.obsidianAction)
                             .foregroundColor(selectedIcon == icon ? .white : colorForName(selectedColor))
                             .frame(width: 44, height: 44)
                             .background(selectedIcon == icon ? colorForName(selectedColor) : Color.obsidianElevated)
@@ -147,7 +147,7 @@ struct ServiceCategoryCreatorView: View {
                             .overlay(
                                 selectedColor == color ?
                                 Image(systemName: "checkmark")
-                                    .font(.headline)
+                                    .font(.obsidianCallout)
                                     .fontWeight(.bold)
                                     .foregroundColor(.white)
                                 : nil
@@ -168,7 +168,7 @@ struct ServiceCategoryCreatorView: View {
         ) {
             HStack(spacing: 12) {
                 Image(systemName: selectedIcon)
-                    .font(.title2)
+                    .font(.obsidianAction)
                     .foregroundColor(colorForName(selectedColor))
                     .frame(width: 40, height: 40)
                     .background(colorForName(selectedColor).opacity(0.12))

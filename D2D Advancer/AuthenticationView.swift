@@ -202,7 +202,7 @@ struct AuthenticationView: View {
                             .tint(.white)
                     } else {
                         Image(systemName: isLoginMode ? "arrow.right.circle.fill" : "checkmark.circle.fill")
-                            .font(.title3)
+                            .font(.obsidianAction)
                     }
 
                     Text(isLoginMode ? "Sign In" : "Create Account")
@@ -489,7 +489,7 @@ struct ForgotPasswordSheet: View {
         }) {
             HStack(spacing: 8) {
                 Image(systemName: "paperplane.fill")
-                    .font(.title3)
+                    .font(.obsidianAction)
 
                 Text("Send Reset Email")
                     .font(.obsidianAction)

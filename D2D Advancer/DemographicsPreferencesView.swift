@@ -151,7 +151,7 @@ struct ProfileCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: profileIcon)
-                    .font(.title2)
+                    .font(.obsidianAction)
                     .foregroundColor(isSelected ? .white : Color.electricViolet)
                     .frame(width: 44, height: 44)
                     .background(

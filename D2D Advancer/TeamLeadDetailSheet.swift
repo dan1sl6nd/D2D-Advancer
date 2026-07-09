@@ -922,7 +922,7 @@ private struct TeamLeadDetailSection<Content: View>: View {
             HStack(spacing: 10) {
                 if let systemImage {
                     Image(systemName: systemImage)
-                        .font(.title2)
+                        .font(.obsidianAction)
                         .foregroundColor(Color.electricViolet)
                         .frame(width: 24)
                 }
@@ -945,7 +945,7 @@ private struct TeamLeadDetailSection<Content: View>: View {
                 RoundedRectangle(cornerRadius: systemImage == nil ? 14 : 16, style: .continuous)
                     .stroke(systemImage == nil ? Color.obsidianBorder.opacity(0.4) : Color.obsidianBorder, lineWidth: systemImage == nil ? 1 : 0.5)
             )
-            .shadow(color: systemImage == nil ? Color.clear : Color.black, radius: systemImage == nil ? 0 : 8, x: 0, y: systemImage == nil ? 0 : 2)
+            .shadow(color: systemImage == nil ? Color.clear : Color.black.opacity(0.08), radius: systemImage == nil ? 0 : 8, x: 0, y: systemImage == nil ? 0 : 2)
         }
     }
 }
@@ -1020,8 +1020,7 @@ private struct TeamLeadDetailEditField: View {
                     .frame(width: 20)
 
                 Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textPrimary)
             }
 
@@ -1029,7 +1028,7 @@ private struct TeamLeadDetailEditField: View {
                 .keyboardType(keyboardType)
                 .textInputAutocapitalization(keyboardType == .emailAddress ? .never : .sentences)
                 .autocorrectionDisabled(keyboardType == .emailAddress)
-                .font(.obsidianFootnote)
+                .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -1058,13 +1057,12 @@ private struct TeamLeadDetailEditTextArea: View {
                     .frame(width: 20)
 
                 Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textPrimary)
             }
 
             TextEditor(text: $text)
-                .font(.obsidianFootnote)
+                .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 104)
@@ -1093,8 +1091,7 @@ private struct TeamLeadDetailDateField: View {
                     .frame(width: 20)
 
                 Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textPrimary)
             }
 
@@ -1130,8 +1127,7 @@ private struct TeamLeadDetailStepperField: View {
                     .frame(width: 20)
 
                 Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.obsidianFootnote)
                     .foregroundColor(Color.textPrimary)
             }
 
@@ -1401,7 +1397,7 @@ struct TeamToolbarDoneButton: View {
             }
             .foregroundColor(.white)
             .padding(.horizontal, 12)
-            .frame(height: 34)
+            .frame(minHeight: 44)
             .background(
                 Capsule()
                     .fill(

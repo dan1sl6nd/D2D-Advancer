@@ -183,7 +183,7 @@ struct CustomTemplateCreatorView: View {
                         Spacer()
                         Image(systemName: "chevron.down")
                             .foregroundColor(Color.textSecondary)
-                            .font(.caption)
+                            .font(.obsidianSmall)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -248,7 +248,7 @@ struct CustomTemplateCreatorView: View {
                     Spacer(minLength: 0)
 
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
+                        .font(.obsidianSmall.weight(.semibold))
                         .foregroundColor(Color.textMuted)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -276,7 +276,7 @@ struct CustomTemplateCreatorView: View {
                 HStack {
                     Image(systemName: "tag.fill")
                         .foregroundColor(Color.electricViolet)
-                        .font(.caption)
+                        .font(.obsidianSmall)
                     Text("Insert Placeholders")
                         .font(.obsidianFootnote)
                         .foregroundColor(Color.textPrimary)
@@ -289,7 +289,7 @@ struct CustomTemplateCreatorView: View {
 
                     HStack(spacing: 4) {
                         Image(systemName: "info.circle.fill")
-                            .font(.caption2)
+                            .font(.nano)
                             .foregroundColor(Color.electricViolet)
                         Text("Use math with price: {price + 50}, {price * 1.1}, {price - 100}, {price / 2}")
                             .font(.micro)
@@ -351,7 +351,7 @@ struct CustomTemplateCreatorView: View {
                         Spacer(minLength: 0)
 
                         Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
+                            .font(.obsidianSmall.weight(.semibold))
                             .foregroundColor(Color.textMuted)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

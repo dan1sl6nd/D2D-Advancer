@@ -145,7 +145,7 @@ struct CustomAppointmentTypeCreatorView: View {
 
                         Image(systemName: "chevron.right")
                             .foregroundColor(Color.textSecondary)
-                            .font(.caption)
+                            .font(.obsidianSmall)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -288,7 +288,7 @@ struct ColorSelectionChip: View {
                     )
                 
                 Text(colorName)
-                    .font(.caption2)
+                    .font(.nano)
                     .fontWeight(.medium)
                     .foregroundColor(isSelected ? color : Color.textSecondary)
             }
