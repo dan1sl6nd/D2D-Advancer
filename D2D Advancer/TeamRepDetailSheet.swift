@@ -373,13 +373,13 @@ struct TeamRepDetailSheet: View {
                 .foregroundColor(canUpdateBooking(booking) ? Color.electricViolet : Color.textMuted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
-                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .background(
                     Capsule()
                         .fill(Color.electricViolet.opacity(canUpdateBooking(booking) ? 0.12 : 0.05))
                 )
+                .contentShape(Capsule())
         }
         .buttonStyle(PlainButtonStyle())
         .disabled(!canUpdateBooking(booking) || booking.status == status || isSaving || teamService.isLoading)

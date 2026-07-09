@@ -449,9 +449,10 @@ struct TeamWorkspaceView: View {
                     .fontWeight(.semibold)
                     .foregroundColor(Color.electricViolet)
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .frame(minHeight: 44)
                     .background(Color.electricViolet.opacity(0.12))
                     .clipShape(Capsule())
+                    .contentShape(Capsule())
                     .buttonStyle(PlainButtonStyle())
                     Spacer()
                 }
@@ -2242,13 +2243,13 @@ struct TeamWorkspaceView: View {
                 .foregroundColor(canUpdateBooking(booking) ? Color.electricViolet : Color.textMuted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
-                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .background(
                     Capsule()
                         .fill(Color.electricViolet.opacity(canUpdateBooking(booking) ? 0.12 : 0.05))
                 )
+                .contentShape(Capsule())
         }
         .buttonStyle(PlainButtonStyle())
         .disabled(!canUpdateBooking(booking) || booking.status == status || isWorking || teamService.isLoading)
@@ -2262,12 +2263,14 @@ struct TeamWorkspaceView: View {
                 .font(.nano)
                 .foregroundColor(team.planStatus.allowsTeamWrite ? Color.electricViolet : Color.textMuted)
                 .lineLimit(1)
+                .minimumScaleFactor(0.72)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .background(
                     Capsule()
                         .fill(Color.electricViolet.opacity(team.planStatus.allowsTeamWrite ? 0.12 : 0.05))
                 )
+                .contentShape(Capsule())
         }
         .buttonStyle(PlainButtonStyle())
         .disabled(!team.planStatus.allowsTeamWrite || isWorking || teamService.isLoading)
