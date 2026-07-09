@@ -1802,7 +1802,8 @@ struct SyncSettingsView: View {
                         .foregroundColor(Color.electricViolet)
                 }
             }
-            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityIdentifier("syncSettingsInterval_\(interval.rawValue)")
