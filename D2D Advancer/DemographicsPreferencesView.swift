@@ -131,6 +131,7 @@ struct DemographicsPreferencesView: View {
                 )
             }
         }
+        .obsidianModalBackground()
     }
 
     private func formatCurrency(_ value: Double) -> String {

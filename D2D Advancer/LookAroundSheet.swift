@@ -31,7 +31,7 @@ struct LookAroundSheet: View {
             .frame(maxHeight: .infinity, alignment: .top)
         }
         .background(Color.obsidianBackground(for: colorScheme))
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
         .onAppear {
             // Always load on appear — the task(id:) only fires on coordinate CHANGES
             Task { await loadAppleScene() }

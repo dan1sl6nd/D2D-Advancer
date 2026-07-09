@@ -114,6 +114,7 @@ struct FirstMessageConfirmationView: View {
         } message: {
             Text(deleteErrorMessage ?? "Please try again.")
         }
+        .obsidianModalBackground()
     }
 
     private var sendWarning: (title: String, message: String)? {

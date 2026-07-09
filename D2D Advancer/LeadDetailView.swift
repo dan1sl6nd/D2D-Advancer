@@ -455,16 +455,19 @@ struct LeadDetailView: View {
                         Text("Street View")
                             .font(.obsidianSmall)
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Color.textPrimary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
-                    .background(Color.obsidianSurface.opacity(0.92))
+                    .frame(minHeight: 44)
+                    .background(Color.obsidianElevated.opacity(0.94))
                     .clipShape(Capsule())
                     .overlay(
                         Capsule()
                             .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
                     )
+                    .contentShape(Capsule())
                 }
+                .buttonStyle(.plain)
                 .padding(10)
             }
             .sheet(isPresented: $showingLookAround) {
@@ -782,10 +785,10 @@ struct LeadDetailView: View {
             Text("\(copiedFieldName) copied")
                 .font(.obsidianFootnote)
                 .fontWeight(.semibold)
-                .foregroundColor(.white)
+                .foregroundColor(Color.textPrimary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(Color.obsidianSurface.opacity(0.96))
+                .background(Color.obsidianElevated.opacity(0.96))
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()

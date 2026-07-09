@@ -256,7 +256,7 @@ struct MainTabView: View {
         guard mapPrewarmTask == nil else { return }
 
         mapPrewarmTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 700_000_000)
+            try? await Task.sleep(nanoseconds: 150_000_000)
             guard !Task.isCancelled else { return }
             shouldKeepMapAlive = true
             mapPrewarmTask = nil

@@ -45,7 +45,7 @@ struct AuthenticationView: View {
                 .padding(.bottom, 24)
             }
         }
-        .presentationBackground(screenBackground)
+        .obsidianModalBackground()
         .navigationBarHidden(true)
         .onAppear {
             loadStoredCredentials()
@@ -406,7 +406,7 @@ struct ForgotPasswordSheet: View {
                 .padding(.bottom, 24)
             }
         }
-        .presentationBackground(screenBackground)
+        .obsidianModalBackground()
         .onAppear {
             accountManager.authStatus = .idle
             resetEmail = email

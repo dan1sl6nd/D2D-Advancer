@@ -717,16 +717,16 @@ struct MapView: View {
 
     private func scheduleOpeningMapLeadRenderUpdate() {
         let hasWarmCache = mapLeadPinCache.isReady
-        mapLeadOpeningGuardUntil = Date().addingTimeInterval(hasWarmCache ? 0.45 : 1.05)
+        mapLeadOpeningGuardUntil = Date().addingTimeInterval(hasWarmCache ? 1.0 : 1.65)
         scheduleMapLeadRenderUpdate(
-            after: hasWarmCache ? 0.12 : 0.26,
+            after: hasWarmCache ? 0.24 : 0.55,
             maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
-            expandAfter: hasWarmCache ? 3.2 : 4.2,
+            expandAfter: hasWarmCache ? 5.0 : 6.5,
             usePreviewIfCacheEmpty: true
         )
     }
 
-    private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 1.4) {
+    private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 0.35) {
         guard !isVisible else { return }
         guard !mapLeadPinCache.isReady || !mapLeadRenderSnapshot.isReady else { return }
         guard mapLeadCachePrewarmTask == nil else { return }
@@ -2200,7 +2200,7 @@ struct InterestedQuickForm: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.obsidianBackground(for: colorScheme))
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
         .sheet(isPresented: $showingMessageConfirmation) {
             if let lead = createdLead {
                 FirstMessageConfirmationView(lead: lead) {
@@ -2635,7 +2635,7 @@ struct MapSearchSheet: View {
             }
         }
         .background(Color.obsidianBackground(for: colorScheme))
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
         .onAppear { isSearchFocused = true }
     }
 
@@ -2702,7 +2702,7 @@ struct ComeBackLaterSheet: View {
             }
         }
         .background(Color.obsidianBackground(for: colorScheme))
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
         .onAppear {
             resolveLocation()
         }
@@ -2995,7 +2995,7 @@ struct LongPressMenuSheet: View {
             }
         }
         .background(Color.obsidianBackground(for: colorScheme))
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
         .presentationDragIndicator(.visible)
         .onAppear {
             if confirmedAddress.isEmpty {
@@ -3393,7 +3393,7 @@ struct SearchPinActionsSheet: View {
             .accessibilityIdentifier("searchPinAddLeadButton")
         }
         .background(Color.obsidianBackground(for: colorScheme))
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
     }
 }
 
@@ -4353,7 +4353,7 @@ private struct MapToolsSheet: View {
             }
         }
         .background(Color.obsidianBackground(for: colorScheme))
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
     }
 
     private var header: some View {
@@ -4546,7 +4546,7 @@ struct LeadClusterSheet: View {
             }
         }
         .background(Color.obsidianBackground(for: colorScheme))
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
     }
 
     private var quickActions: some View {
@@ -4972,7 +4972,7 @@ struct StatusChangeSheet: View {
                 .background(screenBackground.ignoresSafeArea(edges: .bottom))
             }
         }
-        .presentationBackground(screenBackground)
+        .obsidianModalBackground()
     }
 
     private var leadSubtitle: String {

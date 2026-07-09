@@ -1151,7 +1151,7 @@ struct PasswordChangeView: View {
             .background(screenBackground)
             .navigationBarHidden(true)
         }
-        .presentationBackground(screenBackground)
+        .obsidianModalBackground()
         .onAppear {
             userAccountManager.authStatus = .idle
         }
@@ -1602,7 +1602,7 @@ struct DeleteAccountView: View {
             .background(screenBackground)
             .navigationBarHidden(true)
         }
-        .presentationBackground(screenBackground)
+        .obsidianModalBackground()
         .onAppear {
             userAccountManager.authStatus = .idle
         }

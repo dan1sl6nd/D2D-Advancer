@@ -4,7 +4,6 @@ struct SeasonalDatePickerView: View {
     @Binding var selectedDate: Date?
     let onCompletion: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     
     @State private var selectedPreset: SeasonalDatePreset?
     @State private var customDate: Date = Date()
@@ -67,7 +66,7 @@ struct SeasonalDatePickerView: View {
                 )
             }
         }
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
     }
     
     private var hasSelection: Bool {

@@ -82,7 +82,7 @@ struct CustomTemplateCreatorView: View {
                     category: selectedCategory
                 )
                 .presentationDetents([.large])
-                .presentationBackground(Color.obsidianBackground(for: colorScheme))
+                .obsidianModalBackground()
             }
             .alert(
                 "Template not saved",
@@ -96,7 +96,7 @@ struct CustomTemplateCreatorView: View {
                 Text(saveErrorMessage ?? "Please try again.")
             }
         }
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
     }
 
     private func saveTemplate() {
@@ -438,7 +438,7 @@ struct PreviewTemplateView: View {
                 onBack: { dismiss() }
             )
         }
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
     }
 
     private var templateHeaderCard: some View {

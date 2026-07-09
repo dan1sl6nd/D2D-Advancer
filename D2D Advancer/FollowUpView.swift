@@ -832,7 +832,7 @@ struct RescheduleFollowUpView: View {
                 )
             }
         }
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
     }
 
     private var changeSummarySection: some View {

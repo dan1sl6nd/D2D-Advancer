@@ -659,7 +659,7 @@ struct SelectLeadForAppointmentView: View {
                 )
             }
         }
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
         .accessibilityIdentifier("appointmentLeadPickerSheet")
     }
 }

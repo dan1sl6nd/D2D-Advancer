@@ -278,7 +278,7 @@ struct QuickFilterPresetPickerSheet: View {
                 .background(screenBackground.ignoresSafeArea(edges: .bottom))
             }
         }
-        .presentationBackground(screenBackground)
+        .obsidianModalBackground()
         .accessibilityIdentifier("quickFilterPresetPickerSheet")
     }
 }
@@ -409,7 +409,7 @@ struct SavePresetSheet: View {
                 .background(screenBackground.ignoresSafeArea(edges: .bottom))
             }
         }
-        .presentationBackground(screenBackground)
+        .obsidianModalBackground()
         .accessibilityIdentifier("quickFilterSavePresetSheet")
     }
 }

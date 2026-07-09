@@ -161,6 +161,7 @@ struct NeighborhoodDetailView: View {
                 notesEditorSheet
             }
         }
+        .obsidianModalBackground()
     }
 
     private var notesEditorSheet: some View {
@@ -210,6 +211,7 @@ struct NeighborhoodDetailView: View {
             .obsidianScreenBackground()
             .navigationBarHidden(true)
         }
+        .obsidianModalBackground()
         .presentationDetents([.medium, .large])
     }
 

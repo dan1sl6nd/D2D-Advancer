@@ -188,7 +188,7 @@ struct TeamLeadClusterSheet: View {
             }
         }
         .background(Color.obsidianBackground(for: colorScheme))
-        .presentationBackground(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
     }
 
     @ViewBuilder
