@@ -50,9 +50,10 @@ struct QuickFilterChipsView: View {
                         }
                         .font(.themeCaption)
                         .foregroundColor(Color.textSecondary)
-                        .frame(minHeight: 32)
+                        .frame(minHeight: 44)
                         .glassChip()
                     }
+                    .buttonStyle(PlainButtonStyle())
                     .accessibilityIdentifier("quickFilterClearButton")
 
                     Button {
@@ -64,7 +65,7 @@ struct QuickFilterChipsView: View {
                         }
                         .font(.themeCaption)
                         .foregroundColor(Color.textSecondary)
-                        .frame(minHeight: 32)
+                        .frame(minHeight: 44)
                         .glassChip()
                     }
                     .buttonStyle(PlainButtonStyle())

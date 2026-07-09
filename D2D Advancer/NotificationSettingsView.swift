@@ -67,7 +67,6 @@ struct NotificationSettingsView: View {
                             requestPermissionOrOpenSettings()
                         }
                         .buttonStyle(ObsidianSecondaryButtonStyle())
-                        .controlSize(.mini)
                     }
                 }
             )
@@ -270,10 +269,10 @@ struct NotificationSettingsView: View {
             }
             .foregroundColor(Color.electricViolet)
             .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .frame(minWidth: 118)
+            .frame(minWidth: 118, minHeight: 44)
             .background(Color.electricViolet.opacity(0.12))
             .clipShape(Capsule())
+            .contentShape(Capsule())
         }
         .accessibilityIdentifier("notificationFollowUpReminderTimeMenu")
     }

@@ -100,7 +100,6 @@ struct CalendarSettingsView: View {
                             requestAccess()
                         }
                         .buttonStyle(ObsidianSecondaryButtonStyle())
-                        .controlSize(.mini)
                     }
                 )
             }
@@ -155,7 +154,6 @@ struct CalendarSettingsView: View {
                             openAppSettings()
                         }
                         .buttonStyle(ObsidianSecondaryButtonStyle())
-                        .controlSize(.mini)
                     }
                 )
             }

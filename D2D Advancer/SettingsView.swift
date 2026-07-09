@@ -1539,7 +1539,7 @@ struct AppPreferencesView: View {
             }
             .foregroundColor(Color.electricViolet)
             .padding(.horizontal, 12)
-            .frame(minHeight: 38)
+            .frame(minHeight: 44)
             .background(Color.electricViolet.opacity(0.12))
             .clipShape(Capsule())
             .contentShape(Capsule())
