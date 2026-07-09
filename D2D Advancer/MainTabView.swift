@@ -27,14 +27,13 @@ struct MainTabView: View {
     }
 
     private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
-        TeamWorkspaceSurfaceSummary.make(
+        TeamWorkspaceSurfaceSummary.makeShortcut(
             team: teamService.activeTeam,
             currentMember: teamService.currentMember,
             members: teamService.teamMembers,
             leads: teamService.teamLeads,
             bookings: teamService.teamBookings,
             dutySessions: teamService.dutySessions,
-            dutyLocationPoints: teamService.dutyLocationPoints,
             ownerNotifications: teamService.ownerNotifications
         )
     }
