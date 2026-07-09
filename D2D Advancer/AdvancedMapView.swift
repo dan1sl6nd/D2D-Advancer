@@ -92,7 +92,7 @@ struct AdvancedMapView: UIViewRepresentable {
             if mapView.showsUserLocation {
                 mapView.showsUserLocation = false
             }
-            coordinator.suspendHiddenAnnotationWork(mapView: mapView)
+            coordinator.updateHiddenAnnotationsIfNeeded(mapView: mapView, leads: leads)
             return
         }
 
@@ -872,6 +872,19 @@ struct AdvancedMapView: UIViewRepresentable {
             addAnnotationsInBatches(currentAnnotations, to: mapView, generation: generation)
         }
 
+        func updateHiddenAnnotationsIfNeeded(mapView: MKMapView, leads: [MapLeadPin]) {
+            defer {
+                suspendHiddenAnnotationWork(mapView: mapView)
+            }
+
+            guard leads.count <= MapLeadVisibilityPolicy.hiddenRetainedLeadBudget
+                || currentAnnotations.count <= MapLeadVisibilityPolicy.hiddenRetainedLeadBudget else {
+                return
+            }
+
+            updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
+        }
+
         private func cancelPendingAnnotationUpdates() {
             pendingAnnotationWorkItems.forEach { $0.cancel() }
             pendingAnnotationWorkItems.removeAll()
@@ -1359,7 +1372,7 @@ enum LeadClusterDisplayPolicy {
     }
 
     static func mode(mapSpan: CLLocationDegrees) -> Mode {
-        mapSpan <= 0.04 ? .expanded : .clustered
+        mapSpan <= 0.025 ? .expanded : .clustered
     }
 
     static func clusteringIdentifier(for mode: Mode) -> String? {

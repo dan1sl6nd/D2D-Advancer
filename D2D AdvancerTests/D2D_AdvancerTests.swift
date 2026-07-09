@@ -2931,8 +2931,8 @@ struct D2D_AdvancerTests {
     }
 
     @Test func leadClusterDisplayPolicyExpandsPinsAtNeighborhoodZoom() {
-        #expect(LeadClusterDisplayPolicy.mode(mapSpan: 0.04) == .expanded)
-        #expect(LeadClusterDisplayPolicy.mode(mapSpan: 0.05) == .clustered)
+        #expect(LeadClusterDisplayPolicy.mode(mapSpan: 0.025) == .expanded)
+        #expect(LeadClusterDisplayPolicy.mode(mapSpan: 0.035) == .clustered)
         #expect(LeadClusterDisplayPolicy.clusteringIdentifier(for: .expanded) == nil)
     }
 

@@ -753,9 +753,12 @@ struct MapView: View {
         scheduleHiddenMapLeadCachePrewarm()
     }
 
-    private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 0.35) {
+    private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 0.85) {
         guard !isVisible else { return }
-        guard !mapLeadPinCache.isReady || !mapLeadRenderSnapshot.isReady else { return }
+        let needsCache = !mapLeadPinCache.isReady
+        let needsSnapshot = !mapLeadRenderSnapshot.isReady
+            || mapLeadRenderSnapshot.renderedPins.count > MapLeadVisibilityPolicy.hiddenRetainedLeadBudget
+        guard needsCache || needsSnapshot else { return }
         guard mapLeadCachePrewarmTask == nil else { return }
         let persistentStoreCoordinator = viewContext.persistentStoreCoordinator
         guard mapLeadPinCache.isReady || persistentStoreCoordinator != nil else { return }
@@ -788,7 +791,7 @@ struct MapView: View {
                     mode: selectedMapMode,
                     region: visibleMapRegion,
                     fallbackCenter: locationManager.region.center,
-                    maxRenderedLeads: MapLeadVisibilityPolicy.openingRenderedLeadBudget
+                    maxRenderedLeads: MapLeadVisibilityPolicy.hiddenRetainedLeadBudget
                 )
                 guard !Task.isCancelled else {
                     mapLeadCachePrewarmTask = nil
@@ -4104,9 +4107,10 @@ enum MapLeadOpeningRenderPolicy {
 }
 
 enum MapLeadVisibilityPolicy {
-    static let openingRenderedLeadBudget = 36
-    static let interactiveRenderedLeadBudget = 140
-    static let defaultRenderedLeadBudget = 260
+    static let openingRenderedLeadBudget = 24
+    static let hiddenRetainedLeadBudget = 32
+    static let interactiveRenderedLeadBudget = 96
+    static let defaultRenderedLeadBudget = 180
     private static let viewportPaddingMultiplier = 1.8
 
     static func visibleLeads<Leads: Collection>(
