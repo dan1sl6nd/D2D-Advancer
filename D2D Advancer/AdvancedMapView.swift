@@ -636,8 +636,8 @@ struct AdvancedMapView: UIViewRepresentable {
     
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: AdvancedMapView
-        private static let annotationBatchSize = 88
-        private static let annotationBatchDelay: TimeInterval = 0.018
+        private static let annotationBatchSize = 48
+        private static let annotationBatchDelay: TimeInterval = 0.045
         private var currentAnnotations: [LeadMapAnnotation] = []
         private var currentSearchPinAnnotation: MKPointAnnotation?
         private var currentAnnotationSignature: [LeadAnnotationSignature] = []
@@ -879,12 +879,10 @@ struct AdvancedMapView: UIViewRepresentable {
 
         func suspendHiddenAnnotationWork(mapView: MKMapView) {
             cancelPendingAnnotationUpdates()
-            guard !currentAnnotations.isEmpty else { return }
-
-            mapView.removeAnnotations(currentAnnotations)
-            currentAnnotations = []
-            currentAnnotationSignature = []
-            currentLeadClusteringMode = nil
+            // The map view is kept alive behind other tabs. Retaining the current
+            // annotation set avoids paying a full remove/re-add cost every time
+            // the user opens the map tab.
+            currentLeadClusteringMode = LeadClusterDisplayPolicy.mode(for: mapView.region)
         }
 
         private func addAnnotationsInBatches(

@@ -727,9 +727,9 @@ struct MapView: View {
 
     private func prepareHiddenMapLeadState() {
         cancelMapLeadRenderTasks()
-        mapLeadRenderSnapshot = mapLeadRenderSnapshot.limited(
-            to: MapLeadVisibilityPolicy.openingRenderedLeadBudget
-        )
+        // Keep the current snapshot while the retained MKMapView is hidden.
+        // Shrinking it here forces annotation removal on the next open, which
+        // makes the map tab feel frozen with larger lead sets.
         scheduleHiddenMapLeadCachePrewarm()
     }
 
