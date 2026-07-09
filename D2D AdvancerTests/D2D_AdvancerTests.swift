@@ -2507,6 +2507,41 @@ struct D2D_AdvancerTests {
         #expect(rendered.prefix(2).map { $0.name ?? "" } == ["Sold", "Interested"])
     }
 
+    @Test func mapLeadOpeningRenderPolicyPreservesWarmSnapshotsOnly() {
+        #expect(
+            MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
+                cacheIsReady: true,
+                snapshotIsReady: true,
+                renderedPinCount: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
+                matchingLeadCount: 2_000
+            )
+        )
+        #expect(
+            MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
+                cacheIsReady: true,
+                snapshotIsReady: true,
+                renderedPinCount: 0,
+                matchingLeadCount: 0
+            )
+        )
+        #expect(
+            !MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
+                cacheIsReady: true,
+                snapshotIsReady: true,
+                renderedPinCount: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
+                matchingLeadCount: 2_000
+            )
+        )
+        #expect(
+            !MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
+                cacheIsReady: false,
+                snapshotIsReady: true,
+                renderedPinCount: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
+                matchingLeadCount: 2_000
+            )
+        )
+    }
+
     @MainActor
     @Test func mapLeadRenderSelectionKeepsSmallSetsCompleteAndCountsAllMatches() throws {
         let persistence = PersistenceController(inMemory: true)

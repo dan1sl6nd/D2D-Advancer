@@ -715,6 +715,18 @@ struct MapView: View {
     }
 
     private func scheduleOpeningMapLeadRenderUpdate() {
+        cancelMapLeadCachePrewarm()
+
+        if MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
+            cacheIsReady: mapLeadPinCache.isReady,
+            snapshotIsReady: mapLeadRenderSnapshot.isReady,
+            renderedPinCount: mapLeadRenderSnapshot.renderedPins.count,
+            matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount
+        ) {
+            mapLeadOpeningGuardUntil = .distantPast
+            return
+        }
+
         let hasWarmCache = mapLeadPinCache.isReady
         mapLeadOpeningGuardUntil = Date().addingTimeInterval(hasWarmCache ? 1.0 : 1.65)
         scheduleMapLeadRenderUpdate(
@@ -4058,6 +4070,26 @@ private struct MapLeadPinSelection {
 private struct MapLeadPinRenderCandidate {
     let pin: MapLeadPin
     let sortKey: LeadClusterSortKey
+}
+
+enum MapLeadOpeningRenderPolicy {
+    static func shouldPreserveSnapshotOnOpen(
+        cacheIsReady: Bool,
+        snapshotIsReady: Bool,
+        renderedPinCount: Int,
+        matchingLeadCount: Int
+    ) -> Bool {
+        guard cacheIsReady, snapshotIsReady else { return false }
+
+        // A warm, richer snapshot already has annotations on the retained
+        // MKMapView. Replacing it with the tiny opening preview causes the tab
+        // open to remove/re-add markers, which is exactly the lag users feel.
+        if renderedPinCount > MapLeadVisibilityPolicy.openingRenderedLeadBudget {
+            return true
+        }
+
+        return matchingLeadCount <= renderedPinCount
+    }
 }
 
 enum MapLeadVisibilityPolicy {
