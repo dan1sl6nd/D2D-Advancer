@@ -1,7 +1,9 @@
 import SwiftUI
+import CoreData
 
 struct MainTabView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var locationManager = LocationManager.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
@@ -9,11 +11,8 @@ struct MainTabView: View {
     @State private var didApplyRoleDefaultTab = false
     @State private var shouldKeepMapAlive = false
     @State private var mapPrewarmTask: Task<Void, Never>?
-
-    @FetchRequest(
-        sortDescriptors: [],
-        predicate: Lead.Status.activeFollowUpPredicate(dueBefore: Date())
-    ) private var overdueLeads: FetchedResults<Lead>
+    @State private var overdueLeadBadgeCount = 0
+    @State private var overdueLeadBadgeTask: Task<Void, Never>?
 
     private var isRunningUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
@@ -84,7 +83,7 @@ struct MainTabView: View {
                             icon: "bell",
                             selectedIcon: "bell.fill",
                             isSelected: router.selectedTab == 2,
-                            badgeCount: overdueLeads.count,
+                            badgeCount: overdueLeadBadgeCount,
                             accessibilityID: "tab_Follow_Up",
                             action: { router.selectedTab = 2 }
                         )
@@ -123,6 +122,8 @@ struct MainTabView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mainTabView")
         .onAppear {
+            scheduleOverdueLeadBadgeRefresh(after: 0)
+
             if router.selectedTab == 0 {
                 shouldKeepMapAlive = true
             } else {
@@ -159,6 +160,9 @@ struct MainTabView: View {
                 applyDefaultTabForRoleIfNeeded()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
+            scheduleOverdueLeadBadgeRefresh(after: 0.2)
+        }
         .onChange(of: userAccountManager.isLoggedIn) { _, _ in
             Task {
                 await loadTeamWorkspaceIfNeeded()
@@ -180,6 +184,8 @@ struct MainTabView: View {
         .onDisappear {
             mapPrewarmTask?.cancel()
             mapPrewarmTask = nil
+            overdueLeadBadgeTask?.cancel()
+            overdueLeadBadgeTask = nil
         }
     }
 
@@ -255,6 +261,33 @@ struct MainTabView: View {
             guard !Task.isCancelled else { return }
             shouldKeepMapAlive = true
             mapPrewarmTask = nil
+        }
+    }
+
+    private func scheduleOverdueLeadBadgeRefresh(after delay: TimeInterval = 0.05) {
+        overdueLeadBadgeTask?.cancel()
+        let context = viewContext
+
+        overdueLeadBadgeTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled else { return }
+
+            let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+            request.predicate = Lead.Status.activeFollowUpPredicate(dueBefore: Date())
+            request.includesPendingChanges = true
+            request.includesSubentities = false
+
+            do {
+                let count = try context.count(for: request)
+                guard !Task.isCancelled else { return }
+                overdueLeadBadgeCount = min(count, 99)
+            } catch {
+                AppLog.warning("Tabs", "Could not refresh follow-up badge count: \(error.localizedDescription)")
+            }
+
+            overdueLeadBadgeTask = nil
         }
     }
 

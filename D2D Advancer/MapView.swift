@@ -311,11 +311,11 @@ struct MapView: View {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var locationManager = LocationManager.shared
     @ObservedObject private var onboardingManager = OnboardingManager.shared
-    @ObservedObject private var preferences = AppPreferences.shared
-    @ObservedObject private var firebaseService = FirebaseService.shared
     @ObservedObject private var teamService = TeamFirebaseService.shared
     @ObservedObject private var syncManager = UserDataSyncManager.shared
-    @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    private let firebaseService = FirebaseService.shared
+    private let userAccountManager = FirebaseUserAccountManager.shared
+    private let paywallManager = PaywallManager.shared
     @State private var selectedLead: Lead?
     @State private var showingAddLead = false
     @State private var addLeadCoordinate: CLLocationCoordinate2D?
@@ -328,7 +328,6 @@ struct MapView: View {
     @State private var is3DModeEnabled = false
     @State private var leadToChangeStatus: Lead?
     @State private var triggerMapAnimation = false
-    @ObservedObject private var paywallManager = PaywallManager.shared
     @State private var toastLead: Lead?
     @State private var toastMessage: String = ""
     @State private var toastToken = UUID()
@@ -373,6 +372,10 @@ struct MapView: View {
         !isRunningUITests || FirebaseEmulatorConfiguration.isEnabled
     }
 
+    private var shouldRunVisibleMapEffects: Bool {
+        isVisible && !isRunningUITests
+    }
+
     enum MapDialog: Identifiable {
         case statusChange
         case longPressMenu
@@ -414,6 +417,18 @@ struct MapView: View {
             bookings: teamService.teamBookings,
             dutySessions: teamService.dutySessions,
             dutyLocationPoints: teamService.dutyLocationPoints,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
+
+    private var teamShortcutSummary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.makeShortcut(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
             ownerNotifications: teamService.ownerNotifications
         )
     }
@@ -902,14 +917,14 @@ struct MapView: View {
             launchLocationCenterRevision: locationManager.initialMapCenterRevision,
             leads: mapLeadRenderSnapshot.renderedPins,
             searchPin: $searchPin,
-            showsUserLocation: !isRunningUITests && LocationManager.isAuthorized(locationManager.authorizationStatus),
-            shouldFollowUserLocationOnLaunch: !isRunningUITests
+            showsUserLocation: shouldRunVisibleMapEffects && LocationManager.isAuthorized(locationManager.authorizationStatus),
+            shouldFollowUserLocationOnLaunch: shouldRunVisibleMapEffects
                 && locationManager.shouldUseUserLocation
                 && !didConfirmVisibleMapCenteredOnLaunch,
-            needsLaunchLocationCenteringConfirmation: !isRunningUITests
+            needsLaunchLocationCenteringConfirmation: shouldRunVisibleMapEffects
                 && LocationManager.isAuthorized(locationManager.authorizationStatus)
                 && !didConfirmVisibleMapCenteredOnLaunch,
-            hasLaunchLocationCandidate: MapLaunchCenteringPolicy.hasUsableLaunchLocationTarget(
+            hasLaunchLocationCandidate: shouldRunVisibleMapEffects && MapLaunchCenteringPolicy.hasUsableLaunchLocationTarget(
                 region: locationManager.region,
                 location: locationManager.location
             ),
@@ -1185,7 +1200,7 @@ struct MapView: View {
 
     @ViewBuilder
     private var urgentTeamMapShortcut: some View {
-        if let summary = teamSurfaceSummary {
+        if let summary = teamShortcutSummary {
             TeamMapShortcutPill(summary: summary) {
                 openTeamFieldMap()
             }

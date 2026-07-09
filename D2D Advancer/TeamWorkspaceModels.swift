@@ -905,6 +905,68 @@ struct TeamWorkspaceSurfaceSummary: Equatable, Sendable {
         }
     }
 
+    static func makeShortcut(
+        team: TeamWorkspace?,
+        currentMember: TeamMember?,
+        members: [TeamMember],
+        leads: [TeamLead],
+        bookings: [TeamBooking],
+        dutySessions: [TeamDutySession],
+        ownerNotifications: [TeamOwnerNotification],
+        now: Date = Date()
+    ) -> TeamWorkspaceSurfaceSummary? {
+        guard let team, let currentMember, team.planStatus.allowsTeamRead else { return nil }
+
+        let activeMembers = TeamMemberRoster.normalized(members)
+            .filter { $0.role == .member && $0.status == .active && !$0.isPendingInvite }
+        let activeMemberIds = Set(activeMembers.map(\.userId))
+        let activeDutyRepCount = Set(
+            dutySessions
+                .filter { $0.status == .active && activeMemberIds.contains($0.repUserId) }
+                .map(\.repUserId)
+        ).count
+        let lightweightOwnerWorkspaces = activeMembers.map { member in
+            TeamRepWorkspace(
+                member: member,
+                assignedLeads: [],
+                assignedBookings: [],
+                activeSession: nil,
+                latestSession: nil,
+                liveLocation: nil,
+                routePoints: []
+            )
+        }
+
+        switch currentMember.role {
+        case .owner:
+            return TeamWorkspaceSurfaceSummary(
+                role: .owner,
+                currentMemberWorkType: .owner,
+                teamName: team.name,
+                workspaces: lightweightOwnerWorkspaces,
+                teamLeadCount: leads.count,
+                importantLeadCount: leads.lazy.filter(Self.isImportantLead).count,
+                activeRepCount: activeDutyRepCount,
+                upcomingBookingCount: bookings.lazy.filter { Self.isUpcomingBooking($0, now: now) }.count,
+                unreadNotificationCount: ownerNotifications.lazy.filter { $0.readAt == nil }.count
+            )
+        case .member:
+            let assignedLeads = leads.lazy.filter { $0.assignedToUserId == currentMember.userId }
+            let assignedBookings = bookings.lazy.filter { $0.assignedToUserId == currentMember.userId }
+            return TeamWorkspaceSurfaceSummary(
+                role: .member,
+                currentMemberWorkType: currentMember.workType,
+                teamName: team.name,
+                workspaces: [],
+                teamLeadCount: assignedLeads.count,
+                importantLeadCount: assignedLeads.filter(Self.isImportantLead).count,
+                activeRepCount: activeDutyRepCount,
+                upcomingBookingCount: assignedBookings.filter { Self.isUpcomingBooking($0, now: now) }.count,
+                unreadNotificationCount: 0
+            )
+        }
+    }
+
     private static func isImportantLead(_ lead: TeamLead) -> Bool {
         TeamLeadAttentionPolicy.needsOwnerAttention(lead)
     }

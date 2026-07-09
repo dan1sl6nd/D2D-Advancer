@@ -980,6 +980,60 @@ struct TeamWorkspaceTests {
         #expect(summary?.shouldShowMapShortcut == true)
     }
 
+    @Test func ownerMapShortcutSummaryKeepsWorkerAndUrgentCountsWithoutFullWorkspacePayload() {
+        let now = Date(timeIntervalSince1970: 49_500)
+        let team = TeamWorkspace.newOwnerTeam(
+            id: "team-shortcut-map",
+            name: "Shortcut Team",
+            ownerUserId: "owner-1",
+            now: now
+        )
+        let owner = TeamMember.owner(teamId: team.id, userId: "owner-1", displayName: "Owner", email: nil, joinedAt: now)
+        let repA = TeamMember.rep(teamId: team.id, userId: "rep-a", displayName: "Rep A", email: nil, acceptedInviteId: "invite-a", joinedAt: now)
+        let repB = TeamMember.rep(teamId: team.id, userId: "rep-b", displayName: "Rep B", email: nil, acceptedInviteId: "invite-b", joinedAt: now)
+
+        var interestedLead = TeamLead.newRepLead(
+            teamId: team.id,
+            creatorUserId: repA.userId,
+            name: "Interested",
+            address: "10 King St",
+            coordinate: TeamCoordinate(latitude: 43.65, longitude: -79.38),
+            now: now
+        )
+        interestedLead.status = .interested
+
+        let activeSession = TeamDutySession(
+            id: "session-a",
+            teamId: team.id,
+            repUserId: repA.userId,
+            startedAt: now,
+            endedAt: nil,
+            status: .active,
+            lastLocationAt: now,
+            distanceMeters: 0,
+            createdAt: now,
+            deleteAfter: nil
+        )
+
+        let summary = TeamWorkspaceSurfaceSummary.makeShortcut(
+            team: team,
+            currentMember: owner,
+            members: [owner, repA, repB],
+            leads: [interestedLead],
+            bookings: [],
+            dutySessions: [activeSession],
+            ownerNotifications: [],
+            now: now
+        )
+
+        #expect(summary?.headline == "1 active worker")
+        #expect(summary?.workspaces.count == 2)
+        #expect(summary?.importantLeadCount == 1)
+        #expect(summary?.activeRepCount == 1)
+        #expect(summary?.detailLine == "1 important")
+        #expect(summary?.workspaces.allSatisfy { $0.assignedLeads.isEmpty && $0.routePoints.isEmpty } == true)
+    }
+
     @Test func memberSurfaceSummaryOnlyShowsAssignedWork() {
         let now = Date(timeIntervalSince1970: 50_000)
         let team = TeamWorkspace.newOwnerTeam(
