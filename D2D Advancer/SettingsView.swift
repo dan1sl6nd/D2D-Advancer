@@ -260,16 +260,9 @@ struct SettingsView: View {
                             .scaleEffect(0.8)
                             .tint(Color.electricViolet)
                     } else {
-                        Button("Sync") {
+                        SettingsInlineActionButton(title: "Sync", color: Color.electricViolet) {
                             syncManager.syncWithServer()
                         }
-                        .font(.obsidianFootnote)
-                        .fontWeight(.semibold)
-                        .foregroundColor(Color.electricViolet)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color.electricViolet.opacity(0.12))
-                        .clipShape(Capsule())
                     }
                 }
             )
@@ -917,17 +910,10 @@ struct AccountManagementView: View {
                     title: "Name",
                     subtitle: userAccountManager.currentUserDisplayName ?? userAccountManager.currentUser?.displayName ?? "Unknown",
                     trailingContent: {
-                        Button("Edit") {
+                        SettingsInlineActionButton(title: "Edit", color: Color.electricViolet) {
                             newName = userAccountManager.currentUserDisplayName ?? userAccountManager.currentUser?.displayName ?? ""
                             editingName = true
                         }
-                        .font(.obsidianFootnote)
-                        .fontWeight(.semibold)
-                        .foregroundColor(Color.electricViolet)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color.electricViolet.opacity(0.12))
-                        .clipShape(Capsule())
                         .accessibilityIdentifier("accountNameEditButton")
                     }
                 )
@@ -953,16 +939,9 @@ struct AccountManagementView: View {
                             .background(Color.statusInterested.opacity(0.12))
                             .clipShape(Capsule())
                     } else {
-                        Button("Verify") {
+                        SettingsInlineActionButton(title: "Verify", color: Color.statusNotHome) {
                             userAccountManager.resendVerificationEmail()
                         }
-                        .font(.obsidianFootnote)
-                        .fontWeight(.semibold)
-                        .foregroundColor(Color.statusNotHome)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color.statusNotHome.opacity(0.12))
-                        .clipShape(Capsule())
                     }
                 }
             )
@@ -1870,6 +1849,32 @@ struct PreferenceCardView<TrailingContent: View>: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
+    }
+}
+
+private struct SettingsInlineActionButton: View {
+    let title: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.obsidianFootnote)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundColor(color)
+                .padding(.horizontal, 14)
+                .frame(minWidth: 68, minHeight: 44)
+                .background(color.opacity(0.12))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(color.opacity(0.28), lineWidth: 0.75)
+                )
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
