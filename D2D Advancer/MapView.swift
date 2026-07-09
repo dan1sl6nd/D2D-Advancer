@@ -437,7 +437,8 @@ struct MapView: View {
 
     var body: some View {
         ZStack {
-                mapView
+            mapView
+            if isVisible {
                 overlayControls
                 toastOverlay
 
@@ -453,32 +454,33 @@ struct MapView: View {
                     }
                 }
             }
-            .navigationBarHidden(true)
-            .ignoresSafeArea(.all, edges: .top)
-            .onAppear {
-                guard isVisible else {
-                    prepareHiddenMapLeadState()
-                    return
-                }
+        }
+        .navigationBarHidden(true)
+        .ignoresSafeArea(.all, edges: .top)
+        .onAppear {
+            guard isVisible else {
+                prepareHiddenMapLeadState()
+                return
+            }
+            if !isRunningUITests {
+                prepareLaunchMapCentering()
+            }
+            scheduleOpeningMapLeadRenderUpdate()
+        }
+        .onDisappear {
+            cancelMapLeadRenderTasks()
+            cancelMapLeadCachePrewarm()
+        }
+        .onChange(of: isVisible) { _, isVisible in
+            if isVisible {
                 if !isRunningUITests {
                     prepareLaunchMapCentering()
                 }
                 scheduleOpeningMapLeadRenderUpdate()
+            } else {
+                prepareHiddenMapLeadState()
             }
-            .onDisappear {
-                cancelMapLeadRenderTasks()
-                cancelMapLeadCachePrewarm()
-            }
-            .onChange(of: isVisible) { _, isVisible in
-                if isVisible {
-                    if !isRunningUITests {
-                        prepareLaunchMapCentering()
-                    }
-                    scheduleOpeningMapLeadRenderUpdate()
-                } else {
-                    prepareHiddenMapLeadState()
-                }
-            }
+        }
             .onChange(of: selectedMapMode) { _, _ in
                 guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.03)
@@ -723,7 +725,13 @@ struct MapView: View {
             renderedPinCount: mapLeadRenderSnapshot.renderedPins.count,
             matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount
         ) {
-            mapLeadOpeningGuardUntil = .distantPast
+            mapLeadOpeningGuardUntil = Date().addingTimeInterval(MapLeadOpeningRenderPolicy.warmSnapshotRefreshDelay)
+            scheduleMapLeadRenderUpdate(
+                after: MapLeadOpeningRenderPolicy.warmSnapshotRefreshDelay,
+                maxRenderedLeads: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
+                expandAfter: MapLeadOpeningRenderPolicy.warmSnapshotExpansionDelay,
+                usePreviewIfCacheEmpty: true
+            )
             return
         }
 
@@ -4073,6 +4081,9 @@ private struct MapLeadPinRenderCandidate {
 }
 
 enum MapLeadOpeningRenderPolicy {
+    static let warmSnapshotRefreshDelay: TimeInterval = 1.15
+    static let warmSnapshotExpansionDelay: TimeInterval = 4.0
+
     static func shouldPreserveSnapshotOnOpen(
         cacheIsReady: Bool,
         snapshotIsReady: Bool,
@@ -4084,7 +4095,7 @@ enum MapLeadOpeningRenderPolicy {
         // A warm, richer snapshot already has annotations on the retained
         // MKMapView. Replacing it with the tiny opening preview causes the tab
         // open to remove/re-add markers, which is exactly the lag users feel.
-        if renderedPinCount > MapLeadVisibilityPolicy.openingRenderedLeadBudget {
+        if renderedPinCount > 0 {
             return true
         }
 

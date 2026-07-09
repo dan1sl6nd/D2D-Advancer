@@ -2525,7 +2525,7 @@ struct D2D_AdvancerTests {
             )
         )
         #expect(
-            !MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
+            MapLeadOpeningRenderPolicy.shouldPreserveSnapshotOnOpen(
                 cacheIsReady: true,
                 snapshotIsReady: true,
                 renderedPinCount: MapLeadVisibilityPolicy.openingRenderedLeadBudget,
