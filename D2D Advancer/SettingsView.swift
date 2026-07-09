@@ -1453,7 +1453,7 @@ struct AppPreferencesView: View {
                 ) {
                     PreferenceCardView(
                         icon: "map",
-                        iconColor: .cyan,
+                        iconColor: Color.dataCyan,
                         title: "Default Map Type",
                         subtitle: "Opening map style",
                         trailingContent: {
@@ -1474,7 +1474,7 @@ struct AppPreferencesView: View {
 
                     PreferenceCardView(
                         icon: "icloud.and.arrow.up",
-                        iconColor: .indigo,
+                        iconColor: Color.electricViolet,
                         title: "Auto Backup Frequency",
                         subtitle: "Automatic backup rhythm",
                         trailingContent: {

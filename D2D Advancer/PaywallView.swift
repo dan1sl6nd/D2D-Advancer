@@ -861,7 +861,7 @@ struct ModernTestimonialCard: View {
                     ForEach(0..<5, id: \.self) { _ in
                         Image(systemName: "star.fill")
                             .font(.nano)
-                            .foregroundColor(.yellow)
+                            .foregroundColor(Color.electricVioletLight)
                     }
                 }
             }
@@ -1059,7 +1059,7 @@ struct TestimonialCard: View {
                     HStack(spacing: 2) {
                         ForEach(0..<rating, id: \.self) { _ in
                             Image(systemName: "star.fill")
-                                .foregroundColor(.yellow)
+                                .foregroundColor(Color.electricVioletLight)
                                 .font(.nano)
                         }
                     }
