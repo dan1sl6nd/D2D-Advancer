@@ -237,19 +237,18 @@ struct MessageTemplatesManagerView: View {
             .accessibilityIdentifier("messageTemplateRow")
 
             if isCustom {
-                Button {
+                ObsidianCompactIconButton(
+                    icon: "trash",
+                    accessibilityLabel: "Delete message template",
+                    accentColor: Color.statusNotInterested,
+                    backgroundColor: Color.statusNotInterested.opacity(0.12),
+                    foregroundColor: Color.statusNotInterested,
+                    borderColor: Color.statusNotInterested.opacity(0.2),
+                    size: 44
+                ) {
                     templateToDelete = template
                     showingDeleteConfirm = true
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.obsidianFootnote)
-                        .fontWeight(.semibold)
-                        .foregroundColor(Color.statusNotInterested)
-                        .frame(width: 38, height: 38)
-                        .background(Color.statusNotInterested.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .buttonStyle(PlainButtonStyle())
                 .accessibilityIdentifier("messageTemplateDeleteButton")
                 .padding(.trailing, 16)
                 .padding(.top, 15)

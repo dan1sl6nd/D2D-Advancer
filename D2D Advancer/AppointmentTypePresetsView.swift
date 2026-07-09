@@ -219,9 +219,13 @@ struct CustomTypeChip: View {
                 Image(systemName: "ellipsis.circle")
                     .foregroundColor(Color.textSecondary)
                     .font(.obsidianHeadline)
-                    .frame(width: 38, height: 38)
+                    .frame(width: 44, height: 44)
                     .background(Color.obsidianSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+                    )
             }
             .buttonStyle(.plain)
         }

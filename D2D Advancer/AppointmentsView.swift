@@ -500,11 +500,16 @@ struct AppointmentInteractiveRowView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.micro)
+                .font(.obsidianCallout)
+                .fontWeight(.semibold)
                 .foregroundColor(tint)
-                .frame(width: 34, height: 34)
+                .frame(width: 44, height: 44)
                 .background(tint.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(tint.opacity(0.2), lineWidth: 0.5)
+                )
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityLabel(accessibilityLabel)

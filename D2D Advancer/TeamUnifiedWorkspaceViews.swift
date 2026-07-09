@@ -909,16 +909,16 @@ private struct TeamTechnicianJobRow: View {
             Spacer(minLength: 4)
 
             HStack(spacing: 6) {
-                Button(action: onRoute) {
-                    Image(systemName: "location.north.line.fill")
-                        .font(.micro)
-                        .foregroundColor(Color.electricViolet)
-                        .frame(width: 30, height: 30)
-                        .background(Color.electricViolet.opacity(0.12))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Route to job")
+                ObsidianCompactIconButton(
+                    icon: "location.north.line.fill",
+                    accessibilityLabel: "Route to job",
+                    accentColor: Color.electricViolet,
+                    backgroundColor: Color.electricViolet.opacity(0.12),
+                    foregroundColor: Color.electricViolet,
+                    borderColor: Color.electricViolet.opacity(0.2),
+                    size: 44,
+                    action: onRoute
+                )
 
                 Menu {
                     Button("On the way") { onStatus(.enRoute) }
@@ -929,14 +929,19 @@ private struct TeamTechnicianJobRow: View {
                     if isSaving {
                         ProgressView()
                             .tint(Color.textSecondary)
-                            .frame(width: 30, height: 30)
+                            .frame(width: 44, height: 44)
                     } else {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.micro)
+                            .font(.obsidianCallout)
+                            .fontWeight(.semibold)
                             .foregroundColor(Color.statusConverted)
-                            .frame(width: 30, height: 30)
+                            .frame(width: 44, height: 44)
                             .background(Color.statusConverted.opacity(0.12))
                             .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.statusConverted.opacity(0.2), lineWidth: 0.5)
+                            )
                     }
                 }
                 .disabled(isSaving)
@@ -1006,16 +1011,16 @@ struct TeamWorkInlineSection: View {
 
                 Spacer()
 
-                Button(action: onOpenMap) {
-                    Image(systemName: "map.fill")
-                        .font(.obsidianSmall)
-                        .foregroundColor(Color.electricViolet)
-                        .frame(width: 34, height: 34)
-                        .background(Color.electricViolet.opacity(0.12))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Open team field map")
+                ObsidianCompactIconButton(
+                    icon: "map.fill",
+                    accessibilityLabel: "Open team field map",
+                    accentColor: Color.electricViolet,
+                    backgroundColor: Color.electricViolet.opacity(0.12),
+                    foregroundColor: Color.electricViolet,
+                    borderColor: Color.electricViolet.opacity(0.2),
+                    size: 44,
+                    action: onOpenMap
+                )
             }
 
             if summary.role == .owner && summary.workspaces.count > 1 {

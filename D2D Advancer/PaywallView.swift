@@ -56,19 +56,16 @@ struct PaywallView: View {
                 .frame(maxWidth: .infinity)
                 .accessibilityHidden(true)
 
-            Button(action: { dismiss() }) {
-                Image(systemName: "xmark")
-                    .font(.obsidianFootnote)
-                    .foregroundColor(.textSecondary)
-                    .frame(width: 34, height: 34)
-                    .background(Color.obsidianSurface)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.obsidianBorder.opacity(0.7), lineWidth: 0.5)
-                    )
+            ObsidianCompactIconButton(
+                icon: "xmark",
+                accessibilityLabel: "Close paywall",
+                accentColor: Color.textSecondary,
+                backgroundColor: Color.obsidianSurface,
+                foregroundColor: Color.textSecondary,
+                borderColor: Color.obsidianBorder.opacity(0.7)
+            ) {
+                dismiss()
             }
-            .accessibilityLabel("Close paywall")
             .accessibilityIdentifier("paywallCloseButton")
         }
     }

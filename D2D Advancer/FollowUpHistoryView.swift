@@ -326,16 +326,16 @@ struct CheckInRowView: View {
 
             Spacer(minLength: 8)
 
-            Button(action: onDelete) {
-                Image(systemName: "trash.fill")
-                    .font(.micro)
-                    .foregroundColor(Color.statusNotInterested)
-                    .frame(width: 30, height: 30)
-                    .background(Color.statusNotInterested.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(PlainButtonStyle())
-            .accessibilityLabel("Delete check-in")
+            ObsidianCompactIconButton(
+                icon: "trash.fill",
+                accessibilityLabel: "Delete check-in",
+                accentColor: Color.statusNotInterested,
+                backgroundColor: Color.statusNotInterested.opacity(0.12),
+                foregroundColor: Color.statusNotInterested,
+                borderColor: Color.statusNotInterested.opacity(0.2),
+                size: 44,
+                action: onDelete
+            )
         }
         .accessibilityElement(children: .combine)
     }

@@ -343,14 +343,15 @@ private struct FullscreenPhotoViewer: View {
 
             VStack {
                 HStack {
-                    Button(action: onClose) {
-                        Image(systemName: "xmark")
-                            .font(.obsidianCaption.weight(.semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 36, height: 36)
-                            .background(.black.opacity(0.55))
-                            .clipShape(Circle())
-                    }
+                    ObsidianCompactIconButton(
+                        icon: "xmark",
+                        accessibilityLabel: "Close photo preview",
+                        accentColor: .white,
+                        backgroundColor: .black.opacity(0.55),
+                        foregroundColor: .white,
+                        borderColor: .white.opacity(0.18),
+                        action: onClose
+                    )
                     .padding(.leading, 16)
                     .padding(.top, 16)
                     Spacer()

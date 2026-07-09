@@ -302,7 +302,7 @@ struct RoutePlannerSheet: View {
                     Image(systemName: "location.north.line.fill")
                         .font(.obsidianCallout)
                         .foregroundColor(.white)
-                        .frame(width: 38, height: 38)
+                        .frame(width: 44, height: 44)
                         .background(
                             LinearGradient(
                                 colors: [Color.electricViolet, Color.electricVioletDeep],

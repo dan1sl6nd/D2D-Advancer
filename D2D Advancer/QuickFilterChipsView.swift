@@ -317,17 +317,17 @@ private struct QuickFilterPresetRow: View {
             .accessibilityIdentifier("quickFilterPreset_\(preset.id.uuidString)")
             .accessibilityLabel(preset.name)
 
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.obsidianCallout)
-                    .foregroundColor(Color.statusNotInterested)
-                    .frame(width: 38, height: 38)
-                    .background(Color.statusNotInterested.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(PlainButtonStyle())
+            ObsidianCompactIconButton(
+                icon: "trash",
+                accessibilityLabel: "Delete \(preset.name)",
+                accentColor: Color.statusNotInterested,
+                backgroundColor: Color.statusNotInterested.opacity(0.12),
+                foregroundColor: Color.statusNotInterested,
+                borderColor: Color.statusNotInterested.opacity(0.2),
+                size: 44,
+                action: onDelete
+            )
             .accessibilityIdentifier("quickFilterDeletePreset_\(preset.id.uuidString)")
-            .accessibilityLabel("Delete \(preset.name)")
         }
         .padding(12)
         .background(Color.obsidianElevated)

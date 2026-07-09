@@ -1248,7 +1248,7 @@ struct MapView: View {
             Image(systemName: icon)
                 .font(.obsidianBody)
                 .foregroundColor(color)
-                .frame(width: 42, height: 42)
+                .frame(width: 44, height: 44)
                 .background(.ultraThinMaterial)
                 .clipShape(Circle())
                 .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 2)
@@ -2480,15 +2480,13 @@ struct MapSearchSheet: View {
                     .foregroundColor(.textPrimary)
                     .accessibilityIdentifier("mapSearchSheet")
                 Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.obsidianCaption)
-                        .foregroundColor(.textSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(Color.obsidianElevated)
-                        .clipShape(Circle())
+                ObsidianCompactIconButton(
+                    icon: "xmark",
+                    accessibilityLabel: "Close search",
+                    accentColor: Color.textSecondary
+                ) {
+                    dismiss()
                 }
-                .accessibilityLabel("Close search")
                 .accessibilityIdentifier("mapSearchCloseButton")
             }
             .padding(.horizontal, 20)
@@ -3230,15 +3228,13 @@ struct SearchPinActionsSheet: View {
                     .foregroundColor(.textPrimary)
                     .accessibilityIdentifier("searchPinActionsTitle")
                 Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.obsidianCaption)
-                        .foregroundColor(.textSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(Color.obsidianElevated)
-                        .clipShape(Circle())
+                ObsidianCompactIconButton(
+                    icon: "xmark",
+                    accessibilityLabel: "Close pin actions",
+                    accentColor: Color.textSecondary
+                ) {
+                    dismiss()
                 }
-                .accessibilityLabel("Close pin actions")
                 .accessibilityIdentifier("searchPinActionsCloseButton")
             }
             .padding(.horizontal, 20)

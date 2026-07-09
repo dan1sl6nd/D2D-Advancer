@@ -623,7 +623,7 @@ struct ObsidianCompactIconButton: View {
     var foregroundColor: Color? = nil
     var borderColor: Color? = nil
     var accessibilityIdentifier: String? = nil
-    var size: CGFloat = 42
+    var size: CGFloat = 44
     let action: () -> Void
 
     var body: some View {
@@ -653,7 +653,7 @@ private struct ObsidianToolbarIconButton: View {
     var foregroundColor: Color? = nil
     var borderColor: Color? = nil
     var accessibilityIdentifier: String? = nil
-    var size: CGFloat = 42
+    var size: CGFloat = 44
     let action: () -> Void
 
     var body: some View {

@@ -422,16 +422,16 @@ struct TeamWorkspaceView: View {
 
                 Spacer()
 
-                Button {
+                ObsidianCompactIconButton(
+                    icon: "arrow.clockwise",
+                    accessibilityLabel: "Refresh team leads",
+                    accentColor: Color.electricViolet,
+                    backgroundColor: Color.electricViolet.opacity(0.12),
+                    foregroundColor: Color.electricViolet,
+                    borderColor: Color.electricViolet.opacity(0.2)
+                ) {
                     Task { await teamService.refreshTeamData() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.obsidianFootnote)
-                        .foregroundColor(Color.electricViolet)
-                        .frame(width: 34, height: 34)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Refresh team leads")
             }
 
             ownerLeadQueueFilterStrip
@@ -591,17 +591,17 @@ struct TeamWorkspaceView: View {
 
                 Spacer()
 
-                Button {
+                ObsidianCompactIconButton(
+                    icon: "arrow.clockwise",
+                    accessibilityLabel: "Refresh team map",
+                    accentColor: Color.electricViolet,
+                    backgroundColor: Color.electricViolet.opacity(0.12),
+                    foregroundColor: Color.electricViolet,
+                    borderColor: Color.electricViolet.opacity(0.2),
+                    accessibilityIdentifier: "teamRefreshMapButton"
+                ) {
                     Task { await teamService.refreshTeamData() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.obsidianFootnote)
-                        .foregroundColor(Color.electricViolet)
-                        .frame(width: 34, height: 34)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Refresh team map")
-                .accessibilityIdentifier("teamRefreshMapButton")
             }
 
             repFilterChips(workspaces: ownerRepWorkspaces)
@@ -671,16 +671,16 @@ struct TeamWorkspaceView: View {
 
                 Spacer()
 
-                Button {
+                ObsidianCompactIconButton(
+                    icon: "arrow.clockwise",
+                    accessibilityLabel: "Refresh technician jobs",
+                    accentColor: Color.electricViolet,
+                    backgroundColor: Color.electricViolet.opacity(0.12),
+                    foregroundColor: Color.electricViolet,
+                    borderColor: Color.electricViolet.opacity(0.2)
+                ) {
                     Task { await teamService.refreshTeamData() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.obsidianFootnote)
-                        .foregroundColor(Color.electricViolet)
-                        .frame(width: 34, height: 34)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Refresh technician jobs")
             }
 
             if activeTechnicians.isEmpty {
@@ -1522,21 +1522,17 @@ struct TeamWorkspaceView: View {
                 Spacer(minLength: 8)
 
                 if let actionTitle = snapshot.actionTitle {
-                    Button {
+                    ObsidianCompactIconButton(
+                        icon: "arrow.clockwise",
+                        accessibilityLabel: actionTitle,
+                        accentColor: Color.electricViolet,
+                        backgroundColor: Color.electricViolet.opacity(0.12),
+                        foregroundColor: Color.electricViolet,
+                        borderColor: Color.electricViolet.opacity(0.2),
+                        accessibilityIdentifier: "teamSyncHealthRefreshButton"
+                    ) {
                         Task { await teamService.refreshTeamData() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.obsidianCallout)
-                            .foregroundColor(Color.electricViolet)
-                            .frame(width: 40, height: 40)
-                            .background(
-                                Circle()
-                                    .fill(Color.electricViolet.opacity(0.12))
-                            )
                     }
-                    .buttonStyle(PlainButtonStyle())
-                    .accessibilityLabel(actionTitle)
-                    .accessibilityIdentifier("teamSyncHealthRefreshButton")
                 }
             }
         }
@@ -2021,10 +2017,10 @@ struct TeamWorkspaceView: View {
                 }
             }
         } label: {
-            Image(systemName: existingBooking == nil ? "paperplane.fill" : "arrow.triangle.2.circlepath")
-                .font(.micro)
-                .foregroundColor(Color.electricViolet)
-                .frame(width: 30, height: 30)
+            teamInlineMenuIcon(
+                existingBooking == nil ? "paperplane.fill" : "arrow.triangle.2.circlepath",
+                tint: Color.electricViolet
+            )
         }
         .disabled(activeAssignableJobWorkers.isEmpty || teamService.activeTeam?.planStatus.allowsTeamWrite != true)
         .accessibilityLabel(existingBooking == nil ? "Send appointment to worker" : "Reassign sent job")
@@ -2184,10 +2180,7 @@ struct TeamWorkspaceView: View {
                 .disabled(rep.userId == lead.assignedToUserId)
             }
         } label: {
-            Image(systemName: "person.crop.circle.badge.checkmark")
-                .font(.micro)
-                .foregroundColor(Color.electricViolet)
-                .frame(width: 26, height: 26)
+            teamInlineMenuIcon("person.crop.circle.badge.checkmark", tint: Color.electricViolet)
         }
         .disabled(activeAssignableReps.isEmpty || teamService.activeTeam?.planStatus.allowsTeamWrite != true)
         .accessibilityLabel("Assign lead")
@@ -2202,10 +2195,7 @@ struct TeamWorkspaceView: View {
                 .disabled(worker.userId == booking.assignedToUserId)
             }
         } label: {
-            Image(systemName: "person.crop.circle.badge.checkmark")
-                .font(.micro)
-                .foregroundColor(Color.electricViolet)
-                .frame(width: 26, height: 26)
+            teamInlineMenuIcon("person.crop.circle.badge.checkmark", tint: Color.electricViolet)
         }
         .disabled(activeAssignableJobWorkers.isEmpty || teamService.activeTeam?.planStatus.allowsTeamWrite != true)
         .accessibilityLabel("Assign job")
@@ -2220,10 +2210,7 @@ struct TeamWorkspaceView: View {
                 .disabled(status == booking.status)
             }
         } label: {
-            Image(systemName: "checklist")
-                .font(.micro)
-                .foregroundColor(Color.statusInterested)
-                .frame(width: 26, height: 26)
+            teamInlineMenuIcon("checklist", tint: Color.statusInterested)
         }
         .disabled(!canUpdateBooking(booking))
         .accessibilityLabel("Update job status")
@@ -2635,12 +2622,23 @@ struct TeamWorkspaceView: View {
             }
             .disabled(member.workType == .technician)
         } label: {
-            Image(systemName: "person.text.rectangle.fill")
-                .font(.obsidianFootnote)
-                .foregroundColor(Color.electricViolet)
-                .frame(width: 28, height: 28)
+            teamInlineMenuIcon("person.text.rectangle.fill", tint: Color.electricViolet)
         }
         .accessibilityLabel("Change worker type")
+    }
+
+    private func teamInlineMenuIcon(_ icon: String, tint: Color) -> some View {
+        Image(systemName: icon)
+            .font(.obsidianCallout)
+            .fontWeight(.semibold)
+            .foregroundColor(tint)
+            .frame(width: 44, height: 44)
+            .background(tint.opacity(0.12))
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(tint.opacity(0.2), lineWidth: 0.5)
+            )
     }
 
     private func memberStatusText(_ member: TeamMember) -> String {
