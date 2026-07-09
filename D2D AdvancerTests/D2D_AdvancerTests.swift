@@ -3347,6 +3347,7 @@ struct D2D_AdvancerTests {
             launchCenteringResetToken: 0,
             launchLocationCenterRevision: 0,
             leads: [],
+            isVisible: true,
             searchPin: .constant(nil),
             showsUserLocation: true,
             shouldFollowUserLocationOnLaunch: true,

@@ -780,7 +780,7 @@ struct MapView: View {
         scheduleMapLeadRenderUpdate(
             after: delay,
             maxRenderedLeads: MapLeadVisibilityPolicy.interactiveRenderedLeadBudget,
-            expandAfter: 0.75,
+            expandAfter: 1.8,
             usePreviewIfCacheEmpty: true
         )
     }
@@ -916,6 +916,7 @@ struct MapView: View {
             launchCenteringResetToken: launchCenteringResetToken,
             launchLocationCenterRevision: locationManager.initialMapCenterRevision,
             leads: mapLeadRenderSnapshot.renderedPins,
+            isVisible: isVisible,
             searchPin: $searchPin,
             showsUserLocation: shouldRunVisibleMapEffects && LocationManager.isAuthorized(locationManager.authorizationStatus),
             shouldFollowUserLocationOnLaunch: shouldRunVisibleMapEffects

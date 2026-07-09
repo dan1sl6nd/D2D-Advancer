@@ -15,6 +15,7 @@ struct AdvancedMapView: UIViewRepresentable {
     let launchLocationCenterRevision: Int
 
     let leads: [MapLeadPin]
+    let isVisible: Bool
     @Binding var searchPin: SearchPin?
     let showsUserLocation: Bool
     let shouldFollowUserLocationOnLaunch: Bool
@@ -272,11 +273,13 @@ struct AdvancedMapView: UIViewRepresentable {
             )
         }
 
-        coordinator.updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
-        coordinator.updateLeadClusteringModeIfNeeded(mapView: mapView)
-
-        // Update search pin
-        coordinator.updateSearchPin(mapView: mapView, searchPin: searchPin)
+        if isVisible {
+            coordinator.updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
+            coordinator.updateLeadClusteringModeIfNeeded(mapView: mapView)
+            coordinator.updateSearchPin(mapView: mapView, searchPin: searchPin)
+        } else {
+            coordinator.suspendHiddenAnnotationWork()
+        }
     }
     
     func makeCoordinator() -> Coordinator {
@@ -623,8 +626,8 @@ struct AdvancedMapView: UIViewRepresentable {
     
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: AdvancedMapView
-        private static let annotationBatchSize = 32
-        private static let annotationBatchDelay: TimeInterval = 0.05
+        private static let annotationBatchSize = 88
+        private static let annotationBatchDelay: TimeInterval = 0.018
         private var currentAnnotations: [LeadMapAnnotation] = []
         private var currentSearchPinAnnotation: MKPointAnnotation?
         private var currentAnnotationSignature: [LeadAnnotationSignature] = []
@@ -862,6 +865,10 @@ struct AdvancedMapView: UIViewRepresentable {
         private func cancelPendingAnnotationUpdates() {
             pendingAnnotationWorkItems.forEach { $0.cancel() }
             pendingAnnotationWorkItems.removeAll()
+        }
+
+        func suspendHiddenAnnotationWork() {
+            cancelPendingAnnotationUpdates()
         }
 
         private func addAnnotationsInBatches(
