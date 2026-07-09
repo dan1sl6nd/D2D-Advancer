@@ -88,6 +88,14 @@ struct AdvancedMapView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.parent = self
 
+        guard isVisible else {
+            if mapView.showsUserLocation {
+                mapView.showsUserLocation = false
+            }
+            coordinator.suspendHiddenAnnotationWork(mapView: mapView)
+            return
+        }
+
         if Self.shouldResetLaunchInteractionLock(
             previousToken: coordinator.lastLaunchCenteringResetToken,
             currentToken: launchCenteringResetToken
@@ -273,12 +281,8 @@ struct AdvancedMapView: UIViewRepresentable {
             )
         }
 
-        if isVisible {
-            coordinator.updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
-            coordinator.updateSearchPin(mapView: mapView, searchPin: searchPin)
-        } else {
-            coordinator.suspendHiddenAnnotationWork()
-        }
+        coordinator.updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
+        coordinator.updateSearchPin(mapView: mapView, searchPin: searchPin)
     }
     
     func makeCoordinator() -> Coordinator {
@@ -873,8 +877,14 @@ struct AdvancedMapView: UIViewRepresentable {
             pendingAnnotationWorkItems.removeAll()
         }
 
-        func suspendHiddenAnnotationWork() {
+        func suspendHiddenAnnotationWork(mapView: MKMapView) {
             cancelPendingAnnotationUpdates()
+            guard !currentAnnotations.isEmpty else { return }
+
+            mapView.removeAnnotations(currentAnnotations)
+            currentAnnotations = []
+            currentAnnotationSignature = []
+            currentLeadClusteringMode = nil
         }
 
         private func addAnnotationsInBatches(

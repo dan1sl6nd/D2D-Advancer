@@ -457,7 +457,7 @@ struct MapView: View {
             .ignoresSafeArea(.all, edges: .top)
             .onAppear {
                 guard isVisible else {
-                    scheduleHiddenMapLeadCachePrewarm()
+                    prepareHiddenMapLeadState()
                     return
                 }
                 if !isRunningUITests {
@@ -476,8 +476,7 @@ struct MapView: View {
                     }
                     scheduleOpeningMapLeadRenderUpdate()
                 } else {
-                    cancelMapLeadRenderTasks()
-                    scheduleHiddenMapLeadCachePrewarm()
+                    prepareHiddenMapLeadState()
                 }
             }
             .onChange(of: selectedMapMode) { _, _ in
@@ -724,6 +723,14 @@ struct MapView: View {
             expandAfter: hasWarmCache ? 5.0 : 6.5,
             usePreviewIfCacheEmpty: true
         )
+    }
+
+    private func prepareHiddenMapLeadState() {
+        cancelMapLeadRenderTasks()
+        mapLeadRenderSnapshot = mapLeadRenderSnapshot.limited(
+            to: MapLeadVisibilityPolicy.openingRenderedLeadBudget
+        )
+        scheduleHiddenMapLeadCachePrewarm()
     }
 
     private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 0.35) {
@@ -3860,6 +3867,19 @@ private struct MapLeadRenderSnapshot {
         isReady: false,
         cache: .empty
     )
+
+    func limited(to maxRenderedLeads: Int) -> MapLeadRenderSnapshot {
+        guard maxRenderedLeads >= 0 else { return self }
+        guard renderedPins.count > maxRenderedLeads else { return self }
+
+        return MapLeadRenderSnapshot(
+            renderedPins: Array(renderedPins.prefix(maxRenderedLeads)),
+            totalLeadCount: totalLeadCount,
+            matchingLeadCount: matchingLeadCount,
+            isReady: isReady,
+            cache: cache
+        )
+    }
 
     static func make(
         from cache: MapLeadPinCache,
