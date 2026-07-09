@@ -994,9 +994,8 @@ struct QuickTimeButton: View {
                     .minimumScaleFactor(0.82)
             }
             .foregroundColor(isSelected ? .white : Color.electricViolet)
-            .frame(maxWidth: .infinity)
             .padding(.horizontal, 10)
-            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(isSelected ? Color.electricViolet : Color.electricViolet.opacity(0.1))
@@ -1005,6 +1004,7 @@ struct QuickTimeButton: View {
                             .stroke(Color.electricViolet.opacity(isSelected ? 0.0 : 0.3), lineWidth: 1)
                     )
                 )
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityIdentifier(accessibilityIdentifier ?? title)
