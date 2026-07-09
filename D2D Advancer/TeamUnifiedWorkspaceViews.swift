@@ -38,8 +38,7 @@ struct TeamMapShortcutPill: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .frame(maxWidth: summary.hasUrgentActivity ? 230 : 170)
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
+            .teamOverlayCapsule()
             .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 2)
         }
         .buttonStyle(PlainButtonStyle())
@@ -1346,8 +1345,18 @@ struct TeamMapLegend: View {
         .foregroundColor(Color.textSecondary)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
+        .teamOverlayCapsule()
+    }
+}
+
+private extension View {
+    func teamOverlayCapsule() -> some View {
+        background(Color.obsidianSurface.opacity(0.94))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.obsidianBorder.opacity(0.62), lineWidth: 0.7)
+            )
     }
 }
 

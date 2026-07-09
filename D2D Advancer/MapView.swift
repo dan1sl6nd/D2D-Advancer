@@ -1099,8 +1099,7 @@ struct MapView: View {
             .buttonStyle(ObsidianPrimaryButtonStyle())
         }
         .padding(24)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .mapOverlayCard(cornerRadius: 20)
         .padding(24)
     }
 
@@ -1133,8 +1132,7 @@ struct MapView: View {
             .buttonStyle(ObsidianPrimaryButtonStyle())
         }
         .padding(24)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .mapOverlayCard(cornerRadius: 20)
         .padding(24)
     }
 
@@ -1296,8 +1294,7 @@ struct MapView: View {
                 .font(.obsidianBody)
                 .foregroundColor(color)
                 .frame(width: 44, height: 44)
-                .background(.ultraThinMaterial)
-                .clipShape(Circle())
+                .mapOverlayCircle()
                 .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 2)
         }
     }
@@ -1356,8 +1353,7 @@ struct MapView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
+        .mapOverlayCapsule()
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
     }
 
@@ -1505,8 +1501,7 @@ struct MapView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
+        .mapOverlayCapsule()
         .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
         .accessibilityLabel(mapSummaryText)
     }
@@ -1558,8 +1553,7 @@ struct MapView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
+                .mapOverlayCapsule()
                 .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 3)
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .padding(.horizontal, 20)
@@ -4928,6 +4922,33 @@ private extension View {
             .background(Color.obsidianSurface)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .foregroundColor(Color.textPrimary)
+    }
+
+    func mapOverlayCard(cornerRadius: CGFloat) -> some View {
+        background(Color.obsidianSurface.opacity(0.94))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.62), lineWidth: 0.7)
+            )
+    }
+
+    func mapOverlayCapsule() -> some View {
+        background(Color.obsidianSurface.opacity(0.94))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.obsidianBorder.opacity(0.62), lineWidth: 0.7)
+            )
+    }
+
+    func mapOverlayCircle() -> some View {
+        background(Color.obsidianSurface.opacity(0.94))
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(Color.obsidianBorder.opacity(0.62), lineWidth: 0.7)
+            )
     }
 }
 
