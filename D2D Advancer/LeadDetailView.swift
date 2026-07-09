@@ -483,77 +483,79 @@ struct LeadDetailView: View {
     private var followUpHistorySection: some View {
         LeadFormSectionCard(title: "Follow-up History", icon: "clock.arrow.circlepath") {
             VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(checkIns.isEmpty ? "No check-ins yet" : "\(checkIns.count) check-ins recorded")
-                    .font(.obsidianFootnote)
-                    .foregroundColor(Color.textSecondary)
-
-                Spacer()
-                
-                Button(action: {
-                    showingAddCheckIn = true
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus.circle.fill")
-                        Text("Record")
-                    }
-                    .font(.micro)
-                    .fontWeight(.semibold)
-                    .foregroundColor(Color.electricViolet)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.electricViolet.opacity(0.12)))
-                }
-                .accessibilityIdentifier("leadDetailHistoryRecordCheckInButton")
-            }
-            
-            if checkIns.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.obsidianAction)
-                        .foregroundColor(Color.textSecondary)
-
-                    Text("No follow-ups recorded yet")
+                HStack {
+                    Text(checkIns.isEmpty ? "No check-ins yet" : "\(checkIns.count) check-ins recorded")
                         .font(.obsidianFootnote)
-                        .fontWeight(.semibold)
                         .foregroundColor(Color.textSecondary)
 
-                    Text("Start tracking your interactions with this lead")
+                    Spacer()
+
+                    Button(action: {
+                        showingAddCheckIn = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus.circle.fill")
+                            Text("Record")
+                        }
                         .font(.micro)
-                        .foregroundColor(Color.textSecondary)
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color.electricViolet)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 44)
+                        .background(Capsule().fill(Color.electricViolet.opacity(0.12)))
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("leadDetailHistoryRecordCheckInButton")
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .background(Color.obsidianElevated)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
-                )
-            } else {
-                VStack(spacing: 8) {
-                    HStack {
-                        Text("\(checkIns.count) check-ins recorded")
-                            .font(.obsidianFootnote)
+
+                if checkIns.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.obsidianAction)
                             .foregroundColor(Color.textSecondary)
 
-                        Spacer()
-
-                        if checkIns.count > 2 {
-                            Button("View All") {
-                                showingFullHistory = true
-                            }
+                        Text("No follow-ups recorded yet")
                             .font(.obsidianFootnote)
-                            .foregroundColor(Color.electricViolet)
-                            .accessibilityIdentifier("leadDetailFullHistoryButton")
-                        }
-                    }
+                            .fontWeight(.semibold)
+                            .foregroundColor(Color.textSecondary)
 
-                    // Show last 2 check-ins
-                    ForEach(Array(checkIns.prefix(2)), id: \.id) { checkIn in
-                        CheckInRowView(checkIn: checkIn) {
-                            deleteCheckIn(checkIn)
+                        Text("Start tracking your interactions with this lead")
+                            .font(.micro)
+                            .foregroundColor(Color.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                    )
+                } else {
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("\(checkIns.count) check-ins recorded")
+                                .font(.obsidianFootnote)
+                                .foregroundColor(Color.textSecondary)
+
+                            Spacer()
+
+                            if checkIns.count > 2 {
+                                Button("View All") {
+                                    showingFullHistory = true
+                                }
+                                .font(.obsidianFootnote)
+                                .foregroundColor(Color.electricViolet)
+                                .accessibilityIdentifier("leadDetailFullHistoryButton")
+                            }
                         }
+
+                        // Show last 2 check-ins
+                        ForEach(Array(checkIns.prefix(2)), id: \.id) { checkIn in
+                            CheckInRowView(checkIn: checkIn) {
+                                deleteCheckIn(checkIn)
+                            }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(Color.obsidianElevated)
@@ -562,9 +564,9 @@ struct LeadDetailView: View {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                                     .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                             )
+                        }
                     }
                 }
-            }
             }
         }
         .sheet(isPresented: $showingAddCheckIn) {
@@ -1161,9 +1163,11 @@ struct LeadDetailView: View {
                     .fontWeight(.semibold)
                     .foregroundColor(Color.electricViolet)
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
+                    .frame(minHeight: 44)
                     .background(Capsule().fill(Color.electricViolet.opacity(0.12)))
+                    .contentShape(Capsule())
                 }
+                .buttonStyle(.plain)
             }
         }
         .padding(.vertical, 12)
