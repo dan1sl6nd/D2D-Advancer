@@ -1820,18 +1820,19 @@ struct PreferenceCardView<TrailingContent: View>: View {
                     .font(.obsidianFootnote)
                     .fontWeight(.semibold)
                     .foregroundColor(Color.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let subtitle = subtitle {
                     Text(subtitle)
                         .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
 
             trailingContent()
                 .font(.obsidianFootnote)
@@ -1839,16 +1840,10 @@ struct PreferenceCardView<TrailingContent: View>: View {
                 .multilineTextAlignment(.trailing)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
-                .frame(minWidth: 112, alignment: .trailing)
+                .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color.obsidianSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
-        )
     }
 }
 

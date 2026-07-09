@@ -840,15 +840,14 @@ struct TeamWorkspaceView: View {
                         }
                         Spacer()
                         if notification.readAt == nil {
-                            Button {
+                            ObsidianCompactIconButton(
+                                icon: "checkmark",
+                                accessibilityLabel: "Mark owner alert read",
+                                accentColor: Color.statusInterested,
+                                size: 36
+                            ) {
                                 markNotificationRead(notification)
-                            } label: {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.obsidianCallout)
-                                    .foregroundColor(Color.statusInterested)
                             }
-                            .buttonStyle(PlainButtonStyle())
-                            .accessibilityLabel("Mark owner alert read")
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -980,30 +979,29 @@ struct TeamWorkspaceView: View {
             }
 
             if TeamAccessPolicy.canCancelPendingInvite(role: .owner, member: member) {
-                Button {
+                ObsidianCompactIconButton(
+                    icon: "xmark",
+                    accessibilityLabel: "Cancel pending invite",
+                    accentColor: Color.statusNotInterested,
+                    size: 36
+                ) {
                     cancelPendingInvite(member)
-                } label: {
-                    Label("Cancel", systemImage: "xmark.circle.fill")
-                        .labelStyle(.iconOnly)
-                        .font(.obsidianCallout)
-                        .foregroundColor(Color.statusNotInterested)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Cancel pending invite")
                 .disabled(isWorking || teamService.isLoading)
+                .opacity(isWorking || teamService.isLoading ? 0.55 : 1)
             } else if let team = teamService.activeTeam,
                       let currentMember = teamService.currentMember,
                       TeamAccessPolicy.canRemoveMember(actor: currentMember, team: team, member: member) {
-                Button {
+                ObsidianCompactIconButton(
+                    icon: "person.crop.circle.badge.minus",
+                    accessibilityLabel: "Remove \(member.displayName)",
+                    accentColor: Color.statusNotInterested,
+                    size: 36
+                ) {
                     confirmRemoveMember(member)
-                } label: {
-                    Image(systemName: "person.crop.circle.badge.minus")
-                        .font(.obsidianCallout)
-                        .foregroundColor(Color.statusNotInterested)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Remove \(member.displayName)")
                 .disabled(isWorking || teamService.isLoading)
+                .opacity(isWorking || teamService.isLoading ? 0.55 : 1)
             } else {
                 Text(memberStatusText(member))
                     .font(.micro)

@@ -111,28 +111,24 @@ struct AddCheckInView: View {
             .sheet(isPresented: $showingDatePicker) {
                 NavigationStack {
                     VStack(spacing: 20) {
-                        Text("Select Next Follow-up Date")
-                            .font(.obsidianTitle)
-                            .foregroundColor(Color.textPrimary)
-                            .padding(.top)
-                        
                         DatePicker("Next follow-up date", selection: Binding(
                             get: { scheduledNextFollowUp ?? Date() },
                             set: { scheduledNextFollowUp = $0 }
                         ), displayedComponents: [.date, .hourAndMinute])
                         .datePickerStyle(.compact)
                         .labelsHidden()
-                        .padding(.horizontal)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
                         
-                        Spacer(minLength: 20)
+                        Spacer(minLength: 0)
                     }
+                    .accessibilityIdentifier("addCheckInNextFollowUpDatePicker")
                     .obsidianScreenBackground()
                     .obsidianPushedNavigation(
                         "Next Follow-up",
                         backButtonAccessibilityIdentifier: "addCheckInDateBackButton",
                         onBack: { showingDatePicker = false }
                     )
-                    .accessibilityIdentifier("addCheckInNextFollowUpDatePicker")
                     .safeAreaInset(edge: .bottom) {
                         ObsidianBottomActionBar(
                             primaryAccessibilityIdentifier: "addCheckInDateDoneButton",
@@ -144,7 +140,7 @@ struct AddCheckInView: View {
                         )
                     }
                 }
-                .presentationDetents([.height(250)])
+                .presentationDetents([.medium])
                 .obsidianModalBackground()
             }
         }
@@ -292,40 +288,48 @@ struct AddCheckInView: View {
                     .foregroundColor(Color.textSecondary)
             }
 
-            Button(action: action) {
-                HStack {
-                    if let selectedDate = date.wrappedValue {
-                        Text(selectedDate.formatted(.dateTime.day().month().year().hour().minute()))
-                            .font(.obsidianBody)
-                            .foregroundColor(Color.textPrimary)
-
-                        Spacer()
-
-                        Button(action: {
-                            date.wrappedValue = nil
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
+            HStack(spacing: 8) {
+                Button(action: action) {
+                    HStack {
+                        if let selectedDate = date.wrappedValue {
+                            Text(selectedDate.formatted(.dateTime.day().month().year().hour().minute()))
+                                .font(.obsidianBody)
+                                .foregroundColor(Color.textPrimary)
+                                .lineLimit(2)
+                        } else {
+                            Text("Set Date & Time")
+                                .font(.obsidianBody)
                                 .foregroundColor(Color.textSecondary)
                         }
-                    } else {
-                        Text("Set Date & Time")
-                            .font(.obsidianBody)
-                            .foregroundColor(Color.textSecondary)
 
-                        Spacer()
+                        Spacer(minLength: 8)
 
                         Image(systemName: "calendar")
                             .foregroundColor(Color.textSecondary)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                    )
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Color.obsidianElevated)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
-                )
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("addCheckInNextFollowUpButton")
+
+                if date.wrappedValue != nil {
+                    ObsidianCompactIconButton(
+                        icon: "xmark",
+                        accessibilityLabel: "Clear next follow-up date",
+                        accentColor: Color.textSecondary,
+                        accessibilityIdentifier: "addCheckInClearNextFollowUpButton"
+                    ) {
+                        date.wrappedValue = nil
+                    }
+                }
             }
         }
     }

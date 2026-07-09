@@ -13,7 +13,7 @@ struct AppointmentsView: View {
     @State private var selectedLead: Lead?
     @State private var selectedAppointment: Appointment?
     @State private var selectedTeamLead: TeamLead?
-    @State private var showingTeamFieldMap = false
+    @State private var teamFieldMapSummary: TeamWorkspaceSurfaceSummary?
     @State private var selectedTeamRepUserId: String?
     @State private var selectedView: AppointmentView = .active
     @ObservedObject private var paywallManager = PaywallManager.shared
@@ -115,13 +115,11 @@ struct AppointmentsView: View {
             .sheet(item: $selectedTeamLead) { lead in
                 TeamLeadDetailSheet(initialLead: lead)
             }
-            .sheet(isPresented: $showingTeamFieldMap) {
-                if let summary = teamSurfaceSummary {
-                    TeamFieldMapSheet(
-                        summary: summary,
-                        selectedRepUserId: $selectedTeamRepUserId
-                    )
-                }
+            .sheet(item: $teamFieldMapSummary) { summary in
+                TeamFieldMapSheet(
+                    summary: summary,
+                    selectedRepUserId: $selectedTeamRepUserId
+                )
             }
             .onAppear {
                 print("🗓️ AppointmentsView appeared - listener already active")
@@ -207,7 +205,7 @@ struct AppointmentsView: View {
                     TeamWorkInlineSection(
                         summary: summary,
                         selectedRepUserId: $selectedTeamRepUserId,
-                        onOpenMap: { showingTeamFieldMap = true },
+                        onOpenMap: { teamFieldMapSummary = teamSurfaceSummary },
                         onSelectLead: { selectedTeamLead = $0 }
                     )
                     .padding(.horizontal, 16)
@@ -1181,15 +1179,14 @@ struct AppointmentDetailView: View {
                         icon: "phone.fill",
                         tint: Color.statusInterested
                     ) {
-                        Button {
+                        ObsidianCompactIconButton(
+                            icon: "phone.fill",
+                            accessibilityLabel: "Call customer",
+                            accentColor: Color.statusInterested,
+                            size: 36
+                        ) {
                             Utilities.makePhoneCall(to: phone)
-                        } label: {
-                            Image(systemName: "phone.circle.fill")
-                                .font(.obsidianAction)
-                                .foregroundColor(Color.statusInterested)
                         }
-                        .buttonStyle(PlainButtonStyle())
-                        .accessibilityLabel("Call customer")
                     }
                 }
 
@@ -1201,15 +1198,14 @@ struct AppointmentDetailView: View {
                         tint: Color.statusNotHome,
                         valueLineLimit: 1
                     ) {
-                        Button {
+                        ObsidianCompactIconButton(
+                            icon: "envelope.fill",
+                            accessibilityLabel: "Email customer",
+                            accentColor: Color.electricViolet,
+                            size: 36
+                        ) {
                             Utilities.sendEmail(to: email)
-                        } label: {
-                            Image(systemName: "envelope.circle.fill")
-                                .font(.obsidianAction)
-                                .foregroundColor(Color.electricViolet)
                         }
-                        .buttonStyle(PlainButtonStyle())
-                        .accessibilityLabel("Email customer")
                     }
                 }
 

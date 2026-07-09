@@ -786,7 +786,7 @@ struct TeamRepWorkspace: Identifiable, Equatable, Sendable {
     }
 }
 
-struct TeamWorkspaceSurfaceSummary: Equatable, Sendable {
+struct TeamWorkspaceSurfaceSummary: Equatable, Identifiable, Sendable {
     var role: TeamRole
     var currentMemberWorkType: TeamMemberWorkType?
     var teamName: String
@@ -796,6 +796,10 @@ struct TeamWorkspaceSurfaceSummary: Equatable, Sendable {
     var activeRepCount: Int
     var upcomingBookingCount: Int
     var unreadNotificationCount: Int
+
+    var id: String {
+        "\(role.rawValue):\(teamName)"
+    }
 
     var hasMapContent: Bool {
         workspaces.contains { !$0.assignedLeads.isEmpty || $0.liveLocation != nil || !$0.routePoints.isEmpty }

@@ -354,7 +354,7 @@ struct MapView: View {
     @State private var didRequestLaunchLocationCenter = false
     @State private var didConfirmVisibleMapCenteredOnLaunch = false
     @State private var launchCenteringResetToken = 0
-    @State private var showingTeamFieldMap = false
+    @State private var teamFieldMapSummary: TeamWorkspaceSurfaceSummary?
     @State private var selectedTeamRepUserId: String?
     @State private var selectedMapMode: MapWorkflowMode = .all
     @State private var visibleMapRegion: MKCoordinateRegion = LocationManager.shared.region
@@ -706,13 +706,11 @@ struct MapView: View {
                 )
                 .presentationDetents([.large])
             }
-            .sheet(isPresented: $showingTeamFieldMap) {
-                if let summary = teamSurfaceSummary {
-                    TeamFieldMapSheet(
-                        summary: summary,
-                        selectedRepUserId: $selectedTeamRepUserId
-                    )
-                }
+            .sheet(item: $teamFieldMapSummary) { summary in
+                TeamFieldMapSheet(
+                    summary: summary,
+                    selectedRepUserId: $selectedTeamRepUserId
+                )
             }
     }
 
@@ -1279,8 +1277,8 @@ struct MapView: View {
     private func openTeamFieldMap() {
         Task {
             await loadTeamWorkspaceUntilAvailable()
-            if teamSurfaceSummary != nil {
-                showingTeamFieldMap = true
+            if let summary = teamSurfaceSummary {
+                teamFieldMapSummary = summary
             }
         }
     }
@@ -3113,13 +3111,6 @@ struct LongPressMenuSheet: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(12)
-            .background(Color.obsidianElevated)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
-            )
 
             VStack(alignment: .leading, spacing: 7) {
                 Label("Lead address", systemImage: "house.fill")

@@ -23,7 +23,7 @@ struct LeadsListView: View {
     @State private var selectedTeamLead: TeamLead?
     @State private var messageLead: Lead?
     @State private var leadOpenErrorMessage: String?
-    @State private var showingTeamFieldMap = false
+    @State private var teamFieldMapSummary: TeamWorkspaceSurfaceSummary?
     @State private var selectedTeamRepUserId: String?
     @ObservedObject private var paywallManager = PaywallManager.shared
     
@@ -86,7 +86,10 @@ struct LeadsListView: View {
                     Rectangle()
                         .fill(screenBackground)
                         .frame(height: ObsidianLayout.safeAreaTop(geometry))
-                    ObsidianHeaderView(roleContext.leadScreenTitle) {
+                    ObsidianHeaderView(
+                        roleContext.leadScreenTitle,
+                        titleAccessibilityIdentifier: "leadsScreen"
+                    ) {
                         HStack(spacing: 6) {
                             Button {
                                 showingSortOptions = true
@@ -131,7 +134,6 @@ struct LeadsListView: View {
             }
             .navigationBarHidden(true)
             .background(Color.obsidianBackground(for: colorScheme))
-            .accessibilityIdentifier("leadsScreen")
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
             }
@@ -155,13 +157,11 @@ struct LeadsListView: View {
             } message: {
                 Text("Choose how the lead list is ordered.")
             }
-            .sheet(isPresented: $showingTeamFieldMap) {
-                if let summary = teamSurfaceSummary {
-                    TeamFieldMapSheet(
-                        summary: summary,
-                        selectedRepUserId: $selectedTeamRepUserId
-                    )
-                }
+            .sheet(item: $teamFieldMapSummary) { summary in
+                TeamFieldMapSheet(
+                    summary: summary,
+                    selectedRepUserId: $selectedTeamRepUserId
+                )
             }
             .task {
                 loadInitialLeads()
@@ -353,7 +353,7 @@ struct LeadsListView: View {
                 TeamWorkInlineSection(
                     summary: summary,
                     selectedRepUserId: $selectedTeamRepUserId,
-                    onOpenMap: { showingTeamFieldMap = true },
+                    onOpenMap: { teamFieldMapSummary = teamSurfaceSummary },
                     onSelectLead: { selectedTeamLead = $0 }
                 )
                 .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 8, trailing: 16))

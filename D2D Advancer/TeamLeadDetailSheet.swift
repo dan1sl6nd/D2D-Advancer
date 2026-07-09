@@ -732,10 +732,10 @@ struct TeamLeadDetailSheet: View {
             Text("\(copiedFieldName) copied")
                 .font(.obsidianFootnote)
                 .fontWeight(.semibold)
-                .foregroundColor(.white)
+                .foregroundColor(Color.textPrimary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(Color.obsidianSurface.opacity(0.96))
+                .background(Color.obsidianElevated.opacity(0.96))
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()

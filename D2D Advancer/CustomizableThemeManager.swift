@@ -627,6 +627,8 @@ struct ObsidianCompactIconButton: View {
     let action: () -> Void
 
     var body: some View {
+        let hitSize = max(size, 44)
+
         Button(action: action) {
             ObsidianIconButtonFace(
                 icon: icon,
@@ -638,7 +640,7 @@ struct ObsidianCompactIconButton: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
-        .frame(width: size, height: size)
+        .frame(width: hitSize, height: hitSize)
         .contentShape(Rectangle())
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier ?? accessibilityLabel)

@@ -1722,6 +1722,13 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "addCheckInScreen", timeout: 10)
         try assertLightTopChrome(app, screenName: "Record Check-in")
         waitForIdentifiedElement(app, "addCheckInSaveButton", timeout: 8)
+        tapIdentifiedElement(app, "addCheckInNextFollowUpButton", direction: .down, timeout: 8)
+        waitForIdentifiedElement(app, "addCheckInNextFollowUpDatePicker", timeout: 10)
+        try assertLightTopChrome(app, screenName: "Next Follow-up")
+        try assertDarkFilledBackButton(app, identifier: "addCheckInDateBackButton", screenName: "Next Follow-up")
+        waitForIdentifiedElement(app, "addCheckInDateDoneButton", timeout: 8)
+        tapButton(app, "addCheckInDateCancelButton", timeout: 8)
+        waitForIdentifiedElement(app, "addCheckInScreen", timeout: 10)
         tapButton(app, "addCheckInCancelButton", timeout: 8)
 
         waitForIdentifiedElement(app, "leadDetailEditButton", timeout: 10)
@@ -2208,6 +2215,15 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "appPreferenceLeadStatusPicker", timeout: 8)
         waitForIdentifiedElement(app, "appPreferenceLeadSortPicker", timeout: 8)
         scrollToIdentifiedElement(app, "appPreferenceBackupFrequencyPicker", direction: .down, requireHittable: false)
+        let backupTitle = app.staticTexts["Auto Backup Frequency"]
+        let backupPicker = app.descendants(matching: .any)["appPreferenceBackupFrequencyPicker"].firstMatch
+        XCTAssertTrue(backupTitle.waitForExistence(timeout: 8), "Backup preference title should remain visible")
+        XCTAssertTrue(backupPicker.waitForExistence(timeout: 8), "Backup preference picker should remain visible")
+        XCTAssertFalse(
+            backupTitle.frame.intersects(backupPicker.frame),
+            "App Preferences labels and pickers should not overlap on compact layouts"
+        )
+        screenshot(app, name: "App Preferences compact layout")
 
         relaunch(app, opening: "-openMoreTabForUITests")
         scrollToIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down)
@@ -2405,6 +2421,9 @@ final class D2D_AdvancerUITests: XCTestCase {
             }
         }
         XCTAssertNotNil(leadSortChip, "Lead sort chip should be visible")
+        let sortDirectionButton = waitForIdentifiedElement(app, "leadsSortDirectionButton", timeout: 8)
+        XCTAssertGreaterThanOrEqual(sortDirectionButton.frame.width, 44, "Lead sort direction should have a 44pt minimum tap width")
+        XCTAssertGreaterThanOrEqual(sortDirectionButton.frame.height, 44, "Lead sort direction should have a 44pt minimum tap height")
 
         tapButton(app, "tab_Follow_Up", timeout: 12)
         waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
