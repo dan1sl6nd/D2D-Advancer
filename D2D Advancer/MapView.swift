@@ -407,10 +407,16 @@ struct MapView: View {
     var body: some View {
         ZStack {
             mapView
-            if isVisible {
+
+            Group {
                 overlayControls
                 toastOverlay
+            }
+            .opacity(isVisible ? 1 : 0)
+            .allowsHitTesting(isVisible)
+            .accessibilityHidden(!isVisible)
 
+            if isVisible {
                 // Show location permission status
                 if !isRunningUITests && LocationManager.shouldShowPermissionPrompt(
                     for: locationManager.authorizationStatus,
@@ -716,9 +722,9 @@ struct MapView: View {
 
     private func prepareHiddenMapLeadState() {
         cancelMapLeadRenderTasks()
-        mapLeadRenderSnapshot = mapLeadRenderSnapshot.limited(
-            to: MapLeadOpeningRenderPolicy.previewRenderedLeadBudget
-        )
+        // Preserve the exact warm annotation set while the retained MKMapView
+        // is hidden. Shrinking it here forces MapKit to remove and later rebuild
+        // most markers during every tab round trip.
         scheduleHiddenMapLeadCachePrewarm()
     }
 
@@ -922,7 +928,10 @@ struct MapView: View {
             leads: mapLeadRenderSnapshot.renderedPins,
             isVisible: isVisible,
             searchPin: $searchPin,
-            showsUserLocation: shouldRunVisibleMapEffects && LocationManager.isAuthorized(locationManager.authorizationStatus),
+            // Keep the authorized user-location layer warm on the retained map.
+            // Launch-following behavior remains visibility-gated below.
+            showsUserLocation: (!isRunningUITests || shouldExerciseMapRuntimeEffects)
+                && LocationManager.isAuthorized(locationManager.authorizationStatus),
             shouldFollowUserLocationOnLaunch: shouldRunVisibleMapEffects
                 && locationManager.shouldUseUserLocation
                 && !didConfirmVisibleMapCenteredOnLaunch,

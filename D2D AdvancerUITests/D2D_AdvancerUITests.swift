@@ -2549,6 +2549,23 @@ final class D2D_AdvancerUITests: XCTestCase {
         wait(for: [stableSnapshot], timeout: 3)
         screenshot(app, name: "Map - 2000 lead stable opening snapshot")
 
+        let moreTab = app.buttons.matching(identifier: "tab_More").firstMatch
+        moreTab.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["moreOverviewCard"].firstMatch.waitForExistence(timeout: 2),
+            "More should replace the retained map before measuring a warm reopen"
+        )
+
+        let warmReopenStart = ProcessInfo.processInfo.systemUptime
+        mapTab.tap()
+        XCTAssertTrue(waitForExistenceQuickly(summary, timeout: 1), "Warm Map summary should reappear immediately")
+        XCTAssertTrue(waitForExistenceQuickly(mapToolsButton, timeout: 1), "Warm Map controls should reappear immediately")
+        XCTAssertLessThan(
+            ProcessInfo.processInfo.systemUptime - warmReopenStart,
+            1.25,
+            "Reopening a retained Map should not rebuild its controls or annotations"
+        )
+
         app.terminate()
         let cleanupApp = makeApp()
         cleanupApp.launchArguments.append("-openMoreTabForUITests")

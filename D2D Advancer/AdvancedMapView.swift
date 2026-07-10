@@ -92,7 +92,9 @@ struct AdvancedMapView: UIViewRepresentable {
         coordinator.parent = self
 
         guard isVisible else {
-            if mapView.showsUserLocation {
+            // An authorized hidden map is intentionally prewarmed. Only tear
+            // down its location layer when the caller actually revokes it.
+            if !showsUserLocation && mapView.showsUserLocation {
                 mapView.showsUserLocation = false
             }
             coordinator.updateHiddenAnnotationsIfNeeded(mapView: mapView, leads: leads)
