@@ -360,6 +360,7 @@ struct MapView: View {
     @State private var mapLeadRenderSnapshot = MapLeadRenderSnapshot.empty
     @State private var mapLeadPinCache = MapLeadPinCache.empty
     @State private var mapLeadRenderTask: Task<Void, Never>?
+    @State private var mapLeadExpansionTask: Task<Void, Never>?
     @State private var mapLeadCachePrewarmTask: Task<Void, Never>?
     @State private var mapLeadOpeningGuardUntil = Date.distantPast
     @State private var pendingMapLeadRenderSignature: MapLeadRenderRequestSignature?
@@ -494,7 +495,7 @@ struct MapView: View {
                 )
                 .presentationDetents([.medium, .large])
             }
-            .sheet(
+            .fullScreenCover(
                 isPresented: $showingAddLead,
                 onDismiss: {
                     addLeadCoordinate = nil
@@ -692,22 +693,32 @@ struct MapView: View {
             renderedPinCount: mapLeadRenderSnapshot.renderedPins.count,
             matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount
         ) else {
-            mapLeadOpeningGuardUntil = .distantPast
+            // The retained map already has useful pins. Keep that exact set
+            // through the tab transition; MapKit publishes a normalized region
+            // as it becomes visible, and reacting immediately would churn the
+            // annotations while the user is trying to interact.
+            mapLeadOpeningGuardUntil = Date().addingTimeInterval(
+                MapLeadOpeningRenderPolicy.warmOpenInteractionGuard
+            )
+            scheduleMapLeadExpansionIfNeeded(
+                after: MapLeadOpeningRenderPolicy.warmOpenInteractionGuard + 0.08
+            )
             return
         }
 
         mapLeadOpeningGuardUntil = Date().addingTimeInterval(2.0)
         scheduleMapLeadRenderUpdate(
             after: MapLeadOpeningRenderPolicy.coldOpenRenderDelay,
-            maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+            maxRenderedLeads: MapLeadOpeningRenderPolicy.previewRenderedLeadBudget
         )
+        scheduleMapLeadExpansionIfNeeded(after: MapLeadOpeningRenderPolicy.previewExpansionDelay)
     }
 
     private func prepareHiddenMapLeadState() {
         cancelMapLeadRenderTasks()
-        // Keep the current snapshot while the retained MKMapView is hidden.
-        // Shrinking it here forces annotation removal on the next open, which
-        // makes the map tab feel frozen with larger lead sets.
+        mapLeadRenderSnapshot = mapLeadRenderSnapshot.limited(
+            to: MapLeadOpeningRenderPolicy.previewRenderedLeadBudget
+        )
         scheduleHiddenMapLeadCachePrewarm()
     }
 
@@ -751,7 +762,7 @@ struct MapView: View {
                     mode: selectedMapMode,
                     region: visibleMapRegion,
                     fallbackCenter: locationManager.region.center,
-                    maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+                    maxRenderedLeads: MapLeadOpeningRenderPolicy.previewRenderedLeadBudget
                 )
                 guard !Task.isCancelled else {
                     mapLeadCachePrewarmTask = nil
@@ -763,6 +774,33 @@ struct MapView: View {
             }
 
             mapLeadCachePrewarmTask = nil
+        }
+    }
+
+    private func scheduleMapLeadExpansionIfNeeded(after delay: TimeInterval) {
+        mapLeadExpansionTask?.cancel()
+        mapLeadExpansionTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled, isVisible else {
+                mapLeadExpansionTask = nil
+                return
+            }
+            guard MapLeadOpeningRenderPolicy.shouldExpandPreview(
+                renderedPinCount: mapLeadRenderSnapshot.renderedPins.count,
+                matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount,
+                fullRenderedLeadBudget: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+            ) else {
+                mapLeadExpansionTask = nil
+                return
+            }
+
+            mapLeadExpansionTask = nil
+            scheduleMapLeadRenderUpdate(
+                after: 0,
+                maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+            )
         }
     }
 
@@ -944,6 +982,8 @@ struct MapView: View {
     private func cancelMapLeadRenderTasks() {
         mapLeadRenderTask?.cancel()
         mapLeadRenderTask = nil
+        mapLeadExpansionTask?.cancel()
+        mapLeadExpansionTask = nil
         pendingMapLeadRenderSignature = nil
     }
 
@@ -3754,7 +3794,19 @@ private struct MapLeadPinRenderCandidate {
 enum MapLeadOpeningRenderPolicy {
     // Let the tab transition and controls commit before asking MapKit to build
     // the first large annotation set. Warm snapshots bypass this delay.
-    static let coldOpenRenderDelay: TimeInterval = 0.28
+    static let coldOpenRenderDelay: TimeInterval = 0.18
+    static let warmOpenInteractionGuard: TimeInterval = 0.75
+    static let previewExpansionDelay: TimeInterval = 0.95
+    static let previewRenderedLeadBudget = 72
+
+    static func shouldExpandPreview(
+        renderedPinCount: Int,
+        matchingLeadCount: Int,
+        fullRenderedLeadBudget: Int
+    ) -> Bool {
+        guard matchingLeadCount > 0, fullRenderedLeadBudget > 0 else { return false }
+        return renderedPinCount < min(matchingLeadCount, fullRenderedLeadBudget)
+    }
 
     static func shouldPreserveSnapshotOnOpen(
         cacheIsReady: Bool,

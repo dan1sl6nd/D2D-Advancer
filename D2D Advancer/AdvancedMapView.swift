@@ -38,6 +38,9 @@ struct AdvancedMapView: UIViewRepresentable {
         // Keep expensive 3D imagery opt-in so Satellite/Hybrid stay responsive.
         mapView.isRotateEnabled = true
         mapView.isPitchEnabled = Self.allowsPitch(is3DModeEnabled: is3DModeEnabled)
+        mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "SearchPin")
+        mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "LeadCluster")
+        mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "LeadAnnotation")
 
         let shouldFollowLaunchLocation = Self.shouldCenterUserLocationOnLaunch(
             showsUserLocation: showsUserLocation,
@@ -636,8 +639,8 @@ struct AdvancedMapView: UIViewRepresentable {
     
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: AdvancedMapView
-        private static let annotationBatchSize = 24
-        private static let annotationBatchDelay: TimeInterval = 0.03
+        private static let annotationBatchSize = 12
+        private static let annotationBatchDelay: TimeInterval = 0.022
         private var currentAnnotations: [LeadMapAnnotation] = []
         private var currentSearchPinAnnotation: MKPointAnnotation?
         private var currentAnnotationSignature: [LeadAnnotationSignature] = []
@@ -1025,7 +1028,10 @@ struct AdvancedMapView: UIViewRepresentable {
             // Search pin — blue marker with magnifying glass
             if annotation is MKPointAnnotation && !(annotation is LeadMapAnnotation) && !(annotation is MKUserLocation) {
                 let id = "SearchPin"
-                let view = mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: id)
+                let view = mapView.dequeueReusableAnnotationView(
+                    withIdentifier: id,
+                    for: annotation
+                ) as! MKMarkerAnnotationView
                 view.annotation = annotation
                 view.markerTintColor = .systemBlue
                 view.glyphImage = UIImage(systemName: "magnifyingglass")
@@ -1038,7 +1044,10 @@ struct AdvancedMapView: UIViewRepresentable {
 
             if let cluster = annotation as? MKClusterAnnotation {
                 let clusterID = "LeadCluster"
-                let clusterView = mapView.dequeueReusableAnnotationView(withIdentifier: clusterID) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(annotation: cluster, reuseIdentifier: clusterID)
+                let clusterView = mapView.dequeueReusableAnnotationView(
+                    withIdentifier: clusterID,
+                    for: cluster
+                ) as! MKMarkerAnnotationView
                 clusterView.annotation = cluster
                 let pins = cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.pin }
                 let summary = MapLeadPinClusterSummary(pins: pins)
@@ -1059,7 +1068,10 @@ struct AdvancedMapView: UIViewRepresentable {
 
             let pin = leadAnnotation.pin
             let identifier = "LeadAnnotation"
-            let annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            let annotationView = mapView.dequeueReusableAnnotationView(
+                withIdentifier: identifier,
+                for: annotation
+            ) as! MKMarkerAnnotationView
 
             annotationView.annotation = annotation
             annotationView.canShowCallout = false

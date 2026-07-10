@@ -2558,6 +2558,28 @@ struct D2D_AdvancerTests {
                 matchingLeadCount: 0
             )
         )
+
+        #expect(
+            MapLeadOpeningRenderPolicy.shouldExpandPreview(
+                renderedPinCount: MapLeadOpeningRenderPolicy.previewRenderedLeadBudget,
+                matchingLeadCount: 2_000,
+                fullRenderedLeadBudget: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+            )
+        )
+        #expect(
+            !MapLeadOpeningRenderPolicy.shouldExpandPreview(
+                renderedPinCount: MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
+                matchingLeadCount: 2_000,
+                fullRenderedLeadBudget: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+            )
+        )
+        #expect(
+            !MapLeadOpeningRenderPolicy.shouldExpandPreview(
+                renderedPinCount: 0,
+                matchingLeadCount: 0,
+                fullRenderedLeadBudget: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+            )
+        )
     }
 
     @Test func mapLeadHiddenPrewarmPolicyDoesNotReplaceAWarmSnapshot() {
