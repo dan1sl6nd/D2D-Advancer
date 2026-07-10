@@ -636,8 +636,8 @@ struct AdvancedMapView: UIViewRepresentable {
     
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: AdvancedMapView
-        private static let annotationBatchSize = 48
-        private static let annotationBatchDelay: TimeInterval = 0.045
+        private static let annotationBatchSize = 24
+        private static let annotationBatchDelay: TimeInterval = 0.03
         private var currentAnnotations: [LeadMapAnnotation] = []
         private var currentSearchPinAnnotation: MKPointAnnotation?
         private var currentAnnotationSignature: [LeadAnnotationSignature] = []
@@ -1029,7 +1029,9 @@ struct AdvancedMapView: UIViewRepresentable {
                 view.annotation = annotation
                 view.markerTintColor = .systemBlue
                 view.glyphImage = UIImage(systemName: "magnifyingglass")
-                view.canShowCallout = true
+                view.canShowCallout = false
+                view.titleVisibility = .hidden
+                view.subtitleVisibility = .hidden
                 view.clusteringIdentifier = nil
                 return view
             }
@@ -1045,6 +1047,9 @@ struct AdvancedMapView: UIViewRepresentable {
                 clusterView.glyphTintColor = .white
                 clusterView.displayPriority = LeadMapAnnotationPriorityPolicy.clusterDisplayPriority(for: summary)
                 clusterView.collisionMode = .circle
+                clusterView.canShowCallout = false
+                clusterView.titleVisibility = .hidden
+                clusterView.subtitleVisibility = .hidden
                 return clusterView
             }
 
@@ -1057,7 +1062,9 @@ struct AdvancedMapView: UIViewRepresentable {
             let annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
 
             annotationView.annotation = annotation
-            annotationView.canShowCallout = true
+            annotationView.canShowCallout = false
+            annotationView.titleVisibility = .hidden
+            annotationView.subtitleVisibility = .hidden
             annotationView.clusteringIdentifier = LeadClusterDisplayPolicy.clusteringIdentifier(
                 for: currentLeadClusteringMode ?? LeadClusterDisplayPolicy.mode(for: mapView.region)
             )

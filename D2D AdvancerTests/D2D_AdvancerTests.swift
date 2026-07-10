@@ -2567,6 +2567,33 @@ struct D2D_AdvancerTests {
     }
 
     @MainActor
+    @Test func mapLeadCacheInvalidationIgnoresUnrelatedContextChanges() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let lead = Lead.create(in: context)
+
+        let leadChange = Notification(
+            name: .NSManagedObjectContextObjectsDidChange,
+            object: context,
+            userInfo: [NSInsertedObjectsKey: Set<NSManagedObject>([lead])]
+        )
+        let unrelatedChange = Notification(
+            name: .NSManagedObjectContextObjectsDidChange,
+            object: context,
+            userInfo: [NSUpdatedObjectsKey: Set<NSManagedObject>()]
+        )
+        let fullInvalidation = Notification(
+            name: .NSManagedObjectContextObjectsDidChange,
+            object: context,
+            userInfo: [NSInvalidatedAllObjectsKey: true]
+        )
+
+        #expect(MapLeadCacheInvalidationPolicy.shouldInvalidate(for: leadChange))
+        #expect(!MapLeadCacheInvalidationPolicy.shouldInvalidate(for: unrelatedChange))
+        #expect(MapLeadCacheInvalidationPolicy.shouldInvalidate(for: fullInvalidation))
+    }
+
+    @MainActor
     @Test func mapLeadRenderSelectionKeepsSmallSetsCompleteAndCountsAllMatches() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext

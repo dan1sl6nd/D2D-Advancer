@@ -713,12 +713,14 @@ final class D2D_AdvancerUITests: XCTestCase {
             .matching(identifier: "followUpHistoryAddCheckInButton")
             .firstMatch
 
-        if button.waitForExistence(timeout: 3) {
+        if button.waitForExistence(timeout: 3),
+           hasVisibleTapFrame(button, in: app, excludingBottomChrome: true) {
             tapElement(app, button, description: "followUpHistoryAddCheckInButton", excludingBottomChrome: true)
             return
         }
 
-        // iOS 26 sheet snapshots can omit custom header children from the AX tree.
+        // iOS 26 sheet snapshots can omit custom header children or report their
+        // frames relative to a different presentation window.
         // The next assertion still proves the tap opened the intended sheet.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.91, dy: 0.145)).tap()
     }

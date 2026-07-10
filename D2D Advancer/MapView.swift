@@ -469,7 +469,8 @@ struct MapView: View {
                 guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
             }
-            .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { notification in
+                guard MapLeadCacheInvalidationPolicy.shouldInvalidate(for: notification) else { return }
                 mapLeadPinCache = .empty
                 cancelMapLeadCachePrewarm()
                 if isVisible {
@@ -697,7 +698,7 @@ struct MapView: View {
 
         mapLeadOpeningGuardUntil = Date().addingTimeInterval(2.0)
         scheduleMapLeadRenderUpdate(
-            after: 0.05,
+            after: MapLeadOpeningRenderPolicy.coldOpenRenderDelay,
             maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
         )
     }
@@ -710,7 +711,9 @@ struct MapView: View {
         scheduleHiddenMapLeadCachePrewarm()
     }
 
-    private func scheduleHiddenMapLeadCachePrewarm(after delay: TimeInterval = 0.85) {
+    private func scheduleHiddenMapLeadCachePrewarm(
+        after delay: TimeInterval = MapLeadHiddenPrewarmPolicy.prewarmDelay
+    ) {
         guard !isVisible else { return }
         guard MapLeadHiddenPrewarmPolicy.shouldPrewarm(
             cacheIsReady: mapLeadPinCache.isReady,
@@ -1642,7 +1645,6 @@ struct MapView: View {
                 mapIsCenteredOnUser: mapIsCenteredOnUser
             ) else {
                 locationManager.startLocationUpdates()
-                locationManager.requestImmediateLocation()
                 return
             }
         }
@@ -1675,7 +1677,6 @@ struct MapView: View {
             mapIsCenteredOnUser: mapIsCenteredOnUser
         ) else {
             locationManager.startLocationUpdates()
-            locationManager.requestImmediateLocation()
             return
         }
 
@@ -3751,6 +3752,10 @@ private struct MapLeadPinRenderCandidate {
 }
 
 enum MapLeadOpeningRenderPolicy {
+    // Let the tab transition and controls commit before asking MapKit to build
+    // the first large annotation set. Warm snapshots bypass this delay.
+    static let coldOpenRenderDelay: TimeInterval = 0.28
+
     static func shouldPreserveSnapshotOnOpen(
         cacheIsReady: Bool,
         snapshotIsReady: Bool,
@@ -3785,8 +3790,32 @@ enum MapLeadOpeningRenderPolicy {
 }
 
 enum MapLeadHiddenPrewarmPolicy {
+    // Start preparing shortly after the non-map tab settles so the first Map
+    // visit normally uses an already-retained annotation snapshot.
+    static let prewarmDelay: TimeInterval = 0.22
+
     static func shouldPrewarm(cacheIsReady: Bool, snapshotIsReady: Bool) -> Bool {
         !cacheIsReady || !snapshotIsReady
+    }
+}
+
+enum MapLeadCacheInvalidationPolicy {
+    private static let objectChangeKeys = [
+        NSInsertedObjectsKey,
+        NSUpdatedObjectsKey,
+        NSDeletedObjectsKey,
+        NSRefreshedObjectsKey,
+        NSInvalidatedObjectsKey
+    ]
+
+    static func shouldInvalidate(for notification: Notification) -> Bool {
+        guard let userInfo = notification.userInfo else { return true }
+        if userInfo[NSInvalidatedAllObjectsKey] != nil { return true }
+
+        return objectChangeKeys.contains { key in
+            guard let objects = userInfo[key] as? Set<NSManagedObject> else { return false }
+            return objects.contains { $0 is Lead }
+        }
     }
 }
 
