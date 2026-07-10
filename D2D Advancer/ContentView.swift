@@ -27,25 +27,30 @@ struct ContentView: View {
     }
 
     var body: some View {
-        MainTabView()
-            .fullScreenCover(isPresented: onboardingBinding) {
-                OnboardingView(isPresented: onboardingBinding)
-                    .interactiveDismissDisabled()
-            }
-            .sheet(isPresented: paywallBinding) {
-                PaywallView()
-            }
-            .onAppear {
-                if ProcessInfo.processInfo.arguments.contains("-showPaywallForUITests") {
-                    paywallManager.setPremiumStatus(false)
-                    paywallManager.shouldShowPaywall = true
-                }
+        ZStack {
+            Color.obsidianBlack
+                .ignoresSafeArea()
 
-                // Check subscription status when app launches
-                Task {
-                    await paywallManager.checkSubscriptionStatus()
-                }
+            MainTabView()
+        }
+        .fullScreenCover(isPresented: onboardingBinding) {
+            OnboardingView(isPresented: onboardingBinding)
+                .interactiveDismissDisabled()
+        }
+        .sheet(isPresented: paywallBinding) {
+            PaywallView()
+        }
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-showPaywallForUITests") {
+                paywallManager.setPremiumStatus(false)
+                paywallManager.shouldShowPaywall = true
             }
+
+            // Check subscription status when app launches
+            Task {
+                await paywallManager.checkSubscriptionStatus()
+            }
+        }
     }
 }
 

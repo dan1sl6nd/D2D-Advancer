@@ -872,6 +872,7 @@ struct OverviewContentView: View {
             .padding(.top, 16)
             .padding(.bottom, 28)
         }
+        .accessibilityIdentifier("overviewScreen")
         .obsidianScreenBackground()
         .obsidianPushedNavigation("Overview", backButtonAccessibilityIdentifier: "overviewBackButton")
         .refreshable {

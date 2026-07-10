@@ -5,17 +5,24 @@ struct MainTabView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var router = AppRouter.shared
-    @ObservedObject private var locationManager = LocationManager.shared
+    private let locationManager = LocationManager.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
-    @ObservedObject private var teamService = TeamFirebaseService.shared
+    private let teamService = TeamFirebaseService.shared
     @State private var didApplyRoleDefaultTab = false
     @State private var shouldKeepMapAlive = false
     @State private var mapPrewarmTask: Task<Void, Never>?
     @State private var overdueLeadBadgeCount = 0
     @State private var overdueLeadBadgeTask: Task<Void, Never>?
+    @State private var teamLeadBadgeCount = 0
+    @State private var roleContext: TeamRoleContext = .solo
+    @State private var teamPresentationRefreshTask: Task<Void, Never>?
 
     private var isRunningUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
+    }
+
+    private var shouldExerciseMapRuntimeEffects: Bool {
+        ProcessInfo.processInfo.arguments.contains("-exerciseMapRuntimeEffectsForUITests")
     }
 
     private var shouldLoadTeamWorkspace: Bool {
@@ -24,26 +31,6 @@ struct MainTabView: View {
 
     private var shouldOpenTeamWorkspaceForUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-openTeamWorkspaceForUITests")
-    }
-
-    private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
-        TeamWorkspaceSurfaceSummary.makeShortcut(
-            team: teamService.activeTeam,
-            currentMember: teamService.currentMember,
-            members: teamService.teamMembers,
-            leads: teamService.teamLeads,
-            bookings: teamService.teamBookings,
-            dutySessions: teamService.dutySessions,
-            ownerNotifications: teamService.ownerNotifications
-        )
-    }
-
-    private var teamLeadBadgeCount: Int {
-        min(teamSurfaceSummary?.badgeCount ?? 0, 99)
-    }
-
-    private var roleContext: TeamRoleContext {
-        TeamRoleContext(summary: teamSurfaceSummary)
     }
 
     var body: some View {
@@ -116,12 +103,14 @@ struct MainTabView: View {
                 }
             }
         }
-        .background(Color.obsidianBackground(for: colorScheme))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
         .customThemed()
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mainTabView")
         .onAppear {
             scheduleOverdueLeadBadgeRefresh(after: 0)
+            refreshTeamPresentation()
 
             if router.selectedTab == 0 {
                 shouldKeepMapAlive = true
@@ -131,6 +120,9 @@ struct MainTabView: View {
 
             if isRunningUITests {
                 print("🧪 MainTabView: Skipping startup side effects for UI tests")
+                if shouldExerciseMapRuntimeEffects {
+                    initializeLocationServices()
+                }
                 if shouldLoadTeamWorkspace {
                     Task {
                         await loadTeamWorkspaceIfNeeded()
@@ -168,8 +160,8 @@ struct MainTabView: View {
                 applyDefaultTabForRoleIfNeeded(reset: true)
             }
         }
-        .onChange(of: teamService.currentMember?.workType) { _, _ in
-            applyDefaultTabForRoleIfNeeded()
+        .onReceive(teamService.objectWillChange) { _ in
+            scheduleTeamPresentationRefresh()
         }
         .onChange(of: router.selectedTab) { _, newTab in
             if newTab == 0 {
@@ -185,6 +177,8 @@ struct MainTabView: View {
             mapPrewarmTask = nil
             overdueLeadBadgeTask?.cancel()
             overdueLeadBadgeTask = nil
+            teamPresentationRefreshTask?.cancel()
+            teamPresentationRefreshTask = nil
         }
     }
 
@@ -230,6 +224,41 @@ struct MainTabView: View {
             displayName: userAccountManager.currentUserDisplayName,
             email: userAccountManager.currentUserEmail
         )
+        refreshTeamPresentation()
+    }
+
+    private func scheduleTeamPresentationRefresh(after delay: TimeInterval = 0.08) {
+        teamPresentationRefreshTask?.cancel()
+        teamPresentationRefreshTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled else { return }
+            refreshTeamPresentation()
+            teamPresentationRefreshTask = nil
+        }
+    }
+
+    private func refreshTeamPresentation() {
+        let summary = TeamWorkspaceSurfaceSummary.makeShortcut(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            ownerNotifications: teamService.ownerNotifications
+        )
+        let nextRoleContext = TeamRoleContext(summary: summary)
+        let nextBadgeCount = min(summary?.badgeCount ?? 0, 99)
+
+        if roleContext != nextRoleContext {
+            roleContext = nextRoleContext
+            applyDefaultTabForRoleIfNeeded()
+        }
+        if teamLeadBadgeCount != nextBadgeCount {
+            teamLeadBadgeCount = nextBadgeCount
+        }
     }
 
     private func applyDefaultTabForRoleIfNeeded(reset: Bool = false) {
@@ -251,7 +280,7 @@ struct MainTabView: View {
     }
 
     private func scheduleMapPrewarmIfNeeded() {
-        guard !isRunningUITests else { return }
+        guard !isRunningUITests || shouldExerciseMapRuntimeEffects else { return }
         guard !shouldKeepMapAlive else { return }
         guard mapPrewarmTask == nil else { return }
 

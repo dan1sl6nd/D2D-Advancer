@@ -106,9 +106,21 @@ final class D2D_AdvancerUITests: XCTestCase {
         let lightSampleCount = luminanceValues.filter { $0 > 0.72 }.count
         let averageTopChromeLuminance = luminanceValues.reduce(0, +) / CGFloat(max(luminanceValues.count, 1))
 
+        let sideEdgeRects = [
+            CGRect(x: 0.002, y: 0.18, width: 0.012, height: 0.56),
+            CGRect(x: 0.986, y: 0.18, width: 0.012, height: 0.56)
+        ]
+        let sideEdgeLuminanceValues = try sideEdgeRects.map { rect in
+            try averageLuminance(in: screenshot, normalizedRect: rect)
+        }
+
         XCTAssertTrue(
             lightSampleCount >= 5 && averageTopChromeLuminance > 0.72,
             "\(screenName) top chrome is too dark in light mode. samples=\(luminanceValues), average=\(averageTopChromeLuminance)"
+        )
+        XCTAssertTrue(
+            sideEdgeLuminanceValues.allSatisfy { $0 > 0.72 },
+            "\(screenName) does not fill the screen width in light mode. sideEdges=\(sideEdgeLuminanceValues)"
         )
     }
 
@@ -415,6 +427,15 @@ final class D2D_AdvancerUITests: XCTestCase {
         let predicate = NSPredicate(format: "label CONTAINS %@", text)
         let match = app.staticTexts.matching(predicate).firstMatch
         XCTAssertTrue(match.waitForExistence(timeout: timeout), "Expected text containing to appear: \(text)")
+    }
+
+    private func waitForExistenceQuickly(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        repeat {
+            if element.exists { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while ProcessInfo.processInfo.systemUptime < deadline
+        return element.exists
     }
 
     private func tapButton(_ app: XCUIApplication, _ identifier: String, timeout: TimeInterval = 8) {
@@ -1617,7 +1638,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapButton(app, "appointmentsScheduleButton", timeout: 12)
 
         waitForIdentifiedElement(app, "appointmentLeadPickerSheet", timeout: 8)
-        waitForText(app, "Select Customer", timeout: 8)
+        waitForText(app, "Select Lead", timeout: 8)
         try assertLightSurfaceAround(
             app.descendants(matching: .any)["appointmentLeadPickerSheet"].firstMatch,
             app: app,
@@ -2472,7 +2493,8 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "moreOverviewCard", timeout: 12)
-        waitForTextContaining(app, "Lead volume", timeout: 12)
+        waitForIdentifiedElement(app, "overviewScreen", timeout: 12)
+        waitForText(app, "Pipeline", timeout: 12)
 
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "moreMessageTemplatesCard", timeout: 12)
@@ -2485,6 +2507,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launchArguments.removeAll { $0 == "-resetUITestLeads" }
         app.launchArguments.append("-openMoreTabForUITests")
         app.launchArguments.append("-seedMapPerformanceLeads")
+        app.launchArguments.append("-exerciseMapRuntimeEffectsForUITests")
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)
 
@@ -2493,9 +2516,29 @@ final class D2D_AdvancerUITests: XCTestCase {
             "The large-map fixture should finish before measuring the Map transition"
         )
 
-        tapButton(app, "tab_Map", timeout: 8)
+        let mapTab = app.buttons.matching(identifier: "tab_Map").firstMatch
+        XCTAssertTrue(mapTab.waitForExistence(timeout: 8), "Map tab should be ready before measuring")
+        let interactionStart = ProcessInfo.processInfo.systemUptime
+        mapTab.tap()
         let summary = app.descendants(matching: .any)["mapLeadSummary"].firstMatch
-        XCTAssertTrue(summary.waitForExistence(timeout: 2), "Map lead summary should appear immediately")
+        XCTAssertTrue(waitForExistenceQuickly(summary, timeout: 1), "Map lead summary should appear immediately")
+
+        let mapToolsButton = app.buttons.matching(identifier: "mapToolsButton").firstMatch
+        XCTAssertTrue(waitForExistenceQuickly(mapToolsButton, timeout: 1), "Map tools should appear immediately")
+        mapToolsButton.tap()
+        XCTAssertTrue(
+            waitForExistenceQuickly(
+                app.descendants(matching: .any)["mapToolsSheet"].firstMatch,
+                timeout: 1
+            ),
+            "Map tools should remain immediately usable while the large lead snapshot is opening"
+        )
+        XCTAssertLessThan(
+            ProcessInfo.processInfo.systemUptime - interactionStart,
+            2.0,
+            "Opening Map and using its first control should not stall under a 2,000-lead fixture"
+        )
+        tapButton(app, "Close map tools", timeout: 2)
 
         let stableSnapshot = expectation(
             for: NSPredicate(format: "value == %@", "180 rendered pins"),

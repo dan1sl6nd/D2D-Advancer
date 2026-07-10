@@ -2960,6 +2960,15 @@ struct D2D_AdvancerTests {
         #expect(LeadClusterDisplayPolicy.clusteringIdentifier(for: .expanded) == nil)
     }
 
+    @Test func leadClusterDisplayPolicyKeepsDenseNeighborhoodsClustered() {
+        #expect(
+            LeadClusterDisplayPolicy.mode(mapSpan: 0.01, visibleLeadCount: 180) == .clustered
+        )
+        #expect(
+            LeadClusterDisplayPolicy.mode(mapSpan: 0.01, visibleLeadCount: 48) == .expanded
+        )
+    }
+
     @Test func calendarSettingsLocalStoreDistinguishesMissingValidAndCorruptData() async throws {
         let suiteName = "CalendarSettingsLocalStoreTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

@@ -311,8 +311,7 @@ struct MapView: View {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var locationManager = LocationManager.shared
     @ObservedObject private var onboardingManager = OnboardingManager.shared
-    @ObservedObject private var teamService = TeamFirebaseService.shared
-    @ObservedObject private var syncManager = UserDataSyncManager.shared
+    private let teamService = TeamFirebaseService.shared
     private let firebaseService = FirebaseService.shared
     private let userAccountManager = FirebaseUserAccountManager.shared
     private let paywallManager = PaywallManager.shared
@@ -369,12 +368,16 @@ struct MapView: View {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
     }
 
+    private var shouldExerciseMapRuntimeEffects: Bool {
+        ProcessInfo.processInfo.arguments.contains("-exerciseMapRuntimeEffectsForUITests")
+    }
+
     private var shouldLoadTeamWorkspace: Bool {
         !isRunningUITests || FirebaseEmulatorConfiguration.isEnabled
     }
 
     private var shouldRunVisibleMapEffects: Bool {
-        isVisible && !isRunningUITests
+        isVisible && (!isRunningUITests || shouldExerciseMapRuntimeEffects)
     }
 
     enum MapDialog: Identifiable {
@@ -387,28 +390,6 @@ struct MapView: View {
         self.isVisible = isVisible
     }
 
-    private var workflowStatusText: String? {
-        switch teamService.syncWriteState {
-        case .pending, .failed:
-            return teamService.syncWriteState.displayText
-        case .idle:
-            break
-        }
-
-        if syncManager.syncStatus.isBusy {
-            return syncManager.syncStatus.displayText
-        }
-
-        if selectedMapMode != .all {
-            if !mapLeadRenderSnapshot.isReady {
-                return "Loading \(selectedMapMode.title.lowercased()) leads"
-            }
-            return "\(mapLeadRenderSnapshot.matchingLeadCount) \(selectedMapMode.title.lowercased()) leads"
-        }
-
-        return nil
-    }
-
     private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
         TeamWorkspaceSurfaceSummary.make(
             team: teamService.activeTeam,
@@ -418,18 +399,6 @@ struct MapView: View {
             bookings: teamService.teamBookings,
             dutySessions: teamService.dutySessions,
             dutyLocationPoints: teamService.dutyLocationPoints,
-            ownerNotifications: teamService.ownerNotifications
-        )
-    }
-
-    private var teamShortcutSummary: TeamWorkspaceSurfaceSummary? {
-        TeamWorkspaceSurfaceSummary.makeShortcut(
-            team: teamService.activeTeam,
-            currentMember: teamService.currentMember,
-            members: teamService.teamMembers,
-            leads: teamService.teamLeads,
-            bookings: teamService.teamBookings,
-            dutySessions: teamService.dutySessions,
             ownerNotifications: teamService.ownerNotifications
         )
     }
@@ -461,7 +430,7 @@ struct MapView: View {
                 prepareHiddenMapLeadState()
                 return
             }
-            if !isRunningUITests {
+            if !isRunningUITests || shouldExerciseMapRuntimeEffects {
                 prepareLaunchMapCentering()
             }
             scheduleOpeningMapLeadRenderUpdate()
@@ -472,7 +441,7 @@ struct MapView: View {
         }
         .onChange(of: isVisible) { _, isVisible in
             if isVisible {
-                if !isRunningUITests {
+                if !isRunningUITests || shouldExerciseMapRuntimeEffects {
                     prepareLaunchMapCentering()
                 }
                 scheduleOpeningMapLeadRenderUpdate()
@@ -619,12 +588,12 @@ struct MapView: View {
                 RoutePlannerSheet(region: locationManager.region)
             }
             .sheet(isPresented: $showingMapTools) {
-                MapToolsSheet(
+                MapToolsSheetHost(
                     selectedMode: selectedMapMode,
                     selectedStyle: MapStyleChoice.choice(for: mapType),
                     is3DModeEnabled: is3DModeEnabled,
-                    workflowStatusText: workflowStatusText,
-                    teamSummary: teamSurfaceSummary,
+                    isLeadSnapshotReady: mapLeadRenderSnapshot.isReady,
+                    matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount,
                     onSelectMode: setMapMode,
                     onSelectMapStyle: { choice in
                         setMapType(choice.mapType)
@@ -945,22 +914,26 @@ struct MapView: View {
             }
         )
         .onChangeCompat(of: onboardingManager.showOnboarding) { isPresented in
-            if isVisible && !isPresented && !isRunningUITests {
+            if isVisible && !isPresented && (!isRunningUITests || shouldExerciseMapRuntimeEffects) {
                 prepareLaunchMapCentering()
             }
         }
         .onChange(of: locationManager.authorizationStatus) { _, newStatus in
-            guard isVisible, !isRunningUITests else { return }
+            guard isVisible, !isRunningUITests || shouldExerciseMapRuntimeEffects else { return }
             if newStatus == .authorizedWhenInUse || newStatus == .authorizedAlways {
                 prepareLaunchMapCentering()
             }
         }
         .onReceive(locationManager.$location) { location in
-            guard isVisible, !isRunningUITests, location != nil else { return }
+            guard isVisible,
+                  !isRunningUITests || shouldExerciseMapRuntimeEffects,
+                  location != nil else { return }
             centerMapOnLaunchIfPossible()
         }
         .onChange(of: scenePhase) { _, newPhase in
-            guard isVisible, !isRunningUITests, newPhase == .active else { return }
+            guard isVisible,
+                  !isRunningUITests || shouldExerciseMapRuntimeEffects,
+                  newPhase == .active else { return }
             refreshLaunchMapCenteringAfterForeground()
         }
     }
@@ -1192,10 +1165,8 @@ struct MapView: View {
 
     @ViewBuilder
     private var urgentTeamMapShortcut: some View {
-        if let summary = teamShortcutSummary {
-            TeamMapShortcutPill(summary: summary) {
-                openTeamFieldMap()
-            }
+        TeamMapShortcutHost {
+            openTeamFieldMap()
         }
     }
 
@@ -4007,6 +3978,96 @@ struct MapLeadSelection {
 private struct LeadRenderCandidate {
     let lead: Lead
     let sortKey: LeadClusterSortKey
+}
+
+private struct TeamMapShortcutHost: View {
+    @ObservedObject private var teamService = TeamFirebaseService.shared
+    let onOpen: () -> Void
+
+    private var summary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.makeShortcut(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if let summary {
+            TeamMapShortcutPill(summary: summary, action: onOpen)
+        }
+    }
+}
+
+private struct MapToolsSheetHost: View {
+    @ObservedObject private var teamService = TeamFirebaseService.shared
+    @ObservedObject private var syncManager = UserDataSyncManager.shared
+
+    let selectedMode: MapWorkflowMode
+    let selectedStyle: MapStyleChoice
+    let is3DModeEnabled: Bool
+    let isLeadSnapshotReady: Bool
+    let matchingLeadCount: Int
+    let onSelectMode: (MapWorkflowMode) -> Void
+    let onSelectMapStyle: (MapStyleChoice) -> Void
+    let onToggle3D: () -> Void
+    let onOpenRoutePlanner: () -> Void
+    let onOpenTeamMap: () -> Void
+
+    private var workflowStatusText: String? {
+        switch teamService.syncWriteState {
+        case .pending, .failed:
+            return teamService.syncWriteState.displayText
+        case .idle:
+            break
+        }
+
+        if syncManager.syncStatus.isBusy {
+            return syncManager.syncStatus.displayText
+        }
+
+        if selectedMode != .all {
+            if !isLeadSnapshotReady {
+                return "Loading \(selectedMode.title.lowercased()) leads"
+            }
+            return "\(matchingLeadCount) \(selectedMode.title.lowercased()) leads"
+        }
+
+        return nil
+    }
+
+    private var teamSummary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.make(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            dutyLocationPoints: teamService.dutyLocationPoints,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
+
+    var body: some View {
+        MapToolsSheet(
+            selectedMode: selectedMode,
+            selectedStyle: selectedStyle,
+            is3DModeEnabled: is3DModeEnabled,
+            workflowStatusText: workflowStatusText,
+            teamSummary: teamSummary,
+            onSelectMode: onSelectMode,
+            onSelectMapStyle: onSelectMapStyle,
+            onToggle3D: onToggle3D,
+            onOpenRoutePlanner: onOpenRoutePlanner,
+            onOpenTeamMap: onOpenTeamMap
+        )
+    }
 }
 
 private struct MapToolsSheet: View {

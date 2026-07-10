@@ -843,6 +843,10 @@ struct AdvancedMapView: UIViewRepresentable {
             let annotationsToAdd = zip(newAnnotations, newSignature).compactMap { annotation, signature in
                 previousSignatureSet.contains(signature) ? nil : annotation
             }
+            currentLeadClusteringMode = LeadClusterDisplayPolicy.mode(
+                for: mapView.region,
+                visibleLeadCount: visibleLeadAnnotationCount(newAnnotations, in: mapView)
+            )
 
             if !annotationsToRemove.isEmpty {
                 mapView.removeAnnotations(annotationsToRemove)
@@ -852,13 +856,15 @@ struct AdvancedMapView: UIViewRepresentable {
             }
             currentAnnotations = newAnnotations
             currentAnnotationSignature = newSignature
-            currentLeadClusteringMode = LeadClusterDisplayPolicy.mode(for: mapView.region)
 
             AppLog.debug("Map", "Updated map annotations: \(currentAnnotations.count) leads displayed")
         }
 
         func updateLeadClusteringModeIfNeeded(mapView: MKMapView) {
-            let nextMode = LeadClusterDisplayPolicy.mode(for: mapView.region)
+            let nextMode = LeadClusterDisplayPolicy.mode(
+                for: mapView.region,
+                visibleLeadCount: visibleLeadAnnotationCount(currentAnnotations, in: mapView)
+            )
             guard currentLeadClusteringMode != nextMode else { return }
 
             annotationUpdateGeneration += 1
@@ -870,6 +876,19 @@ struct AdvancedMapView: UIViewRepresentable {
 
             mapView.removeAnnotations(currentAnnotations)
             addAnnotationsInBatches(currentAnnotations, to: mapView, generation: generation)
+        }
+
+        private func visibleLeadAnnotationCount(
+            _ annotations: [LeadMapAnnotation],
+            in mapView: MKMapView
+        ) -> Int {
+            let visibleMapRect = mapView.visibleMapRect
+            let countLimit = LeadClusterDisplayPolicy.maximumExpandedVisibleLeadCount + 1
+            return annotations.lazy.filter { annotation in
+                visibleMapRect.contains(MKMapPoint(annotation.coordinate))
+            }
+            .prefix(countLimit)
+            .count
         }
 
         func updateHiddenAnnotationsIfNeeded(mapView: MKMapView, leads: [MapLeadPin]) {
@@ -1040,7 +1059,7 @@ struct AdvancedMapView: UIViewRepresentable {
             annotationView.annotation = annotation
             annotationView.canShowCallout = true
             annotationView.clusteringIdentifier = LeadClusterDisplayPolicy.clusteringIdentifier(
-                for: LeadClusterDisplayPolicy.mode(for: mapView.region)
+                for: currentLeadClusteringMode ?? LeadClusterDisplayPolicy.mode(for: mapView.region)
             )
             annotationView.displayPriority = displayPriority(for: pin)
 
@@ -1345,17 +1364,29 @@ enum LeadClusterInteractionPolicy {
 }
 
 enum LeadClusterDisplayPolicy {
+    static let maximumExpandedVisibleLeadCount = 48
+
     enum Mode {
         case clustered
         case expanded
     }
 
-    static func mode(for region: MKCoordinateRegion) -> Mode {
-        mode(mapSpan: max(region.span.latitudeDelta, region.span.longitudeDelta))
+    static func mode(
+        for region: MKCoordinateRegion,
+        visibleLeadCount: Int = 0
+    ) -> Mode {
+        mode(
+            mapSpan: max(region.span.latitudeDelta, region.span.longitudeDelta),
+            visibleLeadCount: visibleLeadCount
+        )
     }
 
-    static func mode(mapSpan: CLLocationDegrees) -> Mode {
-        mapSpan <= 0.025 ? .expanded : .clustered
+    static func mode(
+        mapSpan: CLLocationDegrees,
+        visibleLeadCount: Int = 0
+    ) -> Mode {
+        guard mapSpan <= 0.025 else { return .clustered }
+        return visibleLeadCount <= maximumExpandedVisibleLeadCount ? .expanded : .clustered
     }
 
     static func clusteringIdentifier(for mode: Mode) -> String? {

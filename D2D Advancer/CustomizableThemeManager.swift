@@ -486,6 +486,7 @@ struct ObsidianHeaderView: View {
         .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 14)
+        .frame(maxWidth: .infinity)
         .background(Color.obsidianBackground(for: colorScheme))
     }
 
