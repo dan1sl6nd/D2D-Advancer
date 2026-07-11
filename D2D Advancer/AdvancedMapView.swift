@@ -359,7 +359,9 @@ struct AdvancedMapView: UIViewRepresentable {
         forHeight _: CGFloat,
         isLaunchCenteringActive _: Bool
     ) -> UIEdgeInsets {
-        UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        // MapKit positions its attribution and built-in controls inside these
+        // margins. Keep the bottom attribution above the floating quick-action bar.
+        UIEdgeInsets(top: 20, left: 20, bottom: 112, right: 20)
     }
 
     nonisolated static func shouldRespectVisibleControlsForStartupCentering(
@@ -1077,7 +1079,10 @@ struct AdvancedMapView: UIViewRepresentable {
 
             annotationView.annotation = annotation
             annotationView.canShowCallout = false
-            annotationView.titleVisibility = .hidden
+            annotationView.titleVisibility = LeadMapAnnotationLabelPolicy.showsName(
+                status: pin.status,
+                name: pin.name
+            ) ? .visible : .hidden
             annotationView.subtitleVisibility = .hidden
             annotationView.clusteringIdentifier = LeadClusterDisplayPolicy.clusteringIdentifier(
                 for: currentLeadClusteringMode ?? LeadClusterDisplayPolicy.mode(for: mapView.region)
@@ -1482,6 +1487,16 @@ enum LeadMapAnnotationPriorityPolicy {
         }
 
         return .defaultHigh
+    }
+}
+
+enum LeadMapAnnotationLabelPolicy {
+    static func showsName(status: Lead.Status, name: String) -> Bool {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+
+        return status == .converted || status == .interested
     }
 }
 

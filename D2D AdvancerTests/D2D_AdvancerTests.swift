@@ -1353,9 +1353,10 @@ struct D2D_AdvancerTests {
         #expect(launchMargins.top <= 24)
         #expect(controlAvoidanceMargins.bottom > launchMargins.bottom)
         #expect(controlAvoidanceMargins.right > launchMargins.right)
-        #expect(mapKitMargins.top == mapKitMargins.bottom)
         #expect(mapKitMargins.left == mapKitMargins.right)
         #expect(mapKitMargins.right <= launchMargins.right)
+        #expect(mapKitMargins.bottom >= 100)
+        #expect(mapKitMargins.bottom > mapKitMargins.top)
     }
 
     @Test func launchMapUsesUsableViewportForStartupCentering() async throws {
@@ -2990,6 +2991,15 @@ struct D2D_AdvancerTests {
             LeadMapAnnotationPriorityPolicy.clusterDisplayPriority(for: interestedCluster).rawValue
             > LeadMapAnnotationPriorityPolicy.clusterDisplayPriority(for: priorityCluster).rawValue
         )
+    }
+
+    @Test func mapOnlyShowsNamesForInterestedAndSoldLeads() {
+        #expect(LeadMapAnnotationLabelPolicy.showsName(status: .converted, name: "Sold Customer"))
+        #expect(LeadMapAnnotationLabelPolicy.showsName(status: .interested, name: "Interested Customer"))
+        #expect(!LeadMapAnnotationLabelPolicy.showsName(status: .notContacted, name: "New Lead"))
+        #expect(!LeadMapAnnotationLabelPolicy.showsName(status: .notHome, name: "Away Lead"))
+        #expect(!LeadMapAnnotationLabelPolicy.showsName(status: .notInterested, name: "Passed Lead"))
+        #expect(!LeadMapAnnotationLabelPolicy.showsName(status: .converted, name: "   "))
     }
 
     @Test func leadClusterInteractionOpensAreaSheetBeforeExtremeZoom() {

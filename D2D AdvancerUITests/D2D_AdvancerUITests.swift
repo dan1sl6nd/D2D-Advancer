@@ -2622,6 +2622,34 @@ final class D2D_AdvancerUITests: XCTestCase {
         wait(for: [stableSnapshot], timeout: 3)
         screenshot(app, name: "Map - 2000 lead stable opening snapshot")
 
+        let legalLink = app.links["Legal"]
+        let awayButton = app.buttons["quickAction_away"]
+        XCTAssertTrue(legalLink.waitForExistence(timeout: 4), "Maps Legal attribution should be visible")
+        XCTAssertTrue(awayButton.waitForExistence(timeout: 4), "Quick-action menu should be visible")
+        XCTAssertLessThanOrEqual(
+            legalLink.frame.maxY,
+            awayButton.frame.minY - 8,
+            "Maps Legal attribution should remain above the floating action menu"
+        )
+
+        mapToolsButton.tap()
+        tapIdentifiedElement(app, "mapWorkflowMode_hot", timeout: 3)
+        let interestedMarker = app.otherElements.matching(
+            NSPredicate(
+                format: "label BEGINSWITH %@ AND label CONTAINS[c] %@",
+                "UI Map Perf ",
+                "Interested"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            interestedMarker.waitForExistence(timeout: 6),
+            "Hot map mode should expose at least one named Interested marker"
+        )
+        screenshot(app, name: "Map - Interested lead names")
+
+        mapToolsButton.tap()
+        tapIdentifiedElement(app, "mapWorkflowMode_all", timeout: 3)
+
         let moreTab = app.buttons.matching(identifier: "tab_More").firstMatch
         moreTab.tap()
         XCTAssertTrue(
