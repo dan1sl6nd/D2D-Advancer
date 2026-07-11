@@ -7,8 +7,8 @@ description: Terms of Use (EULA) for D2D Advancer - Door-to-Door Sales Managemen
 # Terms of Use (EULA)
 ## D2D Advancer
 
-**Effective Date:** November 12, 2025
-**Last Updated:** November 12, 2025
+**Effective Date:** July 10, 2026
+**Last Updated:** July 10, 2026
 
 ---
 
@@ -24,27 +24,26 @@ Subject to your compliance with these Terms, we grant you a limited, non-exclusi
 
 ### 3.1 Auto-Renewable Subscriptions
 
-D2D Advancer offers the following auto-renewable subscription options:
+D2D Advancer offers weekly and yearly auto-renewable subscription options. The exact localized price, currency, taxes, and any introductory offer are shown by Apple before purchase. Current United States reference prices are:
 
-- **Weekly Plan:** $9.99 per week with a 3-day free trial
-  - Free for the first 3 days
+- **Weekly Plan:** $9.99 per week, with a 3-day free trial when that offer is shown and you are eligible
+  - No subscription charge during the displayed trial period
   - After the trial period, automatically renews at $9.99 per week
   - Billed weekly until canceled
 
 - **Yearly Plan:** $36.99 per year
   - Billed annually until canceled
-  - Equivalent to $3.08 per month
 
 ### 3.2 Payment and Renewal
 
 - Payment will be charged to your Apple ID account at confirmation of purchase
 - Subscriptions automatically renew unless auto-renew is turned off at least 24 hours before the end of the current period
 - Your account will be charged for renewal within 24 hours prior to the end of the current period
-- The renewal cost will be the same as the initial subscription price unless we notify you otherwise
+- Renewal uses the price shown by Apple for your storefront, subject to Apple's required notice and consent rules for price changes
 
 ### 3.3 Free Trial
 
-- New subscribers may be offered a free trial period
+- Eligible new subscribers may be offered a free trial period when it is displayed on the purchase screen
 - You may cancel at any time during the trial period without being charged
 - If you do not cancel before the trial ends, you will be charged for the subscription
 - To avoid charges, you must cancel at least 24 hours before the trial period ends
@@ -73,6 +72,13 @@ D2D Advancer offers the following auto-renewable subscription options:
 
 - You must notify us immediately of any unauthorized use of your account
 - We are not liable for any loss or damage from your failure to maintain account security
+
+### 4.3 Account Deletion
+
+- You may request account deletion in the App from **More > Account Management > Delete Account**
+- If you belong to a Team Workspace, you may need to leave it or, as owner, close it before deleting your account
+- Account deletion does not cancel an App Store subscription; subscriptions must be managed separately in Apple ID settings
+- Data is deleted or retained as described in the Privacy Policy and as required by law
 
 ## 5. Acceptable Use
 
@@ -119,9 +125,10 @@ Your use of the App is subject to our Privacy Policy, which is incorporated into
 
 The App integrates with third-party services including:
 
-- **Firebase** (authentication and data storage)
+- **Apple iCloud and CloudKit** (personal data sync and backup)
+- **Firebase** (account authentication and Team Workspace data)
 - **Apple Maps** (mapping and location services)
-- **Apple App Store** (payment processing)
+- **Apple App Store and StoreKit** (subscription processing)
 
 Your use of these services is subject to their respective terms and privacy policies.
 
@@ -254,6 +261,6 @@ If you have any questions about these Terms, please contact us:
 
 ---
 
-**© 2025 D2D Advancer. All rights reserved.**
+**Copyright 2026 D2D Advancer. All rights reserved.**
 
 By using D2D Advancer, you acknowledge that you have read, understood, and agree to be bound by these Terms of Use.

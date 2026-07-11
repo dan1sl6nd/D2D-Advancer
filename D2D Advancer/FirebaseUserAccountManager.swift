@@ -3,6 +3,7 @@ import SwiftUI
 import FirebaseAuth
 import Combine
 import CoreData
+import AuthenticationServices
 
 enum SignOutWorkspaceCleanupPolicy {
     static func shouldClearLocalWorkspaceData(provider: CloudSyncProvider) -> Bool {
@@ -366,27 +367,75 @@ class FirebaseUserAccountManager: ObservableObject {
             authStatus = .failed("Password is required to delete account")
             return
         }
-        
+
+        performAccountDeletion {
+            try await self.firebaseService.deleteAccount(currentPassword: currentPassword)
+        }
+    }
+
+    func deleteAccount(with credentials: AppleAccountDeletionCredentials) {
+        performAccountDeletion {
+            try await self.firebaseService.deleteAccount(with: credentials)
+        }
+    }
+
+    func handleAppleAccountDeletionAuthorization(
+        _ result: Result<ASAuthorization, Error>
+    ) {
+        do {
+            let credentials = try AppleSignInManager.shared.accountDeletionCredentials(from: result)
+            deleteAccount(with: credentials)
+        } catch {
+            authStatus = .failed(error.localizedDescription)
+        }
+    }
+
+    private func performAccountDeletion(
+        _ deleteAuthenticatedAccount: @escaping @MainActor () async throws -> Void
+    ) {
         authStatus = .loading
-        
+
         Task {
             do {
-                try await firebaseService.deleteAccount(currentPassword: currentPassword)
-                
-                // Clear all local data after successful account deletion
-                await self.clearAllLocalData()
-                
-                await MainActor.run {
-                    self.authStatus = .success
-                    print("✅ Account deleted successfully")
-                }
-                
+                try await detachFromTeamBeforeAccountDeletion()
+                try await deleteAuthenticatedAccount()
+
+                let shouldClearWorkspace = SignOutWorkspaceCleanupPolicy
+                    .shouldClearLocalWorkspaceData(provider: CloudSyncProvider.current)
+                await clearAllLocalData(clearWorkspaceData: shouldClearWorkspace)
+                AppleSignInManager.shared.signOut()
+                authStatus = .success
+                AppLog.info("Account", "Account deletion completed")
             } catch {
-                await MainActor.run {
-                    self.authStatus = .failed(self.parseAuthError(error))
-                    ErrorHandler.shared.handleFirebaseError(error, context: "Delete Account")
-                }
+                authStatus = .failed(parseAuthError(error))
+                ErrorHandler.shared.handleFirebaseError(error, context: "Delete Account")
             }
+        }
+    }
+
+    private func detachFromTeamBeforeAccountDeletion() async throws {
+        let teamService = TeamFirebaseService.shared
+
+        if teamService.currentMember == nil {
+            await teamService.loadCurrentTeam(
+                displayName: currentUserDisplayName,
+                email: currentUserEmail
+            )
+        }
+
+        guard let member = teamService.currentMember else {
+            if let message = teamService.lastErrorMessage, !message.isEmpty {
+                throw FirebaseService.FirebaseError.unknown(
+                    "Team data could not be prepared for deletion. \(message)"
+                )
+            }
+            return
+        }
+
+        if member.role == .owner {
+            try await teamService.closeCurrentTeam()
+        } else {
+            try await teamService.leaveCurrentTeam()
         }
     }
     
@@ -693,6 +742,13 @@ class FirebaseUserAccountManager: ObservableObject {
 
     var hasActiveSession: Bool {
         isLoggedIn || isAppleAuthed
+    }
+
+    var accountAuthenticationMethod: AccountAuthenticationMethod {
+        AccountAuthenticationMethod.resolve(
+            providerIDs: currentUser?.providerData.map(\.providerID) ?? [],
+            hasAppleIdentity: isAppleAuthed
+        )
     }
 
     func bridgeAppleSignIn(userIdentifier: String, email: String?, fullName: String?) {

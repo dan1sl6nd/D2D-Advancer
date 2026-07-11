@@ -3363,6 +3363,21 @@ struct D2D_AdvancerTests {
         #expect(!SignOutWorkspaceCleanupPolicy.shouldClearLocalWorkspaceData(provider: .off))
     }
 
+    @Test func accountAuthenticationMethodUsesOriginalFirebaseProvider() {
+        #expect(AccountAuthenticationMethod.resolve(providerIDs: ["password"]) == .password)
+        #expect(AccountAuthenticationMethod.resolve(providerIDs: ["apple.com"]) == .apple)
+        #expect(AccountAuthenticationMethod.resolve(providerIDs: ["password"], hasAppleIdentity: true) == .apple)
+        #expect(AccountAuthenticationMethod.resolve(providerIDs: ["google.com"]) == .unsupported)
+        #expect(AccountAuthenticationMethod.resolve(providerIDs: []) == .unsupported)
+    }
+
+    @Test func appVersionDisplayUsesBundleVersionAndBuildWithoutHardcoding() {
+        #expect(AppVersionDisplay.formatted(shortVersion: "1.1", build: "7") == "1.1 (7)")
+        #expect(AppVersionDisplay.formatted(shortVersion: "1.1", build: nil) == "1.1")
+        #expect(AppVersionDisplay.formatted(shortVersion: nil, build: "7") == "Build 7")
+        #expect(AppVersionDisplay.formatted(shortVersion: " ", build: " ") == "Unknown")
+    }
+
     @Test func leadDeletionTombstonesPersistDeletedIds() throws {
         let suiteName = "LeadDeletionTombstoneTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

@@ -87,6 +87,17 @@ final class CloudKitAccountBackupService {
         )
     }
 
+    func deleteProfile(for userId: String) async throws {
+        try await ensureCloudKitAccountAvailable()
+
+        let recordId = CKRecord.ID(recordName: userId)
+        do {
+            _ = try await database.deleteRecord(withID: recordId)
+        } catch let error as CKError where error.code == .unknownItem {
+            return
+        }
+    }
+
     private func ensureCloudKitAccountAvailable() async throws {
         let status = try await container.accountStatus()
         guard status == .available else {

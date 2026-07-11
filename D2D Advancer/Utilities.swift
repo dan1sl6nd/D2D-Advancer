@@ -2,6 +2,13 @@ import Foundation
 import UIKit
 import CoreData
 
+#if !DEBUG
+@inline(__always)
+func print(_ items: Any..., separator: String = " ", terminator: String = "\n") {
+    // Keep app-owned diagnostic output out of distribution builds.
+}
+#endif
+
 enum AppLog {
     static func debug(_ category: String, _ message: @autoclosure () -> String) {
         #if DEBUG
@@ -25,6 +32,31 @@ enum AppLog {
         #if DEBUG
         print("❌ [\(category)] \(message())")
         #endif
+    }
+}
+
+enum AppVersionDisplay {
+    static var current: String {
+        formatted(
+            shortVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+            build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        )
+    }
+
+    static func formatted(shortVersion: String?, build: String?) -> String {
+        let version = shortVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let buildNumber = build?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch (version?.isEmpty == false ? version : nil, buildNumber?.isEmpty == false ? buildNumber : nil) {
+        case let (.some(version), .some(buildNumber)):
+            return "\(version) (\(buildNumber))"
+        case let (.some(version), .none):
+            return version
+        case let (.none, .some(buildNumber)):
+            return "Build \(buildNumber)"
+        case (.none, .none):
+            return "Unknown"
+        }
     }
 }
 

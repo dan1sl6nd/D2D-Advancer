@@ -5,6 +5,23 @@ import FirebaseCore
 import UIKit
 import CoreData
 
+enum AccountAuthenticationMethod: Equatable, Sendable {
+    case password
+    case apple
+    case unsupported
+
+    static func resolve(providerIDs: [String], hasAppleIdentity: Bool = false) -> Self {
+        let normalized = Set(providerIDs.map { $0.lowercased() })
+        if normalized.contains("apple.com") || hasAppleIdentity {
+            return .apple
+        }
+        if normalized.contains("password") {
+            return .password
+        }
+        return .unsupported
+    }
+}
+
 @MainActor
 class FirebaseService: ObservableObject {
     static let shared: FirebaseService = {
@@ -56,6 +73,12 @@ class FirebaseService: ObservableObject {
     
     @Published var currentUser: User?
     @Published var isAuthenticated = false
+
+    var accountAuthenticationMethod: AccountAuthenticationMethod {
+        AccountAuthenticationMethod.resolve(
+            providerIDs: auth.currentUser?.providerData.map(\.providerID) ?? []
+        )
+    }
     
     private init() {
         FirebaseBootstrap.configureIfNeeded()
@@ -174,6 +197,10 @@ class FirebaseService: ObservableObject {
         guard let user = auth.currentUser else {
             throw FirebaseError.notAuthenticated
         }
+
+        guard accountAuthenticationMethod == .password else {
+            throw FirebaseError.unsupportedAuthenticationProvider
+        }
         
         // Re-authenticate with current password before deletion
         let credential = EmailAuthProvider.credential(
@@ -183,9 +210,34 @@ class FirebaseService: ObservableObject {
         
         try await user.reauthenticate(with: credential)
         
-        // Delete the account
+        try await deletePersonalFirebaseData(for: user.uid)
+        await deleteCloudKitAccountBackupIfAvailable(for: user.uid)
+
         try await user.delete()
-        print("✅ Account deleted successfully")
+        AppLog.info("Account", "Password account deleted successfully")
+    }
+
+    func deleteAccount(with credentials: AppleAccountDeletionCredentials) async throws {
+        guard let user = auth.currentUser else {
+            throw FirebaseError.notAuthenticated
+        }
+
+        guard accountAuthenticationMethod == .apple else {
+            throw FirebaseError.unsupportedAuthenticationProvider
+        }
+
+        let credential = OAuthProvider.appleCredential(
+            withIDToken: credentials.idToken,
+            rawNonce: credentials.rawNonce,
+            fullName: nil
+        )
+        try await user.reauthenticate(with: credential)
+
+        try await deletePersonalFirebaseData(for: user.uid)
+        await deleteCloudKitAccountBackupIfAvailable(for: user.uid)
+        try await auth.revokeToken(withAuthorizationCode: credentials.authorizationCode)
+        try await user.delete()
+        AppLog.info("Account", "Apple account revoked and deleted successfully")
     }
     
     func resendEmailVerification() async throws {
@@ -204,6 +256,7 @@ class FirebaseService: ObservableObject {
         case emailNotVerified
         case invalidCredentials
         case networkError
+        case unsupportedAuthenticationProvider
         case unknown(String)
         
         var errorDescription: String? {
@@ -216,9 +269,53 @@ class FirebaseService: ObservableObject {
                 return "Invalid email or password"
             case .networkError:
                 return "Network error. Please check your connection"
+            case .unsupportedAuthenticationProvider:
+                return "This account must be confirmed with its original sign-in method."
             case .unknown(let message):
                 return message
             }
+        }
+    }
+
+    private func deletePersonalFirebaseData(for userId: String) async throws {
+        let userReference = db.collection("users").document(userId)
+        let subcollections = ["leads", "checkIns", "appointments", "teamProfile"]
+
+        for name in subcollections {
+            try await deleteAllDocuments(in: userReference.collection(name))
+        }
+        try await userReference.delete()
+    }
+
+    private func deleteAllDocuments(in collection: CollectionReference) async throws {
+        while true {
+            let snapshot = try await collection.limit(to: 400).getDocuments()
+            guard !snapshot.documents.isEmpty else { return }
+
+            let batch = db.batch()
+            snapshot.documents.forEach { batch.deleteDocument($0.reference) }
+            try await commit(batch)
+        }
+    }
+
+    private func commit(_ batch: WriteBatch) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            batch.commit { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+        }
+    }
+
+    private func deleteCloudKitAccountBackupIfAvailable(for userId: String) async {
+        guard let accountBackupService else { return }
+        do {
+            try await accountBackupService.deleteProfile(for: userId)
+        } catch {
+            AppLog.warning("Account", "CloudKit account-profile cleanup was unavailable: \(error.localizedDescription)")
         }
     }
     

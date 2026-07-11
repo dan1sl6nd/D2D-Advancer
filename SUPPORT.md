@@ -1,286 +1,96 @@
 ---
 layout: default
 title: Support - D2D Advancer
-description: Get help and support for D2D Advancer - Door-to-Door Sales Management App
+description: Help and support for D2D Advancer
 ---
 
-<div align="center">
-  <h1>🛠️ Support Center</h1>
-  <h2>D2D Advancer</h2>
-  <p><em>We're here to help you succeed!</em></p>
-  
-  <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); padding: 20px; border-radius: 10px; margin: 20px 0; color: white;">
-    <h3 style="color: white; margin: 0;">💬 Need Help? We've Got You Covered!</h3>
-    <p style="margin: 10px 0 0 0;">Find answers to common questions or contact our support team</p>
-  </div>
-</div>
+# D2D Advancer Support
 
----
+**App version:** 1.1
 
-## 📚 Frequently Asked Questions
+**Last updated:** July 10, 2026
 
-<div style="margin: 20px 0;">
+For help that is not covered below, email [dan1sl6nd@gmail.com](mailto:dan1sl6nd@gmail.com). Include your device model, iOS version, app version, and the steps that caused the problem. Do not send customer names, addresses, phone numbers, invite codes, passwords, or screenshots containing private lead data unless support specifically requests a redacted example.
 
-### 🔐 Account & Authentication
+## Quick Troubleshooting
 
-<details style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #007bff;">
-<summary style="font-weight: bold; cursor: pointer; color: #007bff;">❓ I can't sign in to my account</summary>
-<div style="padding: 10px 0;">
-<p><strong>Try these solutions:</strong></p>
-<ul>
-<li>✅ Make sure you've verified your email address (check your inbox and spam folder)</li>
-<li>🔑 Reset your password using the "Forgot Password" link</li>
-<li>📱 Check your internet connection</li>
-<li>🔄 Force close and restart the app</li>
-</ul>
-<p><strong>Still having issues?</strong> Contact us at <a href="mailto:dan1sl6nd@gmail.com">dan1sl6nd@gmail.com</a></p>
-</div>
-</details>
+1. Confirm the iPhone or iPad has an active internet connection.
+2. Force close D2D Advancer and reopen it.
+3. Open **More > Sync Settings** and confirm the expected sync provider is selected.
+4. Install the latest D2D Advancer and iOS updates available to you.
+5. If a problem continues, contact support with the exact error message and time it occurred.
 
-<details style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #007bff;">
-<summary style="font-weight: bold; cursor: pointer; color: #007bff;">📧 I didn't receive the verification email</summary>
-<div style="padding: 10px 0;">
-<p><strong>Check these locations:</strong></p>
-<ul>
-<li>📬 Check your spam/junk folder</li>
-<li>📁 Look in your promotions folder (Gmail)</li>
-<li>⏱️ Wait up to 10 minutes for delivery</li>
-<li>🔄 Request a new verification email from the app</li>
-</ul>
-</div>
-</details>
+## Accounts
 
-### 👥 Lead Management
+### I cannot sign in
 
-<details style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #28a745;">
-<summary style="font-weight: bold; cursor: pointer; color: #28a745;">📊 How do I add a new lead?</summary>
-<div style="padding: 10px 0;">
-<p><strong>Adding leads is easy:</strong></p>
-<ol>
-<li>📱 Open the app and tap the "+" button</li>
-<li>📝 Fill in the lead information (name, address, phone, etc.)</li>
-<li>📍 The app will automatically detect your location or let you set it manually</li>
-<li>💾 Tap "Save" to add the lead to your list</li>
-</ol>
-<p><strong>💡 Pro tip:</strong> Use the voice-to-text feature for faster data entry!</p>
-</div>
-</details>
+- For email accounts, use **Forgot Password** on the sign-in screen and check spam or junk folders for the reset email.
+- For Sign in with Apple, confirm you are signed in to iCloud on the device and that Apple ID services are available.
+- Team Workspace identity uses Sign in with Apple. You do not need to create a separate Firebase username in the app.
 
-<details style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #28a745;">
-<summary style="font-weight: bold; cursor: pointer; color: #28a745;">🗺️ Leads aren't showing on the map</summary>
-<div style="padding: 10px 0;">
-<p><strong>Try these steps:</strong></p>
-<ul>
-<li>📍 Make sure location permissions are enabled in Settings</li>
-<li>🔄 Pull down to refresh the map view</li>
-<li>🎯 Check if leads have valid addresses</li>
-<li>📱 Force close and restart the app</li>
-</ul>
-</div>
-</details>
+### Delete my account
 
-### 📍 Location & Maps
+Open **More > Account Management > Delete Account** and follow the confirmation steps. A Team Workspace member must leave the team first. A team owner must close the team before deleting the account. Deleting an account does not cancel an App Store subscription.
 
-<details style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #ffc107;">
-<summary style="font-weight: bold; cursor: pointer; color: #856404;">📱 Location permission denied</summary>
-<div style="padding: 10px 0;">
-<p><strong>To enable location access:</strong></p>
-<ol>
-<li>⚙️ Open iPhone Settings</li>
-<li>📱 Find "D2D Advancer" in the app list</li>
-<li>📍 Tap "Location"</li>
-<li>✅ Select "While Using App"</li>
-</ol>
-<p><strong>Why we need location:</strong> To show your position on the map and help you navigate to leads efficiently.</p>
-</div>
-</details>
+## Personal Data and iCloud
 
-### 💳 Subscription & Billing
+Personal leads, follow-ups, and appointments use the iCloud account on the device when iCloud sync is enabled.
 
-<details style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #dc3545;">
-<summary style="font-weight: bold; cursor: pointer; color: #dc3545;">💰 How do I upgrade to Pro?</summary>
-<div style="padding: 10px 0;">
-<p><strong>Upgrading is simple:</strong></p>
-<ol>
-<li>📱 Open the app and go to Settings</li>
-<li>⭐ Tap "Upgrade to Pro"</li>
-<li>💳 Choose monthly or yearly subscription</li>
-<li>✅ Complete purchase through App Store</li>
-</ol>
-<p><strong>🎉 Pro Features Include:</strong></p>
-<ul>
-<li>♾️ Unlimited leads</li>
-<li>⏰ Follow-up tracking & reminders</li>
-<li>📅 Appointment scheduling</li>
-<li>📊 Advanced statistics</li>
-</ul>
-</div>
-</details>
+If personal data is not syncing:
 
-<details style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #dc3545;">
-<summary style="font-weight: bold; cursor: pointer; color: #dc3545;">🔄 How do I cancel my subscription?</summary>
-<div style="padding: 10px 0;">
-<p><strong>To cancel through App Store:</strong></p>
-<ol>
-<li>⚙️ Open iPhone Settings</li>
-<li>👤 Tap your Apple ID at the top</li>
-<li>💳 Select "Subscriptions"</li>
-<li>📱 Find "D2D Advancer"</li>
-<li>❌ Tap "Cancel Subscription"</li>
-</ol>
-<p><strong>📝 Note:</strong> You'll keep Pro features until the current billing period ends.</p>
-</div>
-</details>
+1. Open iOS **Settings > Apple Account > iCloud**.
+2. Confirm iCloud Drive is enabled and D2D Advancer is allowed to use iCloud.
+3. Confirm both devices use the intended Apple Account.
+4. Open D2D Advancer and use **More > Sync Data**.
 
-</div>
+Do not delete and reinstall the app as a first troubleshooting step when unsynced local data may exist.
 
----
+## Leads and Map
 
-## 🚀 Getting Started Guide
+### Add a lead
 
-<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 15px; color: white; margin: 20px 0;">
-  <h3 style="color: white; margin-top: 0;">🎯 New to D2D Advancer?</h3>
-  
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0;">
-    
-    <div style="background: rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 10px;">
-      <h4 style="color: white; margin-top: 0;">1️⃣ Set Up Your Account</h4>
-      <ul style="color: white;">
-        <li>📧 Create account with email</li>
-        <li>✅ Verify your email address</li>
-        <li>📍 Allow location permissions</li>
-      </ul>
-    </div>
-    
-    <div style="background: rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 10px;">
-      <h4 style="color: white; margin-top: 0;">2️⃣ Add Your First Leads</h4>
-      <ul style="color: white;">
-        <li>➕ Tap the add button</li>
-        <li>📝 Enter lead details</li>
-        <li>📍 Set accurate addresses</li>
-      </ul>
-    </div>
-    
-    <div style="background: rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 10px;">
-      <h4 style="color: white; margin-top: 0;">3️⃣ Start Managing</h4>
-      <ul style="color: white;">
-        <li>🗺️ View leads on map</li>
-        <li>📞 Update contact status</li>
-        <li>⏰ Set follow-up reminders</li>
-      </ul>
-    </div>
-    
-  </div>
-</div>
+- Tap the **+** button on the Map tab, or long press the intended map location and choose the add-lead action.
+- Review the selected address before saving.
+- A lead needs a name or address to be saved.
 
----
+### A lead is missing from the map
 
-## 💡 Tips & Best Practices
+- Clear active map filters and verify the lead has valid coordinates.
+- Check whether the lead is inactive or filtered by status.
+- Open the lead from the Leads tab and review its address.
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
+### Location is not centering correctly
 
-<div style="background: #e8f5e8; padding: 20px; border-radius: 10px; border-left: 4px solid #28a745;">
-  <h4 style="color: #155724; margin-top: 0;">🎯 Maximize Your Success</h4>
-  <ul style="color: #155724;">
-    <li>📍 Always verify lead addresses for accurate mapping</li>
-    <li>📝 Add detailed notes after each visit</li>
-    <li>⏰ Set follow-up reminders immediately</li>
-    <li>📊 Review your statistics weekly</li>
-  </ul>
-</div>
+Open iOS **Settings > Privacy & Security > Location Services > D2D Advancer** and select **While Using the App**. Precise Location improves centering and navigation accuracy.
 
-<div style="background: #d1ecf1; padding: 20px; border-radius: 10px; border-left: 4px solid #17a2b8;">
-  <h4 style="color: #0c5460; margin-top: 0;">⚡ Performance Tips</h4>
-  <ul style="color: #0c5460;">
-    <li>🔄 Regularly sync your data</li>
-    <li>🗑️ Clean up old, unqualified leads</li>
-    <li>📱 Keep the app updated</li>
-    <li>🔋 Enable low power mode for longer battery life</li>
-  </ul>
-</div>
+## Appointments and Follow-Ups
 
-<div style="background: #fff3cd; padding: 20px; border-radius: 10px; border-left: 4px solid #ffc107;">
-  <h4 style="color: #856404; margin-top: 0;">🔒 Privacy & Security</h4>
-  <ul style="color: #856404;">
-    <li>🔐 Use a strong, unique password</li>
-    <li>📧 Keep your email verified</li>
-    <li>🔄 Log out on shared devices</li>
-    <li>📱 Enable device lock screen</li>
-  </ul>
-</div>
+- Calendar access is optional. D2D Advancer can keep an appointment in the app without adding it to Apple Calendar.
+- Notification access is required for local follow-up and appointment reminders.
+- Manage permissions from **More > Notifications** and **More > Calendar Settings**, or from the iOS Settings app.
 
-</div>
+## Team Workspace
 
----
+- Owners create single-use invite codes that expire after seven days.
+- Sales reps see work assigned to them and leads they create inside Team.
+- Technicians see assigned service jobs, customer details, navigation, and arrival timing.
+- Location is shared only while a member is manually On Duty. Going Off Duty removes the live marker.
 
-## 🐛 Reporting Issues
+If Team says it is offline, confirm internet access, reopen Team Workspace, and refresh. If permissions remain stale after refresh, sign out of the Team identity and sign in again with the same Apple Account.
 
-<div style="background: #f8d7da; padding: 20px; border-radius: 10px; border-left: 4px solid #dc3545; margin: 20px 0;">
-  <h3 style="color: #721c24; margin-top: 0;">🚨 Found a Bug?</h3>
-  <p style="color: #721c24;">Help us improve D2D Advancer by reporting any issues you encounter.</p>
-  
-  <div style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0;">
-    <h4 style="color: #721c24; margin-top: 0;">📋 When reporting issues, please include:</h4>
-    <ul style="color: #721c24;">
-      <li>📱 Device model and iOS version</li>
-      <li>🔢 App version (found in Settings)</li>
-      <li>📝 Detailed description of the problem</li>
-      <li>🔄 Steps to reproduce the issue</li>
-      <li>📸 Screenshots if helpful</li>
-    </ul>
-  </div>
-</div>
+## Subscriptions
 
----
+D2D Advancer offers weekly and yearly plans. Prices and trial eligibility are shown by Apple before purchase.
 
-## 📞 Contact Support
+- To restore a purchase, open the paywall and tap **Restore Purchases**.
+- To manage or cancel, open iOS **Settings > Apple Account > Subscriptions > D2D Advancer**.
+- Deleting the app or account does not cancel a subscription.
 
-<div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 30px; border-radius: 15px; text-align: center; color: white; margin: 30px 0;">
-  <h3 style="color: white; margin-top: 0;">🤝 Still Need Help?</h3>
-  <p style="font-size: 18px; margin: 20px 0;">Our support team is ready to assist you!</p>
-  
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0;">
-    
-    <div style="background: rgba(255, 255, 255, 0.2); padding: 20px; border-radius: 10px;">
-      <h4 style="color: white; margin: 0;">📧 Email Support</h4>
-      <p style="margin: 10px 0; color: rgba(255, 255, 255, 0.9);">Get detailed help via email</p>
-      <a href="mailto:dan1sl6nd@gmail.com" style="color: #ffd700; text-decoration: none; font-size: 16px; font-weight: bold;">dan1sl6nd@gmail.com</a>
-    </div>
-    
-    <div style="background: rgba(255, 255, 255, 0.2); padding: 20px; border-radius: 10px;">
-      <h4 style="color: white; margin: 0;">⚡ Response Time</h4>
-      <p style="margin: 10px 0; color: rgba(255, 255, 255, 0.9);">We typically respond within</p>
-      <p style="color: #ffd700; font-size: 18px; font-weight: bold; margin: 0;">24 hours</p>
-    </div>
-    
-  </div>
-</div>
+## Privacy, Terms, and Safety
 
----
+- [Privacy Policy](PRIVACY_POLICY.html)
+- [Terms of Use](TERMS_OF_USE.html)
 
-<div style="background: #f8f9fa; padding: 30px; border-radius: 15px; margin: 30px 0; border: 2px dashed #dee2e6;">
-  <div style="text-align: center;">
-    <h3>📱 D2D Advancer Support</h3>
-    <p><em>Helping sales professionals succeed, one lead at a time</em></p>
-    
-    <div style="margin: 20px 0;">
-      <span style="background: #007bff; color: white; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">🔧 Technical Support</span>
-      <span style="background: #28a745; color: white; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">📖 User Guides</span>
-      <span style="background: #ffc107; color: black; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">💡 Best Practices</span>
-      <span style="background: #dc3545; color: white; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">🚀 Feature Requests</span>
-    </div>
-    
-    <hr style="border: none; border-top: 2px solid #dee2e6; margin: 20px 0;">
-    
-    <p style="font-size: 14px; color: #6c757d; margin: 0;">
-      <strong>📱 Version:</strong> 1.0 | <strong>🔄 Last Updated:</strong> August 25, 2025
-    </p>
-  </div>
-</div>
+Use D2D Advancer only where you are legally allowed to work. Follow local solicitation, privacy, recording, driving, and workplace-tracking laws. Do not interact with the app while driving.
 
-<div style="text-align: center; margin: 30px 0; padding: 20px;">
-  <p style="color: #6c757d; font-size: 14px;">
-    Thank you for using D2D Advancer! 🙏<br>
-    <strong>© 2025 D2D Advancer - Empowering Sales Success</strong>
-  </p>
-</div>
+Copyright 2026 D2D Advancer.

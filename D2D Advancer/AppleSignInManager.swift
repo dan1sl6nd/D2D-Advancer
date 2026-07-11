@@ -3,6 +3,35 @@ import SwiftUI
 import AuthenticationServices
 import CryptoKit
 
+struct AppleAccountDeletionCredentials: Equatable, Sendable {
+    let idToken: String
+    let rawNonce: String
+    let authorizationCode: String
+}
+
+enum AppleAccountDeletionError: LocalizedError {
+    case cancelled
+    case invalidCredential
+    case missingNonce
+    case missingIdentityToken
+    case missingAuthorizationCode
+
+    var errorDescription: String? {
+        switch self {
+        case .cancelled:
+            return "Apple confirmation was cancelled. Your account was not deleted."
+        case .invalidCredential:
+            return "Apple returned an unexpected credential. Please try again."
+        case .missingNonce:
+            return "Apple confirmation expired. Please try again."
+        case .missingIdentityToken:
+            return "Apple did not return the identity token needed to delete this account."
+        case .missingAuthorizationCode:
+            return "Apple did not return the authorization code needed to revoke this account."
+        }
+    }
+}
+
 @MainActor
 class AppleSignInManager: ObservableObject {
     static let shared = AppleSignInManager()
@@ -15,6 +44,7 @@ class AppleSignInManager: ObservableObject {
 
     private let keychainService = KeychainService.shared
     private var currentNonce: String?
+    private var accountDeletionNonce: String?
 
     enum AuthStatus: Equatable {
         case idle
@@ -108,6 +138,54 @@ class AppleSignInManager: ObservableObject {
         case .failure(let error):
             handleFailure(error)
         }
+    }
+
+    // MARK: - Account Deletion Authorization
+
+    func configureAccountDeletionRequest(_ request: ASAuthorizationAppleIDRequest) {
+        let nonce = Self.randomNonce(length: 32)
+        accountDeletionNonce = nonce
+        request.nonce = Self.sha256(nonce)
+    }
+
+    func accountDeletionCredentials(
+        from result: Result<ASAuthorization, Error>
+    ) throws -> AppleAccountDeletionCredentials {
+        defer { accountDeletionNonce = nil }
+
+        let authorization: ASAuthorization
+        switch result {
+        case .success(let value):
+            authorization = value
+        case .failure(let error):
+            let nsError = error as NSError
+            if nsError.domain == ASAuthorizationError.errorDomain,
+               nsError.code == ASAuthorizationError.canceled.rawValue {
+                throw AppleAccountDeletionError.cancelled
+            }
+            throw error
+        }
+
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            throw AppleAccountDeletionError.invalidCredential
+        }
+        guard let rawNonce = accountDeletionNonce else {
+            throw AppleAccountDeletionError.missingNonce
+        }
+        guard let identityToken = credential.identityToken,
+              let idToken = String(data: identityToken, encoding: .utf8) else {
+            throw AppleAccountDeletionError.missingIdentityToken
+        }
+        guard let authorizationCode = credential.authorizationCode,
+              let code = String(data: authorizationCode, encoding: .utf8) else {
+            throw AppleAccountDeletionError.missingAuthorizationCode
+        }
+
+        return AppleAccountDeletionCredentials(
+            idToken: idToken,
+            rawNonce: rawNonce,
+            authorizationCode: code
+        )
     }
 
     private func handleSuccess(_ authorization: ASAuthorization, requireFirebaseTeamSession: Bool) {

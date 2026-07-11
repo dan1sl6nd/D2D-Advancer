@@ -105,6 +105,7 @@ struct MoreView: View {
                             dataSyncSection
                             preferencesSection
                             accountSection
+                            legalSupportSection
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
@@ -484,7 +485,7 @@ struct MoreView: View {
                 title: "Version",
                 subtitle: "D2D Advancer",
                 trailingContent: {
-                    Text("1.1")
+                    Text(AppVersionDisplay.current)
                         .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
                 }
@@ -493,6 +494,61 @@ struct MoreView: View {
             if userAccountManager.hasActiveSession {
                 moreDivider
                 SignOutCardView(userAccountManager: userAccountManager)
+            }
+        }
+    }
+
+    private var legalSupportSection: some View {
+        MoreSectionGroup(
+            title: "Legal & Support",
+            icon: "questionmark.circle.fill",
+            subtitle: "Policies, terms, and help.",
+            accentColor: Color.statusInterested
+        ) {
+            if let privacyURL = URL(string: "https://dan1sl6nd.github.io/D2D-Advancer/PRIVACY_POLICY.html") {
+                Link(destination: privacyURL) {
+                    MoreCardView(
+                        icon: "hand.raised.fill",
+                        iconColor: Color.statusInterested,
+                        title: "Privacy Policy",
+                        subtitle: "How account, Team, and location data are handled",
+                        showChevron: true
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("morePrivacyPolicyLink")
+            }
+
+            moreDivider
+
+            if let termsURL = URL(string: "https://dan1sl6nd.github.io/D2D-Advancer/TERMS_OF_USE.html") {
+                Link(destination: termsURL) {
+                    MoreCardView(
+                        icon: "doc.text.fill",
+                        iconColor: Color.electricViolet,
+                        title: "Terms of Use",
+                        subtitle: "Subscription and service terms",
+                        showChevron: true
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("moreTermsOfUseLink")
+            }
+
+            moreDivider
+
+            if let supportURL = URL(string: "https://dan1sl6nd.github.io/D2D-Advancer/SUPPORT.html") {
+                Link(destination: supportURL) {
+                    MoreCardView(
+                        icon: "lifepreserver.fill",
+                        iconColor: Color.statusNotHome,
+                        title: "Help & Support",
+                        subtitle: "Troubleshooting and contact information",
+                        showChevron: true
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("moreSupportLink")
             }
         }
     }

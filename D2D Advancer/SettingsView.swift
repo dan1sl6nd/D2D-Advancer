@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreData
 import UniformTypeIdentifiers
+import AuthenticationServices
 
 struct SettingsView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -361,7 +362,7 @@ struct SettingsView: View {
                 icon: "info.circle",
                 iconColor: Color.electricViolet,
                 title: "Version",
-                subtitle: "1.0.0"
+                subtitle: AppVersionDisplay.current
             )
         }
     }
@@ -980,27 +981,29 @@ struct AccountManagementView: View {
         MoreSectionGroup(
             title: "Security",
             icon: "lock.shield.fill",
-            subtitle: "Password and account controls.",
+            subtitle: "Sign-in and account controls.",
             accentColor: Color.statusNotHome
         ) {
-            Button {
-                showingPasswordChange = true
-            } label: {
-                MoreCardView(
-                    icon: "key.fill",
-                    iconColor: Color.statusNotHome,
-                    title: "Change Password",
-                    subtitle: "Update your sign-in password",
-                    showChevron: true
-                )
-            }
-            .buttonStyle(PlainButtonStyle())
-            .accessibilityIdentifier("accountChangePasswordButton")
+            if userAccountManager.accountAuthenticationMethod == .password {
+                Button {
+                    showingPasswordChange = true
+                } label: {
+                    MoreCardView(
+                        icon: "key.fill",
+                        iconColor: Color.statusNotHome,
+                        title: "Change Password",
+                        subtitle: "Update your sign-in password",
+                        showChevron: true
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("accountChangePasswordButton")
 
-            Rectangle()
-                .fill(Color.obsidianBorder.opacity(0.5))
-                .frame(height: 0.5)
-                .padding(.leading, 68)
+                Rectangle()
+                    .fill(Color.obsidianBorder.opacity(0.5))
+                    .frame(height: 0.5)
+                    .padding(.leading, 68)
+            }
 
             Button {
                 showingDeletePasswordPrompt = true
@@ -1538,26 +1541,28 @@ struct DeleteAccountView: View {
                         ObsidianSectionCard(
                             title: "Permanent Action",
                             icon: "exclamationmark.triangle.fill",
-                            subtitle: "This cannot be undone and permanently removes account data.",
+                            subtitle: "This cannot be undone and permanently removes your Team identity and Firebase account data.",
                             accentColor: Color.statusNotInterested
                         ) {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("Enter your current password to confirm deletion.")
+                                Text(accountDeletionExplanation)
                                     .font(.obsidianFootnote)
                                     .foregroundColor(Color.textSecondary)
 
-                                SecureField("Current Password", text: $password)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 12)
-                                    .background(Color.obsidianElevated)
-                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
-                                    )
-                                    .foregroundColor(Color.textPrimary)
-                                    .textContentType(.password)
-                                    .accessibilityIdentifier("deleteAccountPasswordField")
+                                if userAccountManager.accountAuthenticationMethod == .password {
+                                    SecureField("Current Password", text: $password)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 12)
+                                        .background(Color.obsidianElevated)
+                                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                                        )
+                                        .foregroundColor(Color.textPrimary)
+                                        .textContentType(.password)
+                                        .accessibilityIdentifier("deleteAccountPasswordField")
+                                }
                             }
                         }
 
@@ -1624,7 +1629,7 @@ struct DeleteAccountView: View {
                     message: "Keep this screen open until deletion finishes.",
                     tint: Color.statusNotInterested
                 )
-            } else {
+            } else if userAccountManager.accountAuthenticationMethod == .password {
                 Button {
                     userAccountManager.deleteAccount(currentPassword: password)
                 } label: {
@@ -1635,6 +1640,24 @@ struct DeleteAccountView: View {
                 .disabled(!isPasswordValid || userAccountManager.authStatus == .loading)
                 .opacity(isPasswordValid ? 1 : 0.55)
                 .accessibilityIdentifier("deleteAccountSubmitButton")
+            } else if userAccountManager.accountAuthenticationMethod == .apple {
+                SignInWithAppleButton(
+                    .continue,
+                    onRequest: AppleSignInManager.shared.configureAccountDeletionRequest,
+                    onCompletion: userAccountManager.handleAppleAccountDeletionAuthorization
+                )
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                .frame(maxWidth: .infinity, minHeight: 52, maxHeight: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityLabel("Confirm account deletion with Apple")
+                .accessibilityIdentifier("deleteAccountAppleConfirmationButton")
+            } else {
+                ObsidianStatusBanner(
+                    icon: "person.crop.circle.badge.exclamationmark",
+                    title: "Sign-in method unavailable",
+                    message: "Sign in again with the account's original method, then return here.",
+                    tint: Color.statusNotInterested
+                )
             }
         }
     }
@@ -1668,7 +1691,7 @@ struct DeleteAccountView: View {
             ObsidianSectionCard(
                 title: "Account Deleted",
                 icon: "checkmark.circle.fill",
-                subtitle: "Your account and associated data have been permanently deleted.",
+                subtitle: "Your Team identity and Firebase account data have been permanently deleted.",
                 accentColor: Color.statusInterested
             ) {
                 Button {
@@ -1678,12 +1701,24 @@ struct DeleteAccountView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ObsidianPrimaryButtonStyle())
+                .accessibilityIdentifier("deleteAccountSuccessCloseButton")
             }
         }
     }
     
     private var isPasswordValid: Bool {
         !password.isEmpty
+    }
+
+    private var accountDeletionExplanation: String {
+        switch userAccountManager.accountAuthenticationMethod {
+        case .password:
+            return "Enter your current password to confirm deletion. Personal leads stored in your private iCloud workspace are not part of this Team account."
+        case .apple:
+            return "Confirm with Apple to revoke Sign in with Apple and delete this account. Personal leads stored in your private iCloud workspace are not part of this Team account."
+        case .unsupported:
+            return "The app cannot determine how this account was created. Sign in again with the original method before deleting it."
+        }
     }
 }
 

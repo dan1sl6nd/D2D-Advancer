@@ -1,394 +1,168 @@
-# 📱 D2D Advancer - App Store Submission Checklist
+# D2D Advancer App Store Release Checklist
 
-## ✅ StoreKit Configuration - COMPLETED
+Last audited: July 10, 2026
 
-Your StoreKit configuration is now ready with:
+This file separates local engineering proof from App Store Connect and production-service proof. Do not mark an item complete based on simulator evidence alone.
 
-### Configuration Details:
-- **Application ID**: 6738387157
-- **Developer Team ID**: RF247ARQB7
-- **Subscription Group**: Premium Access
+## Product Identity
 
-### Subscription Products:
-1. **Weekly Plan** (`com.d2dadvancer.weekly`)
-   - Price: $9.99/week
-   - Free Trial: 3 days
-   - Reference Name: Weekly Subscription
+- App Store app ID: `6738387157`
+- Bundle ID: `dan1sland.D2D-Advancer`
+- Developer Team ID: `RF247ARQB7`
+- Current marketing version: `1.1`
+- Current project build number: `1`
+- Minimum iOS version: `18.5`
+- Category: Business
 
-2. **Yearly Plan** (`com.d2dadvancer.yearly`)
-   - Price: $36.99/year
-   - No trial
-   - Reference Name: Yearly Subscription
+Before uploading, confirm in App Store Connect that build number `1` has not already been used for version `1.1`. Increment it in Xcode if it has.
 
----
+## Toolchain Requirement
 
-## 🚀 Next Steps: App Store Connect Setup
-
-### Step 1: Create Subscription Group in App Store Connect
+Apple requires iOS submissions to be built with Xcode 26 or later and the iOS 26 SDK as of April 28, 2026. The release audit used Xcode 26.6. Recheck Apple's upcoming requirements page immediately before upload.
 
-1. Go to [App Store Connect](https://appstoreconnect.apple.com)
-2. Navigate to your app → **Subscriptions**
-3. Click **+** to create a new subscription group
-4. **Group Name**: Premium Access
-5. Click **Create**
-
-### Step 2: Create Weekly Subscription
-
-1. Inside the "Premium Access" group, click **+** to add subscription
-2. **Reference Name**: Weekly Subscription
-3. **Product ID**: `com.d2dadvancer.weekly` (MUST MATCH EXACTLY)
-4. **Subscription Duration**: 1 week
-5. Click **Create**
-
-#### Configure Weekly Subscription Details:
-
-**Subscription Prices**:
-- Click **Subscription Prices**
-- Select **United States** → **$9.99 USD**
-- Click **Next** → **Add to All Territories** (optional)
-- Click **Review Pricing** → **Confirm**
-
-**Subscription Localizations**:
-- Click **Subscription Localizations**
-- Select **English (U.S.)**
-- **Display Name**: Weekly Plan
-- **Description**: Weekly subscription with 3-day trial. Get unlimited leads, follow-up tracking, appointment scheduling, and advanced statistics. Cancel anytime.
-- Click **Save**
+## Subscription Products
 
-**Introductory Offer** (Free Trial):
-- Click **Introductory Offers** → **+ Introductory Offer**
-- **Type**: Free
-- **Duration**: 3 days
-- **Territories**: All territories
-- Click **Save**
-
-### Step 3: Create Yearly Subscription
-
-1. In "Premium Access" group, click **+** to add subscription
-2. **Reference Name**: Yearly Subscription
-3. **Product ID**: `com.d2dadvancer.yearly` (MUST MATCH EXACTLY)
-4. **Subscription Duration**: 1 year
-5. Click **Create**
-
-#### Configure Yearly Subscription Details:
-
-**Subscription Prices**:
-- Click **Subscription Prices**
-- Select **United States** → **$36.99 USD**
-- Click **Next** → **Add to All Territories** (optional)
-- Click **Review Pricing** → **Confirm**
-
-**Subscription Localizations**:
-- Click **Subscription Localizations**
-- Select **English (U.S.)**
-- **Display Name**: Yearly Plan
-- **Description**: Yearly subscription - best value! Get unlimited leads, follow-up tracking, appointment scheduling, and advanced statistics. Save over 60% compared to weekly. Cancel anytime.
-- Click **Save**
-
-### Step 4: Review Subscription Settings
+Subscription group: `Premium Access`
 
-**Group Settings**:
-- Return to subscription group overview
-- Ensure both subscriptions are **Ready to Submit**
-- Set **Subscription Group Display Name**: Premium Access
-
----
-
-## 📝 App Metadata Setup
-
-### Required App Information:
-
-**App Name**: D2D Advancer
-
-**Subtitle** (30 chars max): Door-to-Door Sales Manager
-
-**Description**:
-```
-Transform your door-to-door sales game with D2D Advancer – the ultimate lead management app built specifically for field sales professionals.
-
-🎯 SMART LEAD MANAGEMENT
-• Unlimited lead storage with instant GPS mapping
-• Add leads in seconds with automatic location detection
-• Organize by status: Not Contacted, Interested, Converted
-• Rich notes and contact details for every lead
-
-📍 TERRITORY INTELLIGENCE
-• Visual map view of all your leads
-• See your current location in real-time
-• Plan efficient routes and never miss a door
-• Track coverage across your territory
-
-⏰ NEVER MISS A FOLLOW-UP
-• Smart follow-up reminders and notifications
-• Track appointment scheduling and confirmations
-• Automated check-ins keep you organized
-• Complete visit history for every lead
-
-📊 PERFORMANCE TRACKING
-• Real-time statistics and analytics
-• Monitor conversion rates and pipeline
-• Track daily, weekly, and monthly progress
-• Make data-driven territory decisions
-
-🔒 SECURE & PRIVATE
-• Firebase-backed cloud sync across devices
-• Local data storage for offline access
-• Bank-level encryption
-• Your data stays yours – never sold
-
-📅 CALENDAR & CONTACTS INTEGRATION
-• Sync appointments to your calendar
-• Export leads to Contacts app
-• Seamless workflow with iOS
-
-💼 BUILT FOR PROFESSIONALS
-Whether you're selling solar, roofing, pest control, home security, or any door-to-door service – D2D Advancer helps you close more deals with less chaos.
-
-🎁 FREE 3-DAY TRIAL
-Try all premium features risk-free. No commitment required.
-
-SUBSCRIPTION OPTIONS:
-• Weekly: $9.99/week (3-day free trial)
-• Yearly: $36.99/year (Best Value - Save 62%)
-
-Download D2D Advancer today and take control of your sales territory!
-```
-
-**Keywords** (100 chars max):
-```
-door to door,sales,leads,crm,field sales,territory,solar sales,roofing,appointments,follow up
-```
-
-**Support URL**:
-```
-https://dan1sl6nd.github.io/d2d-password-reset/SUPPORT.html
-```
-(Or wherever you host your support page)
-
-**Marketing URL** (optional):
-```
-https://dan1sl6nd.github.io/d2d-password-reset/
-```
-
-**Privacy Policy URL**:
-```
-https://dan1sl6nd.github.io/d2d-password-reset/PRIVACY_POLICY.html
-```
-(Or wherever you host your privacy policy)
-
----
-
-## 📸 App Screenshots Required
-
-You need to provide screenshots for these device sizes:
-
-### iPhone 6.7" Display (iPhone 14 Pro Max, 15 Pro Max)
-- **Size**: 1290 x 2796 pixels
-- **Required**: 3-10 screenshots
-
-### iPhone 6.5" Display (iPhone 11 Pro Max, XS Max)
-- **Size**: 1242 x 2688 pixels
-- **Required**: 3-10 screenshots
-
-### iPad Pro (2nd/3rd gen) 12.9"
-- **Size**: 2048 x 2732 pixels
-- **Required**: 3-10 screenshots (if supporting iPad)
-
-### Recommended Screenshots Order:
-1. **Map View** - Show leads plotted on map with location
-2. **Lead List** - Display organized lead list with statuses
-3. **Add Lead** - Show the add lead form/interface
-4. **Lead Details** - Show individual lead with notes and status
-5. **Statistics** - Display the analytics/overview screen
-6. **Follow-ups** - Show follow-up reminders/calendar
-
-**Pro Tip**: Use screenshots that show the app WITH data (not empty states)
-
----
-
-## 🔐 App Privacy Details
-
-Configure in App Store Connect → App Privacy:
-
-### Data Types You Collect:
-
-**Contact Info**:
-- ✅ Email Address
-- ✅ Name
-- ✅ Phone Number
-- Purpose: App Functionality, Analytics
-- Linked to User: Yes
-- Used for Tracking: No
-
-**Location**:
-- ✅ Precise Location
-- Purpose: App Functionality
-- Linked to User: Yes
-- Used for Tracking: No
-
-**User Content**:
-- ✅ Other User Content (Lead notes, addresses)
-- Purpose: App Functionality
-- Linked to User: Yes
-- Used for Tracking: No
-
-**Identifiers**:
-- ✅ User ID
-- Purpose: App Functionality, Analytics
-- Linked to User: Yes
-- Used for Tracking: No
-
-**Usage Data**:
-- ✅ Product Interaction
-- Purpose: Analytics, App Functionality
-- Linked to User: Yes
-- Used for Tracking: No
-
----
-
-## 🎮 App Review Information
-
-### Demo Account (Required):
-Create a test account for Apple reviewers:
-
-**Email**: appreviewer@d2dadvancer.com (or similar)
-**Password**: Use a simple password for reviewers
-**Notes**: Include instructions:
-```
-This is a demo account pre-loaded with sample leads.
-The app is designed for door-to-door sales professionals.
-
-Test subscription flow:
-1. Navigate to More tab
-2. The paywall will appear after viewing features
-3. Test subscriptions work in Sandbox environment
-
-All premium features are available in the trial period.
-```
-
-### App Review Notes:
-```
-D2D Advancer is a specialized CRM for door-to-door sales professionals.
-
-KEY FEATURES TO TEST:
-• Lead Management: Add, edit, and organize sales leads
-• Map View: See leads plotted on map (requires location permission)
-• Follow-up Reminders: Set and receive notifications for follow-ups
-• Statistics: View performance metrics in More → Overview
-
-PERMISSIONS:
-• Location: Required to show user's position and plot leads on map
-• Calendar: Optional - for scheduling appointments
-• Contacts: Optional - for exporting leads
-• Notifications: Optional - for follow-up reminders
-
-SUBSCRIPTION MODEL:
-• Free 3-day trial on weekly subscription
-• Full access during trial period
-• Managed through Apple's StoreKit
-
-A demo account with sample data is provided above for testing.
-```
-
----
-
-## 🎯 Age Rating
-
-Configure in App Store Connect:
-
-- **Rating**: 4+
-- No objectionable content
-- Business/Productivity app
-
----
-
-## ✅ Pre-Submission Checklist
-
-### In Xcode:
-- [ ] Clean build folder (Product → Clean Build Folder)
-- [ ] Archive app (Product → Archive)
-- [ ] Validate archive (Window → Organizer → Validate App)
-- [ ] Fix any validation errors/warnings
-- [ ] Upload to App Store Connect (Distribute App)
-
-### In App Store Connect:
-- [ ] App Information completed
-- [ ] Pricing and Availability set
-- [ ] Subscription group created: "Premium Access"
-- [ ] Weekly subscription created and configured
-- [ ] Yearly subscription created and configured
-- [ ] Screenshots uploaded (all required sizes)
-- [ ] App Privacy details completed
-- [ ] App Review Information completed (demo account)
-- [ ] Age rating configured
-- [ ] Build selected for submission
-- [ ] Export compliance: No (already set in Info.plist)
-
-### Final Verification:
-- [ ] Test subscription flow in sandbox environment
-- [ ] Verify all links work (support, privacy policy)
-- [ ] Test on real device (not simulator)
-- [ ] Check app runs on iOS 18.5+
-- [ ] Verify Firebase is configured for production
-- [ ] Ensure push notifications work
-
----
-
-## 🚨 Common Rejection Reasons to Avoid
-
-### 1. Subscription Issues
-- ✅ Free trial is clearly disclosed (3 days)
-- ✅ Pricing is transparent
-- ✅ Users can cancel via App Store settings
-- ✅ Manage Subscriptions link works
-
-### 2. Privacy Issues
-- ✅ Location usage clearly explained
-- ✅ Privacy policy accessible
-- ✅ No data sold to third parties
-- ✅ User data is encrypted
-
-### 3. Functionality Issues
-- ✅ App works without crashes
-- ✅ All advertised features functional
-- ✅ Demo account has test data
-- ✅ Subscription flow works in sandbox
-
-### 4. Content Issues
-- ✅ No misleading claims
-- ✅ Screenshots match actual app
-- ✅ Description is accurate
-
----
-
-## 📞 Support Contacts
-
-**Developer Email**: dan1sl6nd@gmail.com
-**Support Email**: dan1sl6nd@gmail.com
-
----
-
-## 🎉 Ready to Submit!
-
-Once you complete all the steps above:
-
-1. Go to App Store Connect
-2. Navigate to your app
-3. Click **Submit for Review**
-4. Answer the questions honestly
-5. Click **Submit**
-
-**Typical Review Time**: 1-3 business days
-
----
-
-## 📱 Post-Approval
-
-After approval:
-- [ ] Monitor crash reports
-- [ ] Check user reviews
-- [ ] Respond to support emails
-- [ ] Track subscription metrics
-- [ ] Plan updates based on feedback
-
-**Good luck with your submission! 🚀**
+| Product | Product ID | Duration | Local StoreKit price | Trial |
+| --- | --- | --- | --- | --- |
+| Weekly Plan | `com.d2dadvancer.weekly` | 1 week | USD 9.99 | 3 days |
+| Yearly Plan | `com.d2dadvancer.yearly` | 1 year | USD 36.99 | None |
+
+App Store Connect checks:
+
+- [ ] Both product IDs exactly match the app and StoreKit configuration.
+- [ ] Products are available in the intended territories.
+- [ ] Prices and trial terms match the paywall shown in the submitted build.
+- [ ] Subscription localizations are complete and within App Store Connect limits.
+- [ ] Paid Applications agreement, tax, and banking status are active.
+- [ ] Both subscriptions are attached to the version submitted for review when required.
+- [ ] Purchase, restore, renewal-state, expiration, cancellation, and billing-retry behavior are tested with StoreKit sandbox/TestFlight.
+
+## Store Listing
+
+Suggested subtitle: `Field Sales & Team CRM`
+
+Suggested keywords, subject to live 100-character validation:
+
+`door to door,sales,leads,crm,field service,territory,appointments,follow up,team`
+
+Use only screenshots captured from the submitted build. Show realistic non-sensitive sample data.
+
+Recommended screenshot sequence:
+
+1. Map with clustered leads and route controls.
+2. Lead list with status and priority.
+3. Simplified lead creation.
+4. Lead details and follow-up workflow.
+5. Appointments and technician dispatch.
+6. Team workspace and assigned work.
+7. Overview and performance summary.
+
+- [ ] Confirm required iPhone and iPad screenshot slots on the live version page.
+- [ ] Verify screenshots contain no real customer names, addresses, phone numbers, or account data.
+- [ ] Verify every claim in the description exists in the submitted build.
+- [ ] Do not claim behavioral analytics, background GPS tracking, or "bank-level" encryption.
+
+## URLs
+
+- Support: `https://dan1sl6nd.github.io/D2D-Advancer/SUPPORT.html`
+- Privacy policy: `https://dan1sl6nd.github.io/D2D-Advancer/PRIVACY_POLICY.html`
+- Terms: `https://dan1sl6nd.github.io/D2D-Advancer/TERMS_OF_USE.html`
+
+- [ ] Deploy the current `PRIVACY_POLICY.md` to the hosted privacy-policy URL.
+- [ ] Open every URL from a device without a developer login and confirm HTTP 200 plus readable mobile layout.
+- [ ] Confirm the in-app links point to the same current pages.
+
+## App Privacy Answers
+
+Match App Store Connect answers to the app privacy manifest and hosted policy. Current app functionality may collect data linked to the user for App Functionality:
+
+- Precise Location
+- Physical Address
+- Name
+- Email Address
+- Phone Number
+- User ID
+- Photos or Videos
+- Audio Data
+- Other User Content
+- Other Data
+
+The app declares no cross-app tracking. Do not select Analytics for app-owned data unless analytics collection is intentionally added and verified in the submitted build.
+
+- [ ] Confirm Firebase SDK privacy details against the exact embedded SDK versions.
+- [ ] Confirm 30-day Team duty-location retention is disclosed.
+- [ ] Confirm owner/member visibility and assigned-record privacy are disclosed.
+- [ ] Confirm Sign in with Apple and Firebase account deletion are described accurately.
+
+## Permissions and Review Notes
+
+Optional permissions used by the app:
+
+- When In Use Location: map centering, navigation, geocoding, and manual on-duty Team sharing.
+- Calendar Full Access: create or update appointments when the user chooses.
+- Contacts: save a selected lead to Contacts.
+- Camera and Photo Library: attach selected property/job photos.
+- Microphone and Speech Recognition: record and transcribe selected voice notes.
+- Notifications: local appointment and follow-up reminders.
+
+The release does not request Always Location permission.
+
+Suggested review path:
+
+1. Complete onboarding or use the supplied demo account.
+2. Add, edit, and delete a lead.
+3. Open the map and inspect clustering/filtering.
+4. Create, edit, complete, and delete an appointment.
+5. Set and complete a follow-up.
+6. Open More > Account Management and verify in-app account deletion.
+7. Open the paywall, view terms/privacy, purchase in sandbox, and restore purchases.
+8. Use the supplied Team owner/worker test identities and invite code only if production Team testing is part of this submission.
+
+- [ ] Provide a working reviewer account or a complete account-creation path.
+- [ ] Provide any Team invite code and exact role-specific test steps.
+- [ ] Explain that personal iCloud leads remain private and Team work uses Firebase.
+- [ ] Explain that on-duty location sharing starts and stops manually.
+
+## Local Engineering Gate
+
+- [x] Clean Release build and static analysis complete with zero errors and reviewed warnings.
+- [x] Full unit-test target passes from a fresh result bundle (175 tests).
+- [x] Serial UI smoke suite passes on a current iPhone simulator (21 broad passes plus the repaired onboarding flow rerun).
+- [x] Primary navigation and layout pass in light and dark mode.
+- [x] iPad primary-navigation smoke tests pass in light and dark mode.
+- [ ] Permission prompts and denied-permission states are tested.
+- [ ] Account creation, Sign in with Apple, sign-out, and both deletion confirmation methods are tested.
+- [x] Large lead dataset map/list performance is tested with 2,000 leads.
+- [x] Firebase rules tests (21) and Team emulator end-to-end test pass.
+- [x] `PrivacyInfo.xcprivacy` is present in the exported app and validates.
+- [x] Every app icon is opaque and the 1024x1024 marketing icon is present.
+- [x] Generic-device Release archive succeeds.
+- [x] App Store Connect IPA export succeeds with Cloud Managed Apple Distribution signing.
+
+## Physical Device and TestFlight Gate
+
+- [ ] Fresh install on the oldest supported iOS version available for testing.
+- [ ] Fresh install and upgrade install on a current iPhone.
+- [ ] Camera, photo library, microphone, speech, Contacts, Calendar, notifications, and location prompts work without termination.
+- [ ] Location centers reliably and stops Team sharing after Off duty.
+- [ ] iCloud personal lead/appointment sync is verified between devices.
+- [ ] Production Firebase Team owner/worker permissions are verified, unless Team is excluded from this release.
+- [ ] Purchase and restore are verified in TestFlight sandbox.
+- [ ] Offline launch, edit queueing, reconnection, and conflict behavior are verified.
+- [ ] No real customer data appears in screenshots, review accounts, or logs.
+
+## Production and App Store Connect Gate
+
+- [ ] Production Firestore rules match the tested repository rules.
+- [ ] Firebase Authentication has Sign in with Apple enabled and configured for the production bundle.
+- [ ] CloudKit production schema is deployed and query/index requirements are verified.
+- [ ] App Store Connect version metadata, age-rating questionnaire, content-rights answers, export compliance, privacy answers, and review contact are complete.
+- [ ] Correct uploaded build is selected.
+- [ ] Automated App Store Connect validation has no blocking issues.
+- [ ] Version is explicitly added for review and its status is verified after submission.
+
+## Release Decision
+
+The app is ready to submit only when every applicable local, physical-device/TestFlight, production-service, and App Store Connect item above has current evidence. A passing simulator build alone is not a release decision.

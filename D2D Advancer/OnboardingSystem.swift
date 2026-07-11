@@ -436,7 +436,10 @@ struct OnboardingView: View {
 
                     ScrollView {
                         VStack(spacing: 18) {
-                            content(for: onboardingManager.currentPage)
+                            content(
+                                for: onboardingManager.currentPage,
+                                usesCompactWelcomeLayout: geometry.size.height < 900
+                            )
                         }
                         .padding(.horizontal, 20)
                         .padding(.bottom, 24)
@@ -480,10 +483,13 @@ struct OnboardingView: View {
     }
 
     @ViewBuilder
-    private func content(for page: OnboardingPage) -> some View {
+    private func content(
+        for page: OnboardingPage,
+        usesCompactWelcomeLayout: Bool
+    ) -> some View {
         switch page {
         case .welcome:
-            welcomeContent
+            welcomeContent(usesCompactLayout: usesCompactWelcomeLayout)
         case .salesGoal:
             VStack(spacing: 16) {
                 ForEach(OnboardingProfile.SalesGoal.allCases) { goal in
@@ -549,12 +555,12 @@ struct OnboardingView: View {
         }
     }
 
-    private var welcomeContent: some View {
-        VStack(spacing: 18) {
+    private func welcomeContent(usesCompactLayout: Bool) -> some View {
+        VStack(spacing: usesCompactLayout ? 12 : 18) {
             ZStack {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(Color.obsidianSurface)
-                    .frame(height: heroCardHeight)
+                    .frame(height: usesCompactLayout ? 88 : heroCardHeight)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
                             .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
@@ -566,23 +572,26 @@ struct OnboardingView: View {
                     )
             }
 
-            VStack(spacing: 12) {
+            VStack(spacing: usesCompactLayout ? 8 : 12) {
                 FeatureHighlightRow(
                     icon: "mappin.circle.fill",
                     title: "Unlock smarter territory planning",
-                    subtitle: "Use heatmaps and neighborhood scores to plan high-converting routes."
+                    subtitle: "Use heatmaps and neighborhood scores to plan high-converting routes.",
+                    isCompact: usesCompactLayout
                 )
 
                 FeatureHighlightRow(
                     icon: "checkmark.circle.fill",
                     title: "Stay on top of every lead",
-                    subtitle: "Capture doors, notes, and tasks so nothing slips through the cracks."
+                    subtitle: "Capture doors, notes, and tasks so nothing slips through the cracks.",
+                    isCompact: usesCompactLayout
                 )
 
                 FeatureHighlightRow(
                     icon: "bolt.badge.clock",
                     title: "Automate tedious follow-ups",
-                    subtitle: "Schedule reminders and send proven scripts in one tap."
+                    subtitle: "Schedule reminders and send proven scripts in one tap.",
+                    isCompact: usesCompactLayout
                 )
             }
         }
@@ -1013,19 +1022,20 @@ private struct FeatureHighlightRow: View {
     let icon: String
     let title: String
     let subtitle: String
+    var isCompact = false
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: isCompact ? 12 : 16) {
             ZStack {
                 Circle()
                     .fill(Color.electricViolet.opacity(0.2))
-                    .frame(width: 48, height: 48)
+                    .frame(width: isCompact ? 40 : 48, height: isCompact ? 40 : 48)
                 Image(systemName: icon)
                     .font(.obsidianHeadline)
                     .foregroundColor(Color.electricViolet)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: isCompact ? 4 : 6) {
                 Text(title)
                     .font(.obsidianCallout)
                     .foregroundColor(.textPrimary)
@@ -1038,7 +1048,7 @@ private struct FeatureHighlightRow: View {
 
             Spacer()
         }
-        .padding(18)
+        .padding(isCompact ? 12 : 18)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color.obsidianSurface)

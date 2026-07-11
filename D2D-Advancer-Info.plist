@@ -43,12 +43,20 @@
 	<true/>
 	<key>NSCalendarsUsageDescription</key>
 	<string>D2D Advancer would like access to your Calendar to save scheduled appointments and reminders.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>D2D Advancer uses full calendar access only when you choose to add or update scheduled appointments in Calendar.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>D2D Advancer uses the camera when you choose to attach a property or job photo to a lead.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>D2D Advancer would like to save your leads to your Contacts app for easy access and to help you stay organized with your door-to-door sales.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>D2D Advancer needs location access to show your current position on the map and help you navigate to leads.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>D2D Advancer needs location access to show your current position on the map and help you navigate to leads.</string>
+	<string>D2D Advancer uses your location while the app is open to center the map, navigate to work, and share your position with your team only while you are on duty.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>D2D Advancer uses the microphone only when you choose to record a voice note for a lead.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>D2D Advancer accesses your photo library only when you choose an existing property or job photo to attach to a lead.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>D2D Advancer uses speech recognition only when you choose to transcribe a recorded lead note.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

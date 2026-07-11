@@ -291,6 +291,13 @@ final class D2D_AdvancerUITests: XCTestCase {
         return app
     }
 
+    private func makeDarkApp() -> XCUIApplication {
+        let app = makeApp()
+        app.launchArguments.removeAll { $0 == "-forceLightModeForUITests" }
+        app.launchArguments.append("-forceDarkModeForUITests")
+        return app
+    }
+
     private func makePaywallApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append("-skipOnboardingForUITests")
@@ -1479,6 +1486,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         let continueButton = app.buttons["onboardingContinueButton"]
         XCTAssertTrue(lastWelcomeSubtitle.waitForExistence(timeout: 8), "Welcome onboarding should show the final benefit subtitle")
         XCTAssertTrue(continueButton.waitForExistence(timeout: 8), "Welcome onboarding should show the continue button")
+        screenshot(app, name: "Onboarding - Welcome")
         XCTAssertTrue(isFinite(lastWelcomeSubtitle.frame), "Welcome final benefit subtitle should have a valid frame")
         XCTAssertTrue(isFinite(continueButton.frame), "Welcome continue button should have a valid frame")
         XCTAssertLessThanOrEqual(
@@ -2209,6 +2217,45 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testPasswordAccountDeletionCompletesAgainstFirebaseEmulator() throws {
+        try requireTeamEmulatorUITestHarness()
+
+        let runId = UUID().uuidString
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+            .prefix(8)
+        let email = "delete-ui-\(runId)@example.com"
+        let password = teamUITestCredentials().password
+        let app = makeTeamEmulatorApp(
+            autoAuthEmail: email,
+            autoAuthDisplayName: "Delete UI",
+            autoAuthPassword: password,
+            shouldCreateAutoAuthAccount: true
+        )
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        let accountCard = scrollToButtonEitherDirection(app, "moreAccountCard", maxSwipesPerDirection: 8)
+        waitForText(app, "Delete UI", timeout: 25)
+        tapElement(app, accountCard, description: "moreAccountCard")
+
+        waitForIdentifiedElement(app, "accountManagementScreen", timeout: 12)
+        scrollToButton(app, "accountDeleteAccountButton", direction: .down).tap()
+        waitForIdentifiedElement(app, "deleteAccountSheet", timeout: 10)
+
+        let passwordField = waitForIdentifiedElement(app, "deleteAccountPasswordField", timeout: 8)
+        typeText(password, into: passwordField)
+        tapIdentifiedElement(app, "deleteAccountSubmitButton", timeout: 8)
+
+        waitForText(app, "Account Deleted", timeout: 25)
+        tapIdentifiedElement(app, "deleteAccountSuccessCloseButton", timeout: 8)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["deleteAccountSheet"].waitForNonExistence(timeout: 5),
+            "Delete account sheet should close after the account is removed"
+        )
+    }
+
+    @MainActor
     func testMorePreferencesDestinationsSmoke() throws {
         let app = makeApp()
         app.launchArguments.append("-openMoreTabForUITests")
@@ -2501,6 +2548,32 @@ final class D2D_AdvancerUITests: XCTestCase {
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "moreMessageTemplatesCard", timeout: 12)
         waitForTextContaining(app, "Manage reusable SMS", timeout: 12)
+    }
+
+    @MainActor
+    func testPrimaryTabsDarkAppearanceSmoke() throws {
+        let app = makeDarkApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        _ = waitForMapReady(app)
+        screenshot(app, name: "Dark appearance - Map")
+
+        tapButton(app, "tab_Leads", timeout: 12)
+        waitForIdentifiedElement(app, "leadsScreen", timeout: 12)
+        screenshot(app, name: "Dark appearance - Leads")
+
+        tapButton(app, "tab_Follow_Up", timeout: 12)
+        waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
+        screenshot(app, name: "Dark appearance - Follow Up")
+
+        tapButton(app, "tab_Appts", timeout: 12)
+        waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
+        screenshot(app, name: "Dark appearance - Appointments")
+
+        tapButton(app, "tab_More", timeout: 12)
+        waitForIdentifiedElement(app, "moreOverviewCard", timeout: 12)
+        screenshot(app, name: "Dark appearance - More")
     }
 
     @MainActor
