@@ -2623,13 +2623,18 @@ final class D2D_AdvancerUITests: XCTestCase {
         screenshot(app, name: "Map - 2000 lead stable opening snapshot")
 
         let legalLink = app.links["Legal"]
-        let awayButton = app.buttons["quickAction_away"]
+        let addLeadButton = app.buttons["addLeadButton"]
         XCTAssertTrue(legalLink.waitForExistence(timeout: 4), "Maps Legal attribution should be visible")
-        XCTAssertTrue(awayButton.waitForExistence(timeout: 4), "Quick-action menu should be visible")
+        XCTAssertTrue(addLeadButton.waitForExistence(timeout: 4), "Floating action menu should be visible")
+        XCTAssertGreaterThanOrEqual(
+            legalLink.frame.minY,
+            addLeadButton.frame.maxY + 4,
+            "Maps Legal attribution should remain below the floating action menu"
+        )
         XCTAssertLessThanOrEqual(
             legalLink.frame.maxY,
-            awayButton.frame.minY - 8,
-            "Maps Legal attribution should remain above the floating action menu"
+            mapTab.frame.minY - 4,
+            "Maps Legal attribution should remain above the tab bar"
         )
 
         mapToolsButton.tap()

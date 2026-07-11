@@ -1355,8 +1355,8 @@ struct D2D_AdvancerTests {
         #expect(controlAvoidanceMargins.right > launchMargins.right)
         #expect(mapKitMargins.left == mapKitMargins.right)
         #expect(mapKitMargins.right <= launchMargins.right)
-        #expect(mapKitMargins.bottom >= 100)
-        #expect(mapKitMargins.bottom > mapKitMargins.top)
+        #expect(mapKitMargins.bottom == 0)
+        #expect(mapKitMargins.bottom < mapKitMargins.top)
     }
 
     @Test func launchMapUsesUsableViewportForStartupCentering() async throws {
