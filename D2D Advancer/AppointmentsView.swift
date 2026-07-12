@@ -3,6 +3,8 @@ import UIKit
 import CoreData
 
 struct AppointmentsView: View {
+    let isEmbeddedInWork: Bool
+
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var appointmentManager = AppointmentManager.shared
@@ -42,6 +44,10 @@ struct AppointmentsView: View {
     private var roleContext: TeamRoleContext {
         TeamRoleContext(summary: teamSurfaceSummary)
     }
+
+    init(isEmbeddedInWork: Bool = false) {
+        self.isEmbeddedInWork = isEmbeddedInWork
+    }
     
     enum AppointmentView: String, CaseIterable {
         case active = "Active"
@@ -74,10 +80,21 @@ struct AppointmentsView: View {
         }
     }
     
+    @ViewBuilder
     var body: some View {
-        NavigationStack {
-            GeometryReader { geometry in
-                VStack(spacing: 0) {
+        if isEmbeddedInWork {
+            screenContent
+        } else {
+            NavigationStack {
+                screenContent
+            }
+        }
+    }
+
+    private var screenContent: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                if !isEmbeddedInWork {
                     safeAreaSpacer(geometry: geometry)
                     ObsidianHeaderView(
                         roleContext.appointmentScreenTitle,
@@ -93,45 +110,47 @@ struct AppointmentsView: View {
                             showingScheduleView = true
                         }
                     }
-                    tabSelectionView
-                    appointmentContentView
                 }
-                .ignoresSafeArea(.all, edges: .top)
+
+                tabSelectionView
+                appointmentContentView
             }
-            .navigationBarHidden(true)
-            .background(Color.obsidianBackground(for: colorScheme))
-            .sheet(isPresented: $showingScheduleView) {
-                SelectLeadForAppointmentView { lead in
-                    selectedLead = lead
-                    showingScheduleView = false
-                }
+            .ignoresSafeArea(.all, edges: isEmbeddedInWork ? [] : .top)
+        }
+        .navigationBarHidden(true)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .accessibilityIdentifier("appointmentsScreen")
+        .sheet(isPresented: $showingScheduleView) {
+            SelectLeadForAppointmentView { lead in
+                selectedLead = lead
+                showingScheduleView = false
             }
-            .sheet(item: $selectedLead) { lead in
-                ScheduleAppointmentView(lead: lead)
+        }
+        .sheet(item: $selectedLead) { lead in
+            ScheduleAppointmentView(lead: lead)
+        }
+        .sheet(item: $selectedAppointment) { appointment in
+            AppointmentDetailView(appointmentId: appointment.id)
+        }
+        .sheet(item: $selectedTeamLead) { lead in
+            TeamLeadDetailSheet(initialLead: lead)
+        }
+        .sheet(item: $teamFieldMapSummary) { summary in
+            TeamFieldMapSheet(
+                summary: summary,
+                selectedRepUserId: $selectedTeamRepUserId
+            )
+        }
+        .onAppear {
+            print("🗓️ AppointmentsView appeared - listener already active")
+            Task { await loadTeamWorkspaceIfNeeded() }
+        }
+        .onChange(of: router.targetAppointmentID) { _, newValue in
+            guard let id = newValue else { return }
+            if let appt = appointmentManager.appointments.first(where: { $0.id == id }) {
+                selectedAppointment = appt
             }
-            .sheet(item: $selectedAppointment) { appointment in
-                AppointmentDetailView(appointmentId: appointment.id)
-            }
-            .sheet(item: $selectedTeamLead) { lead in
-                TeamLeadDetailSheet(initialLead: lead)
-            }
-            .sheet(item: $teamFieldMapSummary) { summary in
-                TeamFieldMapSheet(
-                    summary: summary,
-                    selectedRepUserId: $selectedTeamRepUserId
-                )
-            }
-            .onAppear {
-                print("🗓️ AppointmentsView appeared - listener already active")
-                Task { await loadTeamWorkspaceIfNeeded() }
-            }
-            .onChange(of: router.targetAppointmentID) { _, newValue in
-                guard let id = newValue else { return }
-                if let appt = appointmentManager.appointments.first(where: { $0.id == id }) {
-                    selectedAppointment = appt
-                }
-                router.targetAppointmentID = nil
-            }
+            router.targetAppointmentID = nil
         }
     }
     

@@ -319,7 +319,7 @@ struct LeadsListView: View {
 
             if selectedTab == .active {
                 Button {
-                    AppRouter.shared.selectedTab = 0
+                    AppRouter.shared.selectedTab = MainAppTab.map.rawValue
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "map.fill")

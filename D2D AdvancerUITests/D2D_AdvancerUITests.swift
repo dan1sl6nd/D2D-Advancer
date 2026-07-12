@@ -1162,7 +1162,8 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     private func scheduleAppointmentThroughUI(_ app: XCUIApplication, leadName: String) {
-        tapButton(app, "tab_Appts", timeout: 12)
+        tapButton(app, "tab_Work", timeout: 12)
+        tapButton(app, "workSection_schedule", timeout: 8)
         waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
         tapButton(app, "appointmentsScheduleButton", timeout: 10)
 
@@ -1960,7 +1961,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         let leadName = "UI Follow \(Int(Date().timeIntervalSince1970))"
         createNotHomeFollowUpLead(app, name: leadName)
 
-        tapButton(app, "tab_Follow_Up", timeout: 12)
+        tapButton(app, "tab_Work", timeout: 12)
+        tapButton(app, "workSection_followUps", timeout: 8)
         waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
 
         let followUpRow = scrollToFollowUpRow(app, leadName: leadName)
@@ -2482,15 +2484,14 @@ final class D2D_AdvancerUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(sortDirectionButton.frame.width, 44, "Lead sort direction should have a 44pt minimum tap width")
         XCTAssertGreaterThanOrEqual(sortDirectionButton.frame.height, 44, "Lead sort direction should have a 44pt minimum tap height")
 
-        tapButton(app, "tab_Follow_Up", timeout: 12)
+        tapButton(app, "tab_Work", timeout: 12)
+        tapButton(app, "workSection_followUps", timeout: 8)
         waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
-        waitForText(app, "Follow Up", timeout: 8)
-        try assertLightTopChrome(app, screenName: "Follow Up")
+        waitForText(app, "Work", timeout: 8)
+        try assertLightTopChrome(app, screenName: "Work")
 
-        tapButton(app, "tab_Appts", timeout: 12)
+        tapButton(app, "workSection_schedule", timeout: 8)
         waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
-        waitForText(app, "Appointments", timeout: 8)
-        try assertLightTopChrome(app, screenName: "Appointments")
         XCTAssertTrue(
             app.buttons["Schedule appointment"].waitForExistence(timeout: 8),
             "Appointment schedule button should be available"
@@ -2550,11 +2551,12 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "leadsScreen", timeout: 12)
         screenshot(app, name: "Dark appearance - Leads")
 
-        tapButton(app, "tab_Follow_Up", timeout: 12)
+        tapButton(app, "tab_Work", timeout: 12)
+        tapButton(app, "workSection_followUps", timeout: 8)
         waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
         screenshot(app, name: "Dark appearance - Follow Up")
 
-        tapButton(app, "tab_Appts", timeout: 12)
+        tapButton(app, "workSection_schedule", timeout: 8)
         waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
         screenshot(app, name: "Dark appearance - Appointments")
 

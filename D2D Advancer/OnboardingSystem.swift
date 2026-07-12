@@ -287,7 +287,7 @@ class OnboardingManager: ObservableObject {
         }
 
         if profile.startDestination == .team {
-            AppRouter.shared.selectedTab = 3
+            AppRouter.shared.openMore()
         }
 
         // Team setup remains accessible without showing the personal Pro offer.

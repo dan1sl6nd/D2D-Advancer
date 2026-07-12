@@ -18,8 +18,10 @@ struct TeamWorkspaceTests {
 
         let context = TeamRoleContext(summary: summary)
 
-        #expect(context.defaultTabIndex == 3)
-        #expect(context.scheduleTabTitle == "Jobs")
+        #expect(context.defaultTabIndex == MainAppTab.work.rawValue)
+        #expect(context.defaultWorkSection == .schedule)
+        #expect(context.workTabTitle == "Jobs")
+        #expect(context.workScheduleSectionTitle == "Jobs")
         #expect(context.appointmentScreenTitle == "Today's Jobs")
         #expect(context.workspaceMenuTitle == "Job Workspace")
     }

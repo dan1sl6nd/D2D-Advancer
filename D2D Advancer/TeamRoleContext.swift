@@ -28,8 +28,12 @@ enum TeamRoleContext: Equatable {
         case .salesRep:
             return 1
         case .technician:
-            return 3
+            return MainAppTab.work.rawValue
         }
+    }
+
+    var defaultWorkSection: WorkTabSection {
+        self == .technician ? .schedule : .followUps
     }
 
     var mapTabTitle: String {
@@ -45,24 +49,25 @@ enum TeamRoleContext: Equatable {
         switch self {
         case .salesRep:
             return "Mine"
-        case .technician:
-            return "Work"
         default:
             return "Leads"
         }
     }
 
-    var followUpTabTitle: String {
-        "Follow"
+    var workTabTitle: String {
+        self == .technician ? "Jobs" : "Work"
     }
 
-    var scheduleTabTitle: String {
-        switch self {
-        case .technician:
-            return "Jobs"
-        default:
-            return "Appts"
-        }
+    var workScreenTitle: String {
+        self == .technician ? "My Work" : "Work"
+    }
+
+    var workScheduleSectionTitle: String {
+        self == .technician ? "Jobs" : "Schedule"
+    }
+
+    var workScheduleActionTitle: String {
+        self == .technician ? "Schedule job" : "Schedule appointment"
     }
 
     var moreTabTitle: String {

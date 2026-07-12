@@ -103,17 +103,17 @@ struct D2D_AdvancerApp: App {
         if isRunningUITests {
             UIView.setAnimationsEnabled(false)
             if launchArguments.contains("-openTeamWorkspaceForUITests") {
-                AppRouter.shared.selectedTab = 4
+                AppRouter.shared.openMore()
             } else if launchArguments.contains("-openMoreTabForUITests") {
-                AppRouter.shared.selectedTab = 4
+                AppRouter.shared.openMore()
             } else if launchArguments.contains("-openAppointmentsTabForUITests") {
-                AppRouter.shared.selectedTab = 3
+                AppRouter.shared.openAppointments()
             } else if launchArguments.contains("-openFollowUpTabForUITests") {
-                AppRouter.shared.selectedTab = 2
+                AppRouter.shared.openFollowUps()
             } else if launchArguments.contains("-openLeadsTabForUITests") {
-                AppRouter.shared.selectedTab = 1
+                AppRouter.shared.selectedTab = MainAppTab.leads.rawValue
             } else if launchArguments.contains("-openMapTabForUITests") {
-                AppRouter.shared.selectedTab = 0
+                AppRouter.shared.selectedTab = MainAppTab.map.rawValue
             }
         }
         print("🚀 D2D Advancer App Starting...")

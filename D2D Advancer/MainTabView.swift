@@ -49,47 +49,38 @@ struct MainTabView: View {
                             title: roleContext.mapTabTitle,
                             icon: "map",
                             selectedIcon: "map.fill",
-                            isSelected: router.selectedTab == 0,
+                            isSelected: router.selectedTab == MainAppTab.map.rawValue,
                             accessibilityID: "tab_Map",
-                            action: { router.selectedTab = 0 }
+                            action: { router.selectedTab = MainAppTab.map.rawValue }
                         )
 
                         TabBarButton(
                             title: roleContext.leadsTabTitle,
                             icon: "person.2",
                             selectedIcon: "person.2.fill",
-                            isSelected: router.selectedTab == 1,
+                            isSelected: router.selectedTab == MainAppTab.leads.rawValue,
                             badgeCount: teamLeadBadgeCount,
                             accessibilityID: "tab_Leads",
-                            action: { router.selectedTab = 1 }
+                            action: { router.selectedTab = MainAppTab.leads.rawValue }
                         )
 
                         TabBarButton(
-                            title: roleContext.followUpTabTitle,
-                            icon: "bell",
-                            selectedIcon: "bell.fill",
-                            isSelected: router.selectedTab == 2,
+                            title: roleContext.workTabTitle,
+                            icon: "briefcase",
+                            selectedIcon: "briefcase.fill",
+                            isSelected: router.selectedTab == MainAppTab.work.rawValue,
                             badgeCount: overdueLeadBadgeCount,
-                            accessibilityID: "tab_Follow_Up",
-                            action: { router.selectedTab = 2 }
-                        )
-
-                        TabBarButton(
-                            title: roleContext.scheduleTabTitle,
-                            icon: "calendar",
-                            selectedIcon: "calendar",
-                            isSelected: router.selectedTab == 3,
-                            accessibilityID: "tab_Appts",
-                            action: { router.selectedTab = 3 }
+                            accessibilityID: "tab_Work",
+                            action: { router.selectedTab = MainAppTab.work.rawValue }
                         )
 
                         TabBarButton(
                             title: roleContext.moreTabTitle,
                             icon: "ellipsis.circle",
                             selectedIcon: "ellipsis.circle.fill",
-                            isSelected: router.selectedTab == 4,
+                            isSelected: router.selectedTab == MainAppTab.more.rawValue,
                             accessibilityID: "tab_More",
-                            action: { router.selectedTab = 4 }
+                            action: { router.selectedTab = MainAppTab.more.rawValue }
                         )
                     }
                     .padding(.top, 8)
@@ -112,7 +103,7 @@ struct MainTabView: View {
             scheduleOverdueLeadBadgeRefresh(after: 0)
             refreshTeamPresentation()
 
-            if router.selectedTab == 0 {
+            if router.selectedTab == MainAppTab.map.rawValue {
                 shouldKeepMapAlive = true
             } else {
                 scheduleMapPrewarmIfNeeded()
@@ -164,7 +155,7 @@ struct MainTabView: View {
             scheduleTeamPresentationRefresh()
         }
         .onChange(of: router.selectedTab) { _, newTab in
-            if newTab == 0 {
+            if newTab == MainAppTab.map.rawValue {
                 mapPrewarmTask?.cancel()
                 mapPrewarmTask = nil
                 shouldKeepMapAlive = true
@@ -185,15 +176,15 @@ struct MainTabView: View {
     @ViewBuilder
     private var tabContent: some View {
         ZStack {
-            if shouldKeepMapAlive || router.selectedTab == 0 {
-                MapView(isVisible: router.selectedTab == 0)
-                    .opacity(router.selectedTab == 0 ? 1 : 0)
-                    .allowsHitTesting(router.selectedTab == 0)
-                    .accessibilityHidden(router.selectedTab != 0)
-                    .zIndex(router.selectedTab == 0 ? 1 : 0)
+            if shouldKeepMapAlive || router.selectedTab == MainAppTab.map.rawValue {
+                MapView(isVisible: router.selectedTab == MainAppTab.map.rawValue)
+                    .opacity(router.selectedTab == MainAppTab.map.rawValue ? 1 : 0)
+                    .allowsHitTesting(router.selectedTab == MainAppTab.map.rawValue)
+                    .accessibilityHidden(router.selectedTab != MainAppTab.map.rawValue)
+                    .zIndex(router.selectedTab == MainAppTab.map.rawValue ? 1 : 0)
             }
 
-            if router.selectedTab != 0 {
+            if router.selectedTab != MainAppTab.map.rawValue {
                 nonMapTabContent
                     .zIndex(2)
             }
@@ -203,13 +194,11 @@ struct MainTabView: View {
     @ViewBuilder
     private var nonMapTabContent: some View {
         switch router.selectedTab {
-        case 1:
+        case MainAppTab.leads.rawValue:
             LeadsListView()
-        case 2:
-            FollowUpView()
-        case 3:
-            AppointmentsView()
-        case 4:
+        case MainAppTab.work.rawValue:
+            WorkView(roleContext: roleContext)
+        case MainAppTab.more.rawValue:
             MoreView()
         default:
             EmptyView()
@@ -267,12 +256,13 @@ struct MainTabView: View {
             didApplyRoleDefaultTab = false
         }
         guard !didApplyRoleDefaultTab else { return }
-        guard router.selectedTab == 0 else {
+        guard router.selectedTab == MainAppTab.map.rawValue else {
             didApplyRoleDefaultTab = true
             return
         }
 
         let defaultTab = roleContext.defaultTabIndex
+        router.selectedWorkSection = roleContext.defaultWorkSection
         if defaultTab != router.selectedTab {
             router.selectedTab = defaultTab
         }

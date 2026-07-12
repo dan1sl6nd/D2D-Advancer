@@ -2,6 +2,8 @@ import SwiftUI
 import CoreData
 
 struct FollowUpView: View {
+    let isEmbeddedInWork: Bool
+
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var paywallManager = PaywallManager.shared
@@ -16,66 +18,81 @@ struct FollowUpView: View {
     )
     private var followUpLeads: FetchedResults<Lead>
 
-    var body: some View {
-        NavigationStack {
-            GeometryReader { geometry in
-                let screenBackground = Color.obsidianBackground(for: colorScheme)
+    init(isEmbeddedInWork: Bool = false) {
+        self.isEmbeddedInWork = isEmbeddedInWork
+    }
 
-                VStack(spacing: 0) {
+    @ViewBuilder
+    var body: some View {
+        if isEmbeddedInWork {
+            screenContent
+        } else {
+            NavigationStack {
+                screenContent
+            }
+        }
+    }
+
+    private var screenContent: some View {
+        GeometryReader { geometry in
+            let screenBackground = Color.obsidianBackground(for: colorScheme)
+
+            VStack(spacing: 0) {
+                if !isEmbeddedInWork {
                     Rectangle()
                         .fill(screenBackground)
                         .frame(height: ObsidianLayout.safeAreaTop(geometry))
 
                     ObsidianHeaderView("Follow Up")
+                }
 
-                    if followUpLeads.isEmpty {
-                        emptyStateView
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 8) {
-                                // OVERDUE section
-                                if !overdueLeads.isEmpty {
-                                    followUpSectionHeader("OVERDUE", color: Color.statusNotInterested, count: overdueLeads.count)
-                                    ForEach(overdueLeads, id: \.id) { lead in
-                                        followUpRow(for: lead)
-                                    }
-                                }
-
-                                // TODAY section
-                                if !todayLeads.isEmpty {
-                                    followUpSectionHeader("TODAY", color: Color.electricViolet, count: todayLeads.count)
-                                    ForEach(todayLeads, id: \.id) { lead in
-                                        followUpRow(for: lead)
-                                    }
-                                }
-
-                                // UPCOMING section
-                                if !upcomingLeads.isEmpty {
-                                    followUpSectionHeader("UPCOMING", color: Color.textSecondary, count: upcomingLeads.count)
-                                    ForEach(upcomingLeads, id: \.id) { lead in
-                                        followUpRow(for: lead)
-                                    }
+                if followUpLeads.isEmpty {
+                    emptyStateView
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            // OVERDUE section
+                            if !overdueLeads.isEmpty {
+                                followUpSectionHeader("OVERDUE", color: Color.statusNotInterested, count: overdueLeads.count)
+                                ForEach(overdueLeads, id: \.id) { lead in
+                                    followUpRow(for: lead)
                                 }
                             }
-                            .padding(.vertical, 8)
-                            .padding(.bottom, 12)
+
+                            // TODAY section
+                            if !todayLeads.isEmpty {
+                                followUpSectionHeader("TODAY", color: Color.electricViolet, count: todayLeads.count)
+                                ForEach(todayLeads, id: \.id) { lead in
+                                    followUpRow(for: lead)
+                                }
+                            }
+
+                            // UPCOMING section
+                            if !upcomingLeads.isEmpty {
+                                followUpSectionHeader("UPCOMING", color: Color.textSecondary, count: upcomingLeads.count)
+                                ForEach(upcomingLeads, id: \.id) { lead in
+                                    followUpRow(for: lead)
+                                }
+                            }
                         }
+                        .padding(.vertical, 8)
+                        .padding(.bottom, 12)
                     }
                 }
-                .ignoresSafeArea(.all, edges: .top)
             }
-            .navigationBarHidden(true)
-            .background(Color.obsidianBackground(for: colorScheme))
-            .accessibilityIdentifier("followUpScreen")
-            .sheet(item: $selectedLead) { lead in
-                FollowUpDetailView(lead: lead)
-            }
-            .sheet(item: $leadForMessaging) { lead in
-                MessageSelectionView(lead: lead)
-            }
-            .sheet(item: $leadForCheckIn) { lead in
-                AddCheckInView(lead: lead)
-            }
+            .ignoresSafeArea(.all, edges: isEmbeddedInWork ? [] : .top)
+        }
+        .navigationBarHidden(true)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .accessibilityIdentifier("followUpScreen")
+        .sheet(item: $selectedLead) { lead in
+            FollowUpDetailView(lead: lead)
+        }
+        .sheet(item: $leadForMessaging) { lead in
+            MessageSelectionView(lead: lead)
+        }
+        .sheet(item: $leadForCheckIn) { lead in
+            AddCheckInView(lead: lead)
         }
     }
 
