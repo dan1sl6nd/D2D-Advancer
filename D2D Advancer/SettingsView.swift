@@ -1355,6 +1355,7 @@ struct AppPreferencesView: View {
                                 selection: $preferences.leadSortPreference,
                                 options: [
                                     (value: "date", label: "Date Updated"),
+                                    (value: "created", label: "Date Created"),
                                     (value: "name", label: "Name"),
                                     (value: "status", label: "Status")
                                 ],

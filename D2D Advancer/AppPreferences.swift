@@ -46,16 +46,22 @@ class AppPreferences: ObservableObject {
     // MARK: - Lead Sorting
     
     func sortDescriptors() -> [NSSortDescriptor] {
+        let legacyDefaultAscending = leadSortPreference == "name" || leadSortPreference == "status"
+        let ascending = UserDefaults.standard.object(forKey: "leadSortAscending") as? Bool
+            ?? legacyDefaultAscending
+
         switch leadSortPreference {
         case "name":
-            return [NSSortDescriptor(keyPath: \Lead.name, ascending: true)]
+            return [NSSortDescriptor(keyPath: \Lead.name, ascending: ascending)]
+        case "created":
+            return [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: ascending)]
         case "status":
             return [
-                NSSortDescriptor(keyPath: \Lead.status, ascending: true),
+                NSSortDescriptor(keyPath: \Lead.status, ascending: ascending),
                 NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)
             ]
         default: // "date"
-            return [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)]
+            return [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: ascending)]
         }
     }
     

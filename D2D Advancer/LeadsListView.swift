@@ -11,14 +11,11 @@ struct LeadsListView: View {
     @StateObject private var searchFilterManager = SearchFilterManager()
     @State private var selectedTab: LeadTab = .active
     @State private var showingFilters = false
-    @State private var showingSortOptions = false
-    @State private var sortBy: SortOption = .dateUpdated
-    @State private var sortAscending = false
+    @State private var sortBy: SortOption
+    @State private var sortAscending: Bool
     @State private var currentPage = 0
     @State private var isLoadingMore = false
     @State private var hasMoreData = true
-    @State private var showingOnboarding = false
-    @State private var filterUpdateTask: Task<Void, Never>? = nil
     @State private var selectedLead: Lead?
     @State private var selectedTeamLead: TeamLead?
     @State private var messageLead: Lead?
@@ -30,11 +27,14 @@ struct LeadsListView: View {
     private let pageSize = 50
     
     enum LeadTab: String, CaseIterable {
+        case all = "All"
         case active = "Active"
         case inactive = "Inactive"
         
         var leadStatuses: [Lead.Status] {
             switch self {
+            case .all:
+                return Lead.Status.allCases
             case .active:
                 return [.notContacted, .interested, .converted]
             case .inactive:
@@ -48,9 +48,52 @@ struct LeadsListView: View {
         case dateCreated = "Date Created"
         case dateUpdated = "Date Updated"
         case status = "Status"
+
+        var compactTitle: String {
+            switch self {
+            case .name: return "Name"
+            case .dateCreated: return "Created"
+            case .dateUpdated: return "Updated"
+            case .status: return "Status"
+            }
+        }
+
+        var preferenceKey: String {
+            switch self {
+            case .name: return "name"
+            case .dateCreated: return "created"
+            case .dateUpdated: return "date"
+            case .status: return "status"
+            }
+        }
+
+        var legacyDefaultAscending: Bool {
+            switch self {
+            case .name, .status: return true
+            case .dateCreated, .dateUpdated: return false
+            }
+        }
+
+        init(preferenceKey: String) {
+            switch preferenceKey {
+            case "name": self = .name
+            case "created": self = .dateCreated
+            case "status": self = .status
+            default: self = .dateUpdated
+            }
+        }
     }
     
     @State private var paginatedLeads: [Lead] = []
+
+    init() {
+        let initialSort = SortOption(preferenceKey: AppPreferences.shared.leadSortPreference)
+        _sortBy = State(initialValue: initialSort)
+        _sortAscending = State(
+            initialValue: UserDefaults.standard.object(forKey: "leadSortAscending") as? Bool
+                ?? initialSort.legacyDefaultAscending
+        )
+    }
 
     private var isRunningUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
@@ -89,44 +132,7 @@ struct LeadsListView: View {
                     ObsidianHeaderView(
                         roleContext.leadScreenTitle,
                         titleAccessibilityIdentifier: "leadsScreen"
-                    ) {
-                        HStack(spacing: 6) {
-                            Button {
-                                showingSortOptions = true
-                            } label: {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "arrow.up.arrow.down")
-                                        .font(.nano)
-                                    Text(sortBy.rawValue)
-                                        .font(.obsidianSmall)
-                                }
-                                .foregroundColor(.electricViolet)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.electricViolet.opacity(0.1))
-                                .clipShape(Capsule())
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityIdentifier("leadsSortButton")
-                                .accessibilityLabel("Sort leads")
-                                .accessibilityValue(sortBy.rawValue)
-                                .accessibilityHint("Chooses the lead sort field.")
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("leadsSortButton")
-
-                            ObsidianCompactIconButton(
-                                icon: sortAscending ? "arrow.up" : "arrow.down",
-                                accessibilityLabel: sortAscending ? "Sort ascending" : "Sort descending",
-                                accentColor: Color.textSecondary,
-                                accessibilityIdentifier: "leadsSortDirectionButton",
-                                size: 36
-                            ) {
-                                sortAscending.toggle()
-                            }
-                            .accessibilityHint("Toggles the lead list sort direction.")
-                        }
-                    }
-                    tabSelectionSection
+                    )
                     searchAndFiltersSection
                     leadsContentSection
                 }
@@ -143,19 +149,11 @@ struct LeadsListView: View {
             .sheet(item: $messageLead) { lead in
                 MessageSelectionView(lead: lead)
             }
-            .confirmationDialog(
-                "Sort Leads",
-                isPresented: $showingSortOptions,
-                titleVisibility: .visible
-            ) {
-                ForEach(SortOption.allCases, id: \.self) { option in
-                    Button(option.rawValue) {
-                        sortBy = option
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Choose how the lead list is ordered.")
+            .sheet(isPresented: $showingFilters) {
+                LeadFilterSheet(
+                    selectedScope: $selectedTab,
+                    searchFilterManager: searchFilterManager
+                )
             }
             .sheet(item: $teamFieldMapSummary) { summary in
                 TeamFieldMapSheet(
@@ -171,13 +169,20 @@ struct LeadsListView: View {
                 resetAndLoadLeads()
             }
             .onChange(of: sortBy) {
+                preferences.leadSortPreference = sortBy.preferenceKey
                 resetAndLoadLeads()
             }
             .onChange(of: sortAscending) {
+                UserDefaults.standard.set(sortAscending, forKey: "leadSortAscending")
                 resetAndLoadLeads()
             }
-            .onChange(of: searchFilterManager.currentFilter) { 
-                resetAndLoadLeads()
+            .onChange(of: searchFilterManager.currentFilter) {
+                if !searchFilterManager.currentFilter.selectedStatuses.isEmpty,
+                   selectedTab != .all {
+                    selectedTab = .all
+                } else {
+                    resetAndLoadLeads()
+                }
             }
             .onChange(of: router.targetLeadID) { _, newValue in
                 guard let id = newValue else { return }
@@ -198,70 +203,102 @@ struct LeadsListView: View {
     
     // MARK: - Extracted View Components
 
-    @ViewBuilder
-    private func tabLabel(_ tab: LeadTab) -> some View {
-        let isSelected = selectedTab == tab
-        Text(tab.rawValue)
-            .font(.obsidianFootnote)
-            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-            .foregroundColor(isSelected ? .white : Color.textSecondary)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isSelected ? Color.electricViolet : Color.clear)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private func safeAreaSpacer(geometry: GeometryProxy) -> some View {
-        Rectangle()
-            .fill(Color.obsidianBackground(for: colorScheme))
-            .frame(height: ObsidianLayout.safeAreaTop(geometry, extra: 20, minimum: 70))
-    }
-    
-    private var tabSelectionSection: some View {
-        HStack(spacing: 4) {
-            ForEach(LeadTab.allCases, id: \.self) { tab in
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        selectedTab = tab
-                    }
-                }) {
-                    tabLabel(tab)
-                }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("\(tab.rawValue) leads")
-                .accessibilityHint("Show \(tab.rawValue.lowercased()) leads")
-                .accessibilityAddTraits(selectedTab == tab ? [.isSelected] : [])
-                .accessibilityRemoveTraits(.isImage)
-            }
-        }
-        .padding(4)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.obsidianSurface.opacity(0.88))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 1)
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Lead filter tabs")
-        .padding(.horizontal, 16)
-        .padding(.bottom, 4)
-        .background(Color.obsidianBackground(for: colorScheme))
-    }
-    
     private var searchAndFiltersSection: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
             SearchBar(text: $searchFilterManager.currentFilter.text)
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Search leads")
 
-            QuickFilterChipsView(searchFilterManager: searchFilterManager)
+            HStack(spacing: 10) {
+                Button {
+                    showingFilters = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "line.3.horizontal.decrease")
+                        Text(filterControlTitle)
+                            .lineLimit(1)
+
+                        if activeFilterCount > 0 {
+                            Text("\(activeFilterCount)")
+                                .font(.nano)
+                                .foregroundColor(.white)
+                                .frame(minWidth: 22, minHeight: 22)
+                                .background(Color.electricViolet)
+                                .clipShape(Circle())
+                        }
+                    }
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(Color.obsidianSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.6), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("leadsFilterButton")
+                .accessibilityLabel("Filter leads")
+                .accessibilityValue("\(selectedTab.rawValue) scope, \(activeFilterCount) active filters")
+
+                Menu {
+                    Section("Sort by") {
+                        ForEach(SortOption.allCases, id: \.self) { option in
+                            Button {
+                                sortBy = option
+                            } label: {
+                                Label(option.rawValue, systemImage: sortBy == option ? "checkmark" : "")
+                            }
+                        }
+                    }
+
+                    Section("Direction") {
+                        Button {
+                            sortAscending = true
+                        } label: {
+                            Label("Ascending", systemImage: sortAscending ? "checkmark" : "arrow.up")
+                        }
+                        Button {
+                            sortAscending = false
+                        } label: {
+                            Label("Descending", systemImage: !sortAscending ? "checkmark" : "arrow.down")
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                        Text(sortBy.compactTitle)
+                            .lineLimit(1)
+                    }
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(Color.obsidianSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.6), lineWidth: 1)
+                    )
+                }
+                .accessibilityIdentifier("leadsSortButton")
+                .accessibilityLabel("Sort leads")
+                .accessibilityValue("\(sortBy.rawValue), \(sortAscending ? "ascending" : "descending")")
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
         }
+    }
+
+    private var activeFilterCount: Int {
+        var count = searchFilterManager.currentFilter.selectedStatuses.count
+        if searchFilterManager.currentFilter.hasFollowUp != nil { count += 1 }
+        if searchFilterManager.currentFilter.dateRange != nil { count += 1 }
+        return count
+    }
+
+    private var filterControlTitle: String {
+        selectedTab == .all ? "Filters" : selectedTab.rawValue
     }
     
     private var leadsContentSection: some View {
@@ -298,26 +335,24 @@ struct LeadsListView: View {
                 .fill(Color.electricViolet.opacity(0.12))
                 .frame(width: 88, height: 88)
                 .overlay(
-                    Image(systemName: selectedTab == .active ? "person.2" : "tray")
+                    Image(systemName: selectedTab == .inactive ? "tray" : "person.2")
                         .font(.displayLarge)
                         .foregroundColor(Color.electricViolet)
                 )
 
             VStack(spacing: 10) {
-                Text(selectedTab == .active ? "No Leads Yet" : "No Inactive Leads")
+                Text(emptyStateTitle)
                     .font(.obsidianHeadline)
                     .foregroundColor(Color.textPrimary)
 
-                Text(selectedTab == .active ?
-                    activeEmptyMessage :
-                    "Leads marked as Not Home or Not Interested will appear here.")
+                Text(emptyStateMessage)
                     .font(.obsidianBody)
                     .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
 
-            if selectedTab == .active {
+            if selectedTab != .inactive {
                 Button {
                     AppRouter.shared.selectedTab = MainAppTab.map.rawValue
                 } label: {
@@ -334,6 +369,27 @@ struct LeadsListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("No leads found")
+    }
+
+    private var emptyStateTitle: String {
+        switch selectedTab {
+        case .all: return "No Leads Found"
+        case .active: return "No Leads Yet"
+        case .inactive: return "No Inactive Leads"
+        }
+    }
+
+    private var emptyStateMessage: String {
+        switch selectedTab {
+        case .all:
+            return activeFilterCount > 0 || !searchFilterManager.currentFilter.text.isEmpty
+                ? "No leads match the current search and filters."
+                : activeEmptyMessage
+        case .active:
+            return activeEmptyMessage
+        case .inactive:
+            return "Leads marked as Not Home or Not Interested will appear here."
+        }
     }
 
     private var activeEmptyMessage: String {
@@ -568,7 +624,8 @@ struct LeadsListView: View {
         // Capture values on main actor
         let currentTab = selectedTab
         let currentFilter = searchFilterManager.currentFilter
-        let currentSortPreference = preferences.leadSortPreference
+        let currentSort = sortBy
+        let currentSortAscending = sortAscending
         var pageToLoad = 0
         
         await MainActor.run {
@@ -596,21 +653,28 @@ struct LeadsListView: View {
         if let existingPredicate = fetchRequest.predicate {
             predicates.append(existingPredicate)
         }
-        let statusStrings = currentTab.leadStatuses.map { $0.rawValue }
-        predicates.append(NSPredicate(format: "status IN %@", statusStrings))
+        if currentTab != .all {
+            let statusStrings = currentTab.leadStatuses.map { $0.rawValue }
+            predicates.append(NSPredicate(format: "status IN %@", statusStrings))
+        }
         fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
 
         // Sort descriptors
-        switch currentSortPreference {
-        case "name":
-            fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.name, ascending: true)]
-        case "status":
+        switch currentSort {
+        case .name:
             fetchRequest.sortDescriptors = [
-                NSSortDescriptor(keyPath: \Lead.status, ascending: true),
+                NSSortDescriptor(keyPath: \Lead.name, ascending: currentSortAscending),
                 NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)
             ]
-        default:
-            fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)]
+        case .dateCreated:
+            fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: currentSortAscending)]
+        case .dateUpdated:
+            fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: currentSortAscending)]
+        case .status:
+            fetchRequest.sortDescriptors = [
+                NSSortDescriptor(keyPath: \Lead.status, ascending: currentSortAscending),
+                NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)
+            ]
         }
 
         fetchRequest.fetchLimit = self.pageSize
@@ -819,61 +883,89 @@ struct SearchBar: View {
     }
 }
 
-struct FilterBar: View {
-    @Binding var sortBy: LeadsListView.SortOption
-    @Binding var sortAscending: Bool
-    @Binding var showingFilters: Bool
+struct LeadFilterSheet: View {
+    @Binding var selectedScope: LeadsListView.LeadTab
+    @ObservedObject var searchFilterManager: SearchFilterManager
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        HStack(spacing: 8) {
-            Menu {
-                ForEach(LeadsListView.SortOption.allCases, id: \.self) { option in
-                    Button {
-                        sortBy = option
-                    } label: {
-                        Label(option.rawValue, systemImage: sortBy == option ? "checkmark" : "")
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ObsidianSectionCard(
+                        title: "Lead Scope",
+                        icon: "person.2.fill",
+                        subtitle: "Choose the broad group before applying detailed filters."
+                    ) {
+                        HStack(spacing: 4) {
+                            ForEach(LeadsListView.LeadTab.allCases, id: \.self) { scope in
+                                scopeButton(scope)
+                            }
+                        }
+                        .padding(4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(Color.obsidianElevated)
+                        )
+                    }
+
+                    ObsidianSectionCard(
+                        title: "Quick Filters",
+                        icon: "line.3.horizontal.decrease.circle.fill",
+                        subtitle: "Status, follow-up timing, and reusable presets."
+                    ) {
+                        QuickFilterChipsView(searchFilterManager: searchFilterManager)
                     }
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.up.arrow.down")
-                        .font(.micro)
-                    Text(sortBy.rawValue)
-                        .font(.obsidianSmall)
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .background(screenBackground.ignoresSafeArea())
+            .obsidianPushedNavigation(
+                "Filter Leads",
+                backButtonAccessibilityIdentifier: "leadsFilterBackButton",
+                onBack: { dismiss() }
+            )
+            .safeAreaInset(edge: .bottom) {
+                Button(action: { dismiss() }) {
+                    Label("Done", systemImage: "checkmark.circle.fill")
+                        .frame(maxWidth: .infinity)
                 }
-                .foregroundColor(Color.electricViolet)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill(Color.electricViolet.opacity(0.12))
-                )
-                .accessibilityElement(children: .ignore)
-                .accessibilityIdentifier("leadsSortButton")
-                .accessibilityLabel("Sort leads")
-                .accessibilityValue(sortBy.rawValue)
-                .accessibilityHint("Chooses the lead sort field.")
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+                .accessibilityIdentifier("leadsFilterDoneButton")
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(screenBackground.ignoresSafeArea(edges: .bottom))
             }
-            .accessibilityIdentifier("leadsSortButton")
-            .accessibilityLabel("Sort leads")
-            .accessibilityValue(sortBy.rawValue)
-            .accessibilityHint("Chooses the lead sort field.")
-
-            ObsidianCompactIconButton(
-                icon: sortAscending ? "arrow.up" : "arrow.down",
-                accessibilityLabel: sortAscending ? "Sort ascending" : "Sort descending",
-                accentColor: Color.textSecondary,
-                accessibilityIdentifier: "leadsSortDirectionButton",
-                size: 36
-            ) {
-                sortAscending.toggle()
-            }
-            .accessibilityHint("Toggles the lead list sort direction.")
-
-            Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
+        .obsidianModalBackground()
+        .accessibilityIdentifier("leadsFilterSheet")
+    }
+
+    private func scopeButton(_ scope: LeadsListView.LeadTab) -> some View {
+        let isSelected = selectedScope == scope
+
+        return Button {
+            selectedScope = scope
+        } label: {
+            Text(scope.rawValue)
+                .font(.obsidianFootnote)
+                .foregroundColor(isSelected ? .white : .textSecondary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(isSelected ? Color.electricViolet : Color.clear)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("leadScope_\(scope.rawValue.lowercased())")
+        .accessibilityLabel("\(scope.rawValue) leads")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 

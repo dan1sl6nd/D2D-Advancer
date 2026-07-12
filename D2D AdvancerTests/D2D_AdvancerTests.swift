@@ -1648,6 +1648,16 @@ struct D2D_AdvancerTests {
         ))
     }
 
+    @Test func leadSortSettingsAdoptLegacyPreferenceValues() {
+        #expect(LeadsListView.SortOption(preferenceKey: "date") == .dateUpdated)
+        #expect(LeadsListView.SortOption(preferenceKey: "name") == .name)
+        #expect(LeadsListView.SortOption(preferenceKey: "status") == .status)
+        #expect(LeadsListView.SortOption(preferenceKey: "unknown") == .dateUpdated)
+        #expect(LeadsListView.SortOption.name.legacyDefaultAscending)
+        #expect(!LeadsListView.SortOption.dateUpdated.legacyDefaultAscending)
+        #expect(Set(LeadsListView.LeadTab.all.leadStatuses) == Set(Lead.Status.allCases))
+    }
+
     @Test func searchPresetSaveTrimsPersistsAndDeletes() async throws {
         let suiteName = "SearchPresetTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

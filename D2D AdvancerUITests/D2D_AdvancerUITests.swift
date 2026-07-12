@@ -1161,6 +1161,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["addLeadButton"].waitForExistence(timeout: 15), "Saving a personal lead should return to the map")
     }
 
+    private func openLeadFilterSheet(_ app: XCUIApplication) {
+        tapButton(app, "leadsFilterButton", timeout: 10)
+        waitForIdentifiedElement(app, "leadsFilterSheet", timeout: 10)
+    }
+
     private func scheduleAppointmentThroughUI(_ app: XCUIApplication, leadName: String) {
         tapButton(app, "tab_Work", timeout: 12)
         tapButton(app, "workSection_schedule", timeout: 8)
@@ -1785,9 +1790,10 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForText(app, "Leads", timeout: 10)
         try assertLightTopChrome(app, screenName: "Leads")
 
+        openLeadFilterSheet(app)
         tapIdentifiedElement(app, "quickFilterStatus_interested", timeout: 8)
-        tapHorizontallyScrollableElement(app, "quickFilterDueToday", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
-        tapHorizontallyScrollableElement(app, "quickFilterPresetsMenu", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
+        tapIdentifiedElement(app, "quickFilterDueToday", direction: .down, timeout: 8)
+        tapIdentifiedElement(app, "quickFilterPresetsMenu", direction: .down, timeout: 8)
         tapMenuChoice(app, label: "Save Current", timeout: 8)
 
         waitForIdentifiedElement(app, "quickFilterSavePresetSheet", timeout: 10)
@@ -1806,9 +1812,9 @@ final class D2D_AdvancerUITests: XCTestCase {
             "Save preset sheet should dismiss after saving"
         )
 
-        tapHorizontallyScrollableElement(app, "quickFilterPresetsMenu", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
+        tapIdentifiedElement(app, "quickFilterPresetsMenu", direction: .down, timeout: 8)
         tapMenuChoice(app, label: presetName, timeout: 8)
-        tapHorizontallyScrollableElement(app, "quickFilterClearButton", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
+        tapIdentifiedElement(app, "quickFilterClearButton", direction: .down, timeout: 8)
     }
 
     @MainActor
@@ -1819,9 +1825,10 @@ final class D2D_AdvancerUITests: XCTestCase {
         denySystemPermissionIfPresented(timeout: 2)
 
         waitForText(app, "Leads", timeout: 10)
+        openLeadFilterSheet(app)
         tapIdentifiedElement(app, "quickFilterStatus_interested", timeout: 8)
-        tapHorizontallyScrollableElement(app, "quickFilterDueToday", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
-        tapHorizontallyScrollableElement(app, "quickFilterClearButton", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
+        tapIdentifiedElement(app, "quickFilterDueToday", direction: .down, timeout: 8)
+        tapIdentifiedElement(app, "quickFilterClearButton", direction: .down, timeout: 8)
     }
 
     @MainActor
@@ -1832,8 +1839,9 @@ final class D2D_AdvancerUITests: XCTestCase {
         denySystemPermissionIfPresented(timeout: 2)
 
         waitForText(app, "Leads", timeout: 10)
+        openLeadFilterSheet(app)
         tapIdentifiedElement(app, "quickFilterStatus_interested", timeout: 8)
-        tapHorizontallyScrollableElement(app, "quickFilterPresetsMenu", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
+        tapIdentifiedElement(app, "quickFilterPresetsMenu", direction: .down, timeout: 8)
         tapMenuChoice(app, label: "Save Current", timeout: 8)
 
         waitForIdentifiedElement(app, "quickFilterSavePresetSheet", timeout: 10)
@@ -1853,8 +1861,9 @@ final class D2D_AdvancerUITests: XCTestCase {
         denySystemPermissionIfPresented(timeout: 2)
 
         waitForText(app, "Leads", timeout: 10)
+        openLeadFilterSheet(app)
         tapIdentifiedElement(app, "quickFilterStatus_interested", timeout: 8)
-        tapHorizontallyScrollableElement(app, "quickFilterPresetsMenu", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
+        tapIdentifiedElement(app, "quickFilterPresetsMenu", direction: .down, timeout: 8)
         tapMenuChoice(app, label: "Save Current", timeout: 8)
 
         waitForIdentifiedElement(app, "quickFilterSavePresetSheet", timeout: 10)
@@ -1876,8 +1885,9 @@ final class D2D_AdvancerUITests: XCTestCase {
         denySystemPermissionIfPresented(timeout: 2)
 
         waitForText(app, "Leads", timeout: 10)
+        openLeadFilterSheet(app)
         tapIdentifiedElement(app, "quickFilterStatus_interested", timeout: 8)
-        tapHorizontallyScrollableElement(app, "quickFilterPresetsMenu", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
+        tapIdentifiedElement(app, "quickFilterPresetsMenu", direction: .down, timeout: 8)
         tapMenuChoice(app, label: "Save Current", timeout: 8)
 
         waitForIdentifiedElement(app, "quickFilterSavePresetSheet", timeout: 10)
@@ -1889,7 +1899,7 @@ final class D2D_AdvancerUITests: XCTestCase {
             app.descendants(matching: .any)["quickFilterSavePresetSheet"].waitForExistence(timeout: 5),
             "Save preset sheet should dismiss cleanly after saving"
         )
-        tapHorizontallyScrollableElement(app, "quickFilterPresetsMenu", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
+        tapIdentifiedElement(app, "quickFilterPresetsMenu", direction: .down, timeout: 8)
         tapMenuChoice(app, label: presetName, timeout: 8)
     }
 
@@ -1901,8 +1911,9 @@ final class D2D_AdvancerUITests: XCTestCase {
         denySystemPermissionIfPresented(timeout: 2)
 
         waitForText(app, "Leads", timeout: 10)
+        openLeadFilterSheet(app)
         tapIdentifiedElement(app, "quickFilterStatus_interested", timeout: 8)
-        tapHorizontallyScrollableElement(app, "quickFilterPresetsMenu", scrollerIdentifier: "quickFilterChipScroller", timeout: 8)
+        tapIdentifiedElement(app, "quickFilterPresetsMenu", direction: .down, timeout: 8)
         tapMenuChoice(app, label: "Save Current", timeout: 8)
 
         waitForIdentifiedElement(app, "quickFilterSavePresetSheet", timeout: 10)
@@ -1914,6 +1925,7 @@ final class D2D_AdvancerUITests: XCTestCase {
             app.descendants(matching: .any)["quickFilterSavePresetSheet"].waitForExistence(timeout: 5),
             "Save preset sheet should dismiss cleanly after saving"
         )
+        tapButton(app, "leadsFilterDoneButton", timeout: 8)
         waitForText(app, "Leads", timeout: 8)
     }
 
@@ -2468,21 +2480,10 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "leadsScreen", timeout: 12)
         waitForText(app, "Leads", timeout: 8)
         try assertLightTopChrome(app, screenName: "Leads")
-        let sortChipLabels = ["Date Updated", "Date", "Status", "Name", "Address"]
-        var leadSortChip: XCUIElement?
-        for label in sortChipLabels {
-            let candidate = app.descendants(matching: .any)
-                .matching(NSPredicate(format: "label CONTAINS %@", label))
-                .firstMatch
-            if candidate.waitForExistence(timeout: 1) {
-                leadSortChip = candidate
-                break
-            }
-        }
-        XCTAssertNotNil(leadSortChip, "Lead sort chip should be visible")
-        let sortDirectionButton = waitForIdentifiedElement(app, "leadsSortDirectionButton", timeout: 8)
-        XCTAssertGreaterThanOrEqual(sortDirectionButton.frame.width, 44, "Lead sort direction should have a 44pt minimum tap width")
-        XCTAssertGreaterThanOrEqual(sortDirectionButton.frame.height, 44, "Lead sort direction should have a 44pt minimum tap height")
+        let filterButton = waitForIdentifiedElement(app, "leadsFilterButton", timeout: 8)
+        let sortButton = waitForIdentifiedElement(app, "leadsSortButton", timeout: 8)
+        XCTAssertGreaterThanOrEqual(filterButton.frame.height, 44, "Lead filter control should have a 44pt minimum tap height")
+        XCTAssertGreaterThanOrEqual(sortButton.frame.height, 44, "Lead sort control should have a 44pt minimum tap height")
 
         tapButton(app, "tab_Work", timeout: 12)
         tapButton(app, "workSection_followUps", timeout: 8)
@@ -2812,11 +2813,13 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         tapButton(app, "tab_Leads", timeout: 12)
         waitForIdentifiedElement(app, "leadsScreen", timeout: 12)
-        tapMenuChoice(app, label: "Inactive leads", timeout: 8)
+        openLeadFilterSheet(app)
 
         let passFilterChip = waitForIdentifiedElement(app, "quickFilterStatus_not_interested", timeout: 8)
         XCTAssertGreaterThanOrEqual(passFilterChip.frame.height, 44, "Pass filter chip should have a 44pt minimum tap height")
         tapButton(app, "quickFilterStatus_not_interested", timeout: 8)
+        tapButton(app, "leadScope_inactive", timeout: 8)
+        tapButton(app, "leadsFilterDoneButton", timeout: 8)
 
         let passLeadRow = waitForIdentifiedElement(app, "personalLeadRow", timeout: 12)
         let passLeadStatus = (passLeadRow.value as? String) ?? ""

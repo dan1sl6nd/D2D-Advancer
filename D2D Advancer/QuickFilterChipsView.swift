@@ -9,73 +9,63 @@ struct QuickFilterChipsView: View {
     private let quickStatuses: [Lead.Status] = [.notContacted, .interested, .converted, .notInterested]
 
     var body: some View {
-        VStack(spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    // Status chips
-                    ForEach(quickStatuses, id: \.self) { status in
-                        chip(
-                            title: quickStatusTitle(for: status),
-                            icon: status.icon,
-                            isSelected: searchFilterManager.currentFilter.selectedStatuses.contains(status),
-                            accessibilityLabel: status.compactDisplayName
-                        ) {
-                            toggleStatus(status)
-                        }
-                        .accessibilityIdentifier("quickFilterStatus_\(status.rawValue)")
-                    }
-
-                    // Has Follow-up
-                    chip(
-                        title: "Follow-up",
-                        icon: "calendar.badge.clock",
-                        isSelected: searchFilterManager.currentFilter.hasFollowUp == true,
-                        accessibilityLabel: "Has Follow-up"
-                    ) {
-                        toggleHasFollowUp()
-                    }
-                    .accessibilityIdentifier("quickFilterHasFollowUp")
-
-                    // Due Today (follow-up date today)
-                    chip(title: "Due Today", icon: "sun.max", isSelected: isDueTodaySelected) {
-                        toggleDueToday()
-                    }
-                    .accessibilityIdentifier("quickFilterDueToday")
-
-                    // Clear
-                    Button(action: { searchFilterManager.clearAllFilters() }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "xmark.circle")
-                            Text("Clear")
-                        }
-                        .font(.themeCaption)
-                        .foregroundColor(Color.textSecondary)
-                        .frame(minHeight: 44)
-                        .glassChip()
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .accessibilityIdentifier("quickFilterClearButton")
-
-                    Button {
-                        showingPresetPicker = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "tray.full")
-                            Text("Presets")
-                        }
-                        .font(.themeCaption)
-                        .foregroundColor(Color.textSecondary)
-                        .frame(minHeight: 44)
-                        .glassChip()
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .accessibilityIdentifier("quickFilterPresetsMenu")
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 8)], spacing: 8) {
+            ForEach(quickStatuses, id: \.self) { status in
+                chip(
+                    title: quickStatusTitle(for: status),
+                    icon: status.icon,
+                    isSelected: searchFilterManager.currentFilter.selectedStatuses.contains(status),
+                    accessibilityLabel: status.compactDisplayName
+                ) {
+                    toggleStatus(status)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
+                .accessibilityIdentifier("quickFilterStatus_\(status.rawValue)")
             }
-            .accessibilityIdentifier("quickFilterChipScroller")
+
+            chip(
+                title: "Follow-up",
+                icon: "calendar.badge.clock",
+                isSelected: searchFilterManager.currentFilter.hasFollowUp == true,
+                accessibilityLabel: "Has Follow-up"
+            ) {
+                toggleHasFollowUp()
+            }
+            .accessibilityIdentifier("quickFilterHasFollowUp")
+
+            chip(title: "Due Today", icon: "sun.max", isSelected: isDueTodaySelected) {
+                toggleDueToday()
+            }
+            .accessibilityIdentifier("quickFilterDueToday")
+
+            Button(action: { searchFilterManager.clearAllFilters() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark.circle")
+                    Text("Clear")
+                }
+                .font(.themeCaption)
+                .foregroundColor(Color.textSecondary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .glassChip()
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("quickFilterClearButton")
+
+            Button {
+                showingPresetPicker = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "tray.full")
+                    Text("Presets")
+                }
+                .font(.themeCaption)
+                .foregroundColor(Color.textSecondary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .glassChip()
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("quickFilterPresetsMenu")
         }
+        .accessibilityIdentifier("quickFilterChipScroller")
         .sheet(isPresented: $showingPresetPicker) {
             QuickFilterPresetPickerSheet(
                 presets: searchFilterManager.savedPresets,
@@ -175,7 +165,7 @@ struct QuickFilterChipsView: View {
             .foregroundColor(isSelected ? .white : Color.textSecondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .frame(minHeight: 44)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .background(isSelected ? Color.electricViolet : Color.obsidianSurface)
             .clipShape(Capsule())
             .overlay(

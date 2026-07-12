@@ -42,6 +42,7 @@ class FirebaseService: ObservableObject {
     private let syncedPreferenceKeys: Set<String> = [
         "isDarkMode",
         "leadSortPreference",
+        "leadSortAscending",
         "defaultLeadStatus",
         "defaultFollowUpTime",
         "autoBackupFrequency",
