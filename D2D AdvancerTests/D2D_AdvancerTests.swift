@@ -1658,6 +1658,12 @@ struct D2D_AdvancerTests {
         #expect(Set(LeadsListView.LeadTab.all.leadStatuses) == Set(Lead.Status.allCases))
     }
 
+    @Test func mapToolsExposeOnlyPrimaryWorkflowModes() {
+        #expect(MapWorkflowMode.primaryModes == [.all, .hot, .due, .sold])
+        #expect(MapWorkflowMode.hot.rawValue == "hot")
+        #expect(MapWorkflowMode.hot.title == "Interested")
+    }
+
     @Test func searchPresetSaveTrimsPersistsAndDeletes() async throws {
         let suiteName = "SearchPresetTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

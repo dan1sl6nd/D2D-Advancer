@@ -11,12 +11,14 @@ enum MapWorkflowMode: String, CaseIterable, Identifiable {
     case sold
     case next
 
+    static let primaryModes: [MapWorkflowMode] = [.all, .hot, .due, .sold]
+
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .all: return "All"
-        case .hot: return "Hot"
+        case .hot: return "Interested"
         case .due: return "Due"
         case .today: return "Today"
         case .sold: return "Sold"
@@ -4189,7 +4191,7 @@ private struct MapToolsSheet: View {
 
                     MapToolSection(title: "View") {
                         LazyVGrid(columns: optionColumns, spacing: 10) {
-                            ForEach(MapWorkflowMode.allCases) { mode in
+                            ForEach(MapWorkflowMode.primaryModes) { mode in
                                 MapToolOptionButton(
                                     title: mode.title,
                                     icon: mode.icon,

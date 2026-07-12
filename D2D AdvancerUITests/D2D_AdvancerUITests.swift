@@ -2712,7 +2712,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Map Tools"].waitForNonExistence(timeout: 5), "Map tools should close after applying Hot")
         tapButton(app, "mapToolsButton", timeout: 8)
         waitForIdentifiedElement(app, "mapWorkflowStatusCard", timeout: 8)
-        waitForTextContaining(app, "hot leads", timeout: 8)
+        waitForTextContaining(app, "interested leads", timeout: 8)
 
         tapIdentifiedElement(app, "mapWorkflowMode_due", timeout: 8)
         XCTAssertTrue(app.staticTexts["Map Tools"].waitForNonExistence(timeout: 5), "Map tools should close after applying Due")
