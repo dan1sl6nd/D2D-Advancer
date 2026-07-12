@@ -36,7 +36,7 @@ struct AddCheckInView: View {
                                 
                                 Spacer()
                                 
-                                StatusBadge(status: LeadStatus.from(leadStatus: lead.leadStatus))
+                                StatusBadge(status: lead.leadStatus)
                             }
                             
                             HStack {

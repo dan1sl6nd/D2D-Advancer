@@ -4,7 +4,7 @@ import CoreLocation
 
 struct SearchFilter: Equatable {
     var text: String = ""
-    var selectedStatuses: Set<LeadStatus> = []
+    var selectedStatuses: Set<Lead.Status> = []
     var dateRange: DateRange?
     var hasFollowUp: Bool? = nil
     var visitCountRange: ClosedRange<Int>?
@@ -97,10 +97,10 @@ class SearchFilterManager: ObservableObject {
             predicates.append(searchPredicate)
         }
 
-        // Status filter (map UI LeadStatus -> Core Data Lead.Status)
+        // Status filter uses the same canonical values stored by Core Data.
         if !currentFilter.selectedStatuses.isEmpty {
-            let legacyStatuses = currentFilter.selectedStatuses.map { $0.leadStatus.rawValue }
-            predicates.append(NSPredicate(format: "status IN %@", legacyStatuses))
+            let statuses = currentFilter.selectedStatuses.map(\.rawValue)
+            predicates.append(NSPredicate(format: "status IN %@", statuses))
         }
 
         // Has follow-up filter
@@ -276,7 +276,7 @@ extension SearchFilter: Codable {
         text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
         
         let statusStrings = try container.decodeIfPresent([String].self, forKey: .selectedStatuses) ?? []
-        selectedStatuses = Set(statusStrings.compactMap(LeadStatus.init))
+        selectedStatuses = Set(statusStrings.compactMap(Lead.Status.filterStatus(from:)))
         
         dateRange = try container.decodeIfPresent(DateRange.self, forKey: .dateRange)
         hasFollowUp = try container.decodeIfPresent(Bool.self, forKey: .hasFollowUp)

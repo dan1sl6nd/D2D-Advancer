@@ -42,7 +42,7 @@
 		E6D2D0012F00000100ABCDEF /* Exceptions for "D2D Advancer" folder in "D2D Advancer" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Info-Debug.plist,
+				"Info-Debug.plist",
 			);
 			target = E631E7D42E51C3F300EAD3D5 /* D2D Advancer */;
 		};

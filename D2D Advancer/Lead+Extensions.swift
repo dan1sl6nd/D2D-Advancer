@@ -91,6 +91,41 @@ extension Lead {
             normalizedRawValue(from: rawStatus) ?? notContacted.rawValue
         }
 
+        /// Decodes both the current five-value status model and status values
+        /// written by older saved-search and import implementations.
+        static func filterStatus(from rawStatus: String) -> Status? {
+            let normalized = rawStatus
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "_")
+                .replacingOccurrences(of: " ", with: "_")
+
+            switch normalized {
+            case notContacted.rawValue, "new", "scheduled", "visited", "follow_up":
+                return .notContacted
+            case notHome.rawValue, "not_home", "contacted", "away", "later":
+                return .notHome
+            case interested.rawValue, "prospect", "booked":
+                return .interested
+            case converted.rawValue, "sold", "closed", "won":
+                return .converted
+            case notInterested.rawValue, "notinterested", "pass", "lost":
+                return .notInterested
+            default:
+                return nil
+            }
+        }
+
+        var compactDisplayName: String {
+            switch self {
+            case .notContacted: return "New"
+            case .notHome: return "Away"
+            case .interested: return "Interested"
+            case .converted: return "Sold"
+            case .notInterested: return "Pass"
+            }
+        }
+
         var allowsActiveFollowUp: Bool {
             self != .converted && self != .notInterested
         }

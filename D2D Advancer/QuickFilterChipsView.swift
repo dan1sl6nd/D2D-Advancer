@@ -6,7 +6,7 @@ struct QuickFilterChipsView: View {
     @State private var showingPresetPicker = false
     @State private var presetSaveErrorMessage: String?
 
-    private let quickStatuses: [LeadStatus] = [.new, .interested, .closed, .notInterested]
+    private let quickStatuses: [Lead.Status] = [.notContacted, .interested, .converted, .notInterested]
 
     var body: some View {
         VStack(spacing: 8) {
@@ -18,7 +18,7 @@ struct QuickFilterChipsView: View {
                             title: quickStatusTitle(for: status),
                             icon: status.icon,
                             isSelected: searchFilterManager.currentFilter.selectedStatuses.contains(status),
-                            accessibilityLabel: status.displayName
+                            accessibilityLabel: status.compactDisplayName
                         ) {
                             toggleStatus(status)
                         }
@@ -123,18 +123,11 @@ struct QuickFilterChipsView: View {
         return false
     }
 
-    private func quickStatusTitle(for status: LeadStatus) -> String {
-        switch status {
-        case .closed:
-            return "Sold"
-        case .notInterested:
-            return "Pass"
-        default:
-            return status.displayName
-        }
+    private func quickStatusTitle(for status: Lead.Status) -> String {
+        status.compactDisplayName
     }
 
-    private func toggleStatus(_ status: LeadStatus) {
+    private func toggleStatus(_ status: Lead.Status) {
         var set = searchFilterManager.currentFilter.selectedStatuses
         if set.contains(status) {
             set.remove(status)

@@ -662,11 +662,11 @@ struct LeadSelectionRow: View {
     let onTap: () -> Void
     
     var body: some View {
-        let status = LeadStatus.from(leadStatus: lead.leadStatus)
+        let status = lead.leadStatus
 
         Button(action: onTap) {
             HStack(alignment: .top, spacing: 12) {
-                ObsidianIconTile(icon: "person.fill", tint: status.color, size: 42)
+                ObsidianIconTile(icon: "person.fill", tint: status.swiftUIColor, size: 42)
 
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -717,7 +717,7 @@ struct LeadSelectionRow: View {
 }
 
 struct LeadStatusBadge: View {
-    let status: LeadStatus
+    let status: Lead.Status
     
     var body: some View {
         Text(status.displayName)
@@ -725,8 +725,8 @@ struct LeadStatusBadge: View {
             .fontWeight(.semibold)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(status.color.opacity(0.2))
-            .foregroundColor(status.color)
+            .background(status.swiftUIColor.opacity(0.2))
+            .foregroundColor(status.swiftUIColor)
             .clipShape(Capsule())
     }
 }
@@ -1204,7 +1204,7 @@ struct AppointmentDetailView: View {
                 }
 
                 HStack(spacing: 10) {
-                    LeadStatusBadge(status: LeadStatus.from(leadStatus: lead.leadStatus))
+                    LeadStatusBadge(status: lead.leadStatus)
 
                     if lead.priority > 0 {
                         Label("Priority \(Int(lead.priority))", systemImage: "star.fill")

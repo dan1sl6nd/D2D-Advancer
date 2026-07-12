@@ -32,7 +32,7 @@ struct SelectableLeadRow: View {
 
                         Spacer()
 
-                        StatusBadge(status: LeadStatus(rawValue: lead.status ?? "") ?? .new)
+                        StatusBadge(status: lead.leadStatus)
                     }
 
                     if let address = lead.address, !address.isEmpty {
@@ -121,11 +121,6 @@ struct SelectableLeadRow: View {
 struct StatusBadge: View {
     private let displayName: String
     private let color: Color
-
-    init(status: LeadStatus) {
-        self.displayName = status.displayName
-        self.color = status.color
-    }
 
     init(status: Lead.Status) {
         self.displayName = status.displayName

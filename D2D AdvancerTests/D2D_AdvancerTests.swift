@@ -1638,6 +1638,37 @@ struct D2D_AdvancerTests {
         #expect(SearchFilterManager(userDefaults: defaults, presetsKey: key).savedPresets.isEmpty)
     }
 
+    @Test func searchFilterMigratesLegacyStatusesToCanonicalValues() throws {
+        let legacyJSON = """
+        {
+          "selectedStatuses": [
+            "new",
+            "contacted",
+            "interested",
+            "closed",
+            "not_interested",
+            "scheduled",
+            "follow_up"
+          ]
+        }
+        """
+        let data = try #require(legacyJSON.data(using: .utf8))
+        let filter = try JSONDecoder().decode(SearchFilter.self, from: data)
+
+        #expect(filter.selectedStatuses == [
+            .notContacted,
+            .notHome,
+            .interested,
+            .converted,
+            .notInterested
+        ])
+
+        let encoded = try JSONEncoder().encode(filter)
+        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        let persistedStatuses = Set(try #require(object["selectedStatuses"] as? [String]))
+        #expect(persistedStatuses == Set(Lead.Status.allCases.map(\.rawValue)))
+    }
+
     @Test func searchPresetRejectsBlankNamesAndSurfacesCorruptStorage() async throws {
         let suiteName = "SearchPresetCorruptTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
