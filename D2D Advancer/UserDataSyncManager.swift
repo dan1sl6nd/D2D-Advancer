@@ -35,6 +35,33 @@ enum LeadCloudMergePolicy {
         guard let id = UUID(uuidString: documentId) else { return false }
         return deletedIds.contains(id)
     }
+
+    static func shouldApplyRemote(
+        remoteModifiedDate: Date,
+        localModifiedDate: Date
+    ) -> Bool {
+        remoteModifiedDate > localModifiedDate
+    }
+}
+
+struct PersonalCloudMigrationSummary: Equatable {
+    let firebaseLeadCount: Int
+    let iCloudLeadCount: Int
+    let appointmentCount: Int
+}
+
+enum PersonalCloudMigrationError: LocalizedError {
+    case migrationAlreadyRunning
+    case firebaseSignInRequired
+
+    var errorDescription: String? {
+        switch self {
+        case .migrationAlreadyRunning:
+            return "A cloud sync is already running. Wait for it to finish and try again."
+        case .firebaseSignInRequired:
+            return "Sign in with Apple again so the legacy Firebase data can be copied to iCloud."
+        }
+    }
 }
 
 @MainActor
@@ -365,6 +392,79 @@ class UserDataSyncManager: ObservableObject {
         
         // Start general data sync (including appointments)
         startSync()
+    }
+
+    func migratePersonalDataToICloud() async throws -> PersonalCloudMigrationSummary {
+        guard !syncStatus.isBusy else {
+            throw PersonalCloudMigrationError.migrationAlreadyRunning
+        }
+
+        let sourceProvider = CloudSyncProvider.current
+        var firebaseLeadCount = 0
+
+        syncStatus = .syncing
+
+        do {
+            await cleanupCorruptedLeads()
+
+            if PersonalCloudMigrationPolicy.needsFirebaseMerge(current: sourceProvider) {
+                guard firebaseService.isAuthenticated,
+                      let userId = firebaseService.currentUser?.uid else {
+                    throw PersonalCloudMigrationError.firebaseSignInRequired
+                }
+
+                PersonalCloudMigrationStateStore.setPhase(.firebaseMerge)
+
+                // Download first so a newer local record is never overwritten by
+                // an older copy uploaded from this device.
+                let downloadSummary = try await downloadLeadsFromFirestore(userId: userId)
+                firebaseLeadCount = downloadSummary.remoteCount
+
+                let mergedFirebasePayloads = try await fetchLeadSyncPayloads()
+                try await uploadLeadsToFirestore(userId: userId, payloads: mergedFirebasePayloads)
+
+                let appointmentSnapshot = try await db.collection("users")
+                    .document(userId)
+                    .collection("appointments")
+                    .getDocuments()
+                let remoteAppointments = appointmentSnapshot.documents.compactMap { document in
+                    try? document.data(as: Appointment.self)
+                }
+                AppointmentManager.shared.mergeAppointmentsForMigration(
+                    remoteAppointments,
+                    preferIncoming: true
+                )
+                await AppointmentManager.shared.syncAllAppointmentsToFirebase()
+            }
+
+            PersonalCloudMigrationStateStore.setPhase(.iCloudUpload)
+
+            // Merge any prior private iCloud backup before writing the union.
+            _ = try await restoreLeadsFromCloudKitBackup(userId: Self.privateCloudKitUserId)
+            let iCloudPayloads = try await fetchLeadSyncPayloads()
+            let uploadedLeadCount = try await uploadLeadsToCloudKitBackupStrict(
+                userId: Self.privateCloudKitUserId,
+                payloads: iCloudPayloads
+            )
+            let appointmentCount = try await AppointmentManager.shared.migrateAppointmentsToPrivateICloud()
+
+            // The provider flag is the final commit point. Firebase records are
+            // intentionally retained as a non-authoritative legacy backup.
+            PersonalCloudMigrationStateStore.setPhase(.completed)
+            CloudSyncProvider.current = .icloud
+            AppointmentManager.shared.restartFirebaseSync()
+            syncStatus = .completed
+            lastSyncDate = Date()
+
+            return PersonalCloudMigrationSummary(
+                firebaseLeadCount: firebaseLeadCount,
+                iCloudLeadCount: uploadedLeadCount,
+                appointmentCount: appointmentCount
+            )
+        } catch {
+            syncStatus = .failed(error.localizedDescription)
+            throw error
+        }
     }
 
     private func performCloudKitOnlySync(includeAppointments: Bool = true) async {
@@ -897,11 +997,12 @@ class UserDataSyncManager: ObservableObject {
             ?? Date.distantPast
 
         if let existingLead = existingLeads.first {
-            let fiveMinutesAgo = Date().addingTimeInterval(-300)
             let localModifiedDate = existingLead.updatedDate ?? existingLead.dateModified ?? Date.distantPast
 
-            // Skip remote update if local data is newer AND was edited recently (within 5 min)
-            if remoteModifiedDate <= localModifiedDate && localModifiedDate >= fiveMinutesAgo {
+            if !LeadCloudMergePolicy.shouldApplyRemote(
+                remoteModifiedDate: remoteModifiedDate,
+                localModifiedDate: localModifiedDate
+            ) {
                 return .skipped
             }
 

@@ -159,6 +159,28 @@ enum AppointmentCloudMergePolicy {
         guard !deletedIds.isEmpty else { return appointments }
         return appointments.filter { !deletedIds.contains($0.id) }
     }
+
+    static func mergedForMigration(
+        local: [Appointment],
+        incoming: [Appointment],
+        deletedIds: Set<UUID>,
+        preferIncoming: Bool
+    ) -> [Appointment] {
+        var merged = excludingDeletedAppointments(local, deletedIds: deletedIds)
+        let incoming = excludingDeletedAppointments(incoming, deletedIds: deletedIds)
+
+        for appointment in incoming {
+            if let index = merged.firstIndex(where: { $0.id == appointment.id }) {
+                if preferIncoming {
+                    merged[index] = appointment
+                }
+            } else {
+                merged.append(appointment)
+            }
+        }
+
+        return merged
+    }
 }
 
 enum AppointmentCloudSyncPolicy {
@@ -905,6 +927,52 @@ class AppointmentManager: ObservableObject {
         }
         
         print("🗓️ Appointment cloud sync completed")
+    }
+
+    @discardableResult
+    func mergeAppointmentsForMigration(
+        _ incomingAppointments: [Appointment],
+        preferIncoming: Bool
+    ) -> Int {
+        let previousIds = Set(appointments.map(\.id))
+        let merged = AppointmentCloudMergePolicy.mergedForMigration(
+            local: appointments,
+            incoming: incomingAppointments,
+            deletedIds: deletedAppointmentIds(),
+            preferIncoming: preferIncoming
+        )
+        appointments = merged
+
+        if !incomingAppointments.isEmpty {
+            _ = saveAppointments()
+            objectWillChange.send()
+        }
+
+        return merged.reduce(into: 0) { count, appointment in
+            if !previousIds.contains(appointment.id) { count += 1 }
+        }
+    }
+
+    func migrateAppointmentsToPrivateICloud() async throws -> Int {
+        guard let cloudKitBackupService else {
+            throw CloudKitLeadBackupError.containerUnavailable(CloudKitLeadBackupService.containerIdentifier)
+        }
+
+        let userId = UserDataSyncManager.privateCloudKitUserId
+        let existingPayloads = try await cloudKitBackupService.fetchAppointments(for: userId)
+        _ = mergeAppointmentsForMigration(
+            existingPayloads.map(\.appointment),
+            preferIncoming: false
+        )
+
+        for appointment in appointments {
+            try await cloudKitBackupService.uploadAppointment(
+                AppointmentSyncPayload(appointment: appointment),
+                for: userId
+            )
+        }
+
+        return appointments.count
     }
 
     private func backupAppointmentToCloudKit(_ appointment: Appointment, userId: String) async {

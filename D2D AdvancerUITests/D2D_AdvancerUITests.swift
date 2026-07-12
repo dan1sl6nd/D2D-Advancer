@@ -2422,7 +2422,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         try assertLightSurfaceAround(
             cloudProviderSheet,
             app: app,
-            screenName: "Cloud Storage"
+            screenName: "Personal iCloud Sync"
         )
         tapIdentifiedElement(app, "cloudProviderCloseButton", timeout: 8)
         XCTAssertTrue(
@@ -2521,11 +2521,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "moreCloudStorageButton", timeout: 8)
         waitForIdentifiedElement(app, "cloudProviderSheet", timeout: 8)
-        waitForText(app, "Cloud Storage", timeout: 8)
+        waitForText(app, "Personal iCloud Sync", timeout: 8)
         try assertLightSurfaceAround(
             app.descendants(matching: .any)["cloudProviderSheet"].firstMatch,
             app: app,
-            screenName: "Cloud Storage"
+            screenName: "Personal iCloud Sync"
         )
         tapIdentifiedElement(app, "cloudProviderCloseButton", timeout: 8)
 

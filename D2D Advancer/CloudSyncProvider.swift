@@ -33,3 +33,40 @@ enum CloudSyncProvider: String, CaseIterable {
         }
     }
 }
+
+enum PersonalCloudMigrationPhase: String, Equatable {
+    case idle
+    case firebaseMerge
+    case iCloudUpload
+    case completed
+}
+
+enum PersonalCloudMigrationStateStore {
+    nonisolated static let phaseKey = "personalCloudMigrationPhaseV1"
+    nonisolated static let completedAtKey = "personalCloudMigrationCompletedAtV1"
+
+    nonisolated static func phase(in defaults: UserDefaults = .standard) -> PersonalCloudMigrationPhase {
+        guard let rawValue = defaults.string(forKey: phaseKey) else { return .idle }
+        return PersonalCloudMigrationPhase(rawValue: rawValue) ?? .idle
+    }
+
+    nonisolated static func setPhase(
+        _ phase: PersonalCloudMigrationPhase,
+        in defaults: UserDefaults = .standard
+    ) {
+        defaults.set(phase.rawValue, forKey: phaseKey)
+        if phase == .completed {
+            defaults.set(Date(), forKey: completedAtKey)
+        }
+    }
+}
+
+enum PersonalCloudMigrationPolicy {
+    nonisolated static func availableProviders(current: CloudSyncProvider) -> [CloudSyncProvider] {
+        current == .firebase ? [.firebase, .icloud] : [.icloud]
+    }
+
+    nonisolated static func needsFirebaseMerge(current: CloudSyncProvider) -> Bool {
+        current == .firebase
+    }
+}

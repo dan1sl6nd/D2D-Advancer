@@ -1664,6 +1664,74 @@ struct D2D_AdvancerTests {
         #expect(MapWorkflowMode.hot.title == "Interested")
     }
 
+    @Test func personalCloudMigrationStateAndProviderPolicyAreBackwardCompatible() throws {
+        let suiteName = "PersonalCloudMigrationTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        #expect(PersonalCloudMigrationStateStore.phase(in: defaults) == .idle)
+        PersonalCloudMigrationStateStore.setPhase(.firebaseMerge, in: defaults)
+        #expect(PersonalCloudMigrationStateStore.phase(in: defaults) == .firebaseMerge)
+        PersonalCloudMigrationStateStore.setPhase(.completed, in: defaults)
+        #expect(PersonalCloudMigrationStateStore.phase(in: defaults) == .completed)
+        #expect(defaults.object(forKey: PersonalCloudMigrationStateStore.completedAtKey) is Date)
+
+        #expect(PersonalCloudMigrationPolicy.availableProviders(current: .firebase) == [.firebase, .icloud])
+        #expect(PersonalCloudMigrationPolicy.availableProviders(current: .icloud) == [.icloud])
+        #expect(PersonalCloudMigrationPolicy.availableProviders(current: .off) == [.icloud])
+    }
+
+    @Test func cloudMigrationKeepsNewestLeadAndMergesAppointmentsWithoutDroppingIds() {
+        let now = Date()
+        #expect(LeadCloudMergePolicy.shouldApplyRemote(
+            remoteModifiedDate: now,
+            localModifiedDate: now.addingTimeInterval(-60)
+        ))
+        #expect(!LeadCloudMergePolicy.shouldApplyRemote(
+            remoteModifiedDate: now.addingTimeInterval(-60),
+            localModifiedDate: now
+        ))
+
+        let sharedId = UUID()
+        let addedId = UUID()
+        let local = Appointment(
+            id: sharedId,
+            title: "Local",
+            notes: "",
+            startDate: now,
+            endDate: now.addingTimeInterval(3600),
+            location: "Local",
+            leadId: nil,
+            calendarEventId: nil,
+            appointmentType: .consultation,
+            customAppointmentTypeId: nil,
+            status: .scheduled
+        )
+        var incomingReplacement = local
+        incomingReplacement.title = "Remote"
+        var incomingAdded = local
+        incomingAdded.id = addedId
+        incomingAdded.title = "Added"
+
+        let preferRemote = AppointmentCloudMergePolicy.mergedForMigration(
+            local: [local],
+            incoming: [incomingReplacement, incomingAdded],
+            deletedIds: [],
+            preferIncoming: true
+        )
+        #expect(Set(preferRemote.map(\.id)) == Set([sharedId, addedId]))
+        #expect(preferRemote.first(where: { $0.id == sharedId })?.title == "Remote")
+
+        let preserveLocal = AppointmentCloudMergePolicy.mergedForMigration(
+            local: [local],
+            incoming: [incomingReplacement, incomingAdded],
+            deletedIds: [],
+            preferIncoming: false
+        )
+        #expect(preserveLocal.first(where: { $0.id == sharedId })?.title == "Local")
+    }
+
     @Test func searchPresetSaveTrimsPersistsAndDeletes() async throws {
         let suiteName = "SearchPresetTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

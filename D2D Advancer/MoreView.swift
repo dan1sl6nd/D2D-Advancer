@@ -292,8 +292,8 @@ struct MoreView: View {
                 MoreCardView(
                     icon: CloudSyncProvider.current.icon,
                     iconColor: cloudProviderColor,
-                    title: "Cloud Storage",
-                    subtitle: CloudSyncProvider.current == .off ? "Off, local only" : CloudSyncProvider.current.displayName,
+                    title: "iCloud Sync",
+                    subtitle: personalCloudSubtitle,
                     showChevron: true
                 )
             }
@@ -384,6 +384,17 @@ struct MoreView: View {
             }
             .buttonStyle(PlainButtonStyle())
             .accessibilityIdentifier("moreImportLeadsButton")
+        }
+    }
+
+    private var personalCloudSubtitle: String {
+        switch CloudSyncProvider.current {
+        case .firebase:
+            return "Move legacy personal data to iCloud"
+        case .icloud:
+            return "On · Apple ID"
+        case .off:
+            return "Set up private iCloud sync"
         }
     }
 
@@ -1568,8 +1579,9 @@ struct CloudProviderSheet: View {
     @State private var selectedProvider = CloudSyncProvider.current
     @State private var showingConfirmation = false
     @State private var isMigrating = false
+    @State private var migrationOutcomeMessage: String?
+    @State private var migrationDidSucceed = false
     @ObservedObject private var syncManager = UserDataSyncManager.shared
-    @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
 
     private var localLeadCount: Int? {
         let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: viewContext)
@@ -1580,6 +1592,10 @@ struct CloudProviderSheet: View {
         }
     }
 
+    private var availableProviders: [CloudSyncProvider] {
+        PersonalCloudMigrationPolicy.availableProviders(current: CloudSyncProvider.current)
+    }
+
     var body: some View {
         let screenBackground = Color.obsidianBackground(for: colorScheme)
 
@@ -1588,12 +1604,12 @@ struct CloudProviderSheet: View {
                 ObsidianIconTile(icon: "externaldrive.connected.to.line.below.fill", tint: Color.electricViolet, size: 42)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Cloud Storage")
+                    Text("Personal iCloud Sync")
                         .font(.obsidianHeadline)
                         .foregroundColor(.textPrimary)
                         .accessibilityIdentifier("cloudProviderSheet")
 
-                    Text("Choose where your lead data syncs and backs up.")
+                    Text("Personal leads and appointments sync with the Apple ID on this device.")
                         .font(.obsidianFootnote)
                         .foregroundColor(.textSecondary)
                         .lineLimit(2)
@@ -1617,7 +1633,7 @@ struct CloudProviderSheet: View {
 
             // Provider options
             VStack(spacing: 0) {
-                ForEach(CloudSyncProvider.allCases, id: \.self) { provider in
+                ForEach(availableProviders, id: \.self) { provider in
                     Button {
                         selectedProvider = provider
                         if provider != CloudSyncProvider.current {
@@ -1649,7 +1665,7 @@ struct CloudProviderSheet: View {
                         .padding(.vertical, 14)
                     }
                     .accessibilityIdentifier("cloudProviderOption_\(provider.rawValue)")
-                    if provider != CloudSyncProvider.allCases.last {
+                    if provider != availableProviders.last {
                         Divider().padding(.leading, 70)
                     }
                 }
@@ -1672,7 +1688,9 @@ struct CloudProviderSheet: View {
                     ProgressView()
                         .controlSize(.large)
                         .tint(.electricViolet)
-                    Text("Syncing before switching...")
+                    Text(CloudSyncProvider.current == .firebase
+                        ? "Merging Firebase, local, and iCloud data..."
+                        : "Uploading local data to iCloud...")
                         .font(.obsidianFootnote)
                         .foregroundColor(.textSecondary)
                 }
@@ -1688,20 +1706,20 @@ struct CloudProviderSheet: View {
                 selectedProvider = CloudSyncProvider.current
             }
         } message: {
-            if CloudSyncProvider.current == .firebase && selectedProvider == .icloud {
-                Text("\(LeadCountDisplay.firebaseToICloudMessage(for: localLeadCount)) Firebase will be kept as a backup.")
-            } else if selectedProvider == .icloud {
-                Text(LeadCountDisplay.iCloudSyncMessage(for: localLeadCount))
-            } else if selectedProvider == .firebase {
-                Text("Switching to Firebase. Requires account sign-in for cloud sync.")
-            } else {
-                Text("Cloud sync will be disabled. Data stays on this device only.")
-            }
+            Text(CloudSyncProvider.current == .firebase
+                ? "\(LeadCountDisplay.firebaseToICloudMessage(for: localLeadCount)) Existing Firebase records will be retained as a legacy backup."
+                : LeadCountDisplay.iCloudSyncMessage(for: localLeadCount))
         }
-        .alert("Restart Required", isPresented: $showRestartNeeded) {
-            Button("OK") { }
+        .alert(
+            migrationDidSucceed ? "iCloud Sync Ready" : "iCloud Migration Failed",
+            isPresented: Binding(
+                get: { migrationOutcomeMessage != nil },
+                set: { if !$0 { migrationOutcomeMessage = nil } }
+            )
+        ) {
+            Button("OK") { migrationOutcomeMessage = nil }
         } message: {
-            Text("Please close and reopen the app for the sync provider change to take full effect.")
+            Text(migrationOutcomeMessage ?? "")
         }
     }
 
@@ -1715,35 +1733,33 @@ struct CloudProviderSheet: View {
 
     private func providerSubtitle(_ provider: CloudSyncProvider) -> String {
         switch provider {
-        case .off: return "Local only, no backup"
-        case .firebase: return "Cross-device, requires sign-in"
-        case .icloud: return "Automatic, uses Apple ID"
+        case .off: return "Legacy local-only mode"
+        case .firebase: return "Legacy personal sync source"
+        case .icloud: return "Private sync through your Apple ID"
         }
     }
 
-    @State private var showRestartNeeded = false
-
     private func performSwitch() {
-        let oldProvider = CloudSyncProvider.current
-        let newProvider = selectedProvider
+        guard selectedProvider == .icloud else {
+            selectedProvider = CloudSyncProvider.current
+            return
+        }
 
-        if oldProvider == .firebase && userAccountManager.isLoggedIn {
-            isMigrating = true
-            syncManager.startSync()
-            Task {
-                for _ in 0..<60 {
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                    if !syncManager.syncStatus.isBusy { break }
-                }
-                await MainActor.run {
-                    isMigrating = false
-                    CloudSyncProvider.current = newProvider
-                    showRestartNeeded = true
-                }
+        isMigrating = true
+        migrationOutcomeMessage = nil
+
+        Task {
+            do {
+                let summary = try await syncManager.migratePersonalDataToICloud()
+                selectedProvider = .icloud
+                migrationDidSucceed = true
+                migrationOutcomeMessage = "Copied \(summary.iCloudLeadCount) leads and \(summary.appointmentCount) appointments to private iCloud sync. Firebase data was not deleted."
+            } catch {
+                selectedProvider = CloudSyncProvider.current
+                migrationDidSucceed = false
+                migrationOutcomeMessage = error.localizedDescription
             }
-        } else {
-            CloudSyncProvider.current = newProvider
-            showRestartNeeded = true
+            isMigrating = false
         }
     }
 }
