@@ -119,15 +119,9 @@ struct TeamWorkspaceView: View {
                             if member.role == .owner {
                                 ownerSummary(team: team)
                                 memberListCard(team: team)
-                                ownerNotificationsCard
-                                ownerLeadQueueCard
-                                ownerTechnicianJobsCard
                                 ownerDuplicateWarningsCard
-                                ownerFieldMapCard
-                                ownerRepWorkCard
                                 activityLogCard
                             } else {
-                                repSummary(team: team, member: member)
                                 activityLogCard
                             }
                         } else {
@@ -233,10 +227,10 @@ struct TeamWorkspaceView: View {
 
     private var teamIntroText: String {
         if teamService.currentMember?.role == .owner {
-            return "Team setup, invites, seats, duty sharing, and owner controls. Daily lead and job work is also available from Map, Leads, and Jobs."
+            return "Team setup, invites, seats, duty sharing, and owner controls. Daily lead and job work stays in Map, Leads, and Work."
         }
         if teamService.currentMember?.isTechnician == true {
-            return "Use this screen for team access and duty sharing. Your daily service work is in Jobs."
+            return "Use this screen for team access and duty sharing. Your daily service work is in Work."
         }
         if teamService.currentMember?.isSalesRep == true {
             return "Use this screen for team access and duty sharing. Your daily sales work is in My Leads."
@@ -258,11 +252,6 @@ struct TeamWorkspaceView: View {
                 .overlay(Color.obsidianBorder.opacity(0.6))
 
             if member.role == .owner {
-                ownerInviteControls(team: team)
-
-                Divider()
-                    .overlay(Color.obsidianBorder.opacity(0.6))
-
                 Text("Close the workspace to remove worker access and cancel pending invites.")
                     .font(.micro)
                     .foregroundColor(Color.textSecondary)
@@ -368,19 +357,12 @@ struct TeamWorkspaceView: View {
 
     private func ownerSummary(team: TeamWorkspace) -> some View {
         TeamInfoCard {
-            Text("Owner Controls")
+            Text("Team Administration")
                 .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
 
-            if let todaySummary = teamService.todayWorkSummary() {
-                statRow("Today jobs", "\(todaySummary.bookingCount)")
-                statRow("Important work", "\(todaySummary.importantLeadCount)")
-            }
-            statRow("Team leads", "\(teamService.teamLeads.count)")
-            statRow("Jobs", "\(teamService.teamBookings.count)")
             statRow("Sales reps", "\(activeSalesReps.count)")
             statRow("Technicians", "\(activeTechnicians.count)")
-            statRow("On duty", "\(ownerRepWorkspaces.filter(\.isOnDuty).count)")
             statRow("Seats used", "\(activeMemberCount)/\(team.memberLimit)")
             if let member = teamService.currentMember {
                 statRow("Owner sharing", teamService.activeDutySession == nil ? "Off" : "On")
@@ -399,7 +381,7 @@ struct TeamWorkspaceView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("Generate one invite code per worker. Each code reserves one seat until the worker joins or you cancel the pending invite.")
+            Text("Lead review, dispatch, live locations, and daily work stay in Map, Leads, and Work. This screen only manages access and privacy.")
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

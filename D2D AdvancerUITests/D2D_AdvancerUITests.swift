@@ -1289,7 +1289,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         dismissTeamKeyboardIfPresent(technicianApp)
         scrollToButton(technicianApp, "teamJoinTeamButton").tap()
         waitForText(technicianApp, "Joined team.", timeout: 25)
-        scrollToText(technicianApp, "My Service Jobs", direction: .down)
+        scrollToText(technicianApp, "Activity Log", direction: .down)
         _ = scrollToButtonEitherDirection(technicianApp, "teamLeaveButton")
         technicianApp.terminate()
 
@@ -1308,7 +1308,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         scrollToButton(repApp, "teamJoinTeamButton").tap()
         waitForText(repApp, "Joined team.", timeout: 25)
         resetVerticalScrollToTop(repApp)
-        waitForText(repApp, "My Team Work", timeout: 12)
+        waitForText(repApp, "Activity Log", timeout: 12)
 
         tapButton(repApp, "teamDutyToggleButton", timeout: 12)
         waitForText(repApp, "Go Off Duty", timeout: 12)
@@ -1331,15 +1331,9 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         openTeamWorkspace(ownerReturnApp, expectedInitialText: "My Team")
         waitForText(ownerReturnApp, "3/3 seats", timeout: 8)
-        scrollToVisibleText(ownerReturnApp, "Owner Alerts", direction: .down, maxSwipes: 12)
-        waitForText(ownerReturnApp, "Rep marked a lead interested", timeout: 25)
-        waitForTextContaining(ownerReturnApp, String(leadName), timeout: 25)
-        scrollToVisibleText(ownerReturnApp, "Field Map", direction: .down, maxSwipes: 12)
-        XCTAssertTrue(
-            ownerReturnApp.otherElements["teamFieldMapView"].waitForExistence(timeout: 8),
-            "Owner Team Workspace should render the field map for rep work"
-        )
-        waitForTextContaining(ownerReturnApp, String(leadName), timeout: 8)
+        scrollToVisibleText(ownerReturnApp, "Team Administration", direction: .down, maxSwipes: 12)
+        scrollToVisibleText(ownerReturnApp, "Members", direction: .down, maxSwipes: 12)
+        scrollToVisibleText(ownerReturnApp, "Activity Log", direction: .down, maxSwipes: 12)
 
         relaunch(ownerReturnApp, opening: "-openLeadsTabForUITests")
         XCTAssertTrue(
@@ -1425,7 +1419,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         scrollToButton(app, "teamJoinTeamButton").tap()
         waitForText(app, "Joined team.", timeout: 25)
         resetVerticalScrollToTop(app)
-        waitForText(app, "My Team Work", timeout: 12)
+        waitForText(app, "Activity Log", timeout: 12)
 
         tapButton(app, "teamDutyToggleButton", timeout: 12)
         waitForText(app, "Go Off Duty", timeout: 12)
@@ -1452,15 +1446,8 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         openTeamWorkspace(app, expectedInitialText: "My Team")
         waitForText(app, "2/3 seats", timeout: 8)
-        scrollToVisibleText(app, "Owner Alerts", direction: .down, maxSwipes: 12)
-        waitForText(app, "Rep marked a lead interested", timeout: 25)
-        waitForTextContaining(app, credentials.leadName, timeout: 25)
-        scrollToVisibleText(app, "Field Map", direction: .down, maxSwipes: 12)
-        XCTAssertTrue(
-            app.otherElements["teamFieldMapView"].waitForExistence(timeout: 8),
-            "Owner Team Workspace should render the field map for rep work"
-        )
-        waitForTextContaining(app, credentials.leadName, timeout: 8)
+        scrollToVisibleText(app, "Team Administration", direction: .down, maxSwipes: 12)
+        scrollToVisibleText(app, "Members", direction: .down, maxSwipes: 12)
 
         relaunch(app, opening: "-openLeadsTabForUITests")
         XCTAssertTrue(
