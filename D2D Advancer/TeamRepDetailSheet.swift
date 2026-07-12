@@ -3,10 +3,10 @@ import MapKit
 import UIKit
 
 struct TeamRepDetailSheet: View {
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var teamService = TeamFirebaseService.shared
 
     let initialWorkspace: TeamRepWorkspace
+    let onClose: () -> Void
     @State private var selectedLead: TeamLead?
     @State private var isSaving = false
     @State private var statusMessage: String?
@@ -60,11 +60,9 @@ struct TeamRepDetailSheet: View {
             .obsidianPushedNavigation(
                 title,
                 backButtonAccessibilityIdentifier: "teamRepDetailBackButton",
-                onBack: { dismiss() }
+                onBack: onClose
             ) {
-                TeamToolbarDoneButton {
-                    dismiss()
-                }
+                TeamToolbarDoneButton(action: onClose)
                 .accessibilityIdentifier("teamRepDetailCloseButton")
             }
         }
@@ -72,7 +70,6 @@ struct TeamRepDetailSheet: View {
         .sheet(item: $selectedLead) { lead in
             TeamLeadDetailSheet(initialLead: lead)
         }
-        .accessibilityIdentifier("teamRepDetailSheet")
     }
 
     private var headerCard: some View {

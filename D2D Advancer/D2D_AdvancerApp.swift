@@ -18,6 +18,7 @@ struct D2D_AdvancerApp: App {
     @StateObject private var userAccountManager: FirebaseUserAccountManager
     @StateObject private var firebaseService: FirebaseService
     @StateObject private var appleSignInManager: AppleSignInManager
+    @StateObject private var teamService: TeamFirebaseService
     @AppStorage("isDarkMode") private var isDarkMode = false
     init() {
         let launchArguments = ProcessInfo.processInfo.arguments
@@ -35,6 +36,12 @@ struct D2D_AdvancerApp: App {
             UserDefaults.standard.removeObject(forKey: "isGuestMode")
             print("🧪 Firebase auth reset for UI tests")
         }
+        #if DEBUG
+        if launchArguments.contains("-resetTeamWorkspaceCacheForUITests") {
+            TeamFirebaseService.resetCachedMembershipForUITests()
+            print("🧪 Team workspace cache reset for UI tests")
+        }
+        #endif
         if launchArguments.contains("-resetMessageTemplatesForUITests") {
             UserDefaults.standard.removeObject(forKey: "custom_message_templates")
             print("🧪 Message templates reset for UI tests")
@@ -89,6 +96,8 @@ struct D2D_AdvancerApp: App {
         _firebaseService = StateObject(wrappedValue: FirebaseService.shared)
         _userAccountManager = StateObject(wrappedValue: FirebaseUserAccountManager.shared)
         _appleSignInManager = StateObject(wrappedValue: AppleSignInManager.shared)
+        // Restore cached Team access before SwiftUI constructs MainTabView.
+        _teamService = StateObject(wrappedValue: TeamFirebaseService.shared)
 
         if isRunningUITests, launchArguments.contains("-resetUITestLeads") {
             Self.resetUITestLeadsWhenReady(using: persistenceController)

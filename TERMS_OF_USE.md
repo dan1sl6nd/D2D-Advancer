@@ -7,8 +7,8 @@ description: Terms of Use (EULA) for D2D Advancer - Door-to-Door Sales Managemen
 # Terms of Use (EULA)
 ## D2D Advancer
 
-**Effective Date:** July 10, 2026
-**Last Updated:** July 10, 2026
+**Effective Date:** July 12, 2026
+**Last Updated:** July 12, 2026
 
 ---
 
@@ -24,15 +24,9 @@ Subject to your compliance with these Terms, we grant you a limited, non-exclusi
 
 ### 3.1 Auto-Renewable Subscriptions
 
-D2D Advancer offers weekly and yearly auto-renewable subscription options. The exact localized price, currency, taxes, and any introductory offer are shown by Apple before purchase. Current United States reference prices are:
+D2D Advancer offers Solo Monthly, Solo Yearly, Team Monthly, and Team Yearly auto-renewable subscriptions. Solo is for one person's private workspace. Team includes one owner and two worker seats for assigned leads, jobs, notifications, and on-duty location sharing.
 
-- **Weekly Plan:** $9.99 per week, with a 3-day free trial when that offer is shown and you are eligible
-  - No subscription charge during the displayed trial period
-  - After the trial period, automatically renews at $9.99 per week
-  - Billed weekly until canceled
-
-- **Yearly Plan:** $36.99 per year
-  - Billed annually until canceled
+The exact localized price, currency, taxes, and any introductory offer are shown by Apple before purchase. Legacy weekly and yearly subscriptions may remain available to existing subscribers but are not offered to new customers in the current app paywall.
 
 ### 3.2 Payment and Renewal
 
@@ -52,13 +46,20 @@ D2D Advancer offers weekly and yearly auto-renewable subscription options. The e
 
 - You can manage and cancel your subscriptions by going to your Apple ID Account Settings
 - Cancellation takes effect at the end of the current billing period
-- No refunds will be provided for the unused portion of any subscription period
+- Refund requests are handled by Apple under App Store policies and applicable law
 
 ### 3.5 Changes to Subscription Pricing
 
 - We reserve the right to modify subscription pricing at any time
-- Price changes will not affect current subscribers until their next renewal
-- You will be notified of any price changes in advance
+- Apple displays or communicates price changes and obtains consent when required
+
+### 3.6 Team Expiration and Grace
+
+- A paid Team plan allows Team reads and edits while the entitlement is active
+- When Team entitlement expires, the Team workspace becomes read-only for seven days
+- After that read-only period, shared Team access pauses until the owner renews
+- Personal leads and appointments remain separate and are not deleted because a Team plan expires
+- The owner can still manage the App Store subscription through Apple
 
 ## 4. User Accounts
 

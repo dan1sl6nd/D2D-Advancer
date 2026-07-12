@@ -304,6 +304,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launchArguments.append("-forceLightModeForUITests")
         app.launchArguments.append("-disableStoreKitForUITests")
         app.launchArguments.append("-resetPremiumForUITests")
+        app.launchArguments.append("-resetFirebaseAuthForUITests")
+        app.launchArguments.append("-resetTeamWorkspaceCacheForUITests")
         app.launchArguments.append(showTeamOffer ? "-showTeamPaywallForUITests" : "-showPaywallForUITests")
         app.launchArguments.append("-resetUITestLeads")
         return app
@@ -575,10 +577,7 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     private func dismissTeamKeyboardIfPresent(_ app: XCUIApplication) {
-        let doneButton = app.buttons["teamKeyboardDoneButton"]
-        if doneButton.waitForExistence(timeout: 2), doneButton.isHittable {
-            doneButton.tap()
-        }
+        dismissKeyboardIfPresent(app)
     }
 
     private func dismissKeyboardIfPresent(_ app: XCUIApplication) {
@@ -789,9 +788,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         }
         let button = app.buttons[identifier]
         XCTAssertTrue(button.waitForExistence(timeout: 3), "Expected button to appear after scrolling: \(identifier)")
+        let availableFrame = app.windows.firstMatch.frame.inset(by: UIEdgeInsets(top: 120, left: 0, bottom: 96, right: 0))
+        let visibleFrame = button.frame.intersection(availableFrame)
         XCTAssertTrue(
             hasVisibleTapFrame(button, in: app, excludingBottomChrome: true),
-            "Expected button to be visibly tappable after scrolling: \(identifier)"
+            "Expected button to be visibly tappable after scrolling: \(identifier); frame=\(button.frame), available=\(availableFrame), visible=\(visibleFrame)"
         )
         return button
     }
@@ -822,14 +823,8 @@ final class D2D_AdvancerUITests: XCTestCase {
                 return button
             }
 
-            if button.exists, isFinite(button.frame), isFinite(availableTapFrame(in: app)) {
-                let frame = button.frame
-                let availableFrame = availableTapFrame(in: app)
-                if frame.maxY < availableFrame.minY {
-                    dragContent(app, direction: .up)
-                } else {
-                    dragContent(app, direction: .down)
-                }
+            if let direction = scrollDirectionToReveal(button, in: app) {
+                dragContent(app, direction: direction)
             } else {
                 dragContent(app, direction: .down)
             }
@@ -1242,6 +1237,28 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testTeamWorkspaceInviteFieldKeyboardLayoutSmoke() throws {
+        try requireTeamEmulatorUITestHarness()
+
+        let runId = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(8)
+        let app = makeTeamEmulatorApp(
+            autoAuthEmail: "invite-layout-\(runId)@example.com",
+            autoAuthDisplayName: "Invite Layout",
+            autoAuthPassword: teamUITestCredentials().password,
+            shouldCreateAutoAuthAccount: true
+        )
+        app.launchArguments.append("-resetTeamWorkspaceCacheForUITests")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        openTeamWorkspace(app, expectedInitialText: "Create or Accept Team")
+        let inviteField = waitForIdentifiedElement(app, "teamInviteCodeField", timeout: 12)
+        typeText("ABC12345", into: inviteField)
+        dismissKeyboardIfPresent(app)
+        XCTAssertEqual(inviteField.value as? String, "ABC12345")
+    }
+
+    @MainActor
     func testTeamWorkspaceFirebaseAccountInviteJoinLeadAndOwnerAlert() throws {
         try requireTeamEmulatorUITestHarness()
 
@@ -1351,7 +1368,10 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapButton(ownerReturnApp, "teamLeadViewRepButton", timeout: 8)
         waitForText(ownerReturnApp, "Sales Rep", timeout: 8)
         waitForText(ownerReturnApp, "Rep UI", timeout: 8)
-        tapButton(ownerReturnApp, "teamRepDetailCloseButton", timeout: 8)
+        let repDetailCloseButton = ownerReturnApp.buttons["teamRepDetailCloseButton"]
+        XCTAssertTrue(repDetailCloseButton.waitForExistence(timeout: 8), "Rep detail close button should be available")
+        repDetailCloseButton.tap()
+        XCTAssertTrue(repDetailCloseButton.waitForNonExistence(timeout: 8), "Rep detail sheet should close before returning to the lead")
         tapButton(ownerReturnApp, "teamLeadDetailCloseButton", timeout: 8)
 
         relaunch(ownerReturnApp, opening: "-openMapTabForUITests")
@@ -1465,7 +1485,10 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapButton(app, "teamLeadViewRepButton", timeout: 8)
         waitForText(app, "Sales Rep", timeout: 8)
         waitForText(app, "Rep UI", timeout: 8)
-        tapButton(app, "teamRepDetailCloseButton", timeout: 8)
+        let repDetailCloseButton = app.buttons["teamRepDetailCloseButton"]
+        XCTAssertTrue(repDetailCloseButton.waitForExistence(timeout: 8), "Rep detail close button should be available")
+        repDetailCloseButton.tap()
+        XCTAssertTrue(repDetailCloseButton.waitForNonExistence(timeout: 8), "Rep detail sheet should close before returning to the lead")
         tapButton(app, "teamLeadDetailCloseButton", timeout: 8)
 
         relaunch(app, opening: "-openMapTabForUITests")

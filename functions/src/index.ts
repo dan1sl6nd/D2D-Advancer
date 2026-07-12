@@ -8,7 +8,6 @@ import {
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
-import { defineInt, defineString } from "firebase-functions/params";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import {
@@ -18,20 +17,15 @@ import {
   deriveTeamEntitlementState,
   normalizeTeamTransaction,
   NormalizedTeamTransaction,
+  teamAppAccountTokenForUser,
   TEAM_MEMBER_LIMIT
 } from "./teamEntitlement";
 
 initializeApp();
 setGlobalOptions({ maxInstances: 10, region: "us-central1" });
 
-const APPLE_APP_ID = defineInt("APPLE_APP_ID", {
-  default: 6738387157,
-  description: "Numeric App Store Apple ID for D2D Advancer"
-});
-const APPLE_BUNDLE_ID = defineString("APPLE_BUNDLE_ID", {
-  default: "dan1sland.D2D-Advancer",
-  description: "D2D Advancer bundle identifier"
-});
+const APPLE_APP_ID = 6751178741;
+const APPLE_BUNDLE_ID = "dan1sland.D2D-Advancer";
 
 const TEAM_SCHEMA_VERSION = 2;
 const ROOT_CERTIFICATE_FILES = [
@@ -76,13 +70,13 @@ function untrustedEnvironment(signedPayload: string): Environment | null {
 
 function verifier(environment: Environment): SignedDataVerifier {
   const appAppleId = environment === Environment.PRODUCTION
-    ? APPLE_APP_ID.value()
+    ? APPLE_APP_ID
     : undefined;
   return new SignedDataVerifier(
     rootCertificates(),
     true,
     environment,
-    APPLE_BUNDLE_ID.value(),
+    APPLE_BUNDLE_ID,
     appAppleId
   );
 }
@@ -145,13 +139,22 @@ function emulatorTeamTransaction(ownerUserId: string, value: unknown): Normalize
   const safeOwnerId = ownerUserId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 120);
   const expiresAtMillis = Date.now() + 365 * 24 * 60 * 60 * 1_000;
   return {
-    appAccountToken: `emulator-account-${safeOwnerId}`,
+    appAccountToken: teamAppAccountTokenForUser(ownerUserId),
     environment: "LocalTesting",
     expiresAtMillis,
     originalTransactionId: `emulator-original-${safeOwnerId}`,
-    productId: "com.d2dadvancer.team.yearly",
+    productId: "com.d2dadvancer.team3.yearly",
     transactionId: `emulator-transaction-${safeOwnerId}`
   };
+}
+
+function assertPurchaseBelongsToOwner(
+  ownerUserId: string,
+  transaction: NormalizedTeamTransaction
+): void {
+  if (transaction.appAccountToken.toLowerCase() !== teamAppAccountTokenForUser(ownerUserId)) {
+    throw new HttpsError("permission-denied", "This Team purchase belongs to another account.");
+  }
 }
 
 function assertSafeDocumentId(value: string): void {
@@ -218,6 +221,7 @@ async function syncEntitlementForOwner(
   ownerUserId: string,
   transaction: NormalizedTeamTransaction
 ): Promise<{ planStatus: string; teamId: string | null }> {
+  assertPurchaseBelongsToOwner(ownerUserId, transaction);
   assertSafeDocumentId(transaction.originalTransactionId);
   assertSafeDocumentId(transaction.appAccountToken);
 
@@ -302,6 +306,7 @@ export const createTeamWorkspace = onCall({ timeoutSeconds: 30 }, async (request
 
   const verifiedTransaction = emulatorTeamTransaction(ownerUserId, request.data?.signedTransaction)
     ?? await verifyTransactionJWS(requireSignedTransaction(request.data?.signedTransaction));
+  assertPurchaseBelongsToOwner(ownerUserId, verifiedTransaction);
   const now = new Date();
   const state = deriveTeamEntitlementState(verifiedTransaction, now.getTime());
   if (state.planStatus !== "active") {

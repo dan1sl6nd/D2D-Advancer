@@ -47,9 +47,14 @@ service cloud.firestore {
           )
           || (
             data.planStatus == "grace"
-            && "graceEndsAt" in data
-            && data.graceEndsAt is timestamp
-            && data.graceEndsAt > request.time
+            && (
+              !("graceEndsAt" in data)
+              || data.graceEndsAt == null
+              || (
+                data.graceEndsAt is timestamp
+                && data.graceEndsAt > request.time
+              )
+            )
           )
         );
     }

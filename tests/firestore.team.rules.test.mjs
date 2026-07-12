@@ -121,7 +121,7 @@ describe("D2D team Firestore rules", () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
       await updateDoc(doc(db, "teams/team-1"), {
-        graceEndsAt: Timestamp.fromMillis(Date.now() - 1)
+        graceEndsAt: Timestamp.fromMillis(Date.now() - 60_000)
       });
     });
 
@@ -766,7 +766,7 @@ function verifiedTeamData(ownerUserId, now, { planExpiresAt, graceEndsAt }) {
   return {
     ...teamData(ownerUserId, now),
     billingOriginalTransactionId: "1000000001",
-    billingProductId: "com.d2dadvancer.team.yearly",
+    billingProductId: "com.d2dadvancer.team3.yearly",
     billingSource: "app_store",
     graceEndsAt,
     planExpiresAt,

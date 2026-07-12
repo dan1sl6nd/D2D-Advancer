@@ -1471,7 +1471,7 @@ struct StatusProgressCardView: View {
     
     private var percentage: Double {
         guard total > 0 else { return 0 }
-        return Double(count) / Double(total)
+        return min(max(Double(count) / Double(total), 0), 1)
     }
     
     private var statusColor: Color {
@@ -1510,7 +1510,10 @@ struct StatusProgressCardView: View {
 
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
                             .fill(statusColor)
-                            .frame(width: geometry.size.width * percentage, height: 6)
+                            .frame(
+                                width: ObsidianLayout.finiteDimension(geometry.size.width) * CGFloat(percentage),
+                                height: 6
+                            )
                     }
                 }
                 .frame(height: 6)

@@ -1,20 +1,21 @@
 # D2D Advancer App Store Release Checklist
 
-Last audited: July 10, 2026
+Last audited: July 12, 2026
 
 This file separates local engineering proof from App Store Connect and production-service proof. Do not mark an item complete based on simulator evidence alone.
 
 ## Product Identity
 
-- App Store app ID: `6738387157`
+- App Store app ID: `6751178741`
 - Bundle ID: `dan1sland.D2D-Advancer`
 - Developer Team ID: `RF247ARQB7`
-- Current marketing version: `1.1`
-- Current project build number: `1`
+- Live App Store version: `1.2`
+- Next marketing version: `1.3`
+- Next project build number: `2`
 - Minimum iOS version: `18.5`
 - Category: Business
 
-Before uploading, confirm in App Store Connect that build number `1` has not already been used for version `1.1`. Increment it in Xcode if it has.
+Before uploading, confirm build `2` has not already been used for version `1.3`. Increment the project build number again if necessary.
 
 ## Toolchain Requirement
 
@@ -24,19 +25,27 @@ Apple requires iOS submissions to be built with Xcode 26 or later and the iOS 26
 
 Subscription group: `Premium Access`
 
-| Product | Product ID | Duration | Local StoreKit price | Trial |
+| Product | Product ID | Duration | Intended US price | Availability |
 | --- | --- | --- | --- | --- |
-| Weekly Plan | `com.d2dadvancer.weekly` | 1 week | USD 9.99 | 3 days |
-| Yearly Plan | `com.d2dadvancer.yearly` | 1 year | USD 36.99 | None |
+| Solo Monthly | `com.d2dadvancer.solo.monthly` | 1 month | USD 9.99 | New paywall |
+| Solo Yearly | `com.d2dadvancer.solo.yearly` | 1 year | USD 99.99 | New paywall |
+| Team Monthly | `com.d2dadvancer.team3.monthly` | 1 month | USD 29.99 | New paywall |
+| Team Yearly | `com.d2dadvancer.team3.yearly` | 1 year | USD 299.99 | New paywall |
+| Legacy Weekly | `com.d2dadvancer.weekly` | 1 week | Existing App Store price | Existing subscribers |
+| Legacy Yearly | `com.d2dadvancer.yearly` | 1 year | Existing App Store price | Existing subscribers |
+| Legacy Monthly | `com.d2dadvancer.monthly` | 1 month | Existing App Store price | Recognition only |
+| Legacy Team Monthly | `com.d2dadvancer.team.monthly` | 1 month | Existing App Store price | Recognition only |
+| Legacy Team Yearly | `com.d2dadvancer.team.yearly` | 1 year | Existing App Store price | Recognition only |
 
 App Store Connect checks:
 
-- [ ] Both product IDs exactly match the app and StoreKit configuration.
+- [ ] All product IDs exactly match the app, StoreKit configuration, Cloud Functions, and App Store Connect.
+- [ ] Team products are a higher subscription level than Solo; monthly/yearly variants with equal access share a level.
 - [ ] Products are available in the intended territories.
 - [ ] Prices and trial terms match the paywall shown in the submitted build.
 - [ ] Subscription localizations are complete and within App Store Connect limits.
 - [ ] Paid Applications agreement, tax, and banking status are active.
-- [ ] Both subscriptions are attached to the version submitted for review when required.
+- [ ] All four new subscriptions are attached to the version submitted for review when required.
 - [ ] Purchase, restore, renewal-state, expiration, cancellation, and billing-retry behavior are tested with StoreKit sandbox/TestFlight.
 
 ## Store Listing
@@ -84,6 +93,7 @@ Match App Store Connect answers to the app privacy manifest and hosted policy. C
 - Email Address
 - Phone Number
 - User ID
+- Purchase History
 - Photos or Videos
 - Audio Data
 - Other User Content
@@ -95,6 +105,7 @@ The app declares no cross-app tracking. Do not select Analytics for app-owned da
 - [ ] Confirm 30-day Team duty-location retention is disclosed.
 - [ ] Confirm owner/member visibility and assigned-record privacy are disclosed.
 - [ ] Confirm Sign in with Apple and Firebase account deletion are described accurately.
+- [ ] Replace the live `Data Not Collected` answer with disclosures that match Team/Firebase and optional user-entered data handling.
 
 ## Permissions and Review Notes
 
@@ -127,19 +138,22 @@ Suggested review path:
 
 ## Local Engineering Gate
 
-- [x] Clean Release build and static analysis complete with zero errors and reviewed warnings.
-- [x] Full unit-test target passes from a fresh result bundle (175 tests).
-- [x] Serial UI smoke suite passes on a current iPhone simulator (21 broad passes plus the repaired onboarding flow rerun).
+- [x] Clean Release build and static analysis complete with zero errors and reviewed warnings for version `1.3 (2)`.
+- [x] Full unit-test target passes from a fresh result bundle (185 tests).
+- [ ] Serial UI smoke suite passes on a current iPhone simulator after the subscription/backend migration.
+- [x] Focused paywall and multi-account Team migration UI flows pass on a current iPhone simulator.
 - [x] Primary navigation and layout pass in light and dark mode.
 - [x] iPad primary-navigation smoke tests pass in light and dark mode.
 - [ ] Permission prompts and denied-permission states are tested.
 - [ ] Account creation, Sign in with Apple, sign-out, and both deletion confirmation methods are tested.
 - [x] Large lead dataset map/list performance is tested with 2,000 leads.
-- [x] Firebase rules tests (21) and Team emulator end-to-end test pass.
-- [x] `PrivacyInfo.xcprivacy` is present in the exported app and validates.
+- [x] Team entitlement policy tests pass (6 tests).
+- [x] Firebase rules and callable Team emulator end-to-end tests pass after server-authoritative billing changes (22 rules tests and 1 integration test).
+- [x] Functions production dependency audit reviewed: no high or critical advisories; 8 moderate transitive advisories remain pending a supported Firebase SDK fix.
+- [x] `PrivacyInfo.xcprivacy` is present in the archived app and validates.
 - [x] Every app icon is opaque and the 1024x1024 marketing icon is present.
-- [x] Generic-device Release archive succeeds.
-- [x] App Store Connect IPA export succeeds with Cloud Managed Apple Distribution signing.
+- [x] Generic-device Release archive succeeds for version `1.3 (2)`.
+- [ ] App Store Connect IPA export succeeds with Cloud Managed Apple Distribution signing for the current archive.
 
 ## Physical Device and TestFlight Gate
 
@@ -156,6 +170,8 @@ Suggested review path:
 ## Production and App Store Connect Gate
 
 - [ ] Production Firestore rules match the tested repository rules.
+- [ ] Firebase Cloud Functions are deployed and `createTeamWorkspace` rejects missing, invalid, replayed, or expired Team transactions.
+- [ ] App Store Server Notifications V2 points to the deployed notification function and passes Sandbox testing.
 - [ ] Firebase Authentication has Sign in with Apple enabled and configured for the production bundle.
 - [ ] CloudKit production schema is deployed and query/index requirements are verified.
 - [ ] App Store Connect version metadata, age-rating questionnaire, content-rights answers, export compliance, privacy answers, and review contact are complete.

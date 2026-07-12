@@ -294,7 +294,6 @@ struct TeamLeadDetailSheet: View {
                 }
                 .accessibilityIdentifier("teamLeadDetailCloseButton")
             }
-            .accessibilityIdentifier("teamLeadDetailSheet")
         }
         .obsidianModalBackground()
         .onDisappear {
@@ -305,7 +304,9 @@ struct TeamLeadDetailSheet: View {
             resetEditableFields(from: lead)
         }
         .sheet(item: $selectedRepWorkspace) { workspace in
-            TeamRepDetailSheet(initialWorkspace: workspace)
+            TeamRepDetailSheet(initialWorkspace: workspace) {
+                selectedRepWorkspace = nil
+            }
         }
     }
 

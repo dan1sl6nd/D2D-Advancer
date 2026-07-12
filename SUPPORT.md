@@ -6,9 +6,9 @@ description: Help and support for D2D Advancer
 
 # D2D Advancer Support
 
-**App version:** 1.1
+**App version:** 1.3
 
-**Last updated:** July 10, 2026
+**Last updated:** July 12, 2026
 
 For help that is not covered below, email [dan1sl6nd@gmail.com](mailto:dan1sl6nd@gmail.com). Include your device model, iOS version, app version, and the steps that caused the problem. Do not send customer names, addresses, phone numbers, invite codes, passwords, or screenshots containing private lead data unless support specifically requests a redacted example.
 
@@ -75,12 +75,13 @@ Open iOS **Settings > Privacy & Security > Location Services > D2D Advancer** an
 - Sales reps see work assigned to them and leads they create inside Team.
 - Technicians see assigned service jobs, customer details, navigation, and arrival timing.
 - Location is shared only while a member is manually On Duty. Going Off Duty removes the live marker.
+- When the owner's Team plan expires, all Team edits pause immediately, records remain readable for seven days, and shared access pauses after that grace period until renewal.
 
 If Team says it is offline, confirm internet access, reopen Team Workspace, and refresh. If permissions remain stale after refresh, sign out of the Team identity and sign in again with the same Apple Account.
 
 ## Subscriptions
 
-D2D Advancer offers weekly and yearly plans. Prices and trial eligibility are shown by Apple before purchase.
+D2D Advancer offers Solo Monthly, Solo Yearly, Team Monthly, and Team Yearly plans. Team includes one owner and two worker seats. Prices and any trial eligibility are shown by Apple before purchase. Legacy weekly or yearly subscribers keep the entitlement associated with their existing purchase.
 
 - To restore a purchase, open the paywall and tap **Restore Purchases**.
 - To manage or cancel, open iOS **Settings > Apple Account > Subscriptions > D2D Advancer**.

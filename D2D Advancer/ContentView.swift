@@ -48,11 +48,10 @@ struct ContentView: View {
                 paywallManager.setPremiumStatus(false)
                 paywallManager.showSoloPaywall()
             }
-
-            // Check subscription status when app launches
-            Task {
-                await paywallManager.checkSubscriptionStatus()
-            }
+        }
+        .task {
+            await paywallManager.loadProducts()
+            await paywallManager.checkSubscriptionStatus()
         }
     }
 }

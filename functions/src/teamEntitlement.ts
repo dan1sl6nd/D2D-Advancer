@@ -1,9 +1,13 @@
+import { createHash } from "node:crypto";
+
 export const TEAM_MEMBER_LIMIT = 3;
 export const TEAM_GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1_000;
 
 export const TEAM_PRODUCT_IDS = new Set([
   "com.d2dadvancer.team.monthly",
-  "com.d2dadvancer.team.yearly"
+  "com.d2dadvancer.team.yearly",
+  "com.d2dadvancer.team3.monthly",
+  "com.d2dadvancer.team3.yearly"
 ]);
 
 export type TeamPlanStatus = "active" | "grace" | "paused";
@@ -32,6 +36,23 @@ export interface NormalizedTeamTransaction {
 export interface TeamEntitlementState {
   graceEndsAtMillis: number;
   planStatus: TeamPlanStatus;
+}
+
+export function teamAppAccountTokenForUser(ownerUserId: string): string {
+  const bytes = Buffer.from(
+    createHash("sha256").update(`d2d-team:${ownerUserId}`, "utf8").digest().subarray(0, 16)
+  );
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = bytes.toString("hex");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20)
+  ].join("-");
 }
 
 export function normalizeTeamTransaction(

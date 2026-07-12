@@ -115,6 +115,13 @@ final class TeamFirebaseService: ObservableObject {
     private static let cachedMembershipKey = "teamFirebase.cachedMembership.v1"
     private static let cachedMembershipMaxAge: TimeInterval = 14 * 24 * 60 * 60
 
+    #if DEBUG
+    static func resetCachedMembershipForUITests() {
+        UserDefaults.standard.removeObject(forKey: cachedMembershipKey)
+        UserDefaults.standard.synchronize()
+    }
+    #endif
+
     private let db: Firestore
     private var teamListenerRegistrations: [ListenerRegistration] = []
     private var hasPreparedFirestoreNetwork = false

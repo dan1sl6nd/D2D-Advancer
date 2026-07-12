@@ -29,12 +29,14 @@ import {
 const projectId = "d2d-advancer";
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST;
-const functionsHost = process.env.FUNCTIONS_EMULATOR_HOST;
+// Firebase CLI does not export this variable in every release. The fallback
+// matches the fixed Functions emulator port in firebase.json and is never used
+// unless Auth and Firestore emulator variables prove this is an emulator run.
+const functionsHost = process.env.FUNCTIONS_EMULATOR_HOST ?? "127.0.0.1:5001";
 
 test("created owner and rep Firebase accounts can create and join a team", async () => {
   assert.ok(authHost, "FIREBASE_AUTH_EMULATOR_HOST must be set by firebase emulators:exec");
   assert.ok(firestoreHost, "FIRESTORE_EMULATOR_HOST must be set by firebase emulators:exec");
-  assert.ok(functionsHost, "FUNCTIONS_EMULATOR_HOST must be set by firebase emulators:exec");
 
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const inviteCode = `E2E${runId.replace(/[^A-Z0-9]/gi, "").slice(-6).toUpperCase()}`;

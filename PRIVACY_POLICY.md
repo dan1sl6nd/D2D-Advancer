@@ -6,9 +6,9 @@ description: Privacy Policy for the D2D Advancer iOS app
 
 # Privacy Policy for D2D Advancer
 
-**Effective date:** July 10, 2026
+**Effective date:** July 12, 2026
 
-**Last updated:** July 10, 2026
+**Last updated:** July 12, 2026
 
 D2D Advancer ("we," "our," or "us") is a field-sales and service-work management app. This policy explains what information the app handles, why it is used, where it is stored, and the choices available to you.
 
@@ -40,7 +40,7 @@ The current release does not request Always Location permission and does not per
 
 ### Subscription information
 
-Purchases and subscriptions are processed by Apple through StoreKit. We receive subscription entitlement status but do not receive or store your full payment-card details.
+Purchases and subscriptions are processed by Apple through StoreKit. For Team plans, Apple's signed transaction identifier, product identifier, expiration status, and an app-account token are linked to the Firebase Team owner so the backend can verify access, prevent one purchase from being reused by another account, and apply the read-only grace period. We do not receive or store your full payment-card details.
 
 ### Diagnostics and attribution
 
@@ -56,7 +56,7 @@ We use information to:
 - assign leads and jobs to authorized Team members;
 - share on-duty location with the authorized Team users described above;
 - deliver local reminders selected by the user;
-- process subscription entitlements; and
+- verify Solo and Team subscription entitlements;
 - secure, maintain, and troubleshoot the app.
 
 ## Where Information Is Stored
@@ -67,7 +67,7 @@ Personal leads and appointments are stored locally using Apple's Core Data techn
 
 ### Team workspace
 
-Team identity, membership, assigned Team leads and jobs, activity records, and on-duty location records are stored in Google Firebase Authentication and Cloud Firestore. Access is restricted by authenticated user identity, Team role, and assignment rules.
+Team identity, membership, assigned Team leads and jobs, activity records, on-duty location records, and Team entitlement records are stored using Google Firebase Authentication, Cloud Firestore, and Cloud Functions. Access is restricted by authenticated user identity, Team role, assignment rules, and server-verified plan state.
 
 ### On-device storage
 
@@ -80,7 +80,7 @@ Data is transmitted using encrypted network connections provided by Apple, Googl
 We disclose information only as needed to operate the app, when you direct us to share it, or when required by law.
 
 - **Apple:** iCloud/CloudKit, Sign in with Apple, MapKit and geocoding, StoreKit, app distribution, and operating-system services.
-- **Google Firebase:** Team authentication and Team workspace database services.
+- **Google Firebase:** Team authentication, Team workspace database services, and server-side Team entitlement verification.
 - **Authorized Team users:** Team owners can view Team records and on-duty member location. Workers can view only work assigned to them, their own active-hours route, and the owner's on-duty location where enabled.
 
 We may disclose information when reasonably necessary to comply with law, protect users, investigate abuse, or protect the rights and security of D2D Advancer.
@@ -89,6 +89,7 @@ We may disclose information when reasonably necessary to comply with law, protec
 
 - Personal workspace data remains on the device and, when enabled, in the user's private iCloud storage until the user deletes it or removes the app's iCloud data.
 - Team account information is retained while the Team identity is active.
+- Team subscription bindings and transaction identifiers are retained as needed to verify access, prevent entitlement reuse, process renewals or refunds, and meet legal or accounting obligations.
 - On-duty Team location points and route sessions are retained for up to 30 days.
 - Local reminders remain until completed, cancelled, or removed under the app's reminder settings.
 - A worker's shared Team work records may remain in the Team owner's workspace after the worker leaves or deletes their Team identity because those records are part of the owner's business workflow. The deleted worker no longer has Team access.

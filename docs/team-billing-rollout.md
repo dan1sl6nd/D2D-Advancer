@@ -4,7 +4,8 @@
 
 - Existing Team documents without `billingSource` are grandfathered. They keep their current members and data.
 - Existing `com.d2dadvancer.weekly` and `com.d2dadvancer.yearly` subscribers remain valid Solo subscribers.
-- New Team workspaces require `com.d2dadvancer.team.monthly` or `com.d2dadvancer.team.yearly`.
+- Prior `com.d2dadvancer.monthly`, `com.d2dadvancer.team.monthly`, and `com.d2dadvancer.team.yearly` transactions remain recognized but hidden from new purchases.
+- New Team workspaces require `com.d2dadvancer.team3.monthly` or `com.d2dadvancer.team3.yearly`.
 - Expired Team plans are readable for seven days, with every Team write blocked. Reads stop after grace.
 - No migration deletes personal Firebase data, private iCloud data, Team records, or App Store transactions.
 
@@ -12,13 +13,14 @@
 
 Create these products in the existing Premium Access subscription group:
 
-| Product ID | Display name | Period |
-| --- | --- | --- |
-| `com.d2dadvancer.monthly` | Solo Monthly | 1 month |
-| `com.d2dadvancer.team.monthly` | Team Monthly | 1 month |
-| `com.d2dadvancer.team.yearly` | Team Yearly | 1 year |
+| Product ID | Display name | Period | Intended US price |
+| --- | --- | --- | --- |
+| `com.d2dadvancer.solo.monthly` | Solo Monthly | 1 month | $9.99 |
+| `com.d2dadvancer.solo.yearly` | Solo Yearly | 1 year | $99.99 |
+| `com.d2dadvancer.team3.monthly` | Team Monthly | 1 month | $29.99 |
+| `com.d2dadvancer.team3.yearly` | Team Yearly | 1 year | $299.99 |
 
-Keep `com.d2dadvancer.yearly` and `com.d2dadvancer.weekly` active for existing customers. The weekly product stays hidden from new purchases in the app.
+Keep all existing subscription products available to their current subscribers. Legacy products stay hidden from new purchases in the app.
 
 Configure App Store Server Notifications V2 with the deployed HTTPS URL for `appStoreServerNotifications`. Use the same endpoint for Sandbox while validating the rollout.
 

@@ -183,10 +183,28 @@ struct TeamWorkspaceTests {
         let ownerToken = PaywallManager.teamAppAccountToken(for: "owner-1")
         #expect(ownerToken == PaywallManager.teamAppAccountToken(for: "owner-1"))
         #expect(ownerToken != PaywallManager.teamAppAccountToken(for: "owner-2"))
+        #expect(ownerToken == UUID(uuidString: "5dea72f7-ed61-55f2-b315-9dfefbbffd78"))
         #expect(PaywallManager.SubscriptionPlan.teamMonthly.isTeamPlan)
         #expect(PaywallManager.SubscriptionPlan.teamYearly.isTeamPlan)
         #expect(!PaywallManager.SubscriptionPlan.weekly.isTeamPlan)
         #expect(!PaywallManager.SubscriptionPlan.yearly.isTeamPlan)
+
+        #expect(SubscriptionProductCatalog.recognizes("com.d2dadvancer.weekly"))
+        #expect(SubscriptionProductCatalog.recognizes("com.d2dadvancer.yearly"))
+        #expect(SubscriptionProductCatalog.recognizes("com.d2dadvancer.monthly"))
+        #expect(SubscriptionProductCatalog.recognizes("com.d2dadvancer.team.monthly"))
+        #expect(SubscriptionProductCatalog.recognizes("com.d2dadvancer.team.yearly"))
+        #expect(SubscriptionProductCatalog.recognizes("com.d2dadvancer.solo.monthly"))
+        #expect(SubscriptionProductCatalog.recognizes("com.d2dadvancer.solo.yearly"))
+        #expect(SubscriptionProductCatalog.recognizes("com.d2dadvancer.team3.monthly"))
+        #expect(SubscriptionProductCatalog.recognizes("com.d2dadvancer.team3.yearly"))
+        #expect(!SubscriptionProductCatalog.recognizes("com.d2dadvancer.unknown"))
+        #expect(SubscriptionProductCatalog.team == [
+            "com.d2dadvancer.team.monthly",
+            "com.d2dadvancer.team.yearly",
+            "com.d2dadvancer.team3.monthly",
+            "com.d2dadvancer.team3.yearly"
+        ])
     }
 
     @Test func ownerAndRepMemberRecordsUseExpectedRolesAndInviteLink() {

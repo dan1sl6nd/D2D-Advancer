@@ -5,6 +5,7 @@ const {
   cleanRequiredText,
   deriveTeamEntitlementState,
   normalizeTeamTransaction,
+  teamAppAccountTokenForUser,
   TEAM_GRACE_PERIOD_MS
 } = require("../lib/teamEntitlement.js");
 
@@ -39,10 +40,20 @@ describe("Team entitlement migration policy", () => {
       environment: "Sandbox",
       expiresDate: now + 60_000,
       originalTransactionId: "1000000001",
-      productId: "com.d2dadvancer.team.yearly",
+      productId: "com.d2dadvancer.team3.yearly",
       transactionId: "1000000002"
     });
-    assert.equal(normalized.productId, "com.d2dadvancer.team.yearly");
+    assert.equal(normalized.productId, "com.d2dadvancer.team3.yearly");
+
+    const legacyTeam = normalizeTeamTransaction({
+      appAccountToken: "0d111c55-7c4d-4f56-8c73-04aa7ef3c2a1",
+      environment: "Sandbox",
+      expiresDate: now + 60_000,
+      originalTransactionId: "1000000003",
+      productId: "com.d2dadvancer.team.yearly",
+      transactionId: "1000000004"
+    });
+    assert.equal(legacyTeam.productId, "com.d2dadvancer.team.yearly");
 
     assert.throws(() => normalizeTeamTransaction({
       appAccountToken: "0d111c55-7c4d-4f56-8c73-04aa7ef3c2a1",
@@ -52,6 +63,17 @@ describe("Team entitlement migration policy", () => {
       productId: "com.d2dadvancer.yearly",
       transactionId: "1000000002"
     }));
+  });
+
+  it("derives the same stable owner token as the iOS client", () => {
+    assert.equal(
+      teamAppAccountTokenForUser("owner-1"),
+      "5dea72f7-ed61-55f2-b315-9dfefbbffd78"
+    );
+    assert.notEqual(
+      teamAppAccountTokenForUser("owner-1"),
+      teamAppAccountTokenForUser("owner-2")
+    );
   });
 
   it("normalizes user-entered team identity fields", () => {

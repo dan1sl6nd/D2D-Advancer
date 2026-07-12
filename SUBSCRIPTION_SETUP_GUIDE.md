@@ -1,220 +1,75 @@
-# Subscription Setup Guide for D2D Advancer
+# D2D Advancer Subscription Setup
 
-This guide walks you through setting up in-app subscriptions using StoreKit 2.
+Last updated: July 12, 2026
 
-## ✅ What's Already Done
+## Product model
 
-- ✅ PaywallManager.swift implemented with full StoreKit 2
-- ✅ PaywallView.swift with professional UI
-- ✅ Lead tracking and paywall triggering
-- ✅ Configuration.storekit file for local testing
+All products belong to one App Store subscription group so a customer cannot accidentally hold Solo and Team at the same time.
 
-## 📋 Steps to Complete Setup
+| Level | Product ID | Reference name | Period | Intended US price |
+| --- | --- | --- | --- | --- |
+| 1 | `com.d2dadvancer.team3.yearly` | Team Yearly | 1 year | $299.99 |
+| 1 | `com.d2dadvancer.team3.monthly` | Team Monthly | 1 month | $29.99 |
+| 2 | `com.d2dadvancer.solo.yearly` | Solo Yearly | 1 year | $99.99 |
+| 2 | `com.d2dadvancer.solo.monthly` | Solo Monthly | 1 month | $9.99 |
 
-### 1. App Store Connect Setup
+Team includes one owner plus two worker seats. A worker can be a sales rep or technician. Workers receive assigned Team work without buying their own Team subscription.
 
-#### A. Create Your App (if not already done)
-1. Go to [App Store Connect](https://appstoreconnect.apple.com)
-2. Click "My Apps" → "+" → "New App"
-3. Fill in app information:
-   - Platform: iOS
-   - Name: D2D Advancer
-   - Primary Language: English
-   - Bundle ID: **Must match your Xcode Bundle ID exactly**
-   - SKU: Any unique identifier (e.g., `d2d-advancer-2025`)
+## Legacy products
 
-#### B. Create Subscription Group
-1. In your app → Click "Features" tab
-2. Click "In-App Purchases" section
-3. Click "+" next to "Subscription Groups"
-4. Name: `Premium Access` (or similar)
-5. Click "Create"
+Do not delete these existing products or remove entitlement recognition from the app:
 
-#### C. Create Subscriptions
+- `com.d2dadvancer.weekly`
+- `com.d2dadvancer.yearly`
+- `com.d2dadvancer.monthly`
+- `com.d2dadvancer.team.monthly`
+- `com.d2dadvancer.team.yearly`
 
-**Weekly Subscription:**
-1. Inside your subscription group, click "+"
-2. Select "Auto-Renewable Subscription"
-3. Fill in:
-   - **Reference Name**: Weekly Premium
-   - **Product ID**: `com.d2dadvancer.weekly` (must match PaywallManager.swift)
-   - **Subscription Duration**: 1 Week
+They stay hidden from the new paywall but remain recognized for any signed legacy, sandbox, TestFlight, or production transaction. The app prefers the new Solo Yearly product and falls back to the legacy yearly product while the new App Store products are being approved.
 
-4. Subscription Prices:
-   - Click "Add Pricing"
-   - Select all territories
-   - Price: **$9.99 USD**
+## App Store Connect setup
 
-5. **Add Free Trial**:
-   - Scroll to "Subscription Offers"
-   - Click "Create Introductory Offer"
-   - Type: Free
-   - Duration: 3 Days
-   - One time offer
+1. Open D2D Advancer, App ID `6751178741`.
+2. Add the four new products to the existing subscription group.
+3. Put both Team periods at the higher subscription level and both Solo periods at the lower level.
+4. Add localization, review screenshots, tax category, territory availability, and pricing for every product.
+5. Keep the current weekly and yearly products available for existing subscribers, but do not present weekly to new customers in the app.
+6. Configure App Store Server Notifications V2 using the deployed `appStoreServerNotifications` Cloud Function URL.
 
-6. Localization (English - U.S.):
-   - Display Name: `Weekly Plan`
-   - Description: `Get unlimited leads with our weekly subscription. Includes 3-day free trial.`
+Apple's purchase sheet is the source of truth for localized price, taxes, renewal terms, and trial eligibility. Do not hard-code those claims into the paywall or legal pages.
 
-**Yearly Subscription:**
-1. Click "+" to add another subscription
-2. Fill in:
-   - **Reference Name**: Yearly Premium
-   - **Product ID**: `com.d2dadvancer.yearly` (must match PaywallManager.swift)
-   - **Subscription Duration**: 1 Year
+## Backend enforcement
 
-3. Subscription Prices:
-   - Price: **$36.99 USD**
+The app sends Apple's signed StoreKit transaction to Firebase callable functions. The backend:
 
-4. Localization (English - U.S.):
-   - Display Name: `Yearly Plan`
-   - Description: `Best value! Get unlimited leads for a full year. Save 93% compared to weekly.`
+- verifies the JWS against Apple root certificates;
+- checks the bundle ID and App Store app ID;
+- accepts only Team product IDs for Team creation;
+- binds an original transaction and app-account token to one Firebase owner;
+- creates Team billing fields with Firebase Admin; and
+- applies active, seven-day read-only grace, or paused access.
 
-#### D. App Review Information (Required)
-For each subscription, you need to provide:
-1. **Screenshot**: Take a screenshot of the PaywallView showing the subscription
-2. **Review Notes**: Explain how to trigger the paywall
-   ```
-   To test subscriptions:
-   1. Launch the app (no login required - guest mode)
-   2. Tap the "+" button to add leads
-   3. After adding 10 leads, the paywall will appear
-   4. Select a plan and purchase
+Firestore rules reject Team creation from iPhone clients. Existing Team documents without `billingSource` are grandfathered so old Team data is adopted rather than invalidated.
 
-   Test credentials are not needed (guest mode enabled).
-   ```
+## Rollout order
 
-### 2. Xcode Configuration
+1. Create and approve the four new products.
+2. Run `npm --prefix functions test` and `npm --prefix functions run build`.
+3. Deploy Cloud Functions.
+4. Configure and test App Store Server Notifications V2 in Sandbox.
+5. Release app version `1.3 (2)` or higher.
+6. Deploy the final Firestore rules that reject client-created teams.
+7. Test purchase, restore, Solo-to-Team upgrade, Team-to-Solo downgrade, renewal, expiration, refund, grace, and account deletion.
 
-#### A. Enable In-App Purchase Capability
-1. Open your Xcode project
-2. Select your target → "Signing & Capabilities"
-3. Click "+ Capability"
-4. Add "In-App Purchase"
+## Sandbox acceptance checks
 
-#### B. Configure StoreKit Testing
-1. In Xcode, go to Product → Scheme → Edit Scheme
-2. Select "Run" → "Options" tab
-3. Under "StoreKit Configuration", select "Configuration.storekit"
-4. This lets you test purchases without real money
+- A new Solo purchase unlocks personal lead, map, Work, and iCloud features.
+- A legacy yearly or weekly entitlement still unlocks Solo.
+- A Team purchase unlocks Solo features and permits one Team workspace.
+- One Team transaction cannot create workspaces for two Firebase owners.
+- The owner can invite exactly two workers under the included three-seat limit.
+- Expiration blocks edits while preserving seven days of reads.
+- Renewal restores Team access without deleting members, leads, jobs, or activity.
+- Restore Purchases works after reinstall with the same Apple and Team identity.
 
-#### C. Update Product IDs (if needed)
-In `PaywallManager.swift` (lines 21-22), verify these match your App Store Connect product IDs:
-```swift
-private let weeklyProductID = "com.d2dadvancer.weekly"
-private let yearlyProductID = "com.d2dadvancer.yearly"
-```
-
-### 3. Testing with Sandbox
-
-#### A. Create Sandbox Tester Account
-1. App Store Connect → Users and Access
-2. Sandbox Testers → "+" button
-3. Create test account (use fake but valid-format email)
-4. **Important**: Use a different country than your real Apple ID to avoid conflicts
-
-#### B. Test on Device
-1. Sign out of App Store on your test device (Settings → App Store → Sign Out)
-2. Build and run your app from Xcode
-3. Add 10 leads to trigger paywall
-4. Attempt a purchase
-5. When prompted, sign in with your sandbox tester account
-6. Complete test purchase (won't charge real money)
-
-#### C. Test Scenarios
-- ✅ Free trial starts correctly (weekly plan)
-- ✅ Purchase completes successfully
-- ✅ Premium features unlock
-- ✅ Restore purchases works
-- ✅ Subscription auto-renews (accelerated in sandbox)
-- ✅ Cancellation works
-
-### 4. Production Checklist
-
-Before submitting to App Review:
-
-- [ ] All subscription metadata filled in App Store Connect
-- [ ] Screenshots and review notes provided
-- [ ] Tested with sandbox account
-- [ ] Privacy policy mentions subscriptions
-- [ ] App binary includes In-App Purchase capability
-- [ ] Subscription terms clearly displayed in app
-- [ ] Auto-renewal notice in UI (already in PaywallView)
-- [ ] Restore purchases button visible (already in PaywallView)
-
-### 5. Important Legal Requirements
-
-Your app already includes these (in PaywallView.swift):
-- ✅ Price clearly displayed
-- ✅ Subscription duration shown
-- ✅ Auto-renewal disclosure
-- ✅ Cancellation instructions
-- ✅ Free trial terms (for weekly)
-- ✅ Restore purchases option
-
-### 6. Monitoring & Analytics
-
-After launch, monitor in App Store Connect:
-- Sales and Trends → Subscriptions
-- Track:
-  - New subscriptions
-  - Renewals
-  - Cancellations
-  - Trial conversions
-  - Revenue
-
-## 🧪 Local Testing (No App Store Connect Needed)
-
-For development, use the included `Configuration.storekit` file:
-
-1. In Xcode: Product → Scheme → Edit Scheme → Run → Options
-2. Select "Configuration.storekit" under StoreKit Configuration
-3. Build and run
-4. Purchases will be simulated locally
-5. **Note**: Actual transactions only work with real App Store products
-
-## 🔧 Troubleshooting
-
-**Products not loading?**
-- Verify Bundle ID matches App Store Connect
-- Check product IDs are identical in code and App Store Connect
-- Products must be "Ready to Submit" status
-- Wait 15 minutes after creating products for them to propagate
-
-**Sandbox purchases failing?**
-- Sign out of real App Store account on device
-- Use sandbox tester account created in App Store Connect
-- Check sandbox account hasn't been used on too many devices (max 10)
-
-**"Cannot connect to iTunes Store" error?**
-- Normal in Simulator (use StoreKit configuration instead)
-- On device: Check internet connection
-- Verify sandbox tester email/password
-
-**Subscription not recognized after purchase?**
-- Check Transaction.currentEntitlements in PaywallManager
-- Verify transaction is being finished
-- Look for verification errors in console
-
-## 📞 Support Resources
-
-- [Apple In-App Purchase Documentation](https://developer.apple.com/in-app-purchase/)
-- [StoreKit 2 Guide](https://developer.apple.com/documentation/storekit)
-- [App Store Connect Help](https://help.apple.com/app-store-connect/)
-
-## 🎯 Quick Reference
-
-**Product IDs (Update if needed):**
-- Weekly: `com.d2dadvancer.weekly`
-- Yearly: `com.d2dadvancer.yearly`
-
-**Pricing:**
-- Weekly: $9.99/week with 3-day free trial
-- Yearly: $36.99/year (no trial)
-
-**Free Lead Limit:** 10 leads
-
-**Files Modified:**
-- `PaywallManager.swift` - Purchase logic
-- `PaywallView.swift` - UI
-- `Configuration.storekit` - Local testing
+See `docs/team-billing-rollout.md` for deployment and compatibility details.
