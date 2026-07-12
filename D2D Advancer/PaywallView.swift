@@ -5,7 +5,7 @@ struct PaywallView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @StateObject private var paywallManager = PaywallManager.shared
-    @State private var selectedPlan: PaywallManager.SubscriptionPlan = PaywallManager.shared.experience.recommendedPlan
+    @State private var selectedPlan: PaywallManager.SubscriptionPlan = PaywallManager.shared.defaultPlan
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -35,9 +35,15 @@ struct PaywallView: View {
             purchaseBar
         }
         .onChangeCompat(of: paywallManager.experience.recommendedPlan) { newPlan in
-            selectedPlan = newPlan
+            if paywallManager.offering == .solo {
+                selectedPlan = newPlan
+            }
+        }
+        .onChangeCompat(of: paywallManager.offering) { _ in
+            selectedPlan = paywallManager.defaultPlan
         }
         .onAppear {
+            selectedPlan = paywallManager.defaultPlan
             if paywallManager.products.isEmpty {
                 Task {
                     await paywallManager.loadProducts()
@@ -82,7 +88,7 @@ struct PaywallView: View {
                     .background(Color.electricViolet.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-                Text("D2D Advancer Pro")
+                Text(paywallManager.offering == .team ? "D2D Advancer Team" : "D2D Advancer Pro")
                     .font(.obsidianSmall)
                     .foregroundColor(.textSecondary)
                     .textCase(.uppercase)
@@ -96,7 +102,11 @@ struct PaywallView: View {
                     .foregroundColor(.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Unlimited leads, iCloud backup, reminders, and field tools in one focused workspace.")
+                Text(
+                    paywallManager.offering == .team
+                        ? "One owner and two workers share assigned leads, service jobs, and on-duty location tools."
+                        : "Unlimited leads, iCloud backup, reminders, and field tools in one focused workspace."
+                )
                     .font(.obsidianBody)
                     .foregroundColor(.textSecondary)
                     .lineSpacing(4)
@@ -124,7 +134,7 @@ struct PaywallView: View {
     }
 
     private var orderedPlans: [PaywallManager.SubscriptionPlan] {
-        [.yearly]
+        paywallManager.visiblePlans
     }
 
     private func planButton(for plan: PaywallManager.SubscriptionPlan) -> some View {
@@ -136,12 +146,12 @@ struct PaywallView: View {
             planRow(for: plan)
         }
         .buttonStyle(PlainButtonStyle())
-        .accessibilityIdentifier(plan == .weekly ? "paywallPlanWeeklyButton" : "paywallPlanYearlyButton")
+        .accessibilityIdentifier(planAccessibilityIdentifier(plan))
     }
 
     private func planRow(for plan: PaywallManager.SubscriptionPlan) -> some View {
         let isSelected = selectedPlan == plan
-        let isWeekly = plan == .weekly
+        let isYearly = plan == .yearly || plan == .teamYearly
         let hasLoadedProduct = paywallManager.product(for: plan) != nil
 
         return HStack(spacing: 14) {
@@ -160,11 +170,11 @@ struct PaywallView: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 8) {
-                    Text(isWeekly ? "Weekly" : "Yearly")
+                    Text(paywallManager.planTitle(plan))
                         .font(.obsidianTitle)
                         .foregroundColor(.textPrimary)
 
-                    Text(isWeekly ? "3-day trial" : "Best value")
+                    Text(isYearly ? "Best value" : "Flexible")
                         .font(.nano)
                         .foregroundColor(isSelected ? .obsidianBlack : .textSecondary)
                         .padding(.horizontal, 8)
@@ -175,7 +185,11 @@ struct PaywallView: View {
                         )
                 }
 
-                Text(isWeekly ? "Try the full app first." : "Lowest cost for daily field work.")
+                Text(
+                    isYearly
+                        ? "Lowest cost for ongoing field work."
+                        : "Pay month to month with the same access."
+                )
                     .font(.obsidianCaption)
                     .foregroundColor(.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -190,7 +204,7 @@ struct PaywallView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
 
-                Text(hasLoadedProduct ? (isWeekly ? "/ week" : "/ year") : "from App Store")
+                Text(hasLoadedProduct ? paywallManager.planPeriod(plan) : "from App Store")
                     .font(.obsidianSmall)
                     .foregroundColor(.textSecondary)
             }
@@ -229,7 +243,15 @@ struct PaywallView: View {
     }
 
     private var cleanBenefits: [(icon: String, title: String, subtitle: String, color: Color)] {
-        [
+        if paywallManager.offering == .team {
+            return [
+                ("person.3.fill", "Three seats included", "One owner plus two sales reps or technicians.", .statusConverted),
+                ("person.crop.circle.badge.checkmark", "Assigned work only", "Workers see only the leads and jobs assigned to them.", .statusInterested),
+                ("calendar.badge.clock", "Shared jobs", "Send sold work to technicians with arrival windows and details.", .statusNotHome),
+                ("location.fill", "On-duty locations", "Share live location only while a member is manually on duty.", .electricViolet)
+            ]
+        }
+        return [
             ("person.text.rectangle.fill", "Unlimited leads", "Keep every door, note, status, and follow-up.", .statusConverted),
             ("icloud.fill", "iCloud backup", "Sync through the Apple ID already on the device.", .statusInterested),
             ("bell.badge.fill", "Smart reminders", "Stay on top of callbacks and appointments.", .statusNotHome),
@@ -272,11 +294,24 @@ struct PaywallView: View {
     }
 
     private func cleanHeroTitle(for experience: PaywallExperience) -> String {
+        if paywallManager.offering == .team {
+            return "Run the crew from one workspace."
+        }
         switch experience.recommendedPlan {
         case .weekly:
             return "Try Pro in the field."
-        case .yearly:
+        case .monthly, .yearly, .teamMonthly, .teamYearly:
             return "Upgrade your field workflow."
+        }
+    }
+
+    private func planAccessibilityIdentifier(_ plan: PaywallManager.SubscriptionPlan) -> String {
+        switch plan {
+        case .weekly: return "paywallPlanWeeklyButton"
+        case .monthly: return "paywallPlanMonthlyButton"
+        case .yearly: return "paywallPlanYearlyButton"
+        case .teamMonthly: return "paywallPlanTeamMonthlyButton"
+        case .teamYearly: return "paywallPlanTeamYearlyButton"
         }
     }
 
@@ -410,7 +445,7 @@ struct PaywallView: View {
         if paywallManager.product(for: selectedPlan) == nil {
             return "Retry Loading Plans"
         }
-        return "Continue with Pro"
+        return paywallManager.offering == .team ? "Continue with Team" : "Continue with Pro"
     }
 
     private var purchaseButtonSubtitle: String {
@@ -424,7 +459,7 @@ struct PaywallView: View {
         if paywallManager.product(for: selectedPlan) == nil {
             return "arrow.clockwise"
         }
-        return "crown.fill"
+        return paywallManager.offering == .team ? "person.3.fill" : "crown.fill"
     }
 
     // MARK: - Actions
@@ -432,7 +467,10 @@ struct PaywallView: View {
     private func subscribe() {
         Task {
             await paywallManager.purchase(plan: selectedPlan)
-            if paywallManager.isPremium {
+            let purchaseIsActive = selectedPlan.isTeamPlan
+                ? paywallManager.hasActiveTeamStoreSubscription
+                : paywallManager.isPremium
+            if purchaseIsActive {
                 dismiss()
             }
         }
@@ -441,7 +479,10 @@ struct PaywallView: View {
     private func restorePurchases() {
         Task {
             await paywallManager.restorePurchases()
-            if paywallManager.isPremium {
+            let purchaseIsActive = paywallManager.offering == .team
+                ? paywallManager.hasActiveTeamStoreSubscription
+                : paywallManager.isPremium
+            if purchaseIsActive {
                 dismiss()
             }
         }

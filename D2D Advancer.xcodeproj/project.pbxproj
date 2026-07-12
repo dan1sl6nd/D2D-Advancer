@@ -10,6 +10,7 @@
 		E60962392E55B6CD00950939 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E60962382E55B6CD00950939 /* FirebaseAuth */; };
 		E609623B2E55B6CD00950939 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = E609623A2E55B6CD00950939 /* FirebaseCore */; };
 		E609623D2E55B6CD00950939 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = E609623C2E55B6CD00950939 /* FirebaseFirestore */; };
+		E609623F2E55B6CD00950939 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = E609623E2E55B6CD00950939 /* FirebaseFunctions */; };
 		E6265C3D2E98ED3A00B4BC85 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6265C3C2E98ED3A00B4BC85 /* StoreKit.framework */; };
 /* End PBXBuildFile section */
 
@@ -87,6 +88,7 @@
 				E609623B2E55B6CD00950939 /* FirebaseCore in Frameworks */,
 				E60962392E55B6CD00950939 /* FirebaseAuth in Frameworks */,
 				E609623D2E55B6CD00950939 /* FirebaseFirestore in Frameworks */,
+				E609623F2E55B6CD00950939 /* FirebaseFunctions in Frameworks */,
 				E6265C3D2E98ED3A00B4BC85 /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -161,6 +163,7 @@
 				E60962382E55B6CD00950939 /* FirebaseAuth */,
 				E609623A2E55B6CD00950939 /* FirebaseCore */,
 				E609623C2E55B6CD00950939 /* FirebaseFirestore */,
+				E609623E2E55B6CD00950939 /* FirebaseFunctions */,
 			);
 			productName = "D2D Advancer";
 			productReference = E631E7D52E51C3F300EAD3D5 /* D2D Advancer.app */;
@@ -665,6 +668,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E60962372E55B6CD00950939 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		E609623E2E55B6CD00950939 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E60962372E55B6CD00950939 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

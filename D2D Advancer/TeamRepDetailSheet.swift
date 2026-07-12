@@ -391,7 +391,7 @@ struct TeamRepDetailSheet: View {
         return TeamAccessPolicy.canWriteAssignedRecord(
             userId: currentMember.userId,
             role: currentMember.role,
-            planStatus: team.planStatus,
+            planStatus: team.effectivePlanStatus(),
             assignedToUserId: booking.assignedToUserId
         )
     }

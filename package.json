@@ -2,13 +2,15 @@
   "scripts": {
     "test:firestore-rules": "npm run emulators:test:firestore-rules",
     "test:firestore-rules:runner": "node --test tests/firestore.team.rules.test.mjs",
+    "test:functions": "npm --prefix functions test",
+    "build:functions": "npm --prefix functions run build",
     "test:team-emulator-e2e": "npm run emulators:test:team-e2e",
     "test:team-emulator-e2e:runner": "node --test tests/team.firebase-emulator.e2e.mjs",
     "test:team-ui": "npm run emulators:test:team-ui",
     "test:team-ui:runner": "bash scripts/run_team_ui_emulator_test.sh",
     "emulators:test:firestore-rules": "env JAVA_HOME=/opt/homebrew/opt/openjdk /Users/dan1sland/.npm-global/bin/firebase emulators:exec --only firestore --project d2d-advancer \"npm run test:firestore-rules:runner\"",
-    "emulators:test:team-e2e": "env JAVA_HOME=/opt/homebrew/opt/openjdk /Users/dan1sland/.npm-global/bin/firebase emulators:exec --only auth,firestore --project d2d-advancer \"npm run test:team-emulator-e2e:runner\"",
-    "emulators:test:team-ui": "env JAVA_HOME=/opt/homebrew/opt/openjdk /Users/dan1sland/.npm-global/bin/firebase emulators:exec --only auth,firestore --project d2d-advancer \"npm run test:team-ui:runner\""
+    "emulators:test:team-e2e": "npm run build:functions && env JAVA_HOME=/opt/homebrew/opt/openjdk /Users/dan1sland/.npm-global/bin/firebase emulators:exec --only auth,firestore,functions --project d2d-advancer \"npm run test:team-emulator-e2e:runner\"",
+    "emulators:test:team-ui": "npm run build:functions && env JAVA_HOME=/opt/homebrew/opt/openjdk /Users/dan1sland/.npm-global/bin/firebase emulators:exec --only auth,firestore,functions --project d2d-advancer \"npm run test:team-ui:runner\""
   },
   "dependencies": {
     "firebase-admin": "^13.8.0"

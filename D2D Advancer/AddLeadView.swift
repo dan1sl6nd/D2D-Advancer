@@ -378,7 +378,7 @@ struct AddLeadView: View {
     
     private var shouldShowTechnicianDispatch: Bool {
         guard let team = teamService.activeTeam,
-              team.planStatus.allowsTeamWrite,
+              team.effectivePlanStatus().allowsTeamWrite,
               teamService.currentMember?.role == .owner else {
             return false
         }

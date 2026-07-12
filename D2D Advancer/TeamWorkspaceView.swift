@@ -9,6 +9,7 @@ struct TeamWorkspaceView: View {
     @ObservedObject private var firebaseService = FirebaseService.shared
     @ObservedObject private var appleSignInManager = AppleSignInManager.shared
     @ObservedObject private var teamService = TeamFirebaseService.shared
+    @ObservedObject private var paywallManager = PaywallManager.shared
     @ObservedObject private var locationManager = LocationManager.shared
     @ObservedObject private var appointmentManager = AppointmentManager.shared
     @State private var teamName = "My Team"
@@ -213,7 +214,7 @@ struct TeamWorkspaceView: View {
     }
 
     private var introCard: some View {
-        TeamInfoCard {
+        return TeamInfoCard {
             Label("Team Workspace", systemImage: "person.3.fill")
                 .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
@@ -239,14 +240,16 @@ struct TeamWorkspaceView: View {
     }
 
     private func planStateCard(_ team: TeamWorkspace, member: TeamMember) -> some View {
-        TeamInfoCard {
+        let effectivePlanStatus = team.effectivePlanStatus()
+
+        return TeamInfoCard {
             Text(team.name)
                 .font(.obsidianCallout)
                 .foregroundColor(Color.textPrimary)
 
-            Label(planStateText(team.planStatus), systemImage: planStateIcon(team.planStatus))
+            Label(planStateText(effectivePlanStatus), systemImage: planStateIcon(effectivePlanStatus))
                 .font(.obsidianFootnote)
-                .foregroundColor(planStateColor(team.planStatus))
+                .foregroundColor(planStateColor(effectivePlanStatus))
 
             Divider()
                 .overlay(Color.obsidianBorder.opacity(0.6))
@@ -745,7 +748,7 @@ struct TeamWorkspaceView: View {
 
     private func inviteCreationDisabled(for team: TeamWorkspace) -> Bool {
         activeMemberCount >= team.memberLimit
-            || !team.planStatus.allowsTeamWrite
+            || !team.effectivePlanStatus().allowsTeamWrite
             || isWorking
             || teamService.isLoading
     }
@@ -1585,7 +1588,7 @@ struct TeamWorkspaceView: View {
         accessibilityIdentifier: String
     ) -> some View {
         let isOnDuty = teamService.activeDutySession != nil
-        let canStartDuty = TeamAccessPolicy.canStartDutySession(planStatus: team.planStatus, role: member.role)
+        let canStartDuty = TeamAccessPolicy.canStartDutySession(planStatus: team.effectivePlanStatus(), role: member.role)
             && member.status == .active
         return teamActionButton(
             title: isOnDuty ? offTitle : onTitle,
@@ -2003,7 +2006,7 @@ struct TeamWorkspaceView: View {
                 tint: Color.electricViolet
             )
         }
-        .disabled(activeAssignableJobWorkers.isEmpty || teamService.activeTeam?.planStatus.allowsTeamWrite != true)
+        .disabled(activeAssignableJobWorkers.isEmpty || teamService.activeTeam?.effectivePlanStatus().allowsTeamWrite != true)
         .accessibilityLabel(existingBooking == nil ? "Send appointment to worker" : "Reassign sent job")
     }
 
@@ -2163,7 +2166,7 @@ struct TeamWorkspaceView: View {
         } label: {
             teamInlineMenuIcon("person.crop.circle.badge.checkmark", tint: Color.electricViolet)
         }
-        .disabled(activeAssignableReps.isEmpty || teamService.activeTeam?.planStatus.allowsTeamWrite != true)
+        .disabled(activeAssignableReps.isEmpty || teamService.activeTeam?.effectivePlanStatus().allowsTeamWrite != true)
         .accessibilityLabel("Assign lead")
     }
 
@@ -2178,7 +2181,7 @@ struct TeamWorkspaceView: View {
         } label: {
             teamInlineMenuIcon("person.crop.circle.badge.checkmark", tint: Color.electricViolet)
         }
-        .disabled(activeAssignableJobWorkers.isEmpty || teamService.activeTeam?.planStatus.allowsTeamWrite != true)
+        .disabled(activeAssignableJobWorkers.isEmpty || teamService.activeTeam?.effectivePlanStatus().allowsTeamWrite != true)
         .accessibilityLabel("Assign job")
     }
 
@@ -2241,19 +2244,19 @@ struct TeamWorkspaceView: View {
         } label: {
             Text(title)
                 .font(.nano)
-                .foregroundColor(team.planStatus.allowsTeamWrite ? Color.electricViolet : Color.textMuted)
+                .foregroundColor(team.effectivePlanStatus().allowsTeamWrite ? Color.electricViolet : Color.textMuted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
                 .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(
                     Capsule()
-                        .fill(Color.electricViolet.opacity(team.planStatus.allowsTeamWrite ? 0.12 : 0.05))
+                        .fill(Color.electricViolet.opacity(team.effectivePlanStatus().allowsTeamWrite ? 0.12 : 0.05))
                 )
                 .contentShape(Capsule())
         }
         .buttonStyle(PlainButtonStyle())
-        .disabled(!team.planStatus.allowsTeamWrite || isWorking || teamService.isLoading)
+        .disabled(!team.effectivePlanStatus().allowsTeamWrite || isWorking || teamService.isLoading)
     }
 
     private func mapLegendItem(_ title: String, color: Color, icon: String) -> some View {
@@ -2349,12 +2352,27 @@ struct TeamWorkspaceView: View {
     }
 
     private func createTeam() {
-        runTeamAction(successMessage: "Team created.", scrollToTopOnSuccess: true) {
-            try await teamService.createTeam(
-                name: teamName,
-                displayName: userAccountManager.currentUserDisplayName,
-                email: userAccountManager.currentUserEmail
-            )
+        guard !isWorking else { return }
+        isWorking = true
+        statusMessage = nil
+        statusMessageIsError = false
+
+        Task {
+            do {
+                try await teamService.createTeam(
+                    name: teamName,
+                    displayName: userAccountManager.currentUserDisplayName,
+                    email: userAccountManager.currentUserEmail
+                )
+                statusMessage = "Team created."
+                scrollResetToken += 1
+            } catch TeamFirebaseServiceError.teamPlanRequired {
+                paywallManager.showTeamPaywall()
+            } catch {
+                statusMessage = TeamFirebaseService.userFacingErrorMessage(for: error)
+                statusMessageIsError = true
+            }
+            isWorking = false
         }
     }
 
@@ -2587,7 +2605,7 @@ struct TeamWorkspaceView: View {
               let currentMember = teamService.currentMember else { return false }
         return currentMember.role == .owner
             && currentMember.status == .active
-            && team.planStatus.allowsTeamWrite
+            && team.effectivePlanStatus().allowsTeamWrite
             && member.role == .member
             && member.status == .active
             && !member.isPendingInvite
@@ -2761,7 +2779,7 @@ struct TeamWorkspaceView: View {
         return TeamAccessPolicy.canWriteAssignedRecord(
             userId: currentMember.userId,
             role: currentMember.role,
-            planStatus: team.planStatus,
+            planStatus: team.effectivePlanStatus(),
             assignedToUserId: booking.assignedToUserId
         )
     }

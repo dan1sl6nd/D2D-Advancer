@@ -2,6 +2,7 @@ import Foundation
 import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseFunctions
 
 enum FirebaseBootstrap {
     private static var didConfigure = false
@@ -45,7 +46,11 @@ enum FirebaseEmulatorConfiguration {
         applyIfNeeded(auth: Auth.auth(), firestore: Firestore.firestore())
     }
 
-    static func applyIfNeeded(auth: Auth, firestore: Firestore) {
+    static func applyIfNeeded(
+        auth: Auth,
+        firestore: Firestore,
+        functions: Functions = Functions.functions()
+    ) {
         #if DEBUG
         guard isEnabled, !didApply else { return }
         didApply = true
@@ -59,7 +64,8 @@ enum FirebaseEmulatorConfiguration {
         settings.isSSLEnabled = false
         settings.cacheSettings = MemoryCacheSettings()
         firestore.settings = settings
-        print("🧪 Firebase emulators enabled for Auth and Firestore at \(host)")
+        functions.useEmulator(withHost: host, port: 5001)
+        print("🧪 Firebase emulators enabled for Auth, Firestore, and Functions at \(host)")
         #endif
     }
 

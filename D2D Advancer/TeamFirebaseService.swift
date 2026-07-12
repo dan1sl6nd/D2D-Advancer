@@ -260,6 +260,7 @@ final class TeamFirebaseService: ObservableObject {
             stopTeamRealtimeListeners()
             activeTeam = team
             currentMember = member
+            PaywallManager.shared.setTeamWorkspaceAccess(team.effectivePlanStatus().allowsTeamRead)
             if member.role == .owner {
                 teamMembers = await loadOptionalTeamValue(context: "members", fallback: teamMembers.isEmpty ? [member] : teamMembers) {
                     try await loadMembers(teamId: teamId)
@@ -317,56 +318,33 @@ final class TeamFirebaseService: ObservableObject {
         try await prepareFirestoreForTeamUse()
         let user = try await requireFreshFirebaseUser()
 
-        let existingProfile = try await getServerDocument(teamProfileRef(userId: user.uid))
-        if existingProfile.exists {
-            throw TeamFirebaseServiceError.alreadyInTeam
+        let signedTransaction: String
+        #if DEBUG
+        if FirebaseEmulatorConfiguration.isEnabled {
+            signedTransaction = "D2D_EMULATOR_TEAM_ENTITLEMENT"
+        } else if let currentTransaction = await PaywallManager.shared.activeTeamTransactionJWS() {
+            signedTransaction = currentTransaction
+        } else {
+            throw TeamFirebaseServiceError.teamPlanRequired
         }
+        #else
+        guard let currentTransaction = await PaywallManager.shared.activeTeamTransactionJWS() else {
+            throw TeamFirebaseServiceError.teamPlanRequired
+        }
+        signedTransaction = currentTransaction
+        #endif
 
-        let now = Date()
-        let team = TeamWorkspace.newOwnerTeam(
-            id: UUID().uuidString,
-            name: Self.nilIfBlank(name) ?? "My Team",
-            ownerUserId: user.uid,
-            now: now
-        )
-        let owner = TeamMember.owner(
-            teamId: team.id,
-            userId: user.uid,
-            displayName: Self.nilIfBlank(displayName) ?? Self.nilIfBlank(user.displayName) ?? "Team Owner",
-            email: Self.nilIfBlank(email) ?? user.email,
-            joinedAt: now
+        let teamId = try await TeamBillingService.shared.createTeam(
+            name: name,
+            displayName: displayName ?? user.displayName,
+            email: email ?? user.email,
+            signedTransaction: signedTransaction
         )
 
-        let batch = db.batch()
-        batch.setData(teamData(team), forDocument: teamRef(team.id))
-        batch.setData(memberData(owner, updatedAt: now), forDocument: memberRef(teamId: team.id, userId: user.uid))
-        batch.setData(profileData(teamId: team.id, role: owner.role, updatedAt: now), forDocument: teamProfileRef(userId: user.uid), merge: true)
-        addActivityLog(
-            to: batch,
-            teamId: team.id,
-            actor: owner,
-            kind: .teamCreated,
-            subjectId: team.id,
-            subjectTitle: team.name,
-            targetUserId: owner.userId,
-            createdAt: now
-        )
-        try await commitTeamBatch(batch, pendingWriteCount: 4, allowsLocalQueueFallback: false)
-
-        activeTeam = team
-        currentMember = owner
-        teamMembers = [owner]
-        teamLeads = []
-        teamBookings = []
-        dutySessions = []
-        dutyLocationPoints = []
-        ownerNotifications = []
-        activityLog = []
-        activeDutySession = nil
-        syncWriteState = .idle
-        lastSuccessfulTeamSyncAt = Date()
-        lastTeamSyncFailureAt = nil
-        cacheMembership(team: team, member: owner)
+        await loadCurrentTeam(displayName: displayName, email: email)
+        guard activeTeam?.id == teamId, currentMember?.role == .owner else {
+            throw TeamFirebaseServiceError.serverConfirmationTimedOut
+        }
     }
 
     func createInvite(workType: TeamMemberWorkType = .salesRep) async throws -> TeamInvite {
@@ -378,7 +356,7 @@ final class TeamFirebaseService: ObservableObject {
         guard member.userId == user.uid, member.role == .owner else {
             throw TeamFirebaseServiceError.ownerOnly
         }
-        guard team.planStatus.allowsTeamWrite else {
+        guard team.effectivePlanStatus().allowsTeamWrite else {
             throw TeamFirebaseServiceError.writeBlocked
         }
         guard teamMembers.filter({ $0.status == .active }).count < team.memberLimit else {
@@ -496,7 +474,7 @@ final class TeamFirebaseService: ObservableObject {
         guard TeamAccessPolicy.canCancelPendingInvite(role: currentMember.role, member: member) else {
             throw TeamFirebaseServiceError.ownerOnly
         }
-        guard activeTeam?.planStatus.allowsTeamWrite == true else {
+        guard activeTeam?.effectivePlanStatus().allowsTeamWrite == true else {
             throw TeamFirebaseServiceError.writeBlocked
         }
         guard let inviteId = member.acceptedInviteId else {
@@ -572,7 +550,7 @@ final class TeamFirebaseService: ObservableObject {
         guard TeamAccessPolicy.canCreateRepLead(
             userId: user.uid,
             role: member.role,
-            planStatus: team.planStatus,
+            planStatus: team.effectivePlanStatus(),
             assignedToUserId: lead.assignedToUserId
         ) else {
             throw TeamFirebaseServiceError.writeBlocked
@@ -715,7 +693,7 @@ final class TeamFirebaseService: ObservableObject {
         guard TeamAccessPolicy.canWriteAssignedRecord(
             userId: user.uid,
             role: member.role,
-            planStatus: team.planStatus,
+            planStatus: team.effectivePlanStatus(),
             assignedToUserId: before.assignedToUserId
         ) else {
             throw TeamFirebaseServiceError.writeBlocked
@@ -1020,7 +998,7 @@ final class TeamFirebaseService: ObservableObject {
         guard TeamAccessPolicy.canWriteAssignedRecord(
             userId: user.uid,
             role: member.role,
-            planStatus: team.planStatus,
+            planStatus: team.effectivePlanStatus(),
             assignedToUserId: updated.assignedToUserId
         ) else {
             throw TeamFirebaseServiceError.writeBlocked
@@ -1067,7 +1045,7 @@ final class TeamFirebaseService: ObservableObject {
         guard TeamRepReplyPolicy.canReply(
             userId: user.uid,
             role: member.role,
-            planStatus: team.planStatus,
+            planStatus: team.effectivePlanStatus(),
             assignedToUserId: lead.assignedToUserId
         ) else {
             throw TeamFirebaseServiceError.writeBlocked
@@ -1116,7 +1094,7 @@ final class TeamFirebaseService: ObservableObject {
         guard let team = activeTeam, let member = currentMember, member.userId == user.uid, member.role == .owner else {
             throw TeamFirebaseServiceError.ownerOnly
         }
-        guard team.planStatus.allowsTeamWrite else {
+        guard team.effectivePlanStatus().allowsTeamWrite else {
             throw TeamFirebaseServiceError.writeBlocked
         }
 
@@ -1306,7 +1284,7 @@ final class TeamFirebaseService: ObservableObject {
               memberToUpdate.role == .member,
               memberToUpdate.status == .active,
               !memberToUpdate.isPendingInvite,
-              team.planStatus.allowsTeamWrite else {
+              team.effectivePlanStatus().allowsTeamWrite else {
             throw TeamFirebaseServiceError.writeBlocked
         }
 
@@ -1343,7 +1321,7 @@ final class TeamFirebaseService: ObservableObject {
         let user = try requireFirebaseUser()
         guard let team = activeTeam else { throw TeamFirebaseServiceError.noActiveTeam }
         guard user.uid == member.userId else { throw TeamFirebaseServiceError.noActiveTeam }
-        guard TeamAccessPolicy.canStartDutySession(planStatus: team.planStatus, role: member.role) else {
+        guard TeamAccessPolicy.canStartDutySession(planStatus: team.effectivePlanStatus(), role: member.role) else {
             throw TeamFirebaseServiceError.writeBlocked
         }
 
@@ -1388,7 +1366,7 @@ final class TeamFirebaseService: ObservableObject {
               session.status == .active else {
             throw TeamFirebaseServiceError.noActiveTeam
         }
-        guard team.planStatus.allowsTeamWrite else {
+        guard team.effectivePlanStatus().allowsTeamWrite else {
             throw TeamFirebaseServiceError.writeBlocked
         }
 
@@ -1484,6 +1462,7 @@ enum TeamFirebaseServiceError: LocalizedError {
     case ownerOnly
     case serverConfirmationTimedOut
     case teamFull
+    case teamPlanRequired
     case writeBlocked
 
     var errorDescription: String? {
@@ -1504,6 +1483,8 @@ enum TeamFirebaseServiceError: LocalizedError {
             return "Team could not be confirmed. Check your connection and try again."
         case .teamFull:
             return "The included team seats are full."
+        case .teamPlanRequired:
+            return "Choose an active Team plan before creating a workspace."
         case .writeBlocked:
             return "Team edits are currently read-only."
         }
@@ -1677,6 +1658,9 @@ private extension TeamFirebaseService {
 
         activeTeam = cached.team
         currentMember = cached.member
+        PaywallManager.shared.setTeamWorkspaceAccess(
+            cached.member.status == .active && cached.team.effectivePlanStatus().allowsTeamRead
+        )
         teamMembers = cached.member.role == .owner ? [cached.member] : [cached.member]
         teamLeads = []
         teamBookings = []
@@ -1734,6 +1718,7 @@ private extension TeamFirebaseService {
         activityLog = []
         activeDutySession = nil
         syncWriteState = .idle
+        PaywallManager.shared.setTeamWorkspaceAccess(false)
         if removeCachedMembership {
             UserDefaults.standard.removeObject(forKey: Self.cachedMembershipKey)
             UserDefaults.standard.synchronize()
@@ -1758,6 +1743,30 @@ private extension TeamFirebaseService {
 
     func startTeamRealtimeListeners(team: TeamWorkspace, member: TeamMember) {
         stopTeamRealtimeListeners()
+
+        teamListenerRegistrations.append(
+            teamRef(team.id).addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let error {
+                        self.handleRealtimeListenerError(error, context: "team plan")
+                        return
+                    }
+                    guard let snapshot,
+                          snapshot.exists,
+                          let updatedTeam = self.decodeTeam(id: snapshot.documentID, data: snapshot.data() ?? [:]) else {
+                        return
+                    }
+                    self.activeTeam = updatedTeam
+                    PaywallManager.shared.setTeamWorkspaceAccess(
+                        updatedTeam.effectivePlanStatus().allowsTeamRead
+                    )
+                    if let currentMember = self.currentMember {
+                        self.cacheMembership(team: updatedTeam, member: currentMember)
+                    }
+                }
+            }
+        )
 
         if member.role == .owner {
             teamListenerRegistrations.append(
@@ -2208,7 +2217,7 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.ownerUserId: team.ownerUserId,
             TeamFirebaseSchema.Field.createdAt: Timestamp(date: team.createdAt),
             TeamFirebaseSchema.Field.updatedAt: Timestamp(date: team.updatedAt),
-            TeamFirebaseSchema.Field.planStatus: team.planStatus.rawValue,
+            TeamFirebaseSchema.Field.planStatus: team.effectivePlanStatus().rawValue,
             TeamFirebaseSchema.Field.planExpiresAt: TeamFirestoreMergePayloadValue.omittedWhenNil(optionalTimestamp(team.planExpiresAt)),
             TeamFirebaseSchema.Field.graceEndsAt: TeamFirestoreMergePayloadValue.omittedWhenNil(optionalTimestamp(team.graceEndsAt)),
             TeamFirebaseSchema.Field.memberLimit: team.memberLimit
@@ -2238,7 +2247,7 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.createdAt: Timestamp(date: createdAt),
             TeamFirebaseSchema.Field.expiresAt: Timestamp(date: invite.expiresAt),
             TeamFirebaseSchema.Field.status: TeamFirebaseSchema.InviteStatus.pending,
-            TeamFirebaseSchema.Field.planStatus: team.planStatus.rawValue,
+            TeamFirebaseSchema.Field.planStatus: team.effectivePlanStatus().rawValue,
             TeamFirebaseSchema.Field.workType: workType.rawValue
         ]
     }

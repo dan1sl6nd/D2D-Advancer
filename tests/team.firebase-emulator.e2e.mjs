@@ -20,17 +20,23 @@ import {
   where,
   writeBatch
 } from "firebase/firestore";
+import {
+  connectFunctionsEmulator,
+  getFunctions,
+  httpsCallable
+} from "firebase/functions";
 
 const projectId = "d2d-advancer";
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST;
+const functionsHost = process.env.FUNCTIONS_EMULATOR_HOST;
 
 test("created owner and rep Firebase accounts can create and join a team", async () => {
   assert.ok(authHost, "FIREBASE_AUTH_EMULATOR_HOST must be set by firebase emulators:exec");
   assert.ok(firestoreHost, "FIRESTORE_EMULATOR_HOST must be set by firebase emulators:exec");
+  assert.ok(functionsHost, "FUNCTIONS_EMULATOR_HOST must be set by firebase emulators:exec");
 
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const teamId = `team-${runId}`;
   const inviteCode = `E2E${runId.replace(/[^A-Z0-9]/gi, "").slice(-6).toUpperCase()}`;
 
   const owner = await createTestAccount("owner", runId, "Owner E2E");
@@ -38,11 +44,7 @@ test("created owner and rep Firebase accounts can create and join a team", async
   const technician = await createTestAccount("tech", runId, "Technician E2E");
 
   try {
-    await createOwnerTeam(owner.db, {
-      teamId,
-      ownerUserId: owner.uid,
-      ownerEmail: owner.email
-    });
+    const teamId = await createOwnerTeam(owner.functions);
 
     await createInvite(owner.db, {
       teamId,
@@ -88,7 +90,11 @@ test("created owner and rep Firebase accounts can create and join a team", async
       technicianUserId: technician.uid
     });
   } finally {
-    await Promise.allSettled([deleteApp(owner.app), deleteApp(rep.app), deleteApp(technician.app)]);
+    await Promise.allSettled([
+      deleteApp(owner.app),
+      deleteApp(rep.app),
+      deleteApp(technician.app)
+    ]);
   }
 });
 
@@ -108,6 +114,10 @@ async function createTestAccount(role, runId, displayName) {
   const [host, port] = firestoreHost.split(":");
   connectFirestoreEmulator(db, host, Number(port));
 
+  const functions = getFunctions(app);
+  const [callableHost, callablePort] = functionsHost.split(":");
+  connectFunctionsEmulator(functions, callableHost, Number(callablePort));
+
   const email = `d2d-${role}-${runId}@example.com`;
   const credential = await createUserWithEmailAndPassword(auth, email, "TestPass123!");
   await updateProfile(credential.user, { displayName });
@@ -116,39 +126,22 @@ async function createTestAccount(role, runId, displayName) {
     app,
     db,
     email,
+    functions,
     uid: credential.user.uid
   };
 }
 
-async function createOwnerTeam(db, { teamId, ownerUserId, ownerEmail }) {
-  const now = Timestamp.now();
-  const batch = writeBatch(db);
-
-  batch.set(doc(db, "teams", teamId), {
-    name: "E2E Team",
-    ownerUserId,
-    createdAt: now,
-    updatedAt: now,
-    planStatus: "active",
-    memberLimit: 3
-  });
-  batch.set(doc(db, "teams", teamId, "members", ownerUserId), {
-    teamId,
-    userId: ownerUserId,
+async function createOwnerTeam(functions) {
+  const result = await httpsCallable(functions, "createTeamWorkspace")({
     displayName: "Owner E2E",
-    email: ownerEmail,
-    role: "owner",
-    status: "active",
-    joinedAt: now,
-    updatedAt: now
+    email: "owner@example.com",
+    name: "E2E Team",
+    signedTransaction: "D2D_EMULATOR_TEAM_ENTITLEMENT"
   });
-  batch.set(doc(db, "users", ownerUserId, "teamProfile", "current"), {
-    teamId,
-    role: "owner",
-    updatedAt: now
-  });
-
-  await batch.commit();
+  assert.equal(result.data.planStatus, "active");
+  assert.equal(result.data.memberLimit, 3);
+  assert.ok(result.data.teamId);
+  return result.data.teamId;
 }
 
 async function createInvite(db, { teamId, ownerUserId, inviteCode }) {

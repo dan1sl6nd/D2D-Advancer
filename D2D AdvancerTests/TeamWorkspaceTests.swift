@@ -148,9 +148,45 @@ struct TeamWorkspaceTests {
         #expect(team.name == "Daniel's Team")
         #expect(team.ownerUserId == "owner-1")
         #expect(team.planStatus == .active)
+        #expect(team.effectivePlanStatus() == .active)
         #expect(team.memberLimit == 3)
         #expect(team.createdAt == now)
         #expect(team.updatedAt == now)
+    }
+
+    @Test("Team plan dates adopt legacy workspaces and enforce grace locally")
+    func effectiveTeamPlanStatusMigration() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var team = TeamWorkspace.newOwnerTeam(
+            id: "team-plan-migration",
+            name: "Legacy Team",
+            ownerUserId: "owner",
+            now: now.addingTimeInterval(-1_000)
+        )
+
+        #expect(team.effectivePlanStatus(now: now) == .active)
+
+        team.planExpiresAt = now.addingTimeInterval(-60)
+        team.graceEndsAt = now.addingTimeInterval(60)
+        #expect(team.effectivePlanStatus(now: now) == .grace)
+
+        team.graceEndsAt = now.addingTimeInterval(-1)
+        #expect(team.effectivePlanStatus(now: now) == .paused)
+
+        team.planStatus = .paused
+        team.planExpiresAt = now.addingTimeInterval(60)
+        #expect(team.effectivePlanStatus(now: now) == .paused)
+    }
+
+    @Test("Team purchases use a stable account token without changing legacy plan recognition")
+    func teamPurchaseAccountTokenMigration() {
+        let ownerToken = PaywallManager.teamAppAccountToken(for: "owner-1")
+        #expect(ownerToken == PaywallManager.teamAppAccountToken(for: "owner-1"))
+        #expect(ownerToken != PaywallManager.teamAppAccountToken(for: "owner-2"))
+        #expect(PaywallManager.SubscriptionPlan.teamMonthly.isTeamPlan)
+        #expect(PaywallManager.SubscriptionPlan.teamYearly.isTeamPlan)
+        #expect(!PaywallManager.SubscriptionPlan.weekly.isTeamPlan)
+        #expect(!PaywallManager.SubscriptionPlan.yearly.isTeamPlan)
     }
 
     @Test func ownerAndRepMemberRecordsUseExpectedRolesAndInviteLink() {

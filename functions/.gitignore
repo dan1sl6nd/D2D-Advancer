@@ -1,0 +1,5 @@
+lib/
+.env
+.env.*
+.secret.local
+node_modules/

@@ -198,6 +198,28 @@ struct TeamWorkspace: Identifiable, Codable, Equatable, Sendable {
     var graceEndsAt: Date?
     var memberLimit: Int
 
+    func effectivePlanStatus(now: Date = Date()) -> TeamPlanStatus {
+        guard planStatus != .paused else { return .paused }
+
+        if planStatus == .grace {
+            guard let graceEndsAt else { return .grace }
+            return graceEndsAt > now ? .grace : .paused
+        }
+
+        guard let planExpiresAt else {
+            // Existing workspaces predate server-verified billing metadata and
+            // remain grandfathered instead of being invalidated during migration.
+            return .active
+        }
+        if planExpiresAt > now {
+            return .active
+        }
+        if let graceEndsAt, graceEndsAt > now {
+            return .grace
+        }
+        return .paused
+    }
+
     static func newOwnerTeam(
         id: String,
         name: String,
@@ -862,7 +884,7 @@ struct TeamWorkspaceSurfaceSummary: Equatable, Identifiable, Sendable {
         ownerNotifications: [TeamOwnerNotification],
         now: Date = Date()
     ) -> TeamWorkspaceSurfaceSummary? {
-        guard let team, let currentMember, team.planStatus.allowsTeamRead else { return nil }
+        guard let team, let currentMember, team.effectivePlanStatus(now: now).allowsTeamRead else { return nil }
 
         switch currentMember.role {
         case .owner:
@@ -919,7 +941,7 @@ struct TeamWorkspaceSurfaceSummary: Equatable, Identifiable, Sendable {
         ownerNotifications: [TeamOwnerNotification],
         now: Date = Date()
     ) -> TeamWorkspaceSurfaceSummary? {
-        guard let team, let currentMember, team.planStatus.allowsTeamRead else { return nil }
+        guard let team, let currentMember, team.effectivePlanStatus(now: now).allowsTeamRead else { return nil }
 
         let activeMembers = TeamMemberRoster.normalized(members)
             .filter { $0.role == .member && $0.status == .active && !$0.isPendingInvite }
@@ -1108,7 +1130,7 @@ enum TeamAccessPolicy {
     }
 
     static func canRemoveMember(actor: TeamMember, team: TeamWorkspace, member: TeamMember) -> Bool {
-        guard team.planStatus.allowsTeamWrite else { return false }
+        guard team.effectivePlanStatus().allowsTeamWrite else { return false }
         guard actor.teamId == team.id, member.teamId == team.id else { return false }
         guard actor.role == .owner, actor.status == .active else { return false }
         guard member.role == .member, member.status == .active, !member.isPendingInvite else { return false }
@@ -1172,7 +1194,7 @@ enum TeamAssignmentPolicy {
         target: TeamMember,
         assignedRecordTeamId: String
     ) -> Bool {
-        guard team.planStatus.allowsTeamWrite else { return false }
+        guard team.effectivePlanStatus().allowsTeamWrite else { return false }
         guard actor.teamId == team.id, target.teamId == team.id, assignedRecordTeamId == team.id else { return false }
         guard actor.role == .owner, actor.status == .active else { return false }
         guard target.role == .member, target.status == .active, !target.isPendingInvite else { return false }
@@ -1189,7 +1211,7 @@ enum TeamLeadDispatchPolicy {
         technician: TeamMember,
         lead: TeamLead
     ) -> Bool {
-        guard team.planStatus.allowsTeamWrite else { return false }
+        guard team.effectivePlanStatus().allowsTeamWrite else { return false }
         guard actor.teamId == team.id, technician.teamId == team.id, lead.teamId == team.id else { return false }
         guard actor.role == .owner, actor.status == .active else { return false }
         return technician.isTechnician && technician.status == .active && !technician.isPendingInvite

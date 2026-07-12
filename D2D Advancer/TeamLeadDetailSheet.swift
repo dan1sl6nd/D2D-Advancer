@@ -102,7 +102,7 @@ struct TeamLeadDetailSheet: View {
         return TeamAccessPolicy.canWriteAssignedRecord(
             userId: currentMember.userId,
             role: currentMember.role,
-            planStatus: activeTeam.planStatus,
+            planStatus: activeTeam.effectivePlanStatus(),
             assignedToUserId: lead.assignedToUserId
         )
     }
@@ -111,7 +111,7 @@ struct TeamLeadDetailSheet: View {
         guard let currentMember, let activeTeam else { return false }
         return currentMember.role == .owner
             && currentMember.status == .active
-            && activeTeam.planStatus.allowsTeamWrite
+            && activeTeam.effectivePlanStatus().allowsTeamWrite
             && !activeAssignableReps.isEmpty
     }
 
@@ -119,7 +119,7 @@ struct TeamLeadDetailSheet: View {
         guard let currentMember, let activeTeam else { return false }
         return currentMember.role == .owner
             && currentMember.status == .active
-            && activeTeam.planStatus.allowsTeamWrite
+            && activeTeam.effectivePlanStatus().allowsTeamWrite
             && !activeTechnicians.isEmpty
     }
 

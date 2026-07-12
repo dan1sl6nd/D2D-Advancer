@@ -298,13 +298,13 @@ final class D2D_AdvancerUITests: XCTestCase {
         return app
     }
 
-    private func makePaywallApp() -> XCUIApplication {
+    private func makePaywallApp(showTeamOffer: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append("-skipOnboardingForUITests")
         app.launchArguments.append("-forceLightModeForUITests")
         app.launchArguments.append("-disableStoreKitForUITests")
         app.launchArguments.append("-resetPremiumForUITests")
-        app.launchArguments.append("-showPaywallForUITests")
+        app.launchArguments.append(showTeamOffer ? "-showTeamPaywallForUITests" : "-showPaywallForUITests")
         app.launchArguments.append("-resetUITestLeads")
         return app
     }
@@ -2137,6 +2137,20 @@ final class D2D_AdvancerUITests: XCTestCase {
             app.descendants(matching: .any)["paywallScreen"].waitForNonExistence(timeout: 5),
             "Paywall should dismiss cleanly from the close button"
         )
+    }
+
+    @MainActor
+    func testTeamPaywallShowsIncludedSeatsAndBothBillingPeriods() throws {
+        let app = makePaywallApp(showTeamOffer: true)
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForIdentifiedElement(app, "paywallScreen", timeout: 12)
+        waitForText(app, "Run the crew from one workspace.", timeout: 8)
+        waitForText(app, "Three seats included", timeout: 8)
+        waitForIdentifiedElement(app, "paywallPlanTeamYearlyButton", timeout: 8)
+        waitForIdentifiedElement(app, "paywallPlanTeamMonthlyButton", timeout: 8)
+        waitForIdentifiedElement(app, "paywallPurchaseButton", timeout: 8)
     }
 
     @MainActor

@@ -40,7 +40,7 @@ after(async () => {
 });
 
 describe("D2D team Firestore rules", () => {
-  it("allows the owner create-team batch used by the app", async () => {
+  it("blocks client-created Team plans because the backend owns entitlement state", async () => {
     const db = testEnv.authenticatedContext("owner-1", { email: "owner@example.com" }).firestore();
     const batch = writeBatch(db);
     const now = Timestamp.now();
@@ -57,7 +57,7 @@ describe("D2D team Firestore rules", () => {
       now
     }));
 
-    await assertSucceeds(batch.commit());
+    await assertFails(batch.commit());
   });
 
   it("blocks orphan team documents without the owner member batch", async () => {
@@ -89,6 +89,43 @@ describe("D2D team Firestore rules", () => {
       planStatus: "paused",
       updatedAt: now
     }));
+  });
+
+  it("uses verified expiration timestamps for active, grace, and paused access", async () => {
+    const now = Timestamp.now();
+    const ownerDb = testEnv.authenticatedContext("owner-1", { email: "owner@example.com" }).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "teams/team-1"), verifiedTeamData("owner-1", now, {
+        planExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+        graceEndsAt: Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      }));
+      await setDoc(doc(db, "teams/team-1/members/owner-1"), ownerMemberData("owner-1", now));
+    });
+
+    await assertSucceeds(getDoc(doc(ownerDb, "teams/team-1")));
+    await assertSucceeds(setDoc(doc(ownerDb, "teams/team-1/leads/active-lead"), leadData("owner-1", now)));
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await updateDoc(doc(db, "teams/team-1"), {
+        planExpiresAt: Timestamp.fromMillis(Date.now() - 60_000),
+        graceEndsAt: Timestamp.fromMillis(Date.now() + 60_000)
+      });
+    });
+
+    await assertSucceeds(getDoc(doc(ownerDb, "teams/team-1")));
+    await assertFails(setDoc(doc(ownerDb, "teams/team-1/leads/grace-lead"), leadData("owner-1", now)));
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await updateDoc(doc(db, "teams/team-1"), {
+        graceEndsAt: Timestamp.fromMillis(Date.now() - 1)
+      });
+    });
+
+    await assertFails(getDoc(doc(ownerDb, "teams/team-1")));
   });
 
   it("keeps owner member management limited to work type and removal", async () => {
@@ -722,6 +759,18 @@ function teamData(ownerUserId, now, planStatus = "active") {
     updatedAt: now,
     planStatus,
     memberLimit: 3
+  };
+}
+
+function verifiedTeamData(ownerUserId, now, { planExpiresAt, graceEndsAt }) {
+  return {
+    ...teamData(ownerUserId, now),
+    billingOriginalTransactionId: "1000000001",
+    billingProductId: "com.d2dadvancer.team.yearly",
+    billingSource: "app_store",
+    graceEndsAt,
+    planExpiresAt,
+    schemaVersion: 2
   };
 }
 
