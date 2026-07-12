@@ -50,6 +50,11 @@ struct D2D_AdvancerApp: App {
             UserDefaults.standard.removeObject(forKey: "custom_appointment_types")
             print("🧪 Appointment types reset for UI tests")
         }
+        if launchArguments.contains("-resetUITestAppointments") {
+            UserDefaults.standard.removeObject(forKey: "saved_appointments")
+            UserDefaults.standard.removeObject(forKey: "deleted_appointment_ids")
+            print("🧪 Appointments reset for UI tests")
+        }
         if launchArguments.contains("-resetServiceCategoriesForUITests") {
             UserDefaults.standard.removeObject(forKey: "custom_service_categories")
             print("🧪 Service categories reset for UI tests")
@@ -99,11 +104,10 @@ struct D2D_AdvancerApp: App {
         // Restore cached Team access before SwiftUI constructs MainTabView.
         _teamService = StateObject(wrappedValue: TeamFirebaseService.shared)
 
+        #if DEBUG
         if isRunningUITests, launchArguments.contains("-resetUITestLeads") {
             Self.resetUITestLeadsWhenReady(using: persistenceController)
         }
-
-        #if DEBUG
         if launchArguments.contains("-seedMapPerformanceLeads") {
             Self.seedMapPerformanceLeadsWhenReady(using: persistenceController)
         }
@@ -256,6 +260,7 @@ struct D2D_AdvancerApp: App {
         }
     }
 
+    #if DEBUG
     private static func resetUITestLeadsWhenReady(using persistenceController: PersistenceController, attemptsRemaining: Int = 20) {
         guard persistenceController.hasPersistentStore else {
             guard attemptsRemaining > 0 else {
@@ -271,7 +276,7 @@ struct D2D_AdvancerApp: App {
 
         let context = persistenceController.container.viewContext
         let request = Lead.fetchRequest(in: context)
-        request.predicate = NSPredicate(format: "name BEGINSWITH %@", "UI ")
+        request.predicate = uiTestLeadResetPredicate
 
         do {
             let testLeads = try context.fetch(request)
@@ -286,7 +291,6 @@ struct D2D_AdvancerApp: App {
         }
     }
 
-    #if DEBUG
     private static func seedMapPerformanceLeadsWhenReady(
         using persistenceController: PersistenceController,
         attemptsRemaining: Int = 40
@@ -314,7 +318,7 @@ struct D2D_AdvancerApp: App {
             let request: NSFetchRequest<Lead> = Lead.fetchRequest()
             request.predicate = NSCompoundPredicate(orPredicateWithSubpredicates: [
                 NSPredicate(format: "name BEGINSWITH %@", "Map Perf "),
-                NSPredicate(format: "name BEGINSWITH %@", "UI Map Perf ")
+                uiTestLeadResetPredicate
             ])
             request.fetchBatchSize = 500
 
@@ -359,6 +363,24 @@ struct D2D_AdvancerApp: App {
             }
         }
     }
+
+    private static var uiTestLeadResetPredicate: NSPredicate {
+        NSCompoundPredicate(orPredicateWithSubpredicates: [
+            NSPredicate(format: "name BEGINSWITH %@", "UI "),
+            NSPredicate(format: "id IN %@", appStoreReviewLeadIds)
+        ])
+    }
+
+    private static let appStoreReviewLeadIds: [UUID] = [
+        UUID(uuidString: "A1000000-0000-4000-8000-000000000001")!,
+        UUID(uuidString: "A1000000-0000-4000-8000-000000000002")!,
+        UUID(uuidString: "A1000000-0000-4000-8000-000000000003")!,
+        UUID(uuidString: "A1000000-0000-4000-8000-000000000004")!,
+        UUID(uuidString: "A1000000-0000-4000-8000-000000000005")!,
+        UUID(uuidString: "A1000000-0000-4000-8000-000000000006")!,
+        UUID(uuidString: "A1000000-0000-4000-8000-000000000007")!,
+        UUID(uuidString: "A1000000-0000-4000-8000-000000000008")!
+    ]
 
     private static func seedAppStoreReviewDataWhenReady(
         using persistenceController: PersistenceController,

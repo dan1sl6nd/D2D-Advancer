@@ -450,9 +450,6 @@ class AppointmentManager: ObservableObject {
         }
         markAppointmentDeleted(appointment.id)
         
-        // Delete from the selected cloud provider.
-        await deleteAppointmentFromFirebase(appointment.id)
-
         // Delete Apple Calendar event if present
         if let eventId = appointment.calendarEventId {
             CalendarService.shared.deleteEvent(withIdentifier: eventId)
@@ -463,6 +460,12 @@ class AppointmentManager: ObservableObject {
 
         await MainActor.run {
             isLoading = false
+        }
+
+        // The local tombstone is authoritative. Do not hold the UI open while
+        // Firestore or CloudKit performs best-effort remote cleanup.
+        Task { [weak self] in
+            await self?.deleteAppointmentFromFirebase(appointment.id)
         }
         return true
     }

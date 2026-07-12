@@ -114,7 +114,19 @@ struct AppointmentsView: View {
 
                 tabSelectionView
                 appointmentContentView
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .top
+                    )
+                    .background(Color.obsidianBackground(for: colorScheme))
             }
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: .top
+            )
+            .background(Color.obsidianBackground(for: colorScheme))
             .ignoresSafeArea(.all, edges: isEmbeddedInWork ? [] : .top)
         }
         .navigationBarHidden(true)
@@ -752,6 +764,7 @@ struct LeadStatusBadge: View {
 
 struct AppointmentDetailView: View {
     let appointmentId: UUID
+    private let embeddedTabBarClearance: CGFloat = 56
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
@@ -945,7 +958,8 @@ struct AppointmentDetailView: View {
                     .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: -3)
             )
             .padding(.horizontal, 12)
-            .padding(.bottom, 8)
+            // The app's custom tab bar is outside SwiftUI's safe-area calculation.
+            .padding(.bottom, embeddedTabBarClearance + 8)
             .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .bottom))
         } else {
             appointmentActionButton(
@@ -957,7 +971,8 @@ struct AppointmentDetailView: View {
                 dismiss()
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.top, 12)
+            .padding(.bottom, embeddedTabBarClearance + 12)
             .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .bottom))
         }
     }

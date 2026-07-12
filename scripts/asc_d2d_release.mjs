@@ -10,11 +10,13 @@ const VERSION = "1.3";
 const BUILD_NUMBER = "3";
 const LOCALE = "en-US";
 const IPHONE_SCREENSHOT_DISPLAY_TYPE = "APP_IPHONE_67";
+const IPAD_SCREENSHOT_DISPLAY_TYPE = "APP_IPAD_PRO_3GEN_129";
 const IPHONE_SCREENSHOT_SIZES = new Set([
   "1260x2736",
   "1290x2796",
   "1320x2868",
 ]);
+const IPAD_SCREENSHOT_SIZES = new Set(["2048x2732", "2064x2752"]);
 
 const URLS = {
   marketing: "https://dan1sl6nd.github.io/D2D-Advancer/",
@@ -381,12 +383,16 @@ function pngDimensions(filePath) {
   };
 }
 
-function validatedIphoneScreenshotFiles(directoryPath) {
+function validatedScreenshotFiles(
+  directoryPath,
+  supportedSizes,
+  sizeDescription
+) {
   return screenshotFilesInDirectory(directoryPath).map((filePath) => {
     const { width, height } = pngDimensions(filePath);
-    if (!IPHONE_SCREENSHOT_SIZES.has(`${width}x${height}`)) {
+    if (!supportedSizes.has(`${width}x${height}`)) {
       throw new Error(
-        `${path.basename(filePath)} is ${width}x${height}; expected a supported 6.9-inch portrait size`
+        `${path.basename(filePath)} is ${width}x${height}; expected ${sizeDescription}`
       );
     }
     return {
@@ -474,15 +480,26 @@ async function reorderAppScreenshots(token, screenshotSetId, screenshotIds) {
   );
 }
 
-async function replaceIphoneScreenshots(token, localizationId, directoryPath) {
-  const desired = validatedIphoneScreenshotFiles(directoryPath);
+async function replaceScreenshots(
+  token,
+  localizationId,
+  directoryPath,
+  screenshotDisplayType,
+  supportedSizes,
+  sizeDescription
+) {
+  const desired = validatedScreenshotFiles(
+    directoryPath,
+    supportedSizes,
+    sizeDescription
+  );
   const sets = await readScreenshotSets(token, localizationId);
   const screenshotSet = sets.find(
-    (set) => set.screenshotDisplayType === IPHONE_SCREENSHOT_DISPLAY_TYPE
+    (set) => set.screenshotDisplayType === screenshotDisplayType
   );
   if (!screenshotSet) {
     throw new Error(
-      `No ${IPHONE_SCREENSHOT_DISPLAY_TYPE} screenshot set exists for ${LOCALE}`
+      `No ${screenshotDisplayType} screenshot set exists for ${LOCALE}`
     );
   }
 
@@ -525,6 +542,28 @@ async function replaceIphoneScreenshots(token, localizationId, directoryPath) {
       fileName: screenshot.attributes?.fileName ?? screenshot.fileName,
     })),
   };
+}
+
+async function replaceIphoneScreenshots(token, localizationId, directoryPath) {
+  return replaceScreenshots(
+    token,
+    localizationId,
+    directoryPath,
+    IPHONE_SCREENSHOT_DISPLAY_TYPE,
+    IPHONE_SCREENSHOT_SIZES,
+    "a supported 6.9-inch iPhone portrait size"
+  );
+}
+
+async function replaceIpadScreenshots(token, localizationId, directoryPath) {
+  return replaceScreenshots(
+    token,
+    localizationId,
+    directoryPath,
+    IPAD_SCREENSHOT_DISPLAY_TYPE,
+    IPAD_SCREENSHOT_SIZES,
+    "a supported 13-inch iPad portrait size"
+  );
 }
 
 async function findAppInfo(token, appId) {
@@ -1064,6 +1103,9 @@ const ipaPath = argumentValue("--upload-ipa");
 const iphoneScreenshotsDirectory = argumentValue(
   "--replace-iphone-screenshots-dir"
 );
+const ipadScreenshotsDirectory = argumentValue(
+  "--replace-ipad-screenshots-dir"
+);
 
 const token = await getToken();
 let app = await findApp(token);
@@ -1078,7 +1120,8 @@ if (
   applyReview ||
   applyAge ||
   attachBuildWhenReady ||
-  iphoneScreenshotsDirectory
+  iphoneScreenshotsDirectory ||
+  ipadScreenshotsDirectory
 ) {
   version = version ?? (await ensureVersion(token, app.id));
   versions = await listVersions(token, app.id);
@@ -1112,6 +1155,16 @@ if (iphoneScreenshotsDirectory) {
   );
 }
 
+let replacedIpadScreenshots = null;
+if (ipadScreenshotsDirectory) {
+  const localization = await ensureVersionLocalization(token, version.id);
+  replacedIpadScreenshots = await replaceIpadScreenshots(
+    token,
+    localization.id,
+    ipadScreenshotsDirectory
+  );
+}
+
 let uploadedBuild = null;
 if (ipaPath) {
   uploadedBuild = await uploadIpa(token, app.id, ipaPath);
@@ -1131,6 +1184,7 @@ result.actions = {
   applyAge,
   serverUrlApplied: Boolean(serverUrl),
   replacedIphoneScreenshots,
+  replacedIpadScreenshots,
   ipaUpload: uploadedBuild
     ? {
         skipped: uploadedBuild.skipped,

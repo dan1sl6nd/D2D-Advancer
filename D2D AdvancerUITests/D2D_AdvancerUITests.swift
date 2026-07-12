@@ -284,6 +284,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launchArguments.append("-forceLightModeForUITests")
         app.launchArguments.append("-resetMessageTemplatesForUITests")
         app.launchArguments.append("-resetAppointmentTypesForUITests")
+        app.launchArguments.append("-resetUITestAppointments")
         app.launchArguments.append("-resetServiceCategoriesForUITests")
         app.launchArguments.append("-resetSyncSettingsForUITests")
         app.launchArguments.append("-resetSearchPresetsForUITests")
@@ -1950,7 +1951,10 @@ final class D2D_AdvancerUITests: XCTestCase {
         createInterestedLead(app, name: leadName)
         scheduleAppointmentThroughUI(app, leadName: leadName)
 
-        let appointmentRow = app.descendants(matching: .any)["appointmentRow"].firstMatch
+        let appointmentRow = app.descendants(matching: .any)
+            .matching(identifier: "appointmentRow")
+            .matching(NSPredicate(format: "label CONTAINS %@", leadName))
+            .firstMatch
         XCTAssertTrue(appointmentRow.waitForExistence(timeout: 10), "Scheduled appointment row should be visible")
         tapElement(app, appointmentRow, description: "appointmentRow")
 
@@ -1964,13 +1968,38 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "appointmentDetailDoneButton", timeout: 8)
 
         tapButton(app, "appointmentDetailDeleteButton", timeout: 8)
-        let deleteAlert = app.alerts["Delete Appointment?"]
-        XCTAssertTrue(deleteAlert.waitForExistence(timeout: 8), "Delete confirmation should appear before removing an appointment")
-        deleteAlert.buttons["Delete"].tap()
+        let deleteConfirmationTitle = app.staticTexts["Delete Appointment?"]
+        XCTAssertTrue(
+            deleteConfirmationTitle.waitForExistence(timeout: 8),
+            "Delete confirmation should appear before removing an appointment"
+        )
+        let confirmDeleteButton = app.buttons
+            .matching(NSPredicate(format: "label == %@", "Delete"))
+            .allElementsBoundByIndex
+            .filter(\.isHittable)
+            .min { $0.frame.minY < $1.frame.minY }
+        XCTAssertNotNil(confirmDeleteButton, "Delete confirmation should expose its destructive action")
+        guard let confirmDeleteButton else { return }
+        confirmDeleteButton.tap()
+
+        XCTAssertTrue(
+            deleteConfirmationTitle.waitForNonExistence(timeout: 4),
+            "Delete confirmation should dismiss after accepting the destructive action"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["appointmentDetailScreen"].waitForNonExistence(timeout: 8),
+            "Deleting an appointment should dismiss its detail screen promptly"
+        )
 
         waitForIdentifiedElement(app, "appointmentsScreen", timeout: 12)
-        let deletedAppointmentText = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", leadName)).firstMatch
-        XCTAssertFalse(deletedAppointmentText.waitForExistence(timeout: 4), "Deleted test appointment should leave the appointment list")
+        let deletedAppointmentRow = app.descendants(matching: .any)
+            .matching(identifier: "appointmentRow")
+            .matching(NSPredicate(format: "label CONTAINS %@", leadName))
+            .firstMatch
+        XCTAssertFalse(
+            deletedAppointmentRow.waitForExistence(timeout: 4),
+            "Deleted test appointment should leave the appointment list"
+        )
     }
 
     @MainActor
