@@ -107,6 +107,10 @@ struct D2D_AdvancerApp: App {
         if launchArguments.contains("-seedMapPerformanceLeads") {
             Self.seedMapPerformanceLeadsWhenReady(using: persistenceController)
         }
+        if launchArguments.contains("-seedAppStoreReviewData") {
+            Self.seedAppStoreReviewDataWhenReady(using: persistenceController)
+            Self.seedAppStoreReviewAppointments()
+        }
         #endif
 
         if isRunningUITests {
@@ -353,6 +357,269 @@ struct D2D_AdvancerApp: App {
                 context.rollback()
                 print("Map performance fixture failed: \(error.localizedDescription)")
             }
+        }
+    }
+
+    private static func seedAppStoreReviewDataWhenReady(
+        using persistenceController: PersistenceController,
+        attemptsRemaining: Int = 40
+    ) {
+        guard persistenceController.hasPersistentStore else {
+            guard attemptsRemaining > 0 else {
+                print("App Store review fixture skipped: Core Data store was not ready")
+                return
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                seedAppStoreReviewDataWhenReady(
+                    using: persistenceController,
+                    attemptsRemaining: attemptsRemaining - 1
+                )
+            }
+            return
+        }
+
+        struct DemoLead {
+            let id: UUID
+            let name: String
+            let address: String
+            let phone: String
+            let email: String
+            let latitude: Double
+            let longitude: Double
+            let status: Lead.Status
+            let service: String
+            let value: Double
+            let priority: Int16
+            let followUpOffset: TimeInterval?
+            let notes: String
+        }
+
+        let leads = [
+            DemoLead(
+                id: UUID(uuidString: "A1000000-0000-4000-8000-000000000001")!,
+                name: "Avery",
+                address: "100 City Centre Dr, Mississauga, ON",
+                phone: "(905) 555-0101",
+                email: "avery@example.com",
+                latitude: 43.5932,
+                longitude: -79.6411,
+                status: .converted,
+                service: "Window Cleaning",
+                value: 2_400,
+                priority: 2,
+                followUpOffset: nil,
+                notes: "Sold package. Technician visit confirmed for tomorrow morning."
+            ),
+            DemoLead(
+                id: UUID(uuidString: "A1000000-0000-4000-8000-000000000002")!,
+                name: "Jordan",
+                address: "201 City Centre Dr, Mississauga, ON",
+                phone: "(905) 555-0102",
+                email: "jordan@example.com",
+                latitude: 43.5899,
+                longitude: -79.6447,
+                status: .interested,
+                service: "Gutter Cleaning",
+                value: 1_250,
+                priority: 2,
+                followUpOffset: 7_200,
+                notes: "Interested in the spring service package. Follow up this afternoon."
+            ),
+            DemoLead(
+                id: UUID(uuidString: "A1000000-0000-4000-8000-000000000003")!,
+                name: "Morgan",
+                address: "300 City Centre Dr, Mississauga, ON",
+                phone: "(905) 555-0103",
+                email: "morgan@example.com",
+                latitude: 43.5878,
+                longitude: -79.6423,
+                status: .interested,
+                service: "Exterior Cleaning",
+                value: 980,
+                priority: 1,
+                followUpOffset: 86_400,
+                notes: "Requested a written estimate and an afternoon arrival window."
+            ),
+            DemoLead(
+                id: UUID(uuidString: "A1000000-0000-4000-8000-000000000004")!,
+                name: "Taylor",
+                address: "4141 Living Arts Dr, Mississauga, ON",
+                phone: "(905) 555-0104",
+                email: "taylor@example.com",
+                latitude: 43.5908,
+                longitude: -79.6475,
+                status: .notHome,
+                service: "Pressure Washing",
+                value: 750,
+                priority: 0,
+                followUpOffset: -3_600,
+                notes: "Customer was not home. Return after 5 PM."
+            ),
+            DemoLead(
+                id: UUID(uuidString: "A1000000-0000-4000-8000-000000000005")!,
+                name: "Casey",
+                address: "1 City Centre Dr, Mississauga, ON",
+                phone: "(905) 555-0105",
+                email: "casey@example.com",
+                latitude: 43.5964,
+                longitude: -79.6381,
+                status: .notContacted,
+                service: "Window Cleaning",
+                value: 0,
+                priority: 0,
+                followUpOffset: nil,
+                notes: "New lead added from the map."
+            ),
+            DemoLead(
+                id: UUID(uuidString: "A1000000-0000-4000-8000-000000000006")!,
+                name: "Riley",
+                address: "4100 Living Arts Dr, Mississauga, ON",
+                phone: "(905) 555-0106",
+                email: "riley@example.com",
+                latitude: 43.5894,
+                longitude: -79.6495,
+                status: .converted,
+                service: "Commercial Cleaning",
+                value: 3_600,
+                priority: 1,
+                followUpOffset: nil,
+                notes: "Annual service agreement signed."
+            ),
+            DemoLead(
+                id: UUID(uuidString: "A1000000-0000-4000-8000-000000000007")!,
+                name: "Sam",
+                address: "200 City Centre Dr, Mississauga, ON",
+                phone: "(905) 555-0107",
+                email: "sam@example.com",
+                latitude: 43.5910,
+                longitude: -79.6390,
+                status: .notHome,
+                service: "Gutter Cleaning",
+                value: 650,
+                priority: 0,
+                followUpOffset: 172_800,
+                notes: "Leave a reminder for the weekend route."
+            ),
+            DemoLead(
+                id: UUID(uuidString: "A1000000-0000-4000-8000-000000000008")!,
+                name: "Jamie",
+                address: "301 Burnhamthorpe Rd W, Mississauga, ON",
+                phone: "(905) 555-0108",
+                email: "jamie@example.com",
+                latitude: 43.5864,
+                longitude: -79.6460,
+                status: .notContacted,
+                service: "Exterior Cleaning",
+                value: 0,
+                priority: 0,
+                followUpOffset: nil,
+                notes: "Qualify during the next territory pass."
+            )
+        ]
+
+        let context = persistenceController.container.newBackgroundContext()
+        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        context.undoManager = nil
+        context.perform {
+            let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+            request.predicate = NSPredicate(format: "source == %@", "App Store Demo")
+
+            do {
+                try context.fetch(request).forEach(context.delete)
+                let now = Date()
+                for (index, fixture) in leads.enumerated() {
+                    let lead = Lead.create(in: context)
+                    lead.id = fixture.id
+                    lead.name = fixture.name
+                    lead.address = fixture.address
+                    lead.phone = fixture.phone
+                    lead.email = fixture.email
+                    lead.latitude = fixture.latitude
+                    lead.longitude = fixture.longitude
+                    lead.status = fixture.status.rawValue
+                    lead.serviceCategory = fixture.service
+                    lead.estimatedValue = fixture.value
+                    lead.price = fixture.value
+                    lead.priority = fixture.priority
+                    lead.followUpDate = fixture.followUpOffset.map { now.addingTimeInterval($0) }
+                    lead.notes = fixture.notes
+                    lead.source = "App Store Demo"
+                    lead.tags = "Sample"
+                    lead.createdDate = now.addingTimeInterval(TimeInterval(-86_400 * (index + 1)))
+                    lead.updatedDate = now.addingTimeInterval(TimeInterval(-900 * index))
+                    lead.dateCreated = lead.createdDate
+                    lead.dateModified = lead.updatedDate
+                    lead.lastContactDate = index < 4 ? now.addingTimeInterval(-3_600) : nil
+                    lead.visitCount = Int16(index < 4 ? 2 : 0)
+                }
+
+                try context.save()
+                print("App Store review fixture ready: \(leads.count) leads")
+            } catch {
+                context.rollback()
+                print("App Store review fixture failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private static func seedAppStoreReviewAppointments() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? Date()
+        func time(_ hour: Int, _ minute: Int = 0) -> Date {
+            calendar.date(bySettingHour: hour, minute: minute, second: 0, of: tomorrow) ?? tomorrow
+        }
+
+        let appointments = [
+            Appointment(
+                id: UUID(uuidString: "B2000000-0000-4000-8000-000000000001")!,
+                title: "Window Cleaning - Avery",
+                notes: "Sold package. Bring exterior ladder and pure-water setup.",
+                startDate: time(9, 30),
+                endDate: time(11, 30),
+                location: "100 City Centre Dr, Mississauga, ON",
+                leadId: UUID(uuidString: "A1000000-0000-4000-8000-000000000001"),
+                calendarEventId: nil,
+                appointmentType: .installation,
+                customAppointmentTypeId: nil,
+                status: .confirmed
+            ),
+            Appointment(
+                id: UUID(uuidString: "B2000000-0000-4000-8000-000000000002")!,
+                title: "Gutter Estimate - Jordan",
+                notes: "Review access points and confirm the final quote.",
+                startDate: time(13),
+                endDate: time(14),
+                location: "201 City Centre Dr, Mississauga, ON",
+                leadId: UUID(uuidString: "A1000000-0000-4000-8000-000000000002"),
+                calendarEventId: nil,
+                appointmentType: .consultation,
+                customAppointmentTypeId: nil,
+                status: .scheduled
+            ),
+            Appointment(
+                id: UUID(uuidString: "B2000000-0000-4000-8000-000000000003")!,
+                title: "Exterior Cleaning - Morgan",
+                notes: "Customer requested an afternoon arrival window.",
+                startDate: time(15, 30),
+                endDate: time(17),
+                location: "300 City Centre Dr, Mississauga, ON",
+                leadId: UUID(uuidString: "A1000000-0000-4000-8000-000000000003"),
+                calendarEventId: nil,
+                appointmentType: .inspection,
+                customAppointmentTypeId: nil,
+                status: .scheduled
+            )
+        ]
+
+        do {
+            let data = try JSONEncoder().encode(appointments)
+            UserDefaults.standard.set(data, forKey: "saved_appointments")
+            UserDefaults.standard.removeObject(forKey: "deleted_appointment_ids")
+            print("App Store review fixture ready: \(appointments.count) appointments")
+        } catch {
+            print("App Store appointment fixture failed: \(error.localizedDescription)")
         }
     }
     #endif
