@@ -35,12 +35,9 @@ struct QuickFilterChipsView: View {
                             Image(systemName: "xmark.circle")
                             Text("Clear")
                         }
-                        .font(.caption)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(UIColor.tertiarySystemBackground))
-                        .cornerRadius(12)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1))
+                        .font(.themeCaption)
+                        .foregroundColor(Color.textSecondary)
+                        .glassChip()
                     }
 
                     // Presets menu
@@ -57,12 +54,9 @@ struct QuickFilterChipsView: View {
                             Image(systemName: "tray.full")
                             Text("Presets")
                         }
-                        .font(.caption)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(UIColor.tertiarySystemBackground))
-                        .cornerRadius(12)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1))
+                        .font(.themeCaption)
+                        .foregroundColor(Color.textSecondary)
+                        .glassChip()
                     }
                 }
                 .padding(.horizontal, 8)
@@ -116,22 +110,36 @@ struct QuickFilterChipsView: View {
         }
     }
 
+    @ViewBuilder
     private func chip(title: String, icon: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                Text(title)
+            if isSelected {
+                HStack(spacing: 6) {
+                    Image(systemName: icon)
+                    Text(title)
+                }
+                .font(.themeCaption)
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.electricViolet)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: icon)
+                    Text(title)
+                }
+                .font(.themeCaption)
+                .foregroundColor(Color.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.obsidianSurface)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.obsidianBorder, lineWidth: 1)
+                )
             }
-            .font(.caption)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(isSelected ? Color.themePrimary.opacity(0.15) : Color(UIColor.tertiarySystemBackground))
-            .foregroundColor(isSelected ? Color.themePrimary : .primary)
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.themePrimary : Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-            )
         }
         .buttonStyle(PlainButtonStyle())
     }

@@ -315,7 +315,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         
         let geocoder = CLGeocoder()
         
-        print("🗺️ [Forward Geocoding] Attempt \(attempt)/\(maxAttempts) for address: \(address)")
+        print("🗺️ [Forward Geocoding] Attempt \(attempt)/\(maxAttempts) for address: \(Utilities.redactedText(address))")
         
         geocoder.geocodeAddressString(address) { [weak self] placemarks, error in
             if let error = error {
@@ -344,7 +344,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                         return
                     }
                 case .geocodeFoundNoResult:
-                    print("📍 [Forward Geocoding] No results found for address: \(address)")
+                    print("📍 [Forward Geocoding] No results found for address: \(Utilities.redactedText(address))")
                     DispatchQueue.main.async {
                         self?.isForwardGeocoding = false
                         self?.lastGeocodingError = "Address not found"
@@ -387,7 +387,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 }
                 completion(location.coordinate)
             } else {
-                print("📍 [Forward Geocoding] No placemark found for address: \(address)")
+                print("📍 [Forward Geocoding] No placemark found for address: \(Utilities.redactedText(address))")
                 DispatchQueue.main.async {
                     self?.isForwardGeocoding = false
                     self?.lastGeocodingError = "Address not found"
@@ -480,7 +480,8 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             // Success case
             if let placemark = placemarks?.first {
                 let address = self?.formatAddress(from: placemark)
-                print("✅ [Reverse Geocoding] Success: \(address ?? "Unknown address")")
+                let redacted = address.map { Utilities.redactedText($0) } ?? "Unknown address"
+                print("✅ [Reverse Geocoding] Success: \(redacted)")
                 DispatchQueue.main.async {
                     self?.isReverseGeocoding = false
                     self?.lastGeocodingError = nil

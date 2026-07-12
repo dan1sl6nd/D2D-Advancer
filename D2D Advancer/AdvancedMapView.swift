@@ -12,8 +12,11 @@ struct AdvancedMapView: UIViewRepresentable {
     @State private var hasInitialRegionSet = false
 
     let leads: [Lead]
+    var heatmapOverlay: HeatmapOverlay?
+    var routePolyline: MKPolyline?
     let onLeadTap: (Lead) -> Void
-    let onLongPress: (CLLocationCoordinate2D?, Lead?) -> Void // Modified to accept optional Lead
+    let onLongPress: (CLLocationCoordinate2D?, Lead?) -> Void
+    var onRegionChanged: ((MKCoordinateRegion) -> Void)?
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -158,6 +161,30 @@ struct AdvancedMapView: UIViewRepresentable {
         if coordinator.shouldUpdateAnnotations(leads: leads) {
             coordinator.updateAnnotations(mapView: mapView, leads: leads)
         }
+
+        // Update heatmap overlay
+        let existingHeatmaps = mapView.overlays.compactMap { $0 as? HeatmapOverlay }
+        if let overlay = heatmapOverlay {
+            if existingHeatmaps.isEmpty {
+                mapView.addOverlay(overlay, level: .aboveRoads)
+            } else if existingHeatmaps.first !== overlay {
+                mapView.removeOverlays(existingHeatmaps)
+                mapView.addOverlay(overlay, level: .aboveRoads)
+            }
+        } else if !existingHeatmaps.isEmpty {
+            mapView.removeOverlays(existingHeatmaps)
+        }
+
+        // Update route polyline
+        let existingPolylines = mapView.overlays.compactMap { $0 as? MKPolyline }
+        if let polyline = routePolyline {
+            if existingPolylines.isEmpty || existingPolylines.first?.pointCount != polyline.pointCount {
+                mapView.removeOverlays(existingPolylines)
+                mapView.addOverlay(polyline, level: .aboveRoads)
+            }
+        } else if !existingPolylines.isEmpty {
+            mapView.removeOverlays(existingPolylines)
+        }
     }
     
     func makeCoordinator() -> Coordinator {
@@ -228,8 +255,12 @@ struct AdvancedMapView: UIViewRepresentable {
         
         @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
             guard gesture.state == .began else { return }
-            
-            let mapView = gesture.view as! MKMapView
+
+            guard let mapView = gesture.view as? MKMapView else {
+                print("❌ Long press gesture view is not an MKMapView")
+                return
+            }
+
             let location = gesture.location(in: mapView)
             let coordinate = mapView.convert(location, toCoordinateFrom: mapView)
             
@@ -293,6 +324,19 @@ struct AdvancedMapView: UIViewRepresentable {
             parent.onLeadTap(leadAnnotation.lead)
         }
         
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if overlay is HeatmapOverlay {
+                return HeatmapOverlayRenderer(overlay: overlay)
+            }
+            if let polyline = overlay as? MKPolyline {
+                let renderer = MKPolylineRenderer(polyline: polyline)
+                renderer.strokeColor = UIColor(Color.electricViolet)
+                renderer.lineWidth = 3
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
             isUserInteracting = true
             updateTimer?.invalidate()
@@ -344,6 +388,8 @@ struct AdvancedMapView: UIViewRepresentable {
                             self.parent.pitch = currentCamera.pitch
                         }
                     }
+
+                    self.parent.onRegionChanged?(currentRegion)
                 }
             }
         }

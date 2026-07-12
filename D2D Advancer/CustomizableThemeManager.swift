@@ -195,6 +195,11 @@ class CustomizableThemeManager: ObservableObject {
         
         return theme
     }
+
+    func reloadThemeFromUserDefaults() {
+        currentTheme = loadTheme()
+        objectWillChange.send()
+    }
     
     private func saveColor(_ color: Color, key: String) {
         let components = color.cgColor?.components ?? [0, 0, 0, 1]
@@ -346,5 +351,280 @@ struct CustomThemedButtonStyle: ButtonStyle {
         default:
             return Color.clear
         }
+    }
+}
+
+// MARK: - Obsidian Card Modifiers
+
+struct SurfaceCardModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(12)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.obsidianBorder, lineWidth: 1)
+            )
+    }
+}
+
+struct ElevatedCardModifier: ViewModifier {
+    var glowColor: Color = .electricViolet
+    func body(content: Content) -> some View {
+        content
+            .padding(12)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.obsidianBorder, lineWidth: 1)
+            )
+            .shadow(color: glowColor.opacity(0.2), radius: 16, x: 0, y: 4)
+    }
+}
+
+struct AccentCardModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(12)
+            .background(
+                LinearGradient(
+                    colors: [.electricViolet, .electricVioletDeep],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// Obsidian chip modifier for tags and filters (replaces GlassChipModifier).
+struct ObsidianChipModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.obsidianBorder, lineWidth: 1)
+            )
+    }
+}
+
+/// Obsidian gradient button modifier (replaces GlassButtonModifier).
+struct ObsidianGradientButtonModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .foregroundColor(.white)
+            .background(
+                LinearGradient(
+                    colors: [.electricViolet, .electricVioletDeep],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .electricViolet.opacity(0.25), radius: 8)
+    }
+}
+
+/// Obsidian floating action button modifier (replaces GlassFloatingButtonModifier).
+struct ObsidianFloatingButtonModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .foregroundColor(.white)
+            .frame(width: 56, height: 56)
+            .background(
+                LinearGradient(
+                    colors: [.electricViolet, .electricVioletDeep],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(Circle())
+            .shadow(color: .electricViolet.opacity(0.30), radius: 12)
+    }
+}
+
+// MARK: - Obsidian Card & Modifier View Extensions
+
+extension View {
+    func surfaceCard() -> some View { modifier(SurfaceCardModifier()) }
+    func elevatedCard(glow: Color = .electricViolet) -> some View { modifier(ElevatedCardModifier(glowColor: glow)) }
+    func accentCard() -> some View { modifier(AccentCardModifier()) }
+
+    /// Backward-compatible alias: `.glassCard()` now maps to `.surfaceCard()`.
+    func glassCard() -> some View { modifier(SurfaceCardModifier()) }
+
+    /// Backward-compatible alias: `.glassChip()` now maps to Obsidian chip style.
+    func glassChip() -> some View { modifier(ObsidianChipModifier()) }
+
+    /// Backward-compatible alias: `.glassButton()` now maps to Obsidian gradient button.
+    func glassButton() -> some View { modifier(ObsidianGradientButtonModifier()) }
+
+    /// Backward-compatible alias: `.glassFloatingButton()` now maps to Obsidian floating button.
+    func glassFloatingButton() -> some View { modifier(ObsidianFloatingButtonModifier()) }
+}
+
+// MARK: - Obsidian Button Styles
+
+struct ObsidianPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(
+                LinearGradient(
+                    colors: [.electricViolet, .electricVioletDeep],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .shadow(color: .electricViolet.opacity(0.25), radius: 8, x: 0, y: 4)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+struct ObsidianSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(.textPrimary)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.obsidianBorder, lineWidth: 1)
+            )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+struct ObsidianGhostButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .medium))
+            .foregroundColor(.textSecondary)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+struct ObsidianDangerButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(.statusNotInterested)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.statusNotInterested.opacity(0.3), lineWidth: 1)
+            )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Obsidian Status Badge
+
+struct ObsidianStatusBadge: View {
+    let text: String
+    let color: Color
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text(text)
+                .font(.system(size: 11, weight: .medium))
+                .textCase(.uppercase)
+                .tracking(0.5)
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(color.opacity(0.12)))
+    }
+}
+
+// MARK: - Obsidian Spacing
+
+extension CGFloat {
+    static let spaceXS: CGFloat = 4
+    static let spaceSM: CGFloat = 8
+    static let spaceMD: CGFloat = 12
+    static let spaceLG: CGFloat = 16
+    static let spaceXL: CGFloat = 24
+    static let spaceXXL: CGFloat = 32
+}
+
+// MARK: - Obsidian Text Field Style
+
+struct ObsidianTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(12)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.obsidianBorder, lineWidth: 1)
+            )
+            .foregroundColor(.textPrimary)
+    }
+}
+
+// MARK: - Obsidian Typography System
+
+extension Font {
+    // Display -- SF Pro Display for hero text and big numbers
+    static let displayLarge: Font = .system(size: 34, weight: .bold, design: .default)
+    static let displayMedium: Font = .system(size: 28, weight: .bold, design: .default)
+
+    // Content -- SF Pro Text for readable body content
+    static let obsidianHeadline: Font = .system(size: 20, weight: .semibold, design: .default)
+    static let obsidianTitle: Font = .system(size: 17, weight: .semibold, design: .default)
+    static let obsidianBody: Font = .system(size: 15, weight: .regular, design: .default)
+    static let obsidianCaption: Font = .system(size: 13, weight: .medium, design: .default)
+    static let micro: Font = .system(size: 11, weight: .medium, design: .default)
+
+    // Migration aliases
+    static let themeLargeTitle: Font = .displayMedium
+    static let themeTitle: Font = .obsidianHeadline
+    static let themeHeadline: Font = .obsidianTitle
+    static let themeBody: Font = .obsidianBody
+    static let themeCaption: Font = .obsidianCaption
+    static let themeSmall: Font = .micro
+}
+
+// MARK: - Micro Label Style
+
+struct MicroLabelStyle: ViewModifier {
+    var color: Color = .textMuted
+    func body(content: Content) -> some View {
+        content
+            .font(.micro)
+            .foregroundColor(color)
+            .textCase(.uppercase)
+            .tracking(0.5)
+    }
+}
+
+extension View {
+    func microLabel(color: Color = .textMuted) -> some View {
+        modifier(MicroLabelStyle(color: color))
     }
 }

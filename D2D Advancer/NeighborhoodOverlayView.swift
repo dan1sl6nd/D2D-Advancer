@@ -107,6 +107,7 @@ class NeighborhoodOverlayManager: ObservableObject {
     @Published var isShowingOverlays = false
     @Published var visibleNeighborhoods: [Neighborhood] = []
     @Published var selectedNeighborhood: Neighborhood?
+    @Published var heatmapOverlay: HeatmapOverlay?
 
     private let dataService = NeighborhoodDataService.shared
     private let scoreEngine = NeighborhoodScoreEngine.shared
@@ -217,6 +218,36 @@ class NeighborhoodOverlayManager: ObservableObject {
             print("✅ Populated \(count) neighborhoods from leads")
         }
     }
+
+    /// Generates a heatmap overlay from currently visible neighborhoods.
+    func generateHeatmap(for region: MKCoordinateRegion) async {
+        // Ensure neighborhoods are loaded
+        if visibleNeighborhoods.isEmpty {
+            await loadNeighborhoods(for: region)
+        }
+
+        let points = visibleNeighborhoods.compactMap { neighborhood -> HeatPoint? in
+            guard neighborhood.centerLatitude != 0 || neighborhood.centerLongitude != 0 else { return nil }
+            return HeatPoint(
+                coordinate: CLLocationCoordinate2D(
+                    latitude: neighborhood.centerLatitude,
+                    longitude: neighborhood.centerLongitude
+                ),
+                intensity: neighborhood.score
+            )
+        }
+
+        guard !points.isEmpty else {
+            heatmapOverlay = nil
+            return
+        }
+
+        let overlay = HeatmapOverlay(heatPoints: points, region: region)
+        // Adjust radius based on zoom — tighter at street level, wider when zoomed out
+        let spanKm = region.span.latitudeDelta * 111 // rough km per degree
+        overlay.radiusInMeters = max(300, min(2000, spanKm * 50))
+        heatmapOverlay = overlay
+    }
 }
 
 // MARK: - SwiftUI Overlay Controls
@@ -234,7 +265,7 @@ struct NeighborhoodOverlayControls: View {
                 }
             }) {
                 Circle()
-                    .fill(manager.isShowingOverlays ? Color.blue : Color.gray)
+                    .fill(manager.isShowingOverlays ? Color.electricViolet : Color.textSecondary)
                     .frame(width: 44, height: 44)
                     .overlay(
                         Image(systemName: "map.circle.fill")
@@ -249,7 +280,7 @@ struct NeighborhoodOverlayControls: View {
                     showingLegend.toggle()
                 }) {
                     Circle()
-                        .fill(Color.blue)
+                        .fill(Color.electricViolet)
                         .frame(width: 44, height: 44)
                         .overlay(
                             Image(systemName: "info.circle.fill")
@@ -278,17 +309,17 @@ struct NeighborhoodLegendView: View {
                     .padding(.top)
 
                 VStack(spacing: 12) {
-                    LegendRow(color: .green, label: "Excellent", range: "90-100", description: "Best fit for your target demographics")
+                    LegendRow(color: .statusInterested, label: "Excellent", range: "90-100", description: "Best fit for your target demographics")
                     LegendRow(color: Color(red: 0.7, green: 0.9, blue: 0.4), label: "Very Good", range: "75-89", description: "Strong match with good potential")
                     LegendRow(color: .yellow, label: "Good", range: "60-74", description: "Moderate match worth considering")
-                    LegendRow(color: .orange, label: "Fair", range: "45-59", description: "Some potential but not ideal")
-                    LegendRow(color: .red, label: "Poor", range: "0-44", description: "Low match with target demographics")
+                    LegendRow(color: .statusNotHome, label: "Fair", range: "45-59", description: "Some potential but not ideal")
+                    LegendRow(color: .statusNotInterested, label: "Poor", range: "0-44", description: "Low match with target demographics")
                 }
                 .padding()
 
                 Text("Scores are based on income, home values, population density, and your historical conversion rate in each area.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
@@ -302,7 +333,7 @@ struct NeighborhoodLegendView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(Color.blue)
+                .background(Color.electricViolet)
                 .cornerRadius(12)
                 .padding()
             }
@@ -330,12 +361,12 @@ struct LegendRow: View {
                         .font(.system(size: 15, weight: .semibold))
                     Text("(\(range))")
                         .font(.system(size: 13))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                 }
 
                 Text(description)
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
             }
 
             Spacer()

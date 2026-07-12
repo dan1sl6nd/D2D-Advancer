@@ -16,17 +16,9 @@ struct AuthenticationView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Modern gradient background
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.blue.opacity(0.05),
-                        Color.purple.opacity(0.05),
-                        Color(UIColor.systemBackground)
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                // Obsidian background
+                Color.obsidianBlack
+                    .ignoresSafeArea()
 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 24) {
@@ -80,13 +72,13 @@ struct AuthenticationView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.blue, Color.purple]),
+                            gradient: Gradient(colors: [Color.electricViolet, Color.electricViolet]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 100, height: 100)
-                    .shadow(color: Color.blue.opacity(0.3), radius: 20, x: 0, y: 10)
+                    .shadow(color: Color.electricViolet.opacity(0.3), radius: 20, x: 0, y: 10)
 
                 Image(systemName: "house.fill")
                     .font(.system(size: 40, weight: .semibold))
@@ -95,12 +87,12 @@ struct AuthenticationView: View {
 
             VStack(spacing: 8) {
                 Text("D2D Advancer")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundColor(.primary)
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(Color.textPrimary)
 
                 Text(isLoginMode ? "Welcome Back" : "Create Your Account")
-                    .font(.system(size: 18, weight: .medium, design: .rounded))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.textSecondary)
             }
         }
         .padding(.vertical, 20)
@@ -159,11 +151,11 @@ struct AuthenticationView: View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.title3)
-                .foregroundColor(.red)
+                .foregroundColor(Color.statusNotInterested)
 
             Text(message)
                 .font(.subheadline)
-                .foregroundColor(.red)
+                .foregroundColor(Color.statusNotInterested)
                 .multilineTextAlignment(.leading)
 
             Spacer()
@@ -171,10 +163,10 @@ struct AuthenticationView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.red.opacity(0.1))
+                .fill(Color.statusNotInterested.opacity(0.1))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.statusNotInterested.opacity(0.3), lineWidth: 1)
                 )
         )
     }
@@ -196,7 +188,7 @@ struct AuthenticationView: View {
                     }
 
                     Text(isLoginMode ? "Sign In" : "Create Account")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: 18, weight: .semibold))
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -204,18 +196,18 @@ struct AuthenticationView: View {
                 .background(
                     accountManager.authStatus == .loading ?
                     LinearGradient(
-                        gradient: Gradient(colors: [Color.gray, Color.gray.opacity(0.8)]),
+                        gradient: Gradient(colors: [Color.textSecondary, Color.textSecondary.opacity(0.8)]),
                         startPoint: .leading,
                         endPoint: .trailing
                     ) :
                     LinearGradient(
-                        gradient: Gradient(colors: [Color.blue, Color.purple]),
+                        gradient: Gradient(colors: [Color.electricViolet, Color.electricViolet]),
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 )
                 .cornerRadius(16)
-                .shadow(color: accountManager.authStatus == .loading ? Color.clear : Color.blue.opacity(0.3), radius: 15, x: 0, y: 8)
+                .shadow(color: accountManager.authStatus == .loading ? Color.clear : Color.electricViolet.opacity(0.3), radius: 15, x: 0, y: 8)
             }
             .disabled(accountManager.authStatus == .loading)
 
@@ -225,8 +217,8 @@ struct AuthenticationView: View {
                     showingForgotPassword = true
                 }) {
                     Text("Forgot Password?")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundColor(.blue)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(Color.electricViolet)
                 }
                 .padding(.top, 4)
             }
@@ -239,18 +231,18 @@ struct AuthenticationView: View {
         }) {
             HStack(spacing: 8) {
                 Text(isLoginMode ? "Don't have an account?" : "Already have an account?")
-                    .font(.system(size: 15, weight: .regular, design: .rounded))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundColor(Color.textSecondary)
 
                 Text(isLoginMode ? "Sign Up" : "Sign In")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundColor(.blue)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(Color.electricViolet)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(UIColor.tertiarySystemGroupedBackground))
+                    .fill(Color.obsidianSurface)
             )
         }
     }
@@ -268,26 +260,26 @@ struct AuthenticationView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "person.crop.circle.badge.questionmark")
                         .font(.title2)
-                        .foregroundColor(.green)
+                        .foregroundColor(Color.statusInterested)
 
                     Text("Continue as Guest")
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundColor(.green)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(Color.statusInterested)
                 }
 
                 Text("Explore the app without creating an account")
-                    .font(.system(size: 13, weight: .regular, design: .rounded))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.green.opacity(0.08))
+                    .fill(Color.statusInterested.opacity(0.08))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.green.opacity(0.2), lineWidth: 1.5)
+                            .stroke(Color.statusInterested.opacity(0.2), lineWidth: 1.5)
                     )
             )
         }
@@ -305,11 +297,11 @@ struct AuthenticationView: View {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.electricViolet)
 
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color.textPrimary)
             }
 
             Group {
@@ -320,16 +312,16 @@ struct AuthenticationView: View {
                         .keyboardType(keyboardType)
                 }
             }
-            .font(.system(size: 16, weight: .regular, design: .rounded))
+            .font(.system(size: 16, weight: .regular))
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(UIColor.systemBackground))
+                    .fill(Color.obsidianBlack)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                    .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
             )
         }
     }
@@ -340,23 +332,23 @@ struct AuthenticationView: View {
         VStack(spacing: isLoginMode ? 12 : 10) {
             // App Logo
             Circle()
-                .fill(Color.blue.opacity(0.1))
+                .fill(Color.electricViolet.opacity(0.1))
                 .frame(width: isLoginMode ? 85 : 78, height: isLoginMode ? 85 : 78)
                 .overlay(
                     Image(systemName: "house.fill")
                         .font(.system(size: isLoginMode ? 35 : 32))
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.electricViolet)
                 )
-            
+
             VStack(spacing: isLoginMode ? 6 : 5) {
                 Text("D2D Advancer")
                     .font(isLoginMode ? .title : .title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.textPrimary)
+
                 Text(isLoginMode ? "Welcome Back" : "Create Account")
                     .font(isLoginMode ? .headline : .headline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
             }
         }
         .padding(.top, isLoginMode ? 16 : 14)
@@ -386,17 +378,17 @@ struct AuthenticationView: View {
     }
     
     private func adaptiveErrorCard(message: String) -> some View {
-        adaptiveSectionCard(title: "Error", icon: "exclamationmark.triangle.fill", titleColor: .red) {
+        adaptiveSectionCard(title: "Error", icon: "exclamationmark.triangle.fill", titleColor: Color.statusNotInterested) {
             HStack(spacing: 10) {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.statusNotInterested)
                     .font(.subheadline)
-                
+
                 Text(message)
                     .font(.subheadline)
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.statusNotInterested)
                     .multilineTextAlignment(.leading)
-                
+
                 Spacer()
             }
         }
@@ -426,13 +418,13 @@ struct AuthenticationView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: isLoginMode ? 48 : 45)
-                .background(accountManager.authStatus == .loading ? Color.gray : Color.blue)
+                .background(accountManager.authStatus == .loading ? Color.textSecondary : Color.electricViolet)
                 .cornerRadius(12)
             }
             .disabled(accountManager.authStatus == .loading)
         }
     }
-    
+
     private var adaptiveBottomActionsCard: some View {
         adaptiveSectionCard(title: isLoginMode ? "Need Help?" : "Switch Mode", icon: isLoginMode ? "questionmark.circle.fill" : "arrow.2.squarepath") {
             VStack(spacing: isLoginMode ? 12 : 10) {
@@ -442,10 +434,10 @@ struct AuthenticationView: View {
                         showingForgotPassword = true
                     }
                     .font(.subheadline)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.electricViolet)
                     .frame(maxWidth: .infinity)
                     .frame(height: 38)
-                    .background(Color.blue.opacity(0.1))
+                    .background(Color.electricViolet.opacity(0.1))
                     .cornerRadius(10)
                 }
 
@@ -456,16 +448,16 @@ struct AuthenticationView: View {
                     VStack(spacing: isLoginMode ? 6 : 4) {
                         Text(isLoginMode ? "Don't have an account?" : "Already have an account?")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.textSecondary)
 
                         Text(isLoginMode ? "Sign Up" : "Sign In")
                             .font(isLoginMode ? .subheadline : .subheadline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: isLoginMode ? 44 : 40)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.obsidianSurface)
                     .cornerRadius(10)
                 }
             }
@@ -493,35 +485,35 @@ struct AuthenticationView: View {
 
                     Text("Explore the app without creating an account")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                         .multilineTextAlignment(.center)
                 }
-                .foregroundColor(.green)
+                .foregroundColor(Color.statusInterested)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(Color.green.opacity(0.1))
+                .background(Color.statusInterested.opacity(0.1))
                 .cornerRadius(12)
             }
         }
     }
     
-    private func adaptiveSectionCard<Content: View>(title: String, icon: String, titleColor: Color = .blue, @ViewBuilder content: () -> Content) -> some View {
+    private func adaptiveSectionCard<Content: View>(title: String, icon: String, titleColor: Color = Color.electricViolet, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: isLoginMode ? 12 : 10) {
             HStack {
                 Image(systemName: icon)
                     .foregroundColor(titleColor)
                     .font(isLoginMode ? .headline : .headline)
-                
+
                 Text(title)
                     .font(isLoginMode ? .headline : .headline)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.textPrimary)
+
                 Spacer()
             }
             .padding(.horizontal, isLoginMode ? 18 : 17)
             .padding(.top, isLoginMode ? 16 : 14)
-            
+
             content()
                 .padding(.horizontal, isLoginMode ? 18 : 17)
                 .padding(.bottom, isLoginMode ? 16 : 14)
@@ -533,7 +525,7 @@ struct AuthenticationView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: isLoginMode ? 14 : 13)
-                .stroke(Color(UIColor.separator), lineWidth: 0.5)
+                .stroke(Color.obsidianBorder, lineWidth: 0.5)
         )
     }
     
@@ -541,15 +533,15 @@ struct AuthenticationView: View {
         VStack(alignment: .leading, spacing: isLoginMode ? 8 : 7) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.electricViolet)
                     .frame(width: 18)
                     .font(.subheadline)
-                
+
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
             }
-            
+
             Group {
                 if isSecure {
                     SecureField(title, text: text)
@@ -562,12 +554,12 @@ struct AuthenticationView: View {
             .padding(.vertical, isLoginMode ? 12 : 11)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(UIColor.systemBackground))
+                    .fill(Color.obsidianBlack)
                     .shadow(color: .black.opacity(0.05), radius: 1, x: 0, y: 1)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color(UIColor.separator), lineWidth: 0.5)
+                    .stroke(Color.obsidianBorder, lineWidth: 0.5)
             )
         }
     }
@@ -578,23 +570,23 @@ struct AuthenticationView: View {
         VStack(spacing: 12) {
             // App Logo
             Circle()
-                .fill(Color.blue.opacity(0.1))
+                .fill(Color.electricViolet.opacity(0.1))
                 .frame(width: 85, height: 85)
                 .overlay(
                     Image(systemName: "house.fill")
                         .font(.system(size: 35))
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.electricViolet)
                 )
-            
+
             VStack(spacing: 6) {
                 Text("D2D Advancer")
                     .font(.title)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.textPrimary)
+
                 Text(isLoginMode ? "Welcome Back" : "Create Account")
                     .font(.headline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
             }
         }
         .padding(.top, 16)
@@ -624,17 +616,17 @@ struct AuthenticationView: View {
     }
     
     private func balancedErrorCard(message: String) -> some View {
-        balancedSectionCard(title: "Error", icon: "exclamationmark.triangle.fill", titleColor: .red) {
+        balancedSectionCard(title: "Error", icon: "exclamationmark.triangle.fill", titleColor: Color.statusNotInterested) {
             HStack(spacing: 10) {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.statusNotInterested)
                     .font(.subheadline)
-                
+
                 Text(message)
                     .font(.subheadline)
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.statusNotInterested)
                     .multilineTextAlignment(.leading)
-                
+
                 Spacer()
             }
         }
@@ -664,13 +656,13 @@ struct AuthenticationView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 48)
-                .background(accountManager.authStatus == .loading ? Color.gray : Color.blue)
+                .background(accountManager.authStatus == .loading ? Color.textSecondary : Color.electricViolet)
                 .cornerRadius(12)
             }
             .disabled(accountManager.authStatus == .loading)
         }
     }
-    
+
     private var balancedBottomActionsCard: some View {
         balancedSectionCard(title: isLoginMode ? "Need Help?" : "Switch Mode", icon: isLoginMode ? "questionmark.circle.fill" : "arrow.2.squarepath") {
             VStack(spacing: 12) {
@@ -680,13 +672,13 @@ struct AuthenticationView: View {
                         showingForgotPassword = true
                     }
                     .font(.subheadline)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.electricViolet)
                     .frame(maxWidth: .infinity)
                     .frame(height: 38)
-                    .background(Color.blue.opacity(0.1))
+                    .background(Color.electricViolet.opacity(0.1))
                     .cornerRadius(10)
                 }
-                
+
                 // Toggle mode button
                 Button(action: {
                     toggleAuthMode()
@@ -694,44 +686,44 @@ struct AuthenticationView: View {
                     VStack(spacing: 6) {
                         Text(isLoginMode ? "Don't have an account?" : "Already have an account?")
                             .font(.caption)
-                            .foregroundColor(.secondary)
-                        
+                            .foregroundColor(Color.textSecondary)
+
                         Text(isLoginMode ? "Sign Up" : "Sign In")
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.obsidianSurface)
                     .cornerRadius(10)
                 }
             }
         }
     }
     
-    private func balancedSectionCard<Content: View>(title: String, icon: String, titleColor: Color = .blue, @ViewBuilder content: () -> Content) -> some View {
+    private func balancedSectionCard<Content: View>(title: String, icon: String, titleColor: Color = Color.electricViolet, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: icon)
                     .foregroundColor(titleColor)
                     .font(.headline)
-                
+
                 Text(title)
                     .font(.headline)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.textPrimary)
+
                 Spacer()
             }
             .padding(.horizontal, 18)
             .padding(.top, 16)
-            
+
             content()
                 .padding(.horizontal, 18)
                 .padding(.bottom, 16)
         }
-        .background(Color(UIColor.tertiarySystemBackground))
+        .background(Color.obsidianSurface)
         .cornerRadius(14)
     }
     
@@ -739,15 +731,15 @@ struct AuthenticationView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.electricViolet)
                     .frame(width: 18)
                     .font(.subheadline)
-                
+
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
             }
-            
+
             Group {
                 if isSecure {
                     SecureField(title, text: text)
@@ -758,7 +750,7 @@ struct AuthenticationView: View {
             .font(.body)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color(UIColor.tertiarySystemBackground))
+            .background(Color.obsidianSurface)
             .cornerRadius(8)
         }
     }
@@ -767,23 +759,23 @@ struct AuthenticationView: View {
         VStack(spacing: 16) {
             // App Logo
             Circle()
-                .fill(Color.blue.opacity(0.1))
+                .fill(Color.electricViolet.opacity(0.1))
                 .frame(width: 100, height: 100)
                 .overlay(
                     Image(systemName: "house.fill")
                         .font(.system(size: 40))
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.electricViolet)
                 )
-            
+
             VStack(spacing: 8) {
                 Text("D2D Advancer")
                     .font(.largeTitle)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.textPrimary)
+
                 Text(isLoginMode ? "Welcome Back" : "Create Account")
                     .font(.title2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
             }
         }
         .padding(.top, 40)
@@ -813,16 +805,16 @@ struct AuthenticationView: View {
     }
     
     private func errorCard(message: String) -> some View {
-        modernSectionCard(title: "Error", icon: "exclamationmark.triangle.fill", titleColor: .red) {
+        modernSectionCard(title: "Error", icon: "exclamationmark.triangle.fill", titleColor: Color.statusNotInterested) {
             HStack {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.red)
-                
+                    .foregroundColor(Color.statusNotInterested)
+
                 Text(message)
                     .font(.body)
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.statusNotInterested)
                     .multilineTextAlignment(.leading)
-                
+
                 Spacer()
             }
         }
@@ -852,27 +844,27 @@ struct AuthenticationView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(accountManager.authStatus == .loading ? Color.gray : Color.blue)
+                .background(accountManager.authStatus == .loading ? Color.textSecondary : Color.electricViolet)
                 .cornerRadius(12)
             }
             .disabled(accountManager.authStatus == .loading)
         }
     }
-    
+
     private var accountHelpCard: some View {
         modernSectionCard(title: "Need Help?", icon: "questionmark.circle.fill") {
             Button("Can't access your account?") {
                 showingForgotPassword = true
             }
             .font(.body)
-            .foregroundColor(.blue)
+            .foregroundColor(Color.electricViolet)
             .frame(maxWidth: .infinity)
             .frame(height: 44)
-            .background(Color.blue.opacity(0.1))
+            .background(Color.electricViolet.opacity(0.1))
             .cornerRadius(12)
         }
     }
-    
+
     private var toggleModeCard: some View {
         modernSectionCard(title: "Switch Mode", icon: "arrow.2.squarepath") {
             Button(action: {
@@ -881,43 +873,43 @@ struct AuthenticationView: View {
                 VStack(spacing: 8) {
                     Text(isLoginMode ? "Don't have an account?" : "Already have an account?")
                         .font(.body)
-                        .foregroundColor(.secondary)
-                    
+                        .foregroundColor(Color.textSecondary)
+
                     Text(isLoginMode ? "Sign Up" : "Sign In")
                         .font(.headline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.electricViolet)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 60)
-                .background(Color(UIColor.tertiarySystemBackground))
+                .background(Color.obsidianSurface)
                 .cornerRadius(12)
             }
         }
     }
-    
-    private func modernSectionCard<Content: View>(title: String, icon: String, titleColor: Color = .blue, @ViewBuilder content: () -> Content) -> some View {
+
+    private func modernSectionCard<Content: View>(title: String, icon: String, titleColor: Color = Color.electricViolet, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: icon)
                     .foregroundColor(titleColor)
                     .font(.title2)
-                
+
                 Text(title)
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.textPrimary)
+
                 Spacer()
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
-            
+
             content()
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
         }
-        .background(Color(UIColor.tertiarySystemBackground))
+        .background(Color.obsidianSurface)
         .cornerRadius(16)
     }
     
@@ -925,14 +917,14 @@ struct AuthenticationView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.electricViolet)
                     .frame(width: 20)
-                
+
                 Text(title)
                     .font(.headline)
                     .fontWeight(.semibold)
             }
-            
+
             Group {
                 if isSecure {
                     SecureField(title, text: text)
@@ -942,7 +934,7 @@ struct AuthenticationView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(Color(UIColor.tertiarySystemBackground))
+            .background(Color.obsidianSurface)
             .cornerRadius(8)
         }
     }
@@ -1019,17 +1011,9 @@ struct ForgotPasswordSheet: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Modern gradient background
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.blue.opacity(0.05),
-                        Color.purple.opacity(0.05),
-                        Color(UIColor.systemBackground)
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                // Obsidian background
+                Color.obsidianBlack
+                    .ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -1067,7 +1051,7 @@ struct ForgotPasswordSheet: View {
                 }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 30))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                         .padding(20)
                 }
                 .padding(.top, geometry.safeAreaInsets.top)
@@ -1085,13 +1069,13 @@ struct ForgotPasswordSheet: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.orange, Color.red]),
+                            gradient: Gradient(colors: [Color.statusNotHome, Color.statusNotInterested]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 80, height: 80)
-                    .shadow(color: Color.orange.opacity(0.3), radius: 15, x: 0, y: 8)
+                    .shadow(color: Color.statusNotHome.opacity(0.3), radius: 15, x: 0, y: 8)
 
                 Image(systemName: "key.fill")
                     .font(.system(size: 32, weight: .semibold))
@@ -1100,12 +1084,12 @@ struct ForgotPasswordSheet: View {
 
             VStack(spacing: 8) {
                 Text("Reset Password")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.primary)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(Color.textPrimary)
 
                 Text("Enter your email to receive a password reset link")
-                    .font(.system(size: 15, weight: .regular, design: .rounded))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
             }
@@ -1118,27 +1102,27 @@ struct ForgotPasswordSheet: View {
             HStack(spacing: 6) {
                 Image(systemName: "envelope.fill")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.electricViolet)
 
                 Text("Email Address")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color.textPrimary)
             }
 
             TextField("your.email@example.com", text: $resetEmail)
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
-                .font(.system(size: 16, weight: .regular, design: .rounded))
+                .font(.system(size: 16, weight: .regular))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(UIColor.systemBackground))
+                        .fill(Color.obsidianBlack)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                 )
         }
         .padding(24)
@@ -1153,11 +1137,11 @@ struct ForgotPasswordSheet: View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.title3)
-                .foregroundColor(.red)
+                .foregroundColor(Color.statusNotInterested)
 
             Text(message)
                 .font(.subheadline)
-                .foregroundColor(.red)
+                .foregroundColor(Color.statusNotInterested)
                 .multilineTextAlignment(.leading)
 
             Spacer()
@@ -1165,10 +1149,10 @@ struct ForgotPasswordSheet: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.red.opacity(0.1))
+                .fill(Color.statusNotInterested.opacity(0.1))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.statusNotInterested.opacity(0.3), lineWidth: 1)
                 )
         )
     }
@@ -1177,11 +1161,11 @@ struct ForgotPasswordSheet: View {
         HStack(spacing: 12) {
             ProgressView()
                 .scaleEffect(0.9)
-                .tint(.blue)
+                .tint(Color.electricViolet)
 
             Text("Sending reset email...")
-                .font(.system(size: 16, weight: .medium, design: .rounded))
-                .foregroundColor(.secondary)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(Color.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 18)
@@ -1200,7 +1184,7 @@ struct ForgotPasswordSheet: View {
                     .font(.title3)
 
                 Text("Send Reset Email")
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 18, weight: .semibold))
             }
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
@@ -1208,18 +1192,18 @@ struct ForgotPasswordSheet: View {
             .background(
                 isEmailValid ?
                 LinearGradient(
-                    gradient: Gradient(colors: [Color.orange, Color.red]),
+                    gradient: Gradient(colors: [Color.statusNotHome, Color.statusNotInterested]),
                     startPoint: .leading,
                     endPoint: .trailing
                 ) :
                 LinearGradient(
-                    gradient: Gradient(colors: [Color.gray, Color.gray.opacity(0.8)]),
+                    gradient: Gradient(colors: [Color.textSecondary, Color.textSecondary.opacity(0.8)]),
                     startPoint: .leading,
                     endPoint: .trailing
                 )
             )
             .cornerRadius(16)
-            .shadow(color: isEmailValid ? Color.orange.opacity(0.3) : Color.clear, radius: 15, x: 0, y: 8)
+            .shadow(color: isEmailValid ? Color.statusNotHome.opacity(0.3) : Color.clear, radius: 15, x: 0, y: 8)
         }
         .disabled(!isEmailValid)
     }
@@ -1229,16 +1213,16 @@ struct ForgotPasswordSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title)
-                    .foregroundColor(.green)
+                    .foregroundColor(Color.statusInterested)
 
                 Text("Email Sent!")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundColor(.green)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(Color.statusInterested)
             }
 
             Text("Check your inbox for the password reset link. If you don't see it, check your spam folder.")
-                .font(.system(size: 15, weight: .regular, design: .rounded))
-                .foregroundColor(.secondary)
+                .font(.system(size: 15, weight: .regular))
+                .foregroundColor(Color.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
 
@@ -1246,13 +1230,13 @@ struct ForgotPasswordSheet: View {
                 isPresented = false
             }) {
                 Text("Done")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
                     .background(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.green, Color.green.opacity(0.8)]),
+                            gradient: Gradient(colors: [Color.statusInterested, Color.statusInterested.opacity(0.8)]),
                             startPoint: .leading,
                             endPoint: .trailing
                         )
@@ -1264,10 +1248,10 @@ struct ForgotPasswordSheet: View {
         .padding(24)
         .background(
             RoundedRectangle(cornerRadius: 20)
-                .fill(Color.green.opacity(0.1))
+                .fill(Color.statusInterested.opacity(0.1))
                 .overlay(
                     RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.green.opacity(0.3), lineWidth: 1.5)
+                        .stroke(Color.statusInterested.opacity(0.3), lineWidth: 1.5)
                 )
         )
     }
@@ -1280,23 +1264,23 @@ struct ForgotPasswordSheet: View {
     private var passwordResetHeader: some View {
         VStack(spacing: 16) {
             Circle()
-                .fill(Color.blue.opacity(0.1))
+                .fill(Color.electricViolet.opacity(0.1))
                 .frame(width: 80, height: 80)
                 .overlay(
                     Image(systemName: "key.fill")
                         .font(.system(size: 32))
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.electricViolet)
                 )
-            
+
             VStack(spacing: 8) {
                 Text("Reset Password")
                     .font(.largeTitle)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.textPrimary)
+
                 Text("Enter your email address and we'll send you a link to reset your password.")
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
             }
         }
@@ -1308,14 +1292,14 @@ struct ForgotPasswordSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: "envelope.fill")
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.electricViolet)
                         .frame(width: 20)
-                    
+
                     Text("Email")
                         .font(.headline)
                         .fontWeight(.semibold)
                 }
-                
+
                 TextField("Email", text: $resetEmail)
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
@@ -1324,12 +1308,12 @@ struct ForgotPasswordSheet: View {
                     .padding(.vertical, 12)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(UIColor.systemBackground))
+                            .fill(Color.obsidianBlack)
                             .shadow(color: .black.opacity(0.05), radius: 1, x: 0, y: 1)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(UIColor.separator), lineWidth: 0.5)
+                            .stroke(Color.obsidianBorder, lineWidth: 0.5)
                     )
             }
         }
@@ -1343,7 +1327,7 @@ struct ForgotPasswordSheet: View {
                 
                 Text("Sending reset email...")
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
                 
                 Spacer()
             }
@@ -1361,36 +1345,36 @@ struct ForgotPasswordSheet: View {
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .background(isEmailValid ? Color.blue : Color.gray)
+            .background(isEmailValid ? Color.electricViolet : Color.textSecondary)
             .cornerRadius(12)
             .disabled(!isEmailValid || accountManager.authStatus == .loading)
         }
     }
     
     private func passwordResetErrorCard(message: String) -> some View {
-        passwordResetSectionCard(title: "Error", icon: "exclamationmark.triangle.fill", titleColor: .red) {
+        passwordResetSectionCard(title: "Error", icon: "exclamationmark.triangle.fill", titleColor: Color.statusNotInterested) {
             HStack {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.red)
-                
+                    .foregroundColor(Color.statusNotInterested)
+
                 Text(message)
                     .font(.body)
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.statusNotInterested)
                     .multilineTextAlignment(.leading)
-                
+
                 Spacer()
             }
         }
     }
     
     private var successCard: some View {
-        passwordResetSectionCard(title: "Success", icon: "checkmark.circle.fill", titleColor: .green) {
+        passwordResetSectionCard(title: "Success", icon: "checkmark.circle.fill", titleColor: Color.statusInterested) {
             VStack(spacing: 16) {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(Color.statusInterested)
                     Text("Reset email sent!")
-                        .foregroundColor(.green)
+                        .foregroundColor(Color.statusInterested)
                         .fontWeight(.semibold)
                     Spacer()
                 }
@@ -1398,8 +1382,8 @@ struct ForgotPasswordSheet: View {
                 Text("Check your email for a password reset link. If you don't see it, check your spam folder.")
                     .font(.body)
                     .multilineTextAlignment(.leading)
-                    .foregroundColor(.secondary)
-                
+                    .foregroundColor(Color.textSecondary)
+
                 Button("Done") {
                     isPresented = false
                 }
@@ -1408,29 +1392,29 @@ struct ForgotPasswordSheet: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(Color.green)
+                .background(Color.statusInterested)
                 .cornerRadius(12)
             }
         }
     }
     
-    private func passwordResetSectionCard<Content: View>(title: String, icon: String, titleColor: Color = .blue, @ViewBuilder content: () -> Content) -> some View {
+    private func passwordResetSectionCard<Content: View>(title: String, icon: String, titleColor: Color = Color.electricViolet, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: icon)
                     .foregroundColor(titleColor)
                     .font(.title2)
-                
+
                 Text(title)
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.textPrimary)
+
                 Spacer()
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
-            
+
             content()
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -1442,7 +1426,7 @@ struct ForgotPasswordSheet: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(UIColor.separator), lineWidth: 0.5)
+                .stroke(Color.obsidianBorder, lineWidth: 0.5)
         )
     }
 

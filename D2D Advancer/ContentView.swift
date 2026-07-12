@@ -28,7 +28,6 @@ struct ContentView: View {
             }
             .sheet(isPresented: paywallBinding) {
                 PaywallView()
-                    .interactiveDismissDisabled(paywallManager.remainingFreeLeads() == 0 && !paywallManager.isPremium)
             }
             .onAppear {
                 isOnboardingPresented = onboardingManager.showOnboarding

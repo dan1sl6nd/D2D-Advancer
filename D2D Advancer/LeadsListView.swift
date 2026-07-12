@@ -18,6 +18,7 @@ struct LeadsListView: View {
     @State private var filterUpdateTask: Task<Void, Never>? = nil
     @State private var selectedLead: Lead?
     @State private var messageLead: Lead?
+    @ObservedObject private var paywallManager = PaywallManager.shared
     
     private let pageSize = 50
     
@@ -56,7 +57,7 @@ struct LeadsListView: View {
                 .ignoresSafeArea(.all, edges: .top)
             }
             .navigationBarHidden(true)
-            .background(Color(UIColor.systemGroupedBackground))
+            .background(Color.obsidianBlack)
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
             }
@@ -96,41 +97,46 @@ struct LeadsListView: View {
     }
     
     // MARK: - Extracted View Components
-    
+
+    @ViewBuilder
+    private func tabLabel(_ tab: LeadTab) -> some View {
+        let isSelected = selectedTab == tab
+        Text(tab.rawValue)
+            .font(.system(size: 14, weight: .semibold))
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .foregroundColor(isSelected ? .white : Color.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? Color.electricViolet : Color.obsidianSurface)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(
+                        isSelected ? Color.clear : Color.obsidianBorder,
+                        lineWidth: 1
+                    )
+            )
+    }
+
     private func safeAreaSpacer(geometry: GeometryProxy) -> some View {
         Rectangle()
-            .fill(
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(UIColor.systemBackground),
-                        Color(UIColor.systemBackground).opacity(0.98)
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .fill(Color.obsidianBlack)
             .frame(height: max(geometry.safeAreaInsets.top + 20, 70))
     }
     
     private var tabSelectionSection: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 8) {
             ForEach(LeadTab.allCases, id: \.self) { tab in
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         selectedTab = tab
                     }
                 }) {
-                    Text(tab.rawValue)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(selectedTab == tab ? .white : .primary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(selectedTab == tab ? Color.blue : Color.clear)
-                                .opacity(selectedTab == tab ? 1 : 0)
-                        )
+                    tabLabel(tab)
                 }
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel("\(tab.rawValue) leads")
@@ -143,11 +149,7 @@ struct LeadsListView: View {
         .accessibilityLabel("Lead filter tabs")
         .padding(.horizontal, 16)
         .padding(.bottom, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(UIColor.tertiarySystemBackground))
-                .padding(.horizontal, 12)
-        )
+        .background(Color.obsidianBlack)
     }
     
     private var searchAndFiltersSection: some View {
@@ -185,37 +187,31 @@ struct LeadsListView: View {
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Spacer()
-            
-            Circle()
-                .fill(Color.gray.opacity(0.2))
-                .frame(width: 80, height: 80)
-                .overlay(
-                    Image(systemName: "person.3.fill")
-                        .font(.system(size: 32))
-                        .foregroundColor(.gray)
-                )
-            
+
+            Image(systemName: "person.2")
+                .font(.system(size: 48))
+                .foregroundColor(Color.textMuted)
+
             VStack(spacing: 8) {
                 Text("No Leads Found")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Text(selectedTab == .active ? 
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(Color.textSecondary)
+
+                Text(selectedTab == .active ?
                     "Start adding leads to build your customer database and track your progress." :
                     "Inactive leads will appear here when you mark them as not interested or not home.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 15))
+                    .foregroundColor(Color.textMuted)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
-            
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("No leads found")
-        .accessibilityValue(selectedTab == .active ? 
+        .accessibilityValue(selectedTab == .active ?
             "Start adding leads to build your customer database" :
             "Inactive leads will appear here when marked as not interested or not home")
     }
@@ -227,20 +223,27 @@ struct LeadsListView: View {
                     LeadRowView(
                         lead: lead,
                         onTap: { selectedLead = lead },
-                        onDelete: { handleLongPressDelete(lead) },
+                        onDelete: {
+                            guard paywallManager.gateAction() else { return }
+                            handleLongPressDelete(lead)
+                        },
                         onCall: {
+                            guard paywallManager.gateAction() else { return }
                             if let phone = lead.phone, !phone.isEmpty {
                                 Utilities.makePhoneCall(to: phone)
                             }
                         },
                         onMessage: {
+                            guard paywallManager.gateAction() else { return }
                             messageLead = lead
                         },
                         onFollowUp: {
+                            guard paywallManager.gateAction() else { return }
                             quickSetFollowUp(for: lead)
                         }
                     )
                     .onLongPressGesture {
+                        guard paywallManager.gateAction() else { return }
                         handleLongPressDelete(lead)
                     }
                         .accessibilityElement(children: .combine)
@@ -261,8 +264,8 @@ struct LeadsListView: View {
                         ProgressView()
                             .scaleEffect(0.8)
                         Text("Loading more leads...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(Color.textSecondary)
                     }
                     .padding()
                     .accessibilityLabel("Loading more leads")
@@ -487,7 +490,9 @@ struct LeadsListView: View {
                 }
             } catch {
                 let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+                print("❌ Delete error: \(nsError), \(nsError.userInfo)")
+                // Reset context to prevent corruption
+                viewContext.rollback()
             }
         }
         
@@ -522,7 +527,11 @@ struct LeadsListView: View {
     }
 
     private func cancelNotification(for lead: Lead) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [lead.id!.uuidString])
+        guard let leadId = lead.id else {
+            print("❌ Cannot cancel notification: lead has no ID")
+            return
+        }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [leadId.uuidString])
     }
     
     private func leadAccessibilityValue(for lead: Lead) -> String {
@@ -556,27 +565,28 @@ struct LeadsListView: View {
 struct SearchBar: View {
     @Binding var text: String
     @FocusState private var isSearchFocused: Bool
-    
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.electricViolet)
                 .font(.system(size: 16, weight: .medium))
-            
+
             TextField("Search leads...", text: $text)
                 .focused($isSearchFocused)
-                .font(.system(size: 16, weight: .regular, design: .rounded))
+                .font(.system(size: 15, weight: .regular))
+                .foregroundColor(Color.textPrimary)
                 .textFieldStyle(PlainTextFieldStyle())
                 .accessibilityLabel("Search leads")
                 .accessibilityHint("Enter text to search leads by name, address, phone, or email")
                 .accessibilityValue(text.isEmpty ? "Empty" : text)
-            
+
             if !text.isEmpty {
                 Button(action: {
                     text = ""
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                         .font(.system(size: 16, weight: .medium))
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -585,13 +595,13 @@ struct SearchBar: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(UIColor.tertiarySystemBackground))
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.obsidianSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(isSearchFocused ? Color.blue : Color.clear, lineWidth: 2)
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isSearchFocused ? Color.electricViolet : Color.obsidianBorder, lineWidth: 1)
                 )
         )
         .padding(.horizontal, 16)
@@ -604,37 +614,39 @@ struct FilterBar: View {
     @Binding var sortBy: LeadsListView.SortOption
     @Binding var sortAscending: Bool
     @Binding var showingFilters: Bool
-    
+
     var body: some View {
         if showingFilters {
             VStack(spacing: 8) {
                 HStack {
                     Text("Sort by:")
-                        .font(.caption)
-                        .foregroundColor(Color.themeTextSecondary)
-                    
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(Color.textSecondary)
+
                     Picker("Sort by", selection: $sortBy) {
                         ForEach(LeadsListView.SortOption.allCases, id: \.self) { option in
                             Text(option.rawValue).tag(option)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    
+
                     Spacer()
-                    
+
                     Button(action: {
                         sortAscending.toggle()
                     }) {
                         Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                     }
                 }
-                
-                Divider()
+
+                Rectangle()
+                    .fill(Color.obsidianBorder)
+                    .frame(height: 1)
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
-            .background(Color(UIColor.tertiarySystemBackground))
+            .background(Color.obsidianBlack)
         }
     }
 }
@@ -657,97 +669,76 @@ struct LeadRowView: View {
     }
     
     var body: some View {
-        HStack(spacing: 16) {
-            // Lead initial circle
+        HStack(spacing: 12) {
+            // Lead initial circle with violet-to-cyan gradient
             Circle()
-                .fill(leadInitialColor)
-                .frame(width: 48, height: 48)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.electricViolet, Color.dataCyan],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 40, height: 40)
                 .overlay(
                     Text(leadInitial)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                         .foregroundColor(.white)
                 )
-                .accessibilityHidden(true) // Hide decorative element
-            
-            VStack(alignment: .leading, spacing: 6) {
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(lead.displayName)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.system(size: 17, weight: .semibold))
                         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.textPrimary)
                         .accessibilityAddTraits(.isHeader)
-                    
+
                     Spacer()
-                    
+
                     if let followUpDate = lead.followUpDate {
                         HStack(spacing: 4) {
                             Image(systemName: "calendar.badge.clock")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.orange)
-                                .accessibilityHidden(true) // Hide decorative element
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(Color.statusNotHome)
+                                .accessibilityHidden(true)
                             Text(followUpDate, format: .dateTime.day().month())
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .font(.system(size: 11, weight: .medium))
                                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                                .foregroundColor(.orange)
+                                .foregroundColor(Color.statusNotHome)
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(
                             Capsule()
-                                .fill(Color.orange.opacity(0.15))
+                                .fill(Color.statusNotHome.opacity(0.12))
                         )
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("Follow-up scheduled")
                         .accessibilityValue(DateFormatter.localizedString(from: followUpDate, dateStyle: .medium, timeStyle: .short))
                     }
                 }
-                
+
                 if let address = lead.address, !address.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
-                            .accessibilityHidden(true) // Hide decorative element
-                        Text(address)
-                            .font(.system(size: 14, weight: .regular, design: .rounded))
-                            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Address")
-                    .accessibilityValue(address)
+                    Text(address)
+                        .font(.system(size: 13, weight: .regular))
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                        .foregroundColor(Color.textSecondary)
+                        .lineLimit(1)
+                        .accessibilityLabel("Address: \(address)")
                 }
-                
+
                 HStack {
                     ModernStatusBadge(status: lead.leadStatus)
                     Spacer()
                 }
             }
         }
+        .surfaceCard()
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
         .onTapGesture {
             onTap?()
@@ -758,9 +749,9 @@ struct LeadRowView: View {
             } label: {
                 Label("View Details", systemImage: "eye")
             }
-            
+
             Divider()
-            
+
             Button(role: .destructive) {
                 onDelete?()
             } label: {
@@ -774,7 +765,7 @@ struct LeadRowView: View {
                 } label: {
                     Label("Follow-up", systemImage: "calendar.badge.plus")
                 }
-                .tint(.orange)
+                .tint(Color.statusNotHome)
             }
             if onMessage != nil {
                 Button {
@@ -782,7 +773,7 @@ struct LeadRowView: View {
                 } label: {
                     Label("Message", systemImage: "message")
                 }
-                .tint(.blue)
+                .tint(Color.electricViolet)
             }
             if onCall != nil {
                 Button {
@@ -790,7 +781,7 @@ struct LeadRowView: View {
                 } label: {
                     Label("Call", systemImage: "phone")
                 }
-                .tint(.green)
+                .tint(Color.statusInterested)
             }
         }
         .accessibilityElement(children: .combine)
@@ -800,33 +791,30 @@ struct LeadRowView: View {
         String(lead.displayName.prefix(1)).uppercased()
     }
     
-    private var leadInitialColor: Color {
-        let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .indigo, .teal]
-        let hash = lead.displayName.hash
-        return colors[abs(hash) % colors.count]
-    }
 }
 
 struct ModernStatusBadge: View {
     let status: Lead.Status
-    
+
     var body: some View {
         HStack(spacing: 4) {
             Circle()
                 .fill(statusColor)
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true) // Hide decorative element
-            
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+
             Text(status.displayName)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.system(size: 11, weight: .medium))
+                .textCase(.uppercase)
+                .tracking(0.5)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .foregroundColor(statusColor)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.vertical, 5)
         .background(
             Capsule()
-                .fill(statusColor.opacity(0.15))
+                .fill(statusColor.opacity(0.12))
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Status")
@@ -836,15 +824,15 @@ struct ModernStatusBadge: View {
     private var statusColor: Color {
         switch status {
         case .notContacted:
-            return .gray
+            return Color.statusNotContacted
         case .interested:
-            return .green
+            return Color.statusInterested
         case .notInterested:
-            return .red
+            return Color.statusNotInterested
         case .notHome:
-            return .orange
+            return Color.statusNotHome
         case .converted:
-            return .blue
+            return Color.statusConverted
         }
     }
 }

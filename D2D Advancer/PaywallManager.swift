@@ -63,20 +63,17 @@ struct PaywallExperience {
         case .organizePipeline: return "Upgrade your command center"
         case .bookMoreAppointments: return "Fill your calendar faster"
         case .territoryPlanning: return "Own your best territory"
-        case .followUpAutomation: return "Automate every follow-up touch"
         }
     }
 
     private static func heroHighlight(for goal: OnboardingProfile.SalesGoal) -> String {
         switch goal {
         case .organizePipeline:
-            return "Stay on top of every door you’ve knocked"
+            return "Stay on top of every door you've knocked"
         case .bookMoreAppointments:
             return "Turn conversations into confirmed meetings"
         case .territoryPlanning:
             return "Focus on the blocks that close the fastest"
-        case .followUpAutomation:
-            return "Stay top-of-mind without the manual grind"
         }
     }
 
@@ -87,8 +84,6 @@ struct PaywallExperience {
             workflowSentence = "Launch each day with a clear plan, pre-built follow-ups, and synced reminders."
         case .hustle:
             workflowSentence = "Capture leads in seconds, drop pins, and fire off next steps without slowing down."
-        case .dataDriven:
-            workflowSentence = "Review territory performance, track follow-ups, and course-correct in real time."
         }
 
         let goalSentence: String
@@ -99,8 +94,6 @@ struct PaywallExperience {
             goalSentence = "Unlock appointment tracking, reminders, and confirmations that keep your calendar full."
         case .territoryPlanning:
             goalSentence = "Unlock advanced map layers, neighborhood scores, and saved territories."
-        case .followUpAutomation:
-            goalSentence = "Unlock automated reminders, templated scripts, and next-step nudges."
         }
 
         return [goalSentence, workflowSentence].joined(separator: " ")
@@ -114,8 +107,6 @@ struct PaywallExperience {
             return "Top setters double their confirmed appointments with streamlined scheduling and reminders."
         case .territoryPlanning:
             return "Door-to-door pros plan smarter routes every morning with D2D territory intelligence."
-        case .followUpAutomation:
-            return "Stay top-of-mind like the best closers using automated follow-ups that never miss."
         }
     }
 
@@ -127,14 +118,8 @@ struct PaywallExperience {
                 return Benefit(icon: "map.circle.fill", title: "Territory heatmaps", subtitle: "See top streets instantly with demographic overlays and scoring.")
             case .automatedReminders:
                 return Benefit(icon: "bolt.badge.clock", title: "Automated reminders", subtitle: "Trigger follow-ups the moment a status changes or a visit is logged.")
-            case .appointmentScheduling:
-                return Benefit(icon: "calendar.badge.clock", title: "Appointment hub", subtitle: "Schedule, confirm, and track every visit in one calendar.")
-            case .messageTemplates:
-                return Benefit(icon: "text.bubble.fill", title: "Template library", subtitle: "Send proven SMS and door scripts tailored to your audience.")
             case .leadOrganization:
                 return Benefit(icon: "tray.full.fill", title: "Saved lead views", subtitle: "Build custom filters and tabs for every campaign you run.")
-            case .calendarSync:
-                return Benefit(icon: "link.circle.fill", title: "Calendar sync", subtitle: "Mirror appointments to your device calendar and get alerted everywhere.")
             }
         }
     }
@@ -170,12 +155,6 @@ struct PaywallExperience {
                 Testimonial(avatar: "🚪", name: "Lee • Closer", quote: "I cover fewer doors and get better results because I start with the highest scoring blocks."),
                 Testimonial(avatar: "📈", name: "Dana • Field Rep", quote: "Heatmaps and filters make it obvious which streets are worth revisiting.")
             ]
-        case .followUpAutomation:
-            return [
-                Testimonial(avatar: "🤖", name: "Sam • Consultant", quote: "Automated reminders mean every follow-up is on time. Prospects stay warm and ready."),
-                Testimonial(avatar: "💬", name: "Quinn • Closer", quote: "Templates + reminders = more replies. I send the right message without overthinking it."),
-                Testimonial(avatar: "📨", name: "Casey • Setter", quote: "I load follow-ups once and Advancer keeps me accountable the rest of the week.")
-            ]
         }
     }
 
@@ -198,17 +177,12 @@ struct PaywallExperience {
                 question: "Does D2D Advancer show which streets to start with?",
                 answer: "Premium unlocks map layers, demographic overlays, and saved hot lists so you always know the next best blocks."
             )]
-        case .followUpAutomation:
-            items = [FAQ(
-                question: "Can I schedule follow-ups automatically?",
-                answer: "Yes. Set reminders right from the lead detail, attach templates, and let Advancer prompt you when it's time to reconnect."
-            )]
         }
 
         items.append(contentsOf: [
-            FAQ(question: "Can I cancel anytime?", answer: "Of course. Manage or cancel from your device settings whenever you want—no hidden fees, no hassle."),
-            FAQ(question: "What happens to my existing leads?", answer: "All of your current data stays safe. Premium simply removes caps and unlocks advanced features on top of what you already have."),
-            FAQ(question: "Is my data secure?", answer: "Yes. We use industry-standard encryption, regular backups, and never sell or share your customer information.")
+            FAQ(question: "Can I cancel anytime?", answer: "Yes. Cancel anytime from your device settings with no hassle. If you cancel during your 3-day trial, you won't be charged at all."),
+            FAQ(question: "What happens to my data if I cancel?", answer: "Your leads, notes, and appointments stay on your device. You can always resubscribe later and pick up right where you left off—nothing gets deleted."),
+            FAQ(question: "Is my data secure and private?", answer: "Absolutely. We use industry-standard encryption, automatic cloud backups, and never sell or share your customer information with third parties.")
         ])
 
         return items
@@ -219,7 +193,7 @@ struct PaywallExperience {
         salesGoal: OnboardingProfile.SalesGoal,
         workflow: OnboardingProfile.WorkflowStyle
     ) -> PaywallManager.SubscriptionPlan {
-        if salesGoal == .bookMoreAppointments || focuses.contains(.calendarSync) || focuses.contains(.territoryInsights) {
+        if salesGoal == .bookMoreAppointments || focuses.contains(.territoryInsights) {
             return .yearly
         }
 
@@ -227,7 +201,7 @@ struct PaywallExperience {
             return .weekly
         }
 
-        if focuses.contains(.automatedReminders) || focuses.contains(.appointmentScheduling) {
+        if focuses.contains(.automatedReminders) {
             return .yearly
         }
 
@@ -355,6 +329,15 @@ class PaywallManager: ObservableObject {
         return false
     }
 
+    /// Gate an action behind the paywall. Returns true if the user is premium and the action can proceed.
+    /// Shows the paywall if the user is not premium.
+    @discardableResult
+    func gateAction() -> Bool {
+        if isPremium { return true }
+        shouldShowPaywall = true
+        return false
+    }
+
     // MARK: - Premium Status
 
     private func loadPremiumStatus() {
@@ -368,7 +351,7 @@ class PaywallManager: ObservableObject {
     }
 
     func setPremiumStatus(_ premium: Bool) {
-        let wasPremiouslyPremium = isPremium
+        let wasPreviouslyPremium = isPremium
         isPremium = premium
         userDefaults.set(premium, forKey: premiumKey)
         userDefaults.synchronize()
@@ -386,7 +369,7 @@ class PaywallManager: ObservableObject {
 
             // If user was previously premium and now is not, show paywall
             // This handles subscription expiration/cancellation
-            if wasPremiouslyPremium && !premium && onboardingCompleted {
+            if wasPreviouslyPremium && !premium && onboardingCompleted {
                 print("⚠️ Subscription expired or cancelled - showing paywall")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     self.shouldShowPaywall = true

@@ -61,10 +61,10 @@ struct NeighborhoodDetailView: View {
 
                         HStack {
                             Image(systemName: "mappin.circle.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.electricViolet)
                             Text("\(neighborhood.cityName ?? ""), \(neighborhood.state ?? "")")
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.textSecondary)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -75,17 +75,17 @@ struct NeighborhoodDetailView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Area Score")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.textSecondary)
 
                             HStack(spacing: 8) {
                                 Text(String(format: "%.0f", neighborhood.score))
-                                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                                    .font(.system(size: 36, weight: .bold))
                                     .foregroundColor(scoreColor)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("out of 100")
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(Color.textSecondary)
 
                                     Text(neighborhood.scoreGrade)
                                         .font(.caption)
@@ -115,14 +115,14 @@ struct NeighborhoodDetailView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .background(Color.blue)
+                            .background(Color.electricViolet)
                             .cornerRadius(10)
                         }
                     }
                     .padding(16)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(UIColor.tertiarySystemBackground))
+                            .fill(Color.obsidianSurface)
                     )
                     .padding(.horizontal, 20)
 
@@ -137,28 +137,28 @@ struct NeighborhoodDetailView: View {
                                 icon: "dollarsign.circle.fill",
                                 label: "Median Income",
                                 value: neighborhood.formattedIncome,
-                                color: .green
+                                color: .statusInterested
                             )
 
                             DemographicRow(
                                 icon: "house.circle.fill",
                                 label: "Avg Home Value",
                                 value: neighborhood.formattedHomeValue,
-                                color: .blue
+                                color: .electricViolet
                             )
 
                             DemographicRow(
                                 icon: "person.3.circle.fill",
                                 label: "Population",
                                 value: neighborhood.formattedPopulation,
-                                color: .purple
+                                color: .electricViolet
                             )
 
                             DemographicRow(
                                 icon: "key.circle.fill",
                                 label: "Homeownership",
                                 value: String(format: "%.0f%%", neighborhood.homeOwnershipRate * 100),
-                                color: .orange
+                                color: .statusNotHome
                             )
                         }
                         .padding(.horizontal, 20)
@@ -188,25 +188,25 @@ struct NeighborhoodDetailView: View {
                                 // TODO: Add note editing
                             }
                             .font(.subheadline)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                         }
                         .padding(.horizontal, 20)
 
                         if let notes = neighborhood.userNotes, !notes.isEmpty {
                             Text(notes)
                                 .font(.body)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.textSecondary)
                                 .padding(16)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color(UIColor.tertiarySystemBackground))
+                                        .fill(Color.obsidianSurface)
                                 )
                                 .padding(.horizontal, 20)
                         } else {
                             Text("No notes yet")
                                 .font(.body)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.textSecondary)
                                 .italic()
                                 .padding(.horizontal, 20)
                         }
@@ -221,15 +221,15 @@ struct NeighborhoodDetailView: View {
     private var scoreColor: Color {
         switch neighborhood.score {
         case 90...100:
-            return .green
+            return .statusInterested
         case 75..<90:
             return Color(red: 0.7, green: 0.9, blue: 0.4)
         case 60..<75:
             return .yellow
         case 45..<60:
-            return .orange
+            return .statusNotHome
         default:
-            return .red
+            return .statusNotInterested
         }
     }
 
@@ -262,7 +262,7 @@ struct DemographicRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
 
                 Text(value)
                     .font(.headline)
@@ -274,7 +274,7 @@ struct DemographicRow: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(UIColor.tertiarySystemBackground))
+                .fill(Color.obsidianSurface)
         )
     }
 }
@@ -286,30 +286,30 @@ struct PerformanceStatsView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 16) {
-                StatBox(label: "Total Leads", value: "\(stats.total)", color: .blue)
-                StatBox(label: "Converted", value: "\(stats.converted)", color: .green)
-                StatBox(label: "Interested", value: "\(stats.interested)", color: .orange)
+                StatBox(label: "Total Leads", value: "\(stats.total)", color: .electricViolet)
+                StatBox(label: "Converted", value: "\(stats.converted)", color: .statusInterested)
+                StatBox(label: "Interested", value: "\(stats.interested)", color: .statusNotHome)
             }
 
             HStack {
                 Image(systemName: "chart.line.uptrend.xyaxis.circle.fill")
-                    .foregroundColor(.green)
+                    .foregroundColor(Color.statusInterested)
 
                 Text("Conversion Rate")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
 
                 Spacer()
 
                 Text(String(format: "%.1f%%", stats.conversionRate))
                     .font(.headline)
                     .fontWeight(.bold)
-                    .foregroundColor(.green)
+                    .foregroundColor(Color.statusInterested)
             }
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.green.opacity(0.1))
+                    .fill(Color.statusInterested.opacity(0.1))
             )
         }
         .onAppear {
@@ -345,7 +345,7 @@ struct StatBox: View {
 
             Text(label)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)

@@ -59,7 +59,9 @@ extension Lead {
     func setFollowUpDate(_ date: Date?, autoSave: Bool = true) {
         // Cancel existing follow-up notification if we have an ID
         if let leadId = id {
-            NotificationService.shared.cancelFollowUpNotification(for: leadId)
+            Task { @MainActor in
+                NotificationService.shared.cancelFollowUpNotification(for: leadId)
+            }
         }
 
         // Set the values directly
@@ -70,7 +72,10 @@ extension Lead {
 
         // Schedule new notification if date is set
         if date != nil {
-            NotificationService.shared.scheduleFollowUpNotification(for: self)
+            let lead = self
+            Task { @MainActor in
+                NotificationService.shared.scheduleFollowUpNotification(for: lead)
+            }
         }
 
         // Only auto-save if requested (for views that don't manage their own saving)

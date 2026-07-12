@@ -1,18 +1,21 @@
 import Foundation
 import Security
+import CryptoKit
 
 class KeychainService {
     static let shared = KeychainService()
     
     private let service = "D2D-Advancer"
-    private let server = "d2d-advancer.local" // Local identifier for better autofill compatibility
     
     private init() {}
     
     // MARK: - Password Storage and Retrieval
     
     func saveCredentials(email: String, password: String) -> Bool {
-        let passwordData = password.data(using: .utf8)!
+        guard let passwordData = password.data(using: .utf8) else {
+            print("❌ Failed to encode password as UTF-8")
+            return false
+        }
         
         // Use a simple, reliable keychain structure
         let deleteQuery: [String: Any] = [
@@ -38,9 +41,9 @@ class KeychainService {
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         
         if status == errSecSuccess {
-            print("✅ Credentials saved to iOS Keychain for: \(email)")
+            print("✅ Credentials saved to iOS Keychain for: \(Utilities.redactedEmail(email))")
             // Mark that user has saved credentials for this email
-            UserDefaults.standard.set(true, forKey: "keychain_saved_\(email)")
+            UserDefaults.standard.set(true, forKey: keychainSavedKey(for: email))
             return true
         } else {
             print("❌ Failed to save credentials to Keychain. Status: \(status)")
@@ -84,7 +87,10 @@ class KeychainService {
     }
     
     private func updateExistingCredentials(email: String, password: String) -> Bool {
-        let passwordData = password.data(using: .utf8)!
+        guard let passwordData = password.data(using: .utf8) else {
+            print("❌ Failed to encode password as UTF-8")
+            return false
+        }
         
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -99,8 +105,8 @@ class KeychainService {
         let status = SecItemUpdate(query as CFDictionary, attributesToUpdate as CFDictionary)
         
         if status == errSecSuccess {
-            print("✅ Updated existing credentials in iOS Keychain for: \(email)")
-            UserDefaults.standard.set(true, forKey: "keychain_saved_\(email)")
+            print("✅ Updated existing credentials in iOS Keychain for: \(Utilities.redactedEmail(email))")
+            UserDefaults.standard.set(true, forKey: keychainSavedKey(for: email))
             return true
         } else {
             print("❌ Failed to update existing credentials. Status: \(status)")
@@ -139,7 +145,7 @@ class KeychainService {
         let status = SecItemDelete(query as CFDictionary)
         
         if status == errSecSuccess {
-            print("✅ Credentials deleted from Keychain for: \(email)")
+            print("✅ Credentials deleted from Keychain for: \(Utilities.redactedEmail(email))")
         } else {
             print("❌ Failed to delete credentials from Keychain: \(status)")
         }
@@ -163,13 +169,15 @@ class KeychainService {
     // MARK: - User Preference Tracking
     
     func hasCredentialsSaved(for email: String) -> Bool {
+        migrateLegacyPreferenceKeysIfNeeded(for: email)
+
         // Check both UserDefaults flag AND actual keychain
-        let flagExists = UserDefaults.standard.bool(forKey: "keychain_saved_\(email)")
+        let flagExists = UserDefaults.standard.bool(forKey: keychainSavedKey(for: email))
         let keychainHasPassword = getStoredCredentials(for: email) != nil
         
         // If flag says we saved but keychain is empty, clear the flag
         if flagExists && !keychainHasPassword {
-            UserDefaults.standard.removeObject(forKey: "keychain_saved_\(email)")
+            UserDefaults.standard.removeObject(forKey: keychainSavedKey(for: email))
             return false
         }
         
@@ -177,17 +185,20 @@ class KeychainService {
     }
     
     func markUserDeclinedSaving(for email: String) {
-        UserDefaults.standard.set(true, forKey: "user_declined_save_\(email)")
+        UserDefaults.standard.set(true, forKey: declinedSaveKey(for: email))
     }
     
     func hasUserDeclinedSaving(for email: String) -> Bool {
-        return UserDefaults.standard.bool(forKey: "user_declined_save_\(email)")
+        migrateLegacyPreferenceKeysIfNeeded(for: email)
+        return UserDefaults.standard.bool(forKey: declinedSaveKey(for: email))
     }
     
     func clearUserPreference(for email: String) {
-        UserDefaults.standard.removeObject(forKey: "keychain_saved_\(email)")
-        UserDefaults.standard.removeObject(forKey: "user_declined_save_\(email)")
-        print("🧹 Cleared keychain preferences for: \(email)")
+        UserDefaults.standard.removeObject(forKey: keychainSavedKey(for: email))
+        UserDefaults.standard.removeObject(forKey: declinedSaveKey(for: email))
+        UserDefaults.standard.removeObject(forKey: legacyKeychainSavedKey(for: email))
+        UserDefaults.standard.removeObject(forKey: legacyDeclinedSaveKey(for: email))
+        print("🧹 Cleared keychain preferences for: \(Utilities.redactedEmail(email))")
     }
     
     func resetAllKeychainPreferences() {
@@ -205,5 +216,47 @@ class KeychainService {
         
         userDefaults.synchronize()
         print("🧹 Reset all keychain preferences")
+    }
+
+    // MARK: - Private Helpers
+
+    private func keychainSavedKey(for email: String) -> String {
+        "keychain_saved_\(hashedEmailIdentifier(for: email))"
+    }
+
+    private func declinedSaveKey(for email: String) -> String {
+        "user_declined_save_\(hashedEmailIdentifier(for: email))"
+    }
+
+    private func legacyKeychainSavedKey(for email: String) -> String {
+        "keychain_saved_\(email)"
+    }
+
+    private func legacyDeclinedSaveKey(for email: String) -> String {
+        "user_declined_save_\(email)"
+    }
+
+    private func hashedEmailIdentifier(for email: String) -> String {
+        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let digest = SHA256.hash(data: Data(normalized.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func migrateLegacyPreferenceKeysIfNeeded(for email: String) {
+        let defaults = UserDefaults.standard
+        let legacySavedKey = legacyKeychainSavedKey(for: email)
+        let legacyDeclinedKey = legacyDeclinedSaveKey(for: email)
+        let modernSavedKey = keychainSavedKey(for: email)
+        let modernDeclinedKey = declinedSaveKey(for: email)
+
+        if defaults.object(forKey: legacySavedKey) != nil && defaults.object(forKey: modernSavedKey) == nil {
+            defaults.set(defaults.bool(forKey: legacySavedKey), forKey: modernSavedKey)
+            defaults.removeObject(forKey: legacySavedKey)
+        }
+
+        if defaults.object(forKey: legacyDeclinedKey) != nil && defaults.object(forKey: modernDeclinedKey) == nil {
+            defaults.set(defaults.bool(forKey: legacyDeclinedKey), forKey: modernDeclinedKey)
+            defaults.removeObject(forKey: legacyDeclinedKey)
+        }
     }
 }

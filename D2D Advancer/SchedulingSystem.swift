@@ -39,12 +39,12 @@ struct Appointment: Identifiable, Equatable, Sendable {
         
         var color: Color {
             switch self {
-            case .consultation: return .green
-            case .installation: return .blue
-            case .inspection: return .orange
-            case .maintenance: return .purple
-            case .repair: return .red
-            case .followUp: return .gray
+            case .consultation: return Color.statusInterested
+            case .installation: return Color.electricViolet
+            case .inspection: return Color.statusNotHome
+            case .maintenance: return Color.electricViolet
+            case .repair: return Color.statusNotInterested
+            case .followUp: return Color.textSecondary
             }
         }
     }
@@ -58,11 +58,11 @@ struct Appointment: Identifiable, Equatable, Sendable {
         
         var color: Color {
             switch self {
-            case .scheduled: return .blue
-            case .confirmed: return .green
-            case .completed: return .gray
-            case .cancelled: return .red
-            case .rescheduled: return .orange
+            case .scheduled: return Color.electricViolet
+            case .confirmed: return Color.statusInterested
+            case .completed: return Color.statusInterested
+            case .cancelled: return Color.statusNotInterested
+            case .rescheduled: return Color.statusNotHome
             }
         }
     }
@@ -109,6 +109,7 @@ struct Appointment: Identifiable, Equatable, Sendable {
 
 // MARK: - Appointment Manager
 
+@MainActor
 class AppointmentManager: ObservableObject {
     static let shared = AppointmentManager()
     
@@ -119,6 +120,7 @@ class AppointmentManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private let appointmentsKey = "saved_appointments"
     private let db = Firestore.firestore()
+    private let cloudKitBackupService = CloudKitAppointmentBackupService.shared
     private var listener: ListenerRegistration?
     private var isCleared = false  // Flag to prevent reloading after clearing
     
@@ -367,6 +369,9 @@ class AppointmentManager: ObservableObject {
                 
                 if querySnapshot.documents.isEmpty {
                     print("🗓️ No appointment documents found in Firebase")
+                    Task {
+                        await self?.restoreAppointmentsFromCloudKitIfNeeded(userId: userId)
+                    }
                     return
                 }
                 
@@ -450,6 +455,8 @@ class AppointmentManager: ObservableObject {
                 errorMessage = "Failed to sync appointment: \(error.localizedDescription)"
             }
         }
+
+        await backupAppointmentToCloudKit(appointment, userId: userId)
     }
     
     func deleteAppointmentFromFirebase(_ appointmentId: UUID) async {
@@ -466,6 +473,13 @@ class AppointmentManager: ObservableObject {
             await MainActor.run {
                 errorMessage = "Failed to delete appointment: \(error.localizedDescription)"
             }
+        }
+
+        do {
+            try await cloudKitBackupService.deleteAppointment(appointmentId, for: userId)
+            print("☁️ Appointment deleted from CloudKit backup: \(appointmentId)")
+        } catch {
+            print("⚠️ Failed to delete appointment from CloudKit backup: \(error.localizedDescription)")
         }
     }
     
@@ -490,6 +504,13 @@ class AppointmentManager: ObservableObject {
             print("✅ All appointments deleted from Firebase (\(querySnapshot.documents.count) deleted)")
         } catch {
             print("❌ Failed to delete all appointments from Firebase: \(error)")
+        }
+
+        do {
+            try await cloudKitBackupService.deleteAllAppointments(for: userId)
+            print("✅ All appointments deleted from CloudKit backup")
+        } catch {
+            print("⚠️ Failed to delete appointments from CloudKit backup: \(error.localizedDescription)")
         }
     }
     
@@ -681,6 +702,42 @@ class AppointmentManager: ObservableObject {
         }
         
         print("🗓️ Firebase sync completed and listener restarted")
+    }
+
+    private func backupAppointmentToCloudKit(_ appointment: Appointment, userId: String) async {
+        do {
+            try await cloudKitBackupService.uploadAppointment(AppointmentSyncPayload(appointment: appointment), for: userId)
+            print("☁️ Appointment synced to CloudKit backup: \(appointment.title)")
+        } catch {
+            print("⚠️ Failed to sync appointment to CloudKit backup: \(error.localizedDescription)")
+        }
+    }
+
+    private func restoreAppointmentsFromCloudKitIfNeeded(userId: String) async {
+        let hasLocalAppointments = await MainActor.run { !appointments.isEmpty }
+        guard !hasLocalAppointments else { return }
+
+        do {
+            let backupPayloads = try await cloudKitBackupService.fetchAppointments(for: userId)
+            guard !backupPayloads.isEmpty else {
+                print("☁️ No CloudKit appointment backup found")
+                return
+            }
+
+            let restoredAppointments = backupPayloads.map(\.appointment)
+
+            await MainActor.run {
+                mergeFirestoreAppointments(restoredAppointments)
+            }
+            print("☁️ Restored \(restoredAppointments.count) appointments from CloudKit backup")
+
+            // Backfill Firebase so both cloud stores converge.
+            for appointment in restoredAppointments {
+                await syncAppointmentToFirebase(appointment)
+            }
+        } catch {
+            print("⚠️ Failed to restore appointments from CloudKit backup: \(error.localizedDescription)")
+        }
     }
 }
 

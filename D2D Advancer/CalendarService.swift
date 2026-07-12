@@ -72,6 +72,10 @@ final class CalendarService: ObservableObject {
         settings.selectedCalendarIdentifier = calendar?.calendarIdentifier
     }
 
+    func reloadSettingsFromUserDefaults() {
+        loadSettings()
+    }
+
     // MARK: - Events
     @discardableResult
     func createOrUpdateEvent(for appointment: Appointment) -> String? {

@@ -18,7 +18,7 @@ struct DemographicsPreferencesView: View {
 
                         Text("Configure your ideal customer profile to get better area recommendations")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
@@ -50,7 +50,7 @@ struct DemographicsPreferencesView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "dollarsign.circle.fill")
-                                .foregroundColor(.green)
+                                .foregroundColor(Color.statusInterested)
                             Text("Target Income Range")
                                 .font(.headline)
                         }
@@ -60,7 +60,7 @@ struct DemographicsPreferencesView: View {
                             HStack {
                                 Text("Min")
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.textSecondary)
                                     .frame(width: 50, alignment: .leading)
 
                                 Slider(value: $preferences.targetIncomeMin, in: 20000...300000, step: 10000)
@@ -74,7 +74,7 @@ struct DemographicsPreferencesView: View {
                             HStack {
                                 Text("Max")
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.textSecondary)
                                     .frame(width: 50, alignment: .leading)
 
                                 Slider(value: $preferences.targetIncomeMax, in: 30000...500000, step: 10000)
@@ -86,7 +86,7 @@ struct DemographicsPreferencesView: View {
                             }
                         }
                         .padding(16)
-                        .background(Color(UIColor.tertiarySystemBackground))
+                        .background(Color.obsidianSurface)
                         .cornerRadius(12)
                         .padding(.horizontal, 20)
                     }
@@ -95,7 +95,7 @@ struct DemographicsPreferencesView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "house.circle.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.electricViolet)
                             Text("Target Home Value Range")
                                 .font(.headline)
                         }
@@ -105,7 +105,7 @@ struct DemographicsPreferencesView: View {
                             HStack {
                                 Text("Min")
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.textSecondary)
                                     .frame(width: 50, alignment: .leading)
 
                                 Slider(value: $preferences.targetHomeValueMin, in: 50000...1000000, step: 25000)
@@ -119,7 +119,7 @@ struct DemographicsPreferencesView: View {
                             HStack {
                                 Text("Max")
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.textSecondary)
                                     .frame(width: 50, alignment: .leading)
 
                                 Slider(value: $preferences.targetHomeValueMax, in: 100000...2000000, step: 50000)
@@ -131,7 +131,7 @@ struct DemographicsPreferencesView: View {
                             }
                         }
                         .padding(16)
-                        .background(Color(UIColor.tertiarySystemBackground))
+                        .background(Color.obsidianSurface)
                         .cornerRadius(12)
                         .padding(.horizontal, 20)
                     }
@@ -140,7 +140,7 @@ struct DemographicsPreferencesView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "person.crop.circle.fill")
-                                .foregroundColor(.orange)
+                                .foregroundColor(Color.statusNotHome)
                             Text("Homeownership")
                                 .font(.headline)
                         }
@@ -148,10 +148,13 @@ struct DemographicsPreferencesView: View {
 
                         Toggle("Prefer Homeowners", isOn: $preferences.preferHomeowners)
                             .padding(16)
-                            .background(Color(UIColor.tertiarySystemBackground))
+                            .background(Color.obsidianSurface)
                             .cornerRadius(12)
                             .padding(.horizontal, 20)
                     }
+
+                    // Scoring Weights
+                    ScoringWeightsView()
 
                     Spacer(minLength: 80)
                 }
@@ -163,10 +166,10 @@ struct DemographicsPreferencesView: View {
                         preferences.resetToDefaults()
                     }
                     .font(.headline)
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.statusNotInterested)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(Color.red.opacity(0.1))
+                    .background(Color.statusNotInterested.opacity(0.1))
                     .cornerRadius(12)
 
                     Button("Done") {
@@ -177,14 +180,14 @@ struct DemographicsPreferencesView: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(Color.blue)
+                    .background(Color.electricViolet)
                     .cornerRadius(12)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
+                        .fill(Color.obsidianBlack)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -210,22 +213,22 @@ struct ProfileCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: profileIcon)
                     .font(.title2)
-                    .foregroundColor(isSelected ? .white : .blue)
+                    .foregroundColor(isSelected ? .white : Color.electricViolet)
                     .frame(width: 44, height: 44)
                     .background(
                         Circle()
-                            .fill(isSelected ? Color.blue : Color.blue.opacity(0.1))
+                            .fill(isSelected ? Color.electricViolet : Color.electricViolet.opacity(0.1))
                     )
 
                 Text(profile.rawValue)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.textPrimary)
                     .lineLimit(2)
                     .frame(height: 34)
 
                 Text(profile.description)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
                     .lineLimit(3)
                     .frame(height: 45)
             }
@@ -233,10 +236,10 @@ struct ProfileCard: View {
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(UIColor.tertiarySystemBackground))
+                    .fill(Color.obsidianSurface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
+                            .stroke(isSelected ? Color.electricViolet : Color.clear, lineWidth: 2)
                     )
             )
         }

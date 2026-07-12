@@ -1,7 +1,8 @@
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 import CoreData
 
+@MainActor
 class NotificationService: NSObject, ObservableObject {
     static let shared = NotificationService()
 
@@ -38,13 +39,23 @@ class NotificationService: NSObject, ObservableObject {
         saveSettings()
     }
 
+    func reloadSettingsFromUserDefaults() {
+        loadSettings()
+    }
+
     // MARK: - Follow-up Notifications
 
     func scheduleFollowUpNotification(for lead: Lead) {
         guard let followUpDate = lead.followUpDate,
               notificationSettings.followUpReminders.isEnabled else { return }
 
-        let identifier = "followup_\(lead.id?.uuidString ?? UUID().uuidString)"
+        guard let leadId = lead.id else {
+            print("❌ Cannot schedule follow-up notification: lead has no ID")
+            return
+        }
+        let leadName = lead.displayName
+        let leadAddress = lead.address ?? ""
+        let identifier = "followup_\(leadId.uuidString)"
 
         // Cancel existing notification first
         cancelNotification(withIdentifier: identifier)
@@ -66,9 +77,9 @@ class NotificationService: NSObject, ObservableObject {
         // Add lead information to user info
         content.userInfo = [
             "type": "followup",
-            "leadId": lead.id?.uuidString ?? "",
-            "leadName": lead.displayName,
-            "leadAddress": lead.address ?? ""
+            "leadId": leadId.uuidString,
+            "leadName": leadName,
+            "leadAddress": leadAddress
         ]
 
         // Create trigger
@@ -83,11 +94,19 @@ class NotificationService: NSObject, ObservableObject {
             trigger: trigger
         )
 
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Failed to schedule follow-up notification: \(error)")
-            } else {
-                print("Scheduled follow-up notification for \(lead.displayName) at \(notificationDate)")
+        // Check notification permission before scheduling
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard Self.isAuthorizationAllowed(settings.authorizationStatus) else {
+                print("❌ Notification permission not granted for follow-up, status: \(settings.authorizationStatus.rawValue)")
+                return
+            }
+
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("Failed to schedule follow-up notification: \(error)")
+                } else {
+                    print("Scheduled follow-up notification for \(leadName) at \(notificationDate)")
+                }
             }
         }
     }
@@ -136,11 +155,19 @@ class NotificationService: NSObject, ObservableObject {
                 trigger: trigger
             )
 
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    print("Failed to schedule appointment notification: \(error)")
-                } else {
-                    print("Scheduled appointment notification for \(appointment.title) - \(reminderOffset.displayName) before")
+            // Check notification permission before scheduling
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                guard Self.isAuthorizationAllowed(settings.authorizationStatus) else {
+                    print("❌ Notification permission not granted for appointment, status: \(settings.authorizationStatus.rawValue)")
+                    return
+                }
+
+                UNUserNotificationCenter.current().add(request) { error in
+                    if let error = error {
+                        print("Failed to schedule appointment notification: \(error)")
+                    } else {
+                        print("Scheduled appointment notification for \(appointment.title) - \(reminderOffset.displayName) before")
+                    }
                 }
             }
         }
@@ -180,11 +207,19 @@ class NotificationService: NSObject, ObservableObject {
             trigger: trigger
         )
 
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Failed to schedule daily summary notification: \(error)")
-            } else {
-                print("Scheduled daily summary notification")
+        // Check notification permission before scheduling
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard Self.isAuthorizationAllowed(settings.authorizationStatus) else {
+                print("❌ Notification permission not granted for daily summary, status: \(settings.authorizationStatus.rawValue)")
+                return
+            }
+
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("Failed to schedule daily summary notification: \(error)")
+                } else {
+                    print("Scheduled daily summary notification")
+                }
             }
         }
     }
@@ -273,11 +308,20 @@ class NotificationService: NSObject, ObservableObject {
             }
         }
     }
+
+    nonisolated static func isAuthorizationAllowed(_ status: UNAuthorizationStatus) -> Bool {
+        switch status {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 // MARK: - UNUserNotificationCenterDelegate
 
-extension NotificationService: UNUserNotificationCenterDelegate {
+extension NotificationService: @preconcurrency UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         // Show notification even when app is in foreground
         completionHandler([.banner, .sound])
@@ -314,18 +358,20 @@ extension NotificationService: UNUserNotificationCenterDelegate {
 
         // Get lead and make phone call
         let context = PersistenceController.shared.container.viewContext
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
+        context.perform {
+            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+            fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
 
-        do {
-            let leads = try context.fetch(fetchRequest)
-            if let lead = leads.first, let phone = lead.phone, !phone.isEmpty {
-                if let url = URL(string: "tel:\(phone)") {
-                    UIApplication.shared.open(url)
+            do {
+                let leads = try context.fetch(fetchRequest)
+                if let lead = leads.first, let phone = lead.phone, !phone.isEmpty {
+                    DispatchQueue.main.async {
+                        Utilities.makePhoneCall(to: phone)
+                    }
                 }
+            } catch {
+                print("Failed to fetch lead for call action: \(error)")
             }
-        } catch {
-            print("Failed to fetch lead for call action: \(error)")
         }
     }
 
@@ -346,23 +392,27 @@ extension NotificationService: UNUserNotificationCenterDelegate {
 
         // Mark lead as visited and clear follow-up
         let context = PersistenceController.shared.container.viewContext
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
+        context.perform {
+            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+            fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
 
-        do {
-            let leads = try context.fetch(fetchRequest)
-            if let lead = leads.first {
-                lead.visitCount += 1
-                lead.lastContactDate = Date()
-                lead.followUpDate = nil
+            do {
+                let leads = try context.fetch(fetchRequest)
+                if let lead = leads.first {
+                    lead.visitCount += 1
+                    lead.lastContactDate = Date()
+                    lead.followUpDate = nil
 
-                try context.save()
+                    try context.save()
 
-                // Cancel the follow-up notification
-                cancelFollowUpNotification(for: uuid)
+                    // Cancel the follow-up notification
+                    Task { @MainActor in
+                        self.cancelFollowUpNotification(for: uuid)
+                    }
+                }
+            } catch {
+                print("Failed to mark lead as visited: \(error)")
             }
-        } catch {
-            print("Failed to mark lead as visited: \(error)")
         }
     }
 
@@ -372,20 +422,24 @@ extension NotificationService: UNUserNotificationCenterDelegate {
 
         // Snooze follow-up by 1 hour
         let context = PersistenceController.shared.container.viewContext
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
+        context.perform {
+            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+            fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
 
-        do {
-            let leads = try context.fetch(fetchRequest)
-            if let lead = leads.first {
-                lead.followUpDate = Date().addingTimeInterval(3600) // 1 hour
-                try context.save()
+            do {
+                let leads = try context.fetch(fetchRequest)
+                if let lead = leads.first {
+                    lead.followUpDate = Date().addingTimeInterval(3600) // 1 hour
+                    try context.save()
 
-                // Reschedule notification
-                scheduleFollowUpNotification(for: lead)
+                    // Reschedule notification
+                    Task { @MainActor in
+                        self.scheduleFollowUpNotification(for: lead)
+                    }
+                }
+            } catch {
+                print("Failed to snooze follow-up: \(error)")
             }
-        } catch {
-            print("Failed to snooze follow-up: \(error)")
         }
     }
 
@@ -417,9 +471,10 @@ extension NotificationService: UNUserNotificationCenterDelegate {
     }
 
     private func handleDefaultAction(userInfo: [AnyHashable: Any]) {
-        // Default action when notification is tapped
-        // This could open the relevant view in the app
-        print("Default notification action triggered for userInfo: \(userInfo)")
+        // Default action when notification is tapped.
+        // Avoid logging full payload because it may contain sensitive lead metadata.
+        let type = userInfo["type"] as? String ?? "unknown"
+        print("Default notification action triggered (type: \(type))")
     }
 }
 

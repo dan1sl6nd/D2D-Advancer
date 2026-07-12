@@ -79,7 +79,7 @@ struct CustomAppointmentTypeCreatorView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
@@ -88,7 +88,7 @@ struct CustomAppointmentTypeCreatorView: View {
                                 .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                         )
                     }
-                    
+
                     Button(action: {
                         saveType()
                     }) {
@@ -107,14 +107,14 @@ struct CustomAppointmentTypeCreatorView: View {
                                 .fill(
                                     LinearGradient(
                                         gradient: Gradient(colors: [
-                                            !isValidType ? Color.gray : Color.blue,
-                                            !isValidType ? Color.gray.opacity(0.8) : Color.blue.opacity(0.8)
+                                            !isValidType ? Color.textSecondary : Color.electricViolet,
+                                            !isValidType ? Color.textSecondary.opacity(0.8) : Color.electricViolet.opacity(0.8)
                                         ]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: !isValidType ? .clear : .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                                .shadow(color: !isValidType ? .clear : Color.electricViolet.opacity(0.3), radius: 4, x: 0, y: 2)
                         )
                     }
                     .disabled(!isValidType)
@@ -123,7 +123,7 @@ struct CustomAppointmentTypeCreatorView: View {
                 .padding(.vertical, 12)
                 .background(
                     Rectangle()
-                        .fill(Color(UIColor.systemBackground))
+                        .fill(Color.obsidianBlack)
                         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
@@ -138,13 +138,13 @@ struct CustomAppointmentTypeCreatorView: View {
             // Header
             HStack {
                 Image(systemName: "tag.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
-                
+
                 Text("Type Details")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -153,37 +153,37 @@ struct CustomAppointmentTypeCreatorView: View {
                 Text("Type Name")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
+                    .foregroundColor(Color.textPrimary)
+
                 TextField("Enter type name", text: $typeName)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.obsidianSurface)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                     )
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private var appearanceCard: some View {
         VStack(alignment: .leading, spacing: 20) {
             // Header
             HStack {
                 Image(systemName: "paintbrush.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
-                
+
                 Text("Appearance")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -192,7 +192,7 @@ struct CustomAppointmentTypeCreatorView: View {
                 Text("Icon")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.textPrimary)
                 
                 Button(action: {
                     showingIconPicker = true
@@ -204,21 +204,21 @@ struct CustomAppointmentTypeCreatorView: View {
                             .frame(width: 24)
                         
                         Text("Tap to change icon")
-                            .foregroundColor(.primary)
-                        
+                            .foregroundColor(Color.textPrimary)
+
                         Spacer()
-                        
+
                         Image(systemName: "chevron.right")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.textSecondary)
                             .font(.caption)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
+                    .background(Color.obsidianSurface)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            .stroke(Color.obsidianBorder.opacity(0.3), lineWidth: 1)
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -229,7 +229,7 @@ struct CustomAppointmentTypeCreatorView: View {
                 Text("Color")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.textPrimary)
                 
                 LazyVGrid(columns: [
                     GridItem(.adaptive(minimum: 60), spacing: 12)
@@ -247,23 +247,23 @@ struct CustomAppointmentTypeCreatorView: View {
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private var previewCard: some View {
         VStack(alignment: .leading, spacing: 20) {
             // Header
             HStack {
                 Image(systemName: "eye.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.electricViolet)
                     .font(.title2)
-                
+
                 Text("Preview")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
             }
             
@@ -271,7 +271,7 @@ struct CustomAppointmentTypeCreatorView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("How your appointment type will appear:")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
                 
                 // Preview Chip
                 HStack {
@@ -283,7 +283,7 @@ struct CustomAppointmentTypeCreatorView: View {
                     Text(typeName.isEmpty ? "New Appointment Type" : typeName)
                         .font(.body)
                         .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.textPrimary)
                     
                     Spacer()
                 }
@@ -298,11 +298,11 @@ struct CustomAppointmentTypeCreatorView: View {
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.obsidianBlack)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private func saveType() {
         let customType = CustomAppointmentType(
             id: editingType?.id ?? UUID().uuidString,
@@ -368,7 +368,7 @@ struct ColorSelectionChip: View {
                 Text(colorName)
                     .font(.caption2)
                     .fontWeight(.medium)
-                    .foregroundColor(isSelected ? color : .secondary)
+                    .foregroundColor(isSelected ? color : Color.textSecondary)
             }
             .padding(.vertical, 8)
         }
@@ -412,8 +412,8 @@ struct IconPickerView: View {
                                     Text(category)
                                         .font(.headline)
                                         .fontWeight(.semibold)
-                                        .foregroundColor(.primary)
-                                    
+                                        .foregroundColor(Color.textPrimary)
+
                                     Spacer()
                                 }
                                 .padding(.horizontal, 16)
@@ -463,13 +463,13 @@ struct IconSelectionChip: View {
             VStack(spacing: 8) {
                 Image(systemName: iconData.symbol)
                     .font(.title2)
-                    .foregroundColor(isSelected ? .blue : .primary)
+                    .foregroundColor(isSelected ? Color.electricViolet : Color.textPrimary)
                     .frame(width: 28, height: 28)
-                
+
                 Text(iconData.name)
                     .font(.caption2)
                     .fontWeight(.medium)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -479,11 +479,11 @@ struct IconSelectionChip: View {
             .frame(minWidth: 85, minHeight: 75)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.blue.opacity(0.15) : Color(UIColor.tertiarySystemBackground))
+                    .fill(isSelected ? Color.electricViolet.opacity(0.15) : Color.obsidianSurface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
+                    .stroke(isSelected ? Color.electricViolet : Color.clear, lineWidth: 2)
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -496,22 +496,22 @@ struct IconSearchBar: View {
     var body: some View {
         HStack {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            
+                .foregroundColor(Color.textSecondary)
+
             TextField("Search icons...", text: $text)
-            
+
             if !text.isEmpty {
                 Button(action: {
                     text = ""
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                 }
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(UIColor.tertiarySystemBackground))
+        .background(Color.obsidianSurface)
         .cornerRadius(10)
     }
 }
