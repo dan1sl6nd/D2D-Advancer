@@ -1,234 +1,133 @@
 ---
 layout: default
 title: Privacy Policy - D2D Advancer
-description: Privacy Policy for D2D Advancer - Door-to-Door Sales Management App
+description: Privacy Policy for the D2D Advancer iOS app
 ---
 
-<div align="center">
-  <h1>🛡️ Privacy Policy</h1>
-  <h2>D2D Advancer</h2>
-  <p><em>Door-to-Door Sales Management App</em></p>
-  
-  <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #007bff;">
-    <strong>📅 Effective Date:</strong> November 12, 2025<br>
-    <strong>🔄 Last Updated:</strong> November 12, 2025
-  </div>
-</div>
+# Privacy Policy for D2D Advancer
 
----
+**Effective date:** July 12, 2026
 
-## 🌟 Introduction
+**Last updated:** July 12, 2026
 
-**D2D Advancer** ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application D2D Advancer (the "App").
+D2D Advancer ("we," "our," or "us") is a field-sales and service-work management app. This policy explains what information the app handles, why it is used, where it is stored, and the choices available to you.
 
-> 💡 **TL;DR:** We only collect data necessary for the app to function, keep it secure, and never sell it to third parties.
+We do not sell personal information and do not use personal information for cross-app tracking.
 
-## 📊 Information We Collect
+## Information the App Handles
 
-<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
-  <h3 style="color: white; margin-top: 0;">👤 Personal Information You Provide</h3>
-  <ul>
-    <li><strong>🔐 Account Information:</strong> Email address, display name, and encrypted password for authentication</li>
-    <li><strong>👥 Lead Data:</strong> Names, phone numbers, addresses, notes, and other contact information you enter</li>
-    <li><strong>📝 User Content:</strong> Notes, tags, follow-up information, and appointment details you create</li>
-  </ul>
-</div>
+### Account and identity information
 
-<div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
-  <h3 style="color: white; margin-top: 0;">🤖 Automatically Collected Information</h3>
-  <ul>
-    <li><strong>📍 Location Data:</strong> Your device's precise location (latitude/longitude coordinates) when you grant location permissions</li>
-    <li><strong>📱 Device Information:</strong> Device model, operating system version, and app usage analytics</li>
-    <li><strong>📈 Usage Data:</strong> App features used, session duration, and interaction patterns</li>
-  </ul>
-</div>
+When you create or join a Team workspace, the app may process your name, email address, Firebase user identifier, Sign in with Apple credential, and Team role. Passwords for email accounts are handled by Firebase Authentication and are not stored by D2D Advancer in readable form.
 
-<div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
-  <h3 style="color: white; margin-top: 0;">🔗 Third-Party Data</h3>
-  <ul>
-    <li><strong>💳 Payment Information:</strong> Subscription and billing data processed through Apple's App Store (we do not directly collect payment details)</li>
-  </ul>
-</div>
+### Lead, customer, and job information
 
-## 🎯 How We Use Your Information
+The app stores information that you enter about leads, customers, appointments, and service jobs. This may include names, phone numbers, email addresses, physical addresses, notes, status, quoted prices, service details, follow-up dates, arrival windows, assigned workers, and activity history.
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
+You are responsible for having an appropriate business reason and any required consent before entering another person's information.
 
-<div style="background: #e8f5e8; padding: 20px; border-radius: 10px; border-left: 4px solid #28a745;">
-  <h4 style="color: #155724; margin-top: 0;">✅ Core Functionality</h4>
-  <ul style="color: #155724;">
-    <li>Provide and maintain the App's functionality</li>
-    <li>Authenticate your account and secure your data</li>
-    <li>Display leads on maps using location coordinates</li>
-  </ul>
-</div>
+### Photos, voice notes, and transcripts
 
-<div style="background: #fff3cd; padding: 20px; border-radius: 10px; border-left: 4px solid #ffc107;">
-  <h4 style="color: #856404; margin-top: 0;">🔔 Communications</h4>
-  <ul style="color: #856404;">
-    <li>Send push notifications for follow-up reminders (with your permission)</li>
-    <li>Provide customer support</li>
-  </ul>
-</div>
+If you choose these features, the app can attach photos to leads, record voice notes, and create speech-recognition transcripts. The app requests camera, photo-library, microphone, and speech-recognition access only when the related feature is used.
 
-<div style="background: #d1ecf1; padding: 20px; border-radius: 10px; border-left: 4px solid #17a2b8;">
-  <h4 style="color: #0c5460; margin-top: 0;">💼 Business Operations</h4>
-  <ul style="color: #0c5460;">
-    <li>Process subscription payments through Apple's systems</li>
-    <li>Improve App performance and user experience</li>
-  </ul>
-</div>
+### Location information
 
-</div>
+With permission, the app uses precise location while it is open to center the map, show nearby work, geocode selected map points, and provide navigation.
 
-## 🔒 Data Storage and Security
+For Team members, location is shared with authorized Team users only after the member manually selects **On duty**. Sharing stops when the member selects **Off duty**. Team duty routes and location points are retained for up to 30 days and are then scheduled for deletion. Members can view their own active-hours route; Team owners can view routes for their Team. Other members cannot view one another's routes.
 
-<div style="background: #f8f9fa; padding: 30px; border-radius: 15px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+The current release does not request Always Location permission and does not perform continuous background location tracking.
 
-### 🔐 Firebase Authentication & Security
-<div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #dc3545;">
-  <ul>
-    <li><strong>🛡️ Secure Authentication:</strong> User accounts are managed through Firebase Authentication</li>
-    <li><strong>🔑 Password Protection:</strong> Passwords are encrypted and never stored in plain text</li>
-    <li><strong>📧 Email Verification:</strong> Required for account security</li>
-    <li><strong>⚡ Security Monitoring:</strong> Rate limiting and blocking for suspicious activity</li>
-  </ul>
-</div>
+### Subscription information
 
-### 💾 Local Data Storage
-<div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #28a745;">
-  <ul>
-    <li><strong>📱 Device Storage:</strong> Lead data is stored locally on your device using Core Data</li>
-    <li><strong>☁️ Cloud Sync:</strong> Data is synced with Firebase Firestore for backup and multi-device access</li>
-    <li><strong>🔐 Encrypted Transmission:</strong> All data transmission uses industry-standard encryption protocols</li>
-  </ul>
-</div>
+Purchases and subscriptions are processed by Apple through StoreKit. For Team plans, Apple's signed transaction identifier, product identifier, expiration status, and an app-account token are linked to the Firebase Team owner so the backend can verify access, prevent one purchase from being reused by another account, and apply the read-only grace period. We do not receive or store your full payment-card details.
 
-### 📍 Location Data Protection
-<div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #17a2b8;">
-  <ul>
-    <li><strong>🎯 Permission-Based:</strong> Location data is only accessed when you grant permission</li>
-    <li><strong>🗺️ Purpose-Limited:</strong> Location information is used solely for mapping and navigation features</li>
-    <li><strong>🚫 No Background Tracking:</strong> We do not track your location without explicit permission</li>
-  </ul>
-</div>
+### Diagnostics and attribution
 
-</div>
+The app and its service providers may process basic technical information needed to operate, secure, and troubleshoot the service. D2D Advancer does not include its own third-party behavioral analytics or advertising-tracking system. Apple may provide App Store attribution information under Apple's terms.
 
-## Data Sharing and Disclosure
+## How Information Is Used
 
-We do not sell, trade, or otherwise transfer your personal information to third parties, except:
+We use information to:
 
-### Service Providers
-- **Firebase/Google:** For authentication, database services, and analytics
-- **Apple:** For payment processing and app distribution
-- **MapKit:** For mapping and geocoding services
+- provide lead, map, follow-up, appointment, and Team features;
+- authenticate users and enforce Team permissions;
+- synchronize data between a user's devices;
+- assign leads and jobs to authorized Team members;
+- share on-duty location with the authorized Team users described above;
+- deliver local reminders selected by the user;
+- verify Solo and Team subscription entitlements;
+- secure, maintain, and troubleshoot the app.
 
-### Legal Requirements
-We may disclose your information if required by law or to:
-- Comply with legal processes
-- Protect our rights, property, or safety
-- Investigate potential violations of our terms
+## Where Information Is Stored
 
-## Your Rights and Choices
+### Private personal workspace
 
-### Account Management
-- **Access:** View your account information and data within the App
-- **Update:** Modify your profile information, leads, and preferences
-- **Delete:** Request account deletion through the settings menu
+Personal leads and appointments are stored locally using Apple's Core Data technologies. When iCloud sync is enabled, personal workspace data is stored in the user's private Apple CloudKit/iCloud database. Personal leads are not automatically moved into a Team workspace.
 
-### Location Services
-- You can enable/disable location access in your device settings
-- The App will continue to function with limited mapping capabilities if location is denied
+### Team workspace
 
-### Push Notifications
-- You can enable/disable notifications in your device settings
-- We respect your notification preferences at all times
+Team identity, membership, assigned Team leads and jobs, activity records, on-duty location records, and Team entitlement records are stored using Google Firebase Authentication, Cloud Firestore, and Cloud Functions. Access is restricted by authenticated user identity, Team role, assignment rules, and server-verified plan state.
 
-### Data Portability
-- Request a copy of your data by contacting support
+### On-device storage
 
-## Subscription and Payment Data
+The app stores settings, cached records, and other data required for offline use on the device. Authentication secrets and saved credentials use Apple Keychain where applicable.
 
-- Subscriptions are processed through Apple's App Store
-- We do not store payment information directly
-- Subscription status is managed through Apple's StoreKit framework
-- You can manage subscriptions through your Apple ID settings
+Data is transmitted using encrypted network connections provided by Apple, Google Firebase, and the operating system.
 
-## Children's Privacy
+## Sharing and Service Providers
 
-D2D Advancer is not intended for children under 13 years of age. We do not knowingly collect personal information from children under 13. If we become aware that a child under 13 has provided us with personal information, we will take steps to delete such information.
+We disclose information only as needed to operate the app, when you direct us to share it, or when required by law.
 
-## International Data Transfers
+- **Apple:** iCloud/CloudKit, Sign in with Apple, MapKit and geocoding, StoreKit, app distribution, and operating-system services.
+- **Google Firebase:** Team authentication, Team workspace database services, and server-side Team entitlement verification.
+- **Authorized Team users:** Team owners can view Team records and on-duty member location. Workers can view only work assigned to them, their own active-hours route, and the owner's on-duty location where enabled.
 
-Your information may be transferred to and maintained on servers located outside your state, province, or country. We ensure appropriate safeguards are in place for such transfers.
+We may disclose information when reasonably necessary to comply with law, protect users, investigate abuse, or protect the rights and security of D2D Advancer.
 
-## Data Retention
+## Retention
 
-- Account data is retained while your account is active
-- After account deletion, data is permanently removed within 30 days
-- Backup data in Firebase is deleted according to our retention policies
-- Local device data is removed immediately upon app deletion
+- Personal workspace data remains on the device and, when enabled, in the user's private iCloud storage until the user deletes it or removes the app's iCloud data.
+- Team account information is retained while the Team identity is active.
+- Team subscription bindings and transaction identifiers are retained as needed to verify access, prevent entitlement reuse, process renewals or refunds, and meet legal or accounting obligations.
+- On-duty Team location points and route sessions are retained for up to 30 days.
+- Local reminders remain until completed, cancelled, or removed under the app's reminder settings.
+- A worker's shared Team work records may remain in the Team owner's workspace after the worker leaves or deletes their Team identity because those records are part of the owner's business workflow. The deleted worker no longer has Team access.
 
-## Changes to Privacy Policy
+## Your Choices and Rights
 
-We may update this Privacy Policy from time to time. We will notify you of any changes by:
-- Posting the new Privacy Policy within the App
-- Updating the "Last Updated" date
-- Sending notifications for material changes (if applicable)
+Within the app, you can view and update account information, edit or delete leads and appointments, change notification and sync preferences, leave or close a Team, and turn location access off in iOS Settings.
 
-## 📧 Contact Us
+### Account deletion
 
-<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 15px; text-align: center; color: white; margin: 30px 0;">
-  <h3 style="color: white; margin-top: 0;">Have Questions About Your Privacy?</h3>
-  <p style="font-size: 18px; margin: 20px 0;">We're here to help! Contact us with any privacy-related questions.</p>
-  
-  <div style="background: rgba(255, 255, 255, 0.2); padding: 20px; border-radius: 10px; display: inline-block;">
-    <h4 style="color: white; margin: 0;">📬 Email Us</h4>
-    <a href="mailto:dan1sl6nd@gmail.com" style="color: #ffd700; text-decoration: none; font-size: 18px; font-weight: bold;">dan1sl6nd@gmail.com</a>
-  </div>
-</div>
+Go to **More > Account Management > Delete Account** to delete your Team identity. Email accounts confirm with their password. Sign in with Apple accounts confirm with Apple; the app then revokes the Apple authorization token and deletes the Firebase account and personal Firebase account records.
 
-## Compliance
+Deleting a Team identity does not delete the separate personal workspace stored in your private iCloud account. Personal data can be deleted through the app's data-management controls or by removing D2D Advancer data from iCloud settings.
 
-This Privacy Policy complies with applicable privacy laws including:
-- California Consumer Privacy Act (CCPA)
-- General Data Protection Regulation (GDPR)
-- Children's Online Privacy Protection Act (COPPA)
+For access, correction, deletion, or portability questions that cannot be completed in the app, contact us using the address below. We may need to verify the request before acting on it.
 
-## Your California Privacy Rights
+## Notifications and Device Permissions
 
-California residents have additional rights under CCPA:
-- Right to know what personal information is collected
-- Right to delete personal information
-- Right to opt-out of sale of personal information (we do not sell data)
-- Right to non-discrimination for exercising privacy rights
+The app uses local notifications for reminders. You can change notification access in iOS Settings. Camera, photo-library, contacts, calendar, microphone, speech-recognition, and location permissions are optional and are requested when their associated features are used. Denying a permission limits only the related feature.
 
----
+## Children
 
-<div style="background: #f8f9fa; padding: 30px; border-radius: 15px; margin: 30px 0; border: 2px dashed #dee2e6;">
-  <div style="text-align: center;">
-    <h3>📱 D2D Advancer</h3>
-    <p><em>Empowering door-to-door sales professionals with smart lead management</em></p>
-    
-    <div style="margin: 20px 0;">
-      <span style="background: #007bff; color: white; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">📊 Lead Management</span>
-      <span style="background: #28a745; color: white; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">📍 GPS Mapping</span>
-      <span style="background: #ffc107; color: black; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">⏰ Follow-ups</span>
-      <span style="background: #dc3545; color: white; padding: 8px 16px; border-radius: 20px; margin: 0 5px; display: inline-block;">🔒 Secure</span>
-    </div>
-    
-    <hr style="border: none; border-top: 2px solid #dee2e6; margin: 20px 0;">
-    
-    <p style="font-size: 14px; color: #6c757d; margin: 0;">
-      <strong>📝 Note:</strong> This privacy policy is generated specifically for the D2D Advancer mobile application and reflects our current data practices. For the most up-to-date version, please check within the App or visit our GitHub repository.
-    </p>
-  </div>
-</div>
+D2D Advancer is a business productivity app and is not directed to children under 13. We do not knowingly collect personal information from children under 13.
 
-<div style="text-align: center; margin: 30px 0; padding: 20px;">
-  <p style="color: #6c757d; font-size: 14px;">
-    Made with ❤️ for sales professionals<br>
-    <strong>© 2025 D2D Advancer</strong>
-  </p>
-</div>
+## International Processing
+
+Apple and Google may process information in countries other than your own, subject to their contractual and legal safeguards.
+
+## Changes to This Policy
+
+We may update this policy as the app or legal requirements change. We will update the date above and provide additional notice when required.
+
+## Contact
+
+For privacy questions or requests, contact:
+
+**D2D Advancer**
+
+**Email:** [dan1sl6nd@gmail.com](mailto:dan1sl6nd@gmail.com)
+
+Copyright 2026 D2D Advancer.
