@@ -121,16 +121,9 @@ struct D2D_AdvancerApp: App {
         // Check for Apple Search Ads attribution
         AppleSearchAdsAttribution.shared.checkAttribution()
 
-        // Only request notification authorization if onboarding is completed
-        let onboardingCompleted = UserDefaults.standard.bool(forKey: "onboarding_completed")
-        if onboardingCompleted && !isRunningUITests {
-            print("📱 Onboarding completed - setting up notifications")
-            requestNotificationAuthorization()
-        } else {
-            print("📱 Onboarding not completed yet - will request notification permission during onboarding")
-            // Still set up categories so they're ready when permission is granted
-            setupNotificationCategories()
-        }
+        // Register actions at launch, but ask for notification access only after
+        // the user schedules a follow-up or appointment.
+        setupNotificationCategories()
 
         // Start monitoring connectivity to auto-recover listeners/sync
         if !isRunningUITests {
@@ -355,24 +348,6 @@ struct D2D_AdvancerApp: App {
     }
     #endif
 
-    private func requestNotificationAuthorization() {
-        // Set up notification categories first
-        setupNotificationCategories()
-        
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-            DispatchQueue.main.async {
-                if granted {
-                    print("Notification authorization granted.")
-                } else {
-                    print("Notification authorization denied.")
-                    if let error = error {
-                        print("Notification authorization error: \(error.localizedDescription)")
-                    }
-                }
-            }
-        }
-    }
-    
     private func setupNotificationCategories() {
         // Create actions for lead follow-up notifications
         let callAction = UNNotificationAction(

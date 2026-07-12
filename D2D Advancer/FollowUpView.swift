@@ -382,6 +382,7 @@ struct FollowUpInteractiveRowView: View {
         }
         lead.setFollowUpDate(baseDate)
         NotificationService.shared.scheduleFollowUpNotification(for: lead)
+        NotificationService.shared.requestPermissionAfterSchedulingIfNeeded()
         UserDataSyncManager.shared.syncWithServer()
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
@@ -945,6 +946,7 @@ struct RescheduleFollowUpView: View {
     private func save() {
         guard newDate > Date() else { return }
         lead.setFollowUpDate(newDate)
+        NotificationService.shared.requestPermissionAfterSchedulingIfNeeded()
         dismiss()
     }
 

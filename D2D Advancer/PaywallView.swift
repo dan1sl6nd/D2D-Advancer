@@ -124,10 +124,7 @@ struct PaywallView: View {
     }
 
     private var orderedPlans: [PaywallManager.SubscriptionPlan] {
-        if paywallManager.experience.recommendedPlan == .weekly {
-            return [.weekly, .yearly]
-        }
-        return [.yearly, .weekly]
+        [.yearly]
     }
 
     private func planButton(for plan: PaywallManager.SubscriptionPlan) -> some View {
@@ -353,7 +350,7 @@ struct PaywallView: View {
                     .accessibilityIdentifier("paywallTermsButton")
                 }
 
-                Text(selectedPlan == .weekly ? "No payment required now. Cancel during trial at no charge." : "Full access immediately. Cancel anytime from device settings.")
+                Text("Full access immediately. Cancel anytime from device settings.")
                     .font(.micro)
                     .foregroundColor(.textSecondary)
                     .multilineTextAlignment(.center)
@@ -413,7 +410,7 @@ struct PaywallView: View {
         if paywallManager.product(for: selectedPlan) == nil {
             return "Retry Loading Plans"
         }
-        return selectedPlan == .weekly ? "Start Free Trial" : "Continue with Pro"
+        return "Continue with Pro"
     }
 
     private var purchaseButtonSubtitle: String {
@@ -427,7 +424,7 @@ struct PaywallView: View {
         if paywallManager.product(for: selectedPlan) == nil {
             return "arrow.clockwise"
         }
-        return selectedPlan == .weekly ? "sparkles" : "crown.fill"
+        return "crown.fill"
     }
 
     // MARK: - Actions

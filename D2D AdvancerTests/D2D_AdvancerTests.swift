@@ -1612,6 +1612,42 @@ struct D2D_AdvancerTests {
         )
     }
 
+    @Test func simplifiedOnboardingProfileDecodesLegacyPersonalizationData() throws {
+        let legacyJSON = """
+        {
+          "salesGoal": "organizePipeline",
+          "focusAreas": ["leadOrganization"],
+          "workflowStyle": "structured",
+          "completedAt": 0
+        }
+        """
+        let data = try #require(legacyJSON.data(using: .utf8))
+        let profile = try JSONDecoder().decode(OnboardingProfile.self, from: data)
+
+        #expect(profile.startDestination == nil)
+        #expect(profile.salesGoal == .organizePipeline)
+        #expect(profile.isComplete)
+    }
+
+    @Test func notificationPermissionPromptOnlyRunsContextuallyOnce() {
+        #expect(NotificationPermissionPromptPolicy.shouldRequest(
+            authorizationStatus: .notDetermined,
+            hasRequestedContextually: false
+        ))
+        #expect(!NotificationPermissionPromptPolicy.shouldRequest(
+            authorizationStatus: .notDetermined,
+            hasRequestedContextually: true
+        ))
+        #expect(!NotificationPermissionPromptPolicy.shouldRequest(
+            authorizationStatus: .authorized,
+            hasRequestedContextually: false
+        ))
+        #expect(!NotificationPermissionPromptPolicy.shouldRequest(
+            authorizationStatus: .denied,
+            hasRequestedContextually: false
+        ))
+    }
+
     @Test func searchPresetSaveTrimsPersistsAndDeletes() async throws {
         let suiteName = "SearchPresetTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

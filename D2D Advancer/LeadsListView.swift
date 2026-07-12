@@ -731,6 +731,7 @@ struct LeadsListView: View {
         do {
             try viewContext.save()
             NotificationService.shared.scheduleFollowUpNotification(for: lead)
+            NotificationService.shared.requestPermissionAfterSchedulingIfNeeded()
         } catch {
             print("Failed to set follow-up: \(error)")
         }

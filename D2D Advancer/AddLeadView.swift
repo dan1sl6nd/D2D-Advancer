@@ -584,6 +584,10 @@ struct AddLeadView: View {
             // Sync to the selected cloud provider after save
             UserDataSyncManager.shared.syncWithServer()
 
+            if effectiveFollowUpDate != nil {
+                NotificationService.shared.requestPermissionAfterSchedulingIfNeeded()
+            }
+
             // Sync to iOS Contacts if lead has name or phone
             if (!name.isEmpty || !phone.isEmpty) {
                 syncToContacts(lead: newLead)

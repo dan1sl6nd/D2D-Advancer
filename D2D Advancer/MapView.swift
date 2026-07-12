@@ -408,13 +408,10 @@ struct MapView: View {
         ZStack {
             mapView
 
-            Group {
+            if isVisible {
                 overlayControls
                 toastOverlay
             }
-            .opacity(isVisible ? 1 : 0)
-            .allowsHitTesting(isVisible)
-            .accessibilityHidden(!isVisible)
 
             if isVisible {
                 // Show location permission status
@@ -2914,6 +2911,7 @@ struct ComeBackLaterSheet: View {
             try viewContext.save()
             UserDataSyncManager.shared.syncWithServer()
             NotificationService.shared.scheduleFollowUpNotification(for: newLead)
+            NotificationService.shared.requestPermissionAfterSchedulingIfNeeded()
             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
             impactFeedback.impactOccurred()
         } catch {

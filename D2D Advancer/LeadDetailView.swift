@@ -907,6 +907,10 @@ struct LeadDetailView: View {
             // Sync to the selected cloud provider after save
             UserDataSyncManager.shared.syncWithServer()
 
+            if editedFollowUpDate != nil {
+                NotificationService.shared.requestPermissionAfterSchedulingIfNeeded()
+            }
+
             // Force the managed object context to refresh to ensure UI updates
             viewContext.refreshAllObjects()
 

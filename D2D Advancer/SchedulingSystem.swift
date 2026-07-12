@@ -280,6 +280,7 @@ class AppointmentManager: ObservableObject {
 
         // Schedule notifications for the appointment
         NotificationService.shared.scheduleAppointmentNotifications(for: updatedAppointment)
+        NotificationService.shared.requestPermissionAfterSchedulingIfNeeded()
 
         isLoading = false
         return true
@@ -336,6 +337,9 @@ class AppointmentManager: ObservableObject {
 
         // Update notifications for the appointment
         NotificationService.shared.scheduleAppointmentNotifications(for: appointmentToStore)
+        if appointmentToStore.status.shouldKeepLinkedCalendarEvent {
+            NotificationService.shared.requestPermissionAfterSchedulingIfNeeded()
+        }
 
         await MainActor.run {
             isLoading = false

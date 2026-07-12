@@ -1,10 +1,37 @@
 import SwiftUI
 import CoreLocation
-import UserNotifications
 
 // MARK: - Onboarding Data Model
 
 struct OnboardingProfile: Codable, Equatable {
+    enum StartDestination: String, Codable, CaseIterable, Identifiable {
+        case personal
+        case team
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .personal: return "Personal workspace"
+            case .team: return "Join or create a team"
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .personal: return "Keep your leads private and sync them with iCloud."
+            case .team: return "Use an invite code or set up an owner workspace after onboarding."
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .personal: return "person.crop.circle.fill"
+            case .team: return "person.3.fill"
+            }
+        }
+    }
+
     enum SalesGoal: String, CaseIterable, Codable, Identifiable {
         case organizePipeline
         case bookMoreAppointments
@@ -116,24 +143,25 @@ struct OnboardingProfile: Codable, Equatable {
     var salesGoal: SalesGoal?
     var focusAreas: Set<FocusArea>
     var workflowStyle: WorkflowStyle?
+    var startDestination: StartDestination?
     var completedAt: Date?
 
     init(
         salesGoal: SalesGoal? = nil,
         focusAreas: Set<FocusArea> = [],
         workflowStyle: WorkflowStyle? = nil,
+        startDestination: StartDestination? = nil,
         completedAt: Date? = nil
     ) {
         self.salesGoal = salesGoal
         self.focusAreas = focusAreas
         self.workflowStyle = workflowStyle
+        self.startDestination = startDestination
         self.completedAt = completedAt
     }
 
     var isComplete: Bool {
-        salesGoal != nil &&
-        !focusAreas.isEmpty &&
-        workflowStyle != nil
+        completedAt != nil
     }
 }
 
@@ -141,11 +169,7 @@ struct OnboardingProfile: Codable, Equatable {
 
 enum OnboardingPage: Int, CaseIterable {
     case welcome
-    case salesGoal
-    case focusAreas
-    case workflowStyle
     case locationPermission
-    case notificationPermission
     case summary
 
     var index: Int { rawValue }
@@ -153,24 +177,16 @@ enum OnboardingPage: Int, CaseIterable {
     var title: String {
         switch self {
         case .welcome: return "Welcome to D2D Advancer"
-        case .salesGoal: return "What's your main focus?"
-        case .focusAreas: return "What features interest you?"
-        case .workflowStyle: return "How do you work?"
         case .locationPermission: return "Enable location services"
-        case .notificationPermission: return "Enable notifications"
-        case .summary: return "You're all set!"
+        case .summary: return "Choose your workspace"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .welcome: return "Let's personalize your experience in just a few steps"
-        case .salesGoal: return "Choose what matters most to you right now"
-        case .focusAreas: return "Select the features you're most excited about"
-        case .workflowStyle: return "Help us understand your selling style"
-        case .locationPermission: return "Track your doors and get territory insights automatically"
-        case .notificationPermission: return "Stay on top of follow-ups and never miss an appointment"
-        case .summary: return "We've customized D2D Advancer to match your workflow"
+        case .welcome: return "Capture doors, organize follow-ups, and schedule work from one field workspace."
+        case .locationPermission: return "Center the map, resolve nearby addresses, and navigate to work."
+        case .summary: return "Personal records stay private. Team records are shared only when assigned."
         }
     }
 
@@ -224,14 +240,10 @@ class OnboardingManager: ObservableObject {
 
     func canAdvance(from page: OnboardingPage) -> Bool {
         switch page {
-        case .welcome, .summary, .locationPermission, .notificationPermission:
+        case .welcome, .locationPermission:
             return true
-        case .salesGoal:
-            return profile.salesGoal != nil
-        case .focusAreas:
-            return !profile.focusAreas.isEmpty
-        case .workflowStyle:
-            return profile.workflowStyle != nil
+        case .summary:
+            return profile.startDestination != nil
         }
     }
 
@@ -274,15 +286,17 @@ class OnboardingManager: ObservableObject {
             isCompleted = true
         }
 
-        // Apple Guideline 5.6 Compliant: Subscription-required app with trial option
-        // This is acceptable because:
-        // 1. Weekly plan offers 3-day free trial (prominently displayed)
-        // 2. Yearly plan is direct subscription with best value pricing
-        // 3. Clear cancellation policy stated for both plans
-        // 4. Messaging is transparent and informative
-        // 5. Users can choose the plan that works best for them
-        if !PaywallManager.shared.isPremium {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        if profile.startDestination == .team {
+            AppRouter.shared.selectedTab = 3
+        }
+
+        // Team setup remains accessible without showing the personal Pro offer.
+        // Existing subscribers are restored by PaywallManager before this check.
+        if !PaywallManager.shared.isPremium && profile.startDestination != .team {
+            // Let the full-screen onboarding cover finish dismissing before
+            // presenting the subscription sheet. Overlapping presentations can
+            // leave the paywall visible but temporarily non-interactive.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 PaywallManager.shared.shouldShowPaywall = true
             }
         }
@@ -319,6 +333,10 @@ class OnboardingManager: ObservableObject {
 
     func selectWorkflowStyle(_ style: OnboardingProfile.WorkflowStyle) {
         profile.workflowStyle = style
+    }
+
+    func selectStartDestination(_ destination: OnboardingProfile.StartDestination) {
+        profile.startDestination = destination
     }
 
     private func checkOnboardingStatus() {
@@ -490,66 +508,8 @@ struct OnboardingView: View {
         switch page {
         case .welcome:
             welcomeContent(usesCompactLayout: usesCompactWelcomeLayout)
-        case .salesGoal:
-            VStack(spacing: 16) {
-                ForEach(OnboardingProfile.SalesGoal.allCases) { goal in
-                    SelectionCard(
-                        icon: goal.icon,
-                        title: goal.title,
-                        subtitle: goal.subtitle,
-                        accent: goal.accent,
-                        isSelected: onboardingManager.profile.salesGoal == goal
-                    ) {
-                        onboardingManager.selectSalesGoal(goal)
-                    }
-                    .accessibilityIdentifier("onboardingSalesGoal_\(goal.rawValue)")
-                }
-            }
-
-        case .focusAreas:
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Select at least one feature you want to use")
-                    .font(.obsidianFootnote)
-                    .foregroundColor(.textSecondary)
-
-                VStack(spacing: 16) {
-                    ForEach(OnboardingProfile.FocusArea.allCases) { focus in
-                        SelectionCard(
-                            icon: focus.icon,
-                            title: focus.title,
-                            subtitle: focus.subtitle,
-                            accent: focus.accent,
-                            isSelected: onboardingManager.profile.focusAreas.contains(focus)
-                        ) {
-                            onboardingManager.toggleFocusArea(focus)
-                        }
-                        .accessibilityIdentifier("onboardingFocusArea_\(focus.rawValue)")
-                    }
-                }
-            }
-
-        case .workflowStyle:
-            VStack(spacing: 16) {
-                ForEach(OnboardingProfile.WorkflowStyle.allCases) { style in
-                    SelectionCard(
-                        icon: style.icon,
-                        title: style.title,
-                        subtitle: style.subtitle,
-                        accent: .electricViolet,
-                        isSelected: onboardingManager.profile.workflowStyle == style
-                    ) {
-                        onboardingManager.selectWorkflowStyle(style)
-                    }
-                    .accessibilityIdentifier("onboardingWorkflowStyle_\(style.rawValue)")
-                }
-            }
-
         case .locationPermission:
             locationPermissionContent
-
-        case .notificationPermission:
-            notificationPermissionContent
-
         case .summary:
             summaryContent
         }
@@ -575,8 +535,8 @@ struct OnboardingView: View {
             VStack(spacing: usesCompactLayout ? 8 : 12) {
                 FeatureHighlightRow(
                     icon: "mappin.circle.fill",
-                    title: "Unlock smarter territory planning",
-                    subtitle: "Use heatmaps and neighborhood scores to plan high-converting routes.",
+                    title: "Work directly from the map",
+                    subtitle: "Save the nearest address, record the outcome, and move to the next door.",
                     isCompact: usesCompactLayout
                 )
 
@@ -589,8 +549,8 @@ struct OnboardingView: View {
 
                 FeatureHighlightRow(
                     icon: "bolt.badge.clock",
-                    title: "Automate tedious follow-ups",
-                    subtitle: "Schedule reminders and send proven scripts in one tap.",
+                    title: "Keep next steps clear",
+                    subtitle: "Schedule reminders, appointments, and technician work without duplicate entry.",
                     isCompact: usesCompactLayout
                 )
             }
@@ -617,20 +577,20 @@ struct OnboardingView: View {
             VStack(spacing: 12) {
                 FeatureHighlightRow(
                     icon: "map.fill",
-                    title: "Auto-log your doors",
-                    subtitle: "We'll track where you knock so you can focus on the conversation, not the paperwork."
+                    title: "Center the field map",
+                    subtitle: "Use your current position to see nearby leads and navigate to assigned work."
                 )
 
                 FeatureHighlightRow(
-                    icon: "chart.line.uptrend.xyaxis",
-                    title: "Surface territory insights",
-                    subtitle: "Get heatmaps, demographic overlays, and data-driven route recommendations."
+                    icon: "mappin.and.ellipse",
+                    title: "Resolve nearby addresses",
+                    subtitle: "Long-press the map to save the closest usable street address."
                 )
 
                 FeatureHighlightRow(
-                    icon: "figure.walk.circle.fill",
-                    title: "Track your daily progress",
-                    subtitle: "See how many doors you've hit and optimize your coverage in real time."
+                    icon: "location.fill.viewfinder",
+                    title: "Share only while on duty",
+                    subtitle: "Team location sharing stays off unless you manually go on duty."
                 )
             }
 
@@ -641,83 +601,26 @@ struct OnboardingView: View {
         }
     }
 
-    private var notificationPermissionContent: some View {
-        VStack(spacing: 18) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.obsidianSurface)
-                    .frame(height: heroCardHeight)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
-                    )
-                    .overlay(
-                        Image(systemName: "bell.badge.fill")
-                            .font(.displayHero)
-                            .foregroundColor(.electricViolet)
-                    )
+    private var summaryContent: some View {
+        VStack(spacing: 14) {
+            ForEach(OnboardingProfile.StartDestination.allCases) { destination in
+                SelectionCard(
+                    icon: destination.icon,
+                    title: destination.title,
+                    subtitle: destination.subtitle,
+                    accent: destination == .team ? .statusInterested : .electricViolet,
+                    isSelected: onboardingManager.profile.startDestination == destination
+                ) {
+                    onboardingManager.selectStartDestination(destination)
+                }
+                .accessibilityIdentifier("onboardingWorkspace_\(destination.rawValue)")
             }
 
-            VStack(spacing: 12) {
-                FeatureHighlightRow(
-                    icon: "alarm.fill",
-                    title: "Never miss a follow-up",
-                    subtitle: "Get timely reminders for callbacks, appointments, and scheduled check-ins."
-                )
-
-                FeatureHighlightRow(
-                    icon: "calendar.badge.clock",
-                    title: "Appointment confirmations",
-                    subtitle: "Receive alerts before your scheduled appointments so you're always prepared."
-                )
-
-                FeatureHighlightRow(
-                    icon: "sparkles",
-                    title: "Smart territory alerts",
-                    subtitle: "Get notified when you're near high-priority areas or hot leads."
-                )
-            }
-
-            Text("You can customize notification preferences in Settings.")
+            Text("You can create or join one Team Workspace later from More. Existing personal leads remain private.")
                 .font(.obsidianFootnote)
                 .foregroundColor(.textSecondary)
-                .padding(.top, 8)
-        }
-    }
-
-    private var summaryContent: some View {
-        let focusAreas = OnboardingProfile.FocusArea.allCases.filter { onboardingManager.profile.focusAreas.contains($0) }
-
-        return VStack(spacing: 20) {
-            SummaryCard(
-                icon: onboardingManager.profile.salesGoal?.icon ?? "sparkles",
-                title: onboardingManager.profile.salesGoal?.title ?? "Let’s build your workspace",
-                subtitle: onboardingManager.profile.salesGoal?.subtitle ?? "We’ll fine tune your experience as you explore."
-            )
-
-            SummarySection(
-                title: "What we'll spotlight",
-                items: focusAreas.map { focus in
-                    SummaryItem(
-                        icon: focus.icon,
-                        title: focus.title,
-                        subtitle: focus.subtitle
-                    )
-                }
-            )
-
-            if let workflow = onboardingManager.profile.workflowStyle {
-                SummarySection(
-                    title: "Workflow fit",
-                    items: [
-                        SummaryItem(
-                            icon: workflow.icon,
-                            title: workflow.title,
-                            subtitle: workflow.subtitle
-                        )
-                    ]
-                )
-            }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
         }
     }
 
@@ -762,10 +665,8 @@ struct OnboardingView: View {
     private var buttonTitle: String {
         switch onboardingManager.currentPage {
         case .summary:
-            return "Finish & launch"
-        case .locationPermission:
             return "Continue"
-        case .notificationPermission:
+        case .locationPermission:
             return "Continue"
         default:
             return "Continue"
@@ -778,8 +679,6 @@ struct OnboardingView: View {
             return "checkmark.seal.fill"
         case .locationPermission:
             return "location.fill"
-        case .notificationPermission:
-            return "bell.fill"
         default:
             return "arrow.right.circle.fill"
         }
@@ -789,8 +688,6 @@ struct OnboardingView: View {
         switch onboardingManager.currentPage {
         case .locationPermission:
             return (Color.statusInterested, Color.electricViolet)
-        case .notificationPermission:
-            return (Color.electricViolet, Color.pink)
         default:
             return (Color.electricViolet, Color.electricViolet)
         }
@@ -802,8 +699,6 @@ struct OnboardingView: View {
             onboardingManager.completeOnboarding()
         case .locationPermission:
             requestLocationPermission()
-        case .notificationPermission:
-            requestNotificationPermission()
         default:
             onboardingManager.nextStep()
         }
@@ -844,46 +739,6 @@ struct OnboardingView: View {
         }
     }
 
-    private func requestNotificationPermission() {
-        // Apple Guideline 5.1.1: Always show the system permission dialog
-        // Check current authorization status first
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            DispatchQueue.main.async {
-                switch settings.authorizationStatus {
-                case .notDetermined:
-                    // REQUIRED: Request authorization - this will show the system dialog
-                    // Users must see the system dialog and make a choice
-                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-                        DispatchQueue.main.async {
-                            if let error = error {
-                                print("❌ Notification permission error: \(error.localizedDescription)")
-                            }
-
-                            if granted {
-                                print("✅ Notification permission granted")
-                            } else {
-                                print("⚠️ Notification permission denied")
-                            }
-
-                            // Move to next step ONLY after user has seen and responded to dialog
-                            onboardingManager.nextStep()
-                        }
-                    }
-
-                case .authorized:
-                    print("✅ Notifications already authorized")
-                    onboardingManager.nextStep()
-
-                case .denied, .provisional, .ephemeral:
-                    print("⚠️ Notification permission denied or limited")
-                    onboardingManager.nextStep()
-
-                @unknown default:
-                    onboardingManager.nextStep()
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Components

@@ -23,6 +23,8 @@ class NotificationService: NSObject, ObservableObject {
 
     private let userDefaults = UserDefaults.standard
     private let settingsKey = "notification_settings"
+    private let contextualPermissionPromptKey = "notification_permission_requested_after_scheduling"
+    private var isContextualPermissionCheckInFlight = false
 
     override init() {
         super.init()
@@ -382,6 +384,31 @@ class NotificationService: NSObject, ObservableObject {
         }
     }
 
+    func requestPermissionAfterSchedulingIfNeeded() {
+        guard !isContextualPermissionCheckInFlight else { return }
+        isContextualPermissionCheckInFlight = true
+
+        let hasRequested = userDefaults.bool(forKey: contextualPermissionPromptKey)
+        checkNotificationPermission { [weak self] status in
+            guard let self else { return }
+            guard NotificationPermissionPromptPolicy.shouldRequest(
+                    authorizationStatus: status,
+                    hasRequestedContextually: hasRequested
+                  ) else {
+                self.isContextualPermissionCheckInFlight = false
+                return
+            }
+
+            self.userDefaults.set(true, forKey: self.contextualPermissionPromptKey)
+            self.requestNotificationPermission { granted in
+                self.isContextualPermissionCheckInFlight = false
+                print(granted
+                    ? "✅ Notification permission granted after scheduling work"
+                    : "⚠️ Notification permission declined after scheduling work")
+            }
+        }
+    }
+
     func checkNotificationPermission(completion: @escaping (UNAuthorizationStatus) -> Void) {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             DispatchQueue.main.async {
@@ -407,6 +434,15 @@ class NotificationService: NSObject, ObservableObject {
         var updatedAppointment = appointment
         updatedAppointment.status = .completed
         return updatedAppointment
+    }
+}
+
+enum NotificationPermissionPromptPolicy {
+    nonisolated static func shouldRequest(
+        authorizationStatus: UNAuthorizationStatus,
+        hasRequestedContextually: Bool
+    ) -> Bool {
+        authorizationStatus == .notDetermined && !hasRequestedContextually
     }
 }
 

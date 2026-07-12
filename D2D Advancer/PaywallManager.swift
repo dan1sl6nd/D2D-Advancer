@@ -55,7 +55,9 @@ struct PaywallExperience {
 
         self.testimonials = PaywallExperience.testimonials(for: salesGoal)
         self.faqItems = PaywallExperience.faq(for: salesGoal)
-        self.recommendedPlan = PaywallExperience.recommendedPlan(for: focuses, salesGoal: salesGoal, workflow: workflow)
+        // Existing onboarding answers remain decodable, but they no longer steer
+        // customers toward the high-churn legacy weekly product.
+        self.recommendedPlan = .yearly
     }
 
     private static func heroTitle(for goal: OnboardingProfile.SalesGoal) -> String {

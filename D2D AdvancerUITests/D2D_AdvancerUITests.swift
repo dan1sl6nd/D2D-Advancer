@@ -1482,7 +1482,7 @@ final class D2D_AdvancerUITests: XCTestCase {
 
     private func chooseRequiredOnboardingPreferences(_ app: XCUIApplication) {
         waitForText(app, "Welcome to D2D Advancer")
-        let lastWelcomeSubtitle = app.staticTexts["Schedule reminders and send proven scripts in one tap."]
+        let lastWelcomeSubtitle = app.staticTexts["Schedule reminders, appointments, and technician work without duplicate entry."]
         let continueButton = app.buttons["onboardingContinueButton"]
         XCTAssertTrue(lastWelcomeSubtitle.waitForExistence(timeout: 8), "Welcome onboarding should show the final benefit subtitle")
         XCTAssertTrue(continueButton.waitForExistence(timeout: 8), "Welcome onboarding should show the continue button")
@@ -1494,18 +1494,6 @@ final class D2D_AdvancerUITests: XCTestCase {
             continueButton.frame.minY - 12,
             "Welcome onboarding final benefit should not be clipped or crowded by the bottom action bar"
         )
-        tapButton(app, "onboardingContinueButton")
-
-        waitForText(app, "What's your main focus?")
-        tapButton(app, "onboardingSalesGoal_organizePipeline")
-        tapButton(app, "onboardingContinueButton")
-
-        waitForText(app, "What features interest you?")
-        tapButton(app, "onboardingFocusArea_leadOrganization")
-        tapButton(app, "onboardingContinueButton")
-
-        waitForText(app, "How do you work?")
-        tapButton(app, "onboardingWorkflowStyle_structured")
         tapButton(app, "onboardingContinueButton")
     }
 
@@ -2132,13 +2120,12 @@ final class D2D_AdvancerUITests: XCTestCase {
         )
         waitForText(app, "D2D ADVANCER PRO", timeout: 8)
         waitForIdentifiedElement(app, "paywallPlanYearlyButton", timeout: 8)
-        waitForIdentifiedElement(app, "paywallPlanWeeklyButton", timeout: 8)
+        XCTAssertFalse(app.buttons["paywallPlanWeeklyButton"].exists, "Legacy weekly plan should not appear for new purchases")
         waitForIdentifiedElement(app, "paywallPurchaseButton", timeout: 8)
         waitForIdentifiedElement(app, "paywallRestoreButton", timeout: 8)
         waitForIdentifiedElement(app, "paywallPrivacyButton", timeout: 8)
         waitForIdentifiedElement(app, "paywallTermsButton", timeout: 8)
 
-        tapIdentifiedElement(app, "paywallPlanWeeklyButton", timeout: 8)
         tapIdentifiedElement(app, "paywallPurchaseButton", timeout: 8)
         waitForIdentifiedElement(app, "paywallPurchaseStatusBanner", timeout: 8)
         waitForTextContaining(app, "unavailable", timeout: 8)
@@ -2848,14 +2835,14 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapButton(app, "onboardingContinueButton")
         denySystemPermissionIfPresented()
 
-        waitForText(app, "Enable notifications")
-        tapButton(app, "onboardingContinueButton")
-        denySystemPermissionIfPresented()
-
-        waitForText(app, "You're all set!")
+        waitForText(app, "Choose your workspace")
+        tapButton(app, "onboardingWorkspace_personal")
         tapButton(app, "onboardingContinueButton")
 
-        XCTAssertTrue(app.staticTexts["You're all set!"].waitForNonExistence(timeout: 8), "Onboarding should dismiss after completion")
+        XCTAssertTrue(app.staticTexts["Choose your workspace"].waitForNonExistence(timeout: 8), "Onboarding should dismiss after completion")
+        waitForIdentifiedElement(app, "paywallScreen", timeout: 8)
+        let closeButton = waitForIdentifiedElement(app, "paywallCloseButton", timeout: 8)
+        tapElement(app, closeButton, description: "paywallCloseButton")
         XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 12), "Map search should be available after onboarding")
         XCTAssertTrue(app.buttons["tab_Map"].exists, "Main tab bar should be available after onboarding")
     }
