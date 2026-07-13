@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C05A00012F10000100000001 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = C05A00022F10000100000002 /* FirebaseAppCheck */; };
 		E60962392E55B6CD00950939 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E60962382E55B6CD00950939 /* FirebaseAuth */; };
 		E609623B2E55B6CD00950939 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = E609623A2E55B6CD00950939 /* FirebaseCore */; };
 		E609623D2E55B6CD00950939 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = E609623C2E55B6CD00950939 /* FirebaseFirestore */; };
@@ -85,6 +86,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C05A00012F10000100000001 /* FirebaseAppCheck in Frameworks */,
 				E609623B2E55B6CD00950939 /* FirebaseCore in Frameworks */,
 				E60962392E55B6CD00950939 /* FirebaseAuth in Frameworks */,
 				E609623D2E55B6CD00950939 /* FirebaseFirestore in Frameworks */,
@@ -160,6 +162,7 @@
 			);
 			name = "D2D Advancer";
 			packageProductDependencies = (
+				C05A00022F10000100000002 /* FirebaseAppCheck */,
 				E60962382E55B6CD00950939 /* FirebaseAuth */,
 				E609623A2E55B6CD00950939 /* FirebaseCore */,
 				E609623C2E55B6CD00950939 /* FirebaseFirestore */,
@@ -654,6 +657,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		C05A00022F10000100000002 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E60962372E55B6CD00950939 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
+		};
 		E60962382E55B6CD00950939 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E60962372E55B6CD00950939 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

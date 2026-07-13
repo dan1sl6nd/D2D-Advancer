@@ -1616,4 +1616,20 @@ struct TeamWorkspaceTests {
         #expect(!TeamFirebaseService.shouldClearMemberSessionAfterPermissionError(error: permissionError, profileRole: nil, cachedRole: nil))
         #expect(!TeamFirebaseService.shouldClearMemberSessionAfterPermissionError(error: networkError, profileRole: .member, cachedRole: .member))
     }
+
+    @Test func teamOperationsControlDefaultsToEnabledAndExplainsPausedWrites() {
+        #expect(TeamOperationsControl.enabled.teamWritesEnabled)
+        #expect(
+            TeamOperationsControl(teamWritesEnabled: false, message: nil).displayMessage
+                == TeamOperationsControl.defaultPausedMessage
+        )
+        #expect(
+            TeamOperationsControl(teamWritesEnabled: false, message: "  Usage review in progress.  ").displayMessage
+                == "Usage review in progress."
+        )
+        #expect(
+            TeamFirebaseServiceError.operationsPaused("Usage review in progress.").errorDescription
+                == "Usage review in progress."
+        )
+    }
 }

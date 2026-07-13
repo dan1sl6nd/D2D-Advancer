@@ -79,6 +79,14 @@ struct TeamWorkspaceView: View {
                             )
                         }
 
+                        if canUseTeamWorkspace,
+                           !teamService.teamOperationsControl.teamWritesEnabled {
+                            statusCard(
+                                teamService.teamOperationsControl.displayMessage,
+                                color: Color.statusNotHome
+                            )
+                        }
+
                         #if DEBUG
                         if FirebaseEmulatorConfiguration.isEnabled {
                             statusCard("Firebase emulator mode active: \(FirebaseEmulatorConfiguration.activeHostDescription)")
@@ -365,6 +373,7 @@ struct TeamWorkspaceView: View {
     private func inviteCreationDisabled(for team: TeamWorkspace) -> Bool {
         activeMemberCount >= team.memberLimit
             || !team.effectivePlanStatus().allowsTeamWrite
+            || !teamService.teamOperationsControl.teamWritesEnabled
             || isWorking
             || teamService.isLoading
     }
@@ -1088,6 +1097,7 @@ struct TeamWorkspaceView: View {
         let isOnDuty = teamService.activeDutySession != nil
         let canStartDuty = TeamAccessPolicy.canStartDutySession(planStatus: team.effectivePlanStatus(), role: member.role)
             && member.status == .active
+            && teamService.teamOperationsControl.teamWritesEnabled
         return teamActionButton(
             title: isOnDuty ? offTitle : onTitle,
             icon: isOnDuty ? "location.slash.fill" : "location.fill",
@@ -1524,6 +1534,7 @@ struct TeamWorkspaceView: View {
         return currentMember.role == .owner
             && currentMember.status == .active
             && team.effectivePlanStatus().allowsTeamWrite
+            && teamService.teamOperationsControl.teamWritesEnabled
             && member.role == .member
             && member.status == .active
             && !member.isPendingInvite

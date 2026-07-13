@@ -1,4 +1,5 @@
 import Foundation
+import FirebaseAppCheck
 import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
@@ -13,9 +14,22 @@ enum FirebaseBootstrap {
             didConfigure = true
             return
         }
+        configureAppCheckIfNeeded()
         FirebaseApp.configure()
         print("🔥 Firebase configured")
         didConfigure = true
+    }
+
+    private static func configureAppCheckIfNeeded() {
+        guard !FirebaseEmulatorConfiguration.isEnabled else { return }
+
+        #if targetEnvironment(simulator)
+        AppCheck.setAppCheckProviderFactory(AppCheckDebugProviderFactory())
+        print("🛡️ Firebase App Check debug provider configured for Simulator")
+        #else
+        AppCheck.setAppCheckProviderFactory(DeviceCheckProviderFactory())
+        print("🛡️ Firebase App Check DeviceCheck provider configured")
+        #endif
     }
 }
 

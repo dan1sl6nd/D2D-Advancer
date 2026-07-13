@@ -106,6 +106,7 @@ final class TeamFirebaseService: ObservableObject {
     @Published private(set) var ownerNotifications: [TeamOwnerNotification] = []
     @Published private(set) var activityLog: [TeamActivityLogEntry] = []
     @Published private(set) var activeDutySession: TeamDutySession?
+    @Published private(set) var teamOperationsControl: TeamOperationsControl = .enabled
     @Published private(set) var syncWriteState: TeamSyncWriteState = .idle
     @Published private(set) var isLoading = false
     @Published private(set) var lastSuccessfulTeamSyncAt: Date?
@@ -232,6 +233,14 @@ final class TeamFirebaseService: ObservableObject {
         do {
             try await prepareFirestoreForTeamUse(force: true)
             let user = try requireFirebaseUser()
+            do {
+                teamOperationsControl = try await loadTeamOperationsControl()
+            } catch {
+                AppLog.warning(
+                    "Team",
+                    "Team operations control could not be loaded: \(Self.userFacingErrorMessage(for: error))"
+                )
+            }
 
             let profile = try await teamProfileRef(userId: user.uid).getDocument()
             guard let teamId = profile.data()?[TeamFirebaseSchema.Field.teamId] as? String,
@@ -324,6 +333,8 @@ final class TeamFirebaseService: ObservableObject {
     func createTeam(name: String, displayName: String?, email: String?) async throws {
         try await prepareFirestoreForTeamUse()
         let user = try await requireFreshFirebaseUser()
+        try await refreshTeamOperationsControl()
+        try assertTeamOperationsWriteAllowed()
 
         let signedTransaction: String
         #if DEBUG
@@ -408,6 +419,8 @@ final class TeamFirebaseService: ObservableObject {
     func joinTeam(inviteCode: String, displayName: String?, email: String?) async throws {
         try await prepareFirestoreForTeamUse()
         let user = try await requireFreshFirebaseUser()
+        try await refreshTeamOperationsControl()
+        try assertTeamOperationsWriteAllowed()
         let code = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !code.isEmpty else { throw TeamFirebaseServiceError.invalidInvite }
 
@@ -1201,7 +1214,11 @@ final class TeamFirebaseService: ObservableObject {
             targetUserId: member.userId,
             createdAt: now
         )
-        try await commitTeamBatch(batch, pendingWriteCount: pendingWriteCount)
+        try await commitTeamBatch(
+            batch,
+            pendingWriteCount: pendingWriteCount,
+            allowsDuringOperationalPause: true
+        )
 
         clearLocalTeam(removeCachedMembership: true)
     }
@@ -1275,7 +1292,11 @@ final class TeamFirebaseService: ObservableObject {
             targetUserId: member.userId,
             createdAt: now
         )
-        try await commitTeamBatch(batch, pendingWriteCount: pendingWriteCount)
+        try await commitTeamBatch(
+            batch,
+            pendingWriteCount: pendingWriteCount,
+            allowsDuringOperationalPause: true
+        )
 
         clearLocalTeam(removeCachedMembership: true)
     }
@@ -1452,7 +1473,11 @@ final class TeamFirebaseService: ObservableObject {
             targetUserId: session.repUserId,
             createdAt: now
         )
-        try await commitTeamBatch(batch, pendingWriteCount: 2)
+        try await commitTeamBatch(
+            batch,
+            pendingWriteCount: 2,
+            allowsDuringOperationalPause: true
+        )
         activeDutySession = nil
         if let index = dutySessions.firstIndex(where: { $0.id == session.id }) {
             dutySessions[index] = ended
@@ -1467,6 +1492,7 @@ enum TeamFirebaseServiceError: LocalizedError {
     case noActiveTeam
     case notAuthenticated
     case ownerOnly
+    case operationsPaused(String)
     case serverConfirmationTimedOut
     case teamFull
     case teamPlanRequired
@@ -1486,6 +1512,8 @@ enum TeamFirebaseServiceError: LocalizedError {
             return "Sign in with Apple to use Team."
         case .ownerOnly:
             return "Only the team owner can do that."
+        case .operationsPaused(let message):
+            return message
         case .serverConfirmationTimedOut:
             return "Team could not be confirmed. Check your connection and try again."
         case .teamFull:
@@ -1750,6 +1778,22 @@ private extension TeamFirebaseService {
 
     func startTeamRealtimeListeners(team: TeamWorkspace, member: TeamMember) {
         stopTeamRealtimeListeners()
+
+        teamListenerRegistrations.append(
+            teamOperationsControlRef().addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let error {
+                        AppLog.warning(
+                            "Team",
+                            "Team operations control listener failed: \(Self.userFacingErrorMessage(for: error))"
+                        )
+                        return
+                    }
+                    self.teamOperationsControl = self.decodeTeamOperationsControl(snapshot?.data())
+                }
+            }
+        )
 
         teamListenerRegistrations.append(
             teamRef(team.id).addSnapshotListener { [weak self] snapshot, error in
@@ -2038,11 +2082,21 @@ private extension TeamFirebaseService {
         if member.role == .owner { return collection }
         return collection.whereField(TeamFirebaseSchema.Field.targetUserId, isEqualTo: member.userId)
     }
+
+    func loadTeamOperationsControl() async throws -> TeamOperationsControl {
+        let snapshot = try await teamOperationsControlRef().getDocument()
+        return decodeTeamOperationsControl(snapshot.data())
+    }
 }
 
 private extension TeamFirebaseService {
     func teamRef(_ teamId: String) -> DocumentReference {
         db.collection(TeamFirebaseSchema.Collection.teams).document(teamId)
+    }
+
+    func teamOperationsControlRef() -> DocumentReference {
+        db.collection(TeamFirebaseSchema.Collection.serviceControls)
+            .document(TeamFirebaseSchema.teamOperationsControlDocumentId)
     }
 
     func memberRef(teamId: String, userId: String) -> DocumentReference {
@@ -2137,8 +2191,10 @@ private extension TeamFirebaseService {
     func commitTeamBatch(
         _ batch: WriteBatch,
         pendingWriteCount: Int = 1,
-        allowsLocalQueueFallback: Bool = true
+        allowsLocalQueueFallback: Bool = true,
+        allowsDuringOperationalPause: Bool = false
     ) async throws {
+        try assertTeamOperationsWriteAllowed(allowsDuringOperationalPause: allowsDuringOperationalPause)
         syncWriteState = .pending(localWriteCount: pendingWriteCount)
         do {
             try await performTeamWrite(allowsLocalQueueFallback: allowsLocalQueueFallback) { completion in
@@ -2148,13 +2204,15 @@ private extension TeamFirebaseService {
             lastSuccessfulTeamSyncAt = Date()
             lastTeamSyncFailureAt = nil
         } catch {
+            let surfacedError = await surfacedTeamWriteError(error)
             lastTeamSyncFailureAt = Date()
-            syncWriteState = .failed(Self.userFacingErrorMessage(for: error))
-            throw error
+            syncWriteState = .failed(Self.userFacingErrorMessage(for: surfacedError))
+            throw surfacedError
         }
     }
 
     func setTeamData(_ data: [String: Any], forDocument document: DocumentReference, merge: Bool = true) async throws {
+        try assertTeamOperationsWriteAllowed()
         syncWriteState = .pending(localWriteCount: 1)
         do {
             try await performTeamWrite { completion in
@@ -2164,9 +2222,10 @@ private extension TeamFirebaseService {
             lastSuccessfulTeamSyncAt = Date()
             lastTeamSyncFailureAt = nil
         } catch {
+            let surfacedError = await surfacedTeamWriteError(error)
             lastTeamSyncFailureAt = Date()
-            syncWriteState = .failed(Self.userFacingErrorMessage(for: error))
-            throw error
+            syncWriteState = .failed(Self.userFacingErrorMessage(for: surfacedError))
+            throw surfacedError
         }
     }
 
@@ -2207,6 +2266,10 @@ private extension TeamFirebaseService {
     }
 
     func commitOptionalTeamBatch(_ batch: WriteBatch, context: String) {
+        guard teamOperationsControl.teamWritesEnabled else {
+            AppLog.info("Team", "Optional write skipped while Team edits are paused (\(context)).")
+            return
+        }
         Task {
             do {
                 try await performTeamWrite(updateSyncStateOnLateCompletion: false) { completion in
@@ -2216,6 +2279,28 @@ private extension TeamFirebaseService {
                 AppLog.warning("Team", "Optional write failed (\(context)): \(Self.userFacingErrorMessage(for: error))")
             }
         }
+    }
+
+    @discardableResult
+    func refreshTeamOperationsControl() async throws -> TeamOperationsControl {
+        let control = try await loadTeamOperationsControl()
+        teamOperationsControl = control
+        return control
+    }
+
+    func assertTeamOperationsWriteAllowed(allowsDuringOperationalPause: Bool = false) throws {
+        guard allowsDuringOperationalPause || teamOperationsControl.teamWritesEnabled else {
+            throw TeamFirebaseServiceError.operationsPaused(teamOperationsControl.displayMessage)
+        }
+    }
+
+    func surfacedTeamWriteError(_ error: Error) async -> Error {
+        guard Self.isPermissionDeniedError(error),
+              let control = try? await refreshTeamOperationsControl(),
+              !control.teamWritesEnabled else {
+            return error
+        }
+        return TeamFirebaseServiceError.operationsPaused(control.displayMessage)
     }
 
     func teamData(_ team: TeamWorkspace) -> [String: Any] {
@@ -2602,6 +2687,14 @@ private final class TeamDocumentCompletionBox: @unchecked Sendable {
 }
 
 private extension TeamFirebaseService {
+    func decodeTeamOperationsControl(_ data: [String: Any]?) -> TeamOperationsControl {
+        guard let data else { return .enabled }
+        return TeamOperationsControl(
+            teamWritesEnabled: data[TeamFirebaseSchema.Field.teamWritesEnabled] as? Bool ?? false,
+            message: data[TeamFirebaseSchema.Field.message] as? String
+        )
+    }
+
     func decodeTeam(id: String, data: [String: Any]) -> TeamWorkspace? {
         guard let name = data[TeamFirebaseSchema.Field.name] as? String,
               let ownerUserId = data[TeamFirebaseSchema.Field.ownerUserId] as? String,

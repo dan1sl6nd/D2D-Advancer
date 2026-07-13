@@ -16,6 +16,9 @@ mockup-*.png
 serviceAccount.json
 serviceAccount*.json
 *-firebase-adminsdk-*.json
+functions/.env
+functions/.env.*
+!functions/.env.example
 
 # Firestore export snapshots — contain all user data
 firestore-backup_*.json

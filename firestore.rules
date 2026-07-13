@@ -25,6 +25,18 @@ service cloud.firestore {
       return /databases/$(database)/documents/teamInvites/$(inviteId);
     }
 
+    function teamOperationsControlPath() {
+      return /databases/$(database)/documents/serviceControls/teamOperations;
+    }
+
+    function teamOperationsAllowWrite() {
+      return !exists(teamOperationsControlPath())
+        || (
+          "teamWritesEnabled" in get(teamOperationsControlPath()).data
+          && get(teamOperationsControlPath()).data.teamWritesEnabled == true
+        );
+    }
+
     function isLegacyTeamPlan(data) {
       return !("billingSource" in data);
     }
@@ -97,7 +109,8 @@ service cloud.firestore {
     }
 
     function teamAllowsWrite(teamId) {
-      return exists(teamPath(teamId))
+      return teamOperationsAllowWrite()
+        && exists(teamPath(teamId))
         && (
           legacyTeamAllowsWrite(get(teamPath(teamId)).data)
           || verifiedTeamAllowsWrite(get(teamPath(teamId)).data)
@@ -105,7 +118,8 @@ service cloud.firestore {
     }
 
     function teamWillAllowWrite(teamId) {
-      return existsAfter(teamPath(teamId))
+      return teamOperationsAllowWrite()
+        && existsAfter(teamPath(teamId))
         && (
           legacyTeamAllowsWrite(getAfter(teamPath(teamId)).data)
           || verifiedTeamAllowsWrite(getAfter(teamPath(teamId)).data)
@@ -395,6 +409,11 @@ service cloud.firestore {
           && getAfter(dutySessionPath(teamId, request.resource.data.subjectId)).data.repUserId == request.auth.uid
           && getAfter(dutySessionPath(teamId, request.resource.data.subjectId)).data.status == "ended"
         );
+    }
+
+    match /serviceControls/{controlId} {
+      allow get: if signedIn() && controlId == "teamOperations";
+      allow list, create, update, delete: if false;
     }
 
     match /users/{userId} {

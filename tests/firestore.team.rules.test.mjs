@@ -713,6 +713,71 @@ describe("D2D team Firestore rules", () => {
     await assertSucceeds(batch.commit());
   });
 
+  it("pauses normal Team writes globally while preserving reads and safe exit actions", async () => {
+    await seedTeamWithTwoRepsAndWork();
+    const now = Timestamp.now();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "serviceControls/teamOperations"), {
+        teamWritesEnabled: false,
+        message: "Team edits are temporarily paused while usage is checked.",
+        reason: "budget_threshold",
+        updatedAt: now
+      });
+      await setDoc(
+        doc(db, "users/rep-1/teamProfile/current"),
+        teamProfileData("team-1", "member", now)
+      );
+    });
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+    const repOneDb = testEnv.authenticatedContext("rep-1").firestore();
+    const repTwoDb = testEnv.authenticatedContext("rep-2").firestore();
+
+    await assertSucceeds(getDoc(doc(ownerDb, "serviceControls/teamOperations")));
+    await assertSucceeds(getDoc(doc(ownerDb, "teams/team-1")));
+    await assertSucceeds(getDoc(doc(ownerDb, "teams/team-1/leads/lead-rep-1")));
+    await assertFails(setDoc(doc(ownerDb, "teams/team-1/leads/blocked-lead"), leadData("owner-1", now)));
+    await assertFails(updateDoc(doc(ownerDb, "serviceControls/teamOperations"), {
+      teamWritesEnabled: true,
+      updatedAt: now
+    }));
+
+    const dutyEndBatch = writeBatch(repTwoDb);
+    dutyEndBatch.update(doc(repTwoDb, "teams/team-1/dutySessions/seeded-session-rep-2"), {
+      status: "ended",
+      endedAt: now,
+      deleteAfter: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    });
+    dutyEndBatch.set(doc(repTwoDb, "teams/team-1/activityLog/paused-duty-ended"), activityLogData({
+      actorUserId: "rep-2",
+      kind: "duty_ended",
+      subjectId: "seeded-session-rep-2",
+      subjectTitle: "duty",
+      targetUserId: "rep-2",
+      now
+    }));
+    await assertSucceeds(dutyEndBatch.commit());
+
+    const leaveBatch = writeBatch(repOneDb);
+    leaveBatch.update(doc(repOneDb, "teams/team-1/members/rep-1"), {
+      status: "removed",
+      removedAt: now,
+      updatedAt: now
+    });
+    leaveBatch.delete(doc(repOneDb, "users/rep-1/teamProfile/current"));
+    leaveBatch.set(doc(repOneDb, "teams/team-1/activityLog/paused-member-left"), activityLogData({
+      actorUserId: "rep-1",
+      kind: "member_left",
+      subjectId: "rep-1",
+      subjectTitle: "Test Team",
+      targetUserId: "rep-1",
+      now
+    }));
+    await assertSucceeds(leaveBatch.commit());
+  });
+
   it("blocks unauthenticated team access", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
 

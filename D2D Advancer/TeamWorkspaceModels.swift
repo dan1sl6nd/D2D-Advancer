@@ -95,6 +95,7 @@ enum TeamFirebaseSchema {
         static let ownerInstructions = "ownerInstructions"
         static let activityLog = "activityLog"
         static let teamProfile = "teamProfile"
+        static let serviceControls = "serviceControls"
     }
 
     enum Field {
@@ -165,6 +166,10 @@ enum TeamFirebaseSchema {
         static let targetUserId = "targetUserId"
         static let kind = "kind"
         static let summary = "summary"
+        static let teamWritesEnabled = "teamWritesEnabled"
+        static let reason = "reason"
+        static let source = "source"
+        static let pausedAt = "pausedAt"
     }
 
     enum InviteStatus {
@@ -174,10 +179,27 @@ enum TeamFirebaseSchema {
     }
 
     static let currentTeamProfileDocumentId = "current"
+    static let teamOperationsControlDocumentId = "teamOperations"
     static let pendingRepUserPrefix = "pending-rep"
     static let inviteExpirationInterval: TimeInterval = 7 * 24 * 60 * 60
     static let inviteDelivery: TeamInviteDelivery = .firebaseInviteCode
     static let sharePrivacyModel: TeamSharePrivacyModel = .assignedFirebaseRecords
+}
+
+struct TeamOperationsControl: Equatable, Sendable {
+    static let defaultPausedMessage = "Team edits are temporarily paused while usage is checked. Existing team data remains available."
+    static let enabled = TeamOperationsControl(teamWritesEnabled: true, message: nil)
+
+    var teamWritesEnabled: Bool
+    var message: String?
+
+    var displayMessage: String {
+        guard let message = message?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !message.isEmpty else {
+            return Self.defaultPausedMessage
+        }
+        return message
+    }
 }
 
 struct TeamCoordinate: Codable, Equatable, Sendable {
