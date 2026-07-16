@@ -35,12 +35,14 @@ import {
 } from "./teamEntitlement";
 
 initializeApp();
+const TEAM_RUNTIME_SERVICE_ACCOUNT = "d2d-team-runtime@d2d-advancer.iam.gserviceaccount.com";
 setGlobalOptions({
   cpu: "gcf_gen1",
   maxInstances: 3,
   memory: "256MiB",
   minInstances: 0,
   region: "us-central1",
+  serviceAccount: TEAM_RUNTIME_SERVICE_ACCOUNT,
   timeoutSeconds: 30
 });
 
@@ -541,7 +543,15 @@ export const appStoreServerNotifications = onRequest(async (request, response) =
   }
 });
 
-export const pauseTeamWritesOnBudget = onMessagePublished({
+// Keep the original HTTPS resource private while the budget listener moves to Pub/Sub.
+export const pauseTeamWritesOnBudget = onRequest({
+  invoker: "private",
+  maxInstances: 1
+}, (_request, response) => {
+  response.status(410).send("Budget alerts are handled by pauseTeamWritesOnBudgetAlert.");
+});
+
+export const pauseTeamWritesOnBudgetAlert = onMessagePublished({
   maxInstances: 1,
   retry: false,
   topic: TEAM_BUDGET_TOPIC
