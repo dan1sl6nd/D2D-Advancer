@@ -5,6 +5,7 @@
 //  Created by Daniil Mukashev on 17/08/2025.
 //
 
+import Contacts
 import CoreLocation
 import CoreGraphics
 import CoreData
@@ -85,6 +86,134 @@ struct D2D_AdvancerTests {
     @Test func syncStatusSummaryDistinguishesOfflineFailuresFromGenericFailures() async throws {
         #expect(SyncStatusSummaryPolicy.failedShortText("Failed to get document because the client is offline.") == "Offline")
         #expect(SyncStatusSummaryPolicy.failedShortText("Permission denied") == "Failed")
+    }
+
+    @Test func appleContactImportMatchesSupportedServicePhrases() {
+        #expect(
+            AppleContactLeadMatchPolicy.matchedService(
+                in: ["Daniil", "Premium WÍNDOW CLEANING Services"]
+            ) == .windowCleaning
+        )
+        #expect(
+            AppleContactLeadMatchPolicy.matchedService(
+                in: ["Sofiia Gutter Cleaning"]
+            ) == .gutterCleaning
+        )
+    }
+
+    @Test func appleContactImportRejectsRelatedButUnsupportedPhrases() {
+        #expect(AppleContactLeadMatchPolicy.matchedService(in: ["Window Tinting"]) == nil)
+        #expect(AppleContactLeadMatchPolicy.matchedService(in: ["Gutter Repair"]) == nil)
+    }
+
+    @Test func appleContactImportUsesTheFirstMatchingServicePhrase() {
+        #expect(
+            AppleContactLeadMatchPolicy.matchedService(
+                in: ["Gutter Cleaning and Window Cleaning"]
+            ) == .gutterCleaning
+        )
+    }
+
+    @Test func appleContactImportBuildsCandidateFromAccessibleContactFields() throws {
+        let contact = CNMutableContact()
+        contact.givenName = "Alex"
+        contact.familyName = "Customer"
+        contact.organizationName = "Northstar Window Cleaning"
+        contact.phoneNumbers = [
+            CNLabeledValue(label: CNLabelPhoneNumberMobile, value: CNPhoneNumber(stringValue: "+1 416 555 0142"))
+        ]
+        contact.emailAddresses = [
+            CNLabeledValue(label: CNLabelWork, value: "alex@example.com" as NSString)
+        ]
+        let address = CNMutablePostalAddress()
+        address.street = "100 Main Street"
+        address.city = "Toronto"
+        address.state = "ON"
+        address.postalCode = "M5V 2T6"
+        let postalAddress: CNPostalAddress = address
+        contact.postalAddresses = [
+            CNLabeledValue(label: CNLabelHome, value: postalAddress)
+        ]
+
+        let candidate = try #require(AppleContactLeadImportService.candidate(from: contact))
+
+        #expect(candidate.displayName == "Alex Customer")
+        #expect(candidate.service == .windowCleaning)
+        #expect(candidate.phone == "+1 416 555 0142")
+        #expect(candidate.email == "alex@example.com")
+        #expect(candidate.address?.contains("100 Main Street") == true)
+        #expect(candidate.address?.contains("Toronto") == true)
+    }
+
+    @Test func appleContactImportDetectsExistingLeadByContactFieldsButNotNameAlone() {
+        let index = AppleContactLeadDuplicateIndex(
+            existingLeads: [
+                AppleContactExistingLeadSnapshot(
+                    name: "Existing Name",
+                    phone: "+1 (647) 555-0198",
+                    email: "OWNER@EXAMPLE.COM",
+                    address: "100 Main St., Toronto, ON"
+                )
+            ]
+        )
+
+        let matchingPhone = AppleContactLeadCandidate(
+            id: "phone-match",
+            displayName: "Different Person",
+            phone: "647-555-0198",
+            email: nil,
+            address: nil,
+            service: .windowCleaning,
+            coordinate: nil
+        )
+        let matchingAddress = AppleContactLeadCandidate(
+            id: "address-match",
+            displayName: "Another Person",
+            phone: nil,
+            email: nil,
+            address: "100 MAIN ST TORONTO ON",
+            service: .gutterCleaning,
+            coordinate: nil
+        )
+        let nameOnly = AppleContactLeadCandidate(
+            id: "name-only",
+            displayName: "Existing Name",
+            phone: nil,
+            email: nil,
+            address: "200 Other Street, Toronto, ON",
+            service: .windowCleaning,
+            coordinate: nil
+        )
+
+        #expect(index.contains(matchingPhone))
+        #expect(index.contains(matchingAddress))
+        #expect(!index.contains(nameOnly))
+    }
+
+    @Test func appleContactImportRequiresAValidMapCoordinate() {
+        let unresolved = AppleContactLeadCandidate(
+            id: "unresolved",
+            displayName: "Window Cleaning Contact",
+            phone: nil,
+            email: nil,
+            address: "100 Main Street",
+            service: .windowCleaning,
+            coordinate: nil
+        )
+        let resolved = AppleContactLeadCandidate(
+            id: "resolved",
+            displayName: "Gutter Cleaning Contact",
+            phone: nil,
+            email: nil,
+            address: "100 Main Street",
+            service: .gutterCleaning,
+            coordinate: AppleContactLeadCoordinate(latitude: 43.6532, longitude: -79.3832)
+        )
+
+        #expect(!unresolved.isReadyForImport)
+        #expect(resolved.isReadyForImport)
+        #expect(AppleContactLeadServiceKind.windowCleaning.serviceCategoryID == "window_cleaning")
+        #expect(AppleContactLeadServiceKind.gutterCleaning.serviceCategoryID == "gutter_cleaning")
     }
 
     @Test func initialMapCenterAcceptsRecentAccurateLocation() async throws {

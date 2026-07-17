@@ -2161,6 +2161,37 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testAppleContactImportEntrySmoke() throws {
+        let app = makeApp()
+        app.launchArguments.append("-openMoreTabForUITests")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        let importCard = scrollToIdentifiedElement(
+            app,
+            "moreAppleContactsImportCard",
+            direction: .down,
+            maxSwipes: 6
+        )
+        tapElement(app, importCard, description: "moreAppleContactsImportCard")
+
+        waitForIdentifiedElement(app, "appleContactImportScreen", timeout: 10)
+        waitForIdentifiedElement(app, "scanAppleContactsButton", timeout: 8)
+        try assertDarkFilledBackButton(
+            app,
+            identifier: "appleContactImportBackButton",
+            screenName: "Apple Contacts"
+        )
+        assertPushedHeaderTitleAlignedAfterBack(
+            app,
+            title: "Apple Contacts",
+            backButtonIdentifier: "appleContactImportBackButton",
+            screenName: "Apple Contacts"
+        )
+        screenshot(app, name: "Apple Contacts import - idle")
+    }
+
+    @MainActor
     func testPaywallPlanSelectionPurchaseErrorAndDismissSmoke() throws {
         let app = makePaywallApp()
         app.launch()

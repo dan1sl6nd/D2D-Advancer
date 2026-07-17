@@ -384,6 +384,20 @@ struct MoreView: View {
             }
             .buttonStyle(PlainButtonStyle())
             .accessibilityIdentifier("moreImportLeadsButton")
+
+            moreDivider
+
+            NavigationLink(destination: AppleContactLeadImportView()) {
+                MoreCardView(
+                    icon: "person.crop.circle.badge.plus",
+                    iconColor: Color.electricViolet,
+                    title: "Apple Contacts",
+                    subtitle: "Find Window or Gutter Cleaning leads",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("moreAppleContactsImportCard")
         }
     }
 

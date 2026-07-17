@@ -48,7 +48,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>D2D Advancer uses the camera when you choose to attach a property or job photo to a lead.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>D2D Advancer would like to save your leads to your Contacts app for easy access and to help you stay organized with your door-to-door sales.</string>
+	<string>D2D Advancer accesses Contacts only when you choose to import matching service contacts or save a lead to Contacts.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>D2D Advancer uses your location while the app is open to center the map, navigate to work, and share your position with your team only while you are on duty.</string>
 	<key>NSMicrophoneUsageDescription</key>
