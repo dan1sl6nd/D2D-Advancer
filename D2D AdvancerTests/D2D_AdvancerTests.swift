@@ -1896,6 +1896,32 @@ struct D2D_AdvancerTests {
     }
 
     @MainActor
+    @Test func messageTemplatePricesUseWholeDollars() throws {
+        let suiteName = "MessageTemplatePriceTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let persistence = PersistenceController(inMemory: true)
+        let lead = Lead.create(in: persistence.container.viewContext)
+        lead.price = 249
+
+        let template = MessageTemplate(
+            title: "Whole-dollar quote",
+            message: "Quote: {price}. With add-on: {price + 50}.",
+            category: .promotional,
+            isForSMS: true,
+            isForEmail: true
+        )
+        let manager = FollowUpMessageTemplates(userDefaults: defaults, customTemplatesKey: "price_test_templates")
+        let rendered = manager.personalizeMessage(template, for: lead)
+
+        #expect(rendered.contains("249"))
+        #expect(rendered.contains("299"))
+        #expect(!rendered.contains(".00"))
+    }
+
+    @MainActor
     @Test func csvImportSkipsNewRowsWithoutUsableCoordinates() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext

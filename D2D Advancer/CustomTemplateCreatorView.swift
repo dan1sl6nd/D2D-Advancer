@@ -544,7 +544,10 @@ struct PreviewTemplateView: View {
         // Then replace simple placeholders
         preview = preview.replacingOccurrences(of: "{name}", with: "John Smith")
         preview = preview.replacingOccurrences(of: "{address}", with: "123 Main St, Toronto")
-        preview = preview.replacingOccurrences(of: "{price}", with: "$2,500.00 CAD")
+        preview = preview.replacingOccurrences(
+            of: "{price}",
+            with: MessageTemplatePriceFormatter.string(from: samplePrice)
+        )
         preview = preview.replacingOccurrences(of: "{service_type}", with: "Window Cleaning")
         preview = preview.replacingOccurrences(of: "{phone}", with: "(416) 555-1234")
         preview = preview.replacingOccurrences(of: "{email}", with: "john.smith@example.com")
@@ -593,11 +596,7 @@ struct PreviewTemplateView: View {
                 break
             }
 
-            // Format as currency
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .currency
-            formatter.currencyCode = "CAD"
-            let priceString = formatter.string(from: NSNumber(value: calculatedPrice)) ?? "$0.00"
+            let priceString = MessageTemplatePriceFormatter.string(from: calculatedPrice)
 
             // Replace the expression with the calculated value
             result = (result as NSString).replacingCharacters(in: match.range(at: 0), with: priceString)

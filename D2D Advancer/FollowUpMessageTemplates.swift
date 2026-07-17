@@ -44,6 +44,18 @@ struct MessageTemplate: Codable, Identifiable {
     }
 }
 
+enum MessageTemplatePriceFormatter {
+    static func string(from value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "CAD"
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 0
+
+        return formatter.string(from: NSNumber(value: value)) ?? "$0"
+    }
+}
+
 class FollowUpMessageTemplates: ObservableObject {
     static let shared = FollowUpMessageTemplates()
     
@@ -391,13 +403,10 @@ class FollowUpMessageTemplates: ObservableObject {
 
         // Format and replace simple price placeholder (if not already replaced by expression)
         if lead.price > 0 {
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .currency
-            formatter.currencyCode = "CAD"
-            let priceString = formatter.string(from: NSNumber(value: lead.price)) ?? "$0.00"
+            let priceString = MessageTemplatePriceFormatter.string(from: lead.price)
             personalizedMessage = personalizedMessage.replacingOccurrences(of: "{price}", with: priceString)
         } else {
-            personalizedMessage = personalizedMessage.replacingOccurrences(of: "{price}", with: "$0.00")
+            personalizedMessage = personalizedMessage.replacingOccurrences(of: "{price}", with: "$0")
         }
 
         // Replace service type placeholder
@@ -458,11 +467,7 @@ class FollowUpMessageTemplates: ObservableObject {
                 break
             }
 
-            // Format as currency
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .currency
-            formatter.currencyCode = "CAD"
-            let priceString = formatter.string(from: NSNumber(value: calculatedPrice)) ?? "$0.00"
+            let priceString = MessageTemplatePriceFormatter.string(from: calculatedPrice)
 
             // Replace the expression with the calculated value
             result = (result as NSString).replacingCharacters(in: match.range(at: 0), with: priceString)
