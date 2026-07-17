@@ -3,8 +3,10 @@ const { describe, it } = require("node:test");
 const {
   CREATE_TEAM_RATE_LIMIT,
   TEAM_BUDGET_LOCK_RATIO,
+  TEAM_USAGE_POLICY,
   evaluateFixedWindowRateLimit,
-  evaluateTeamBudgetAlert
+  evaluateTeamBudgetAlert,
+  evaluateTeamUsage
 } = require("../lib/costControl.js");
 
 describe("cost controls", () => {
@@ -61,5 +63,102 @@ describe("cost controls", () => {
       budgetAmount: 25,
       costAmount: 19.99
     }).shouldPauseTeamWrites, false);
+  });
+
+  it("meters Team writes across velocity and daily windows", () => {
+    const now = Date.parse("2026-07-16T12:00:00.000Z");
+    const first = evaluateTeamUsage(null, {
+      collectionId: "leads",
+      recordDelta: 1
+    }, now);
+
+    assert.equal(first.dailyWrites, 1);
+    assert.equal(first.velocityWrites, 1);
+    assert.equal(first.activeRecords.leads, 1);
+    assert.equal(first.level, "normal");
+    assert.equal(first.writesAllowed, true);
+    assert.equal(first.shouldPublish, true);
+
+    const nextWindow = evaluateTeamUsage(first, {
+      collectionId: "leads",
+      recordDelta: 0
+    }, now + TEAM_USAGE_POLICY.velocityWindowMs);
+    assert.equal(nextWindow.dailyWrites, 2);
+    assert.equal(nextWindow.velocityWrites, 1);
+
+    const nextDay = evaluateTeamUsage(nextWindow, {
+      collectionId: "leads",
+      recordDelta: -1
+    }, Date.parse("2026-07-17T00:00:00.000Z"));
+    assert.equal(nextDay.dailyWrites, 1);
+    assert.equal(nextDay.activeRecords.leads, 0);
+  });
+
+  it("warns and briefly limits an unusually fast Team write burst", () => {
+    const now = Date.parse("2026-07-16T12:00:00.000Z");
+    let state = null;
+
+    for (let count = 1; count <= TEAM_USAGE_POLICY.velocityWarningWrites; count += 1) {
+      state = evaluateTeamUsage(state, {
+        collectionId: "dutyLocationPoints",
+        recordDelta: count % 2 === 0 ? 0 : 1
+      }, now + count);
+    }
+    assert.equal(state.level, "warning");
+    assert.equal(state.writesAllowed, true);
+
+    for (
+      let count = TEAM_USAGE_POLICY.velocityWarningWrites + 1;
+      count <= TEAM_USAGE_POLICY.velocityWriteLimit;
+      count += 1
+    ) {
+      state = evaluateTeamUsage(state, {
+        collectionId: "dutySessions",
+        recordDelta: 0
+      }, now + count);
+    }
+    assert.equal(state.level, "limited");
+    assert.equal(state.writesAllowed, false);
+    assert.ok(state.limitedUntilMillis > now);
+
+    const recovered = evaluateTeamUsage(state, {
+      collectionId: "dutySessions",
+      recordDelta: 0
+    }, state.limitedUntilMillis);
+    assert.equal(recovered.velocityWrites, 1);
+    assert.equal(recovered.writesAllowed, true);
+    assert.equal(recovered.level, "normal");
+  });
+
+  it("blocks new records at collection capacity without freezing existing work", () => {
+    const now = Date.parse("2026-07-16T12:00:00.000Z");
+    const leadLimit = TEAM_USAGE_POLICY.recordLimits.leads;
+    const previous = {
+      activeRecords: { leads: leadLimit - 1 },
+      dailyWrites: 40,
+      dayKey: "2026-07-16",
+      lastPublishedAtMillis: now,
+      publishedLevel: "normal",
+      velocityWrites: 4,
+      windowKey: String(Math.floor(now / TEAM_USAGE_POLICY.velocityWindowMs))
+    };
+    const decision = evaluateTeamUsage(previous, {
+      collectionId: "leads",
+      recordDelta: 1
+    }, now + 1);
+
+    assert.deepEqual(decision.blockedCollections, ["leads"]);
+    assert.equal(decision.writesAllowed, true);
+    assert.equal(decision.level, "warning");
+    assert.equal(decision.shouldPublish, true);
+
+    const recovered = evaluateTeamUsage(decision, {
+      collectionId: "leads",
+      recordDelta: -1
+    }, now + 2);
+
+    assert.deepEqual(recovered.blockedCollections, []);
+    assert.equal(recovered.level, "warning");
+    assert.equal(recovered.shouldPublish, true);
   });
 });

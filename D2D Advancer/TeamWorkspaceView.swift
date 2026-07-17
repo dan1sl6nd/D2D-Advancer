@@ -87,6 +87,11 @@ struct TeamWorkspaceView: View {
                             )
                         }
 
+                        if canUseTeamWorkspace,
+                           teamService.teamUsageControl.level != .normal {
+                            teamUsageSafeguardCard(teamService.teamUsageControl)
+                        }
+
                         #if DEBUG
                         if FirebaseEmulatorConfiguration.isEnabled {
                             statusCard("Firebase emulator mode active: \(FirebaseEmulatorConfiguration.activeHostDescription)")
@@ -346,6 +351,14 @@ struct TeamWorkspaceView: View {
             statRow("Sales reps", "\(activeSalesReps.count)")
             statRow("Technicians", "\(activeTechnicians.count)")
             statRow("Seats used", "\(activeMemberCount)/\(team.memberLimit)")
+            statRow(
+                "Cloud updates today",
+                "\(teamService.teamUsageControl.dailyWrites)/\(teamService.teamUsageControl.dailyWriteLimit)"
+            )
+            statRow(
+                "Recent update pace",
+                "\(teamService.teamUsageControl.velocityWrites)/\(teamService.teamUsageControl.velocityWriteLimit)"
+            )
             if let member = teamService.currentMember {
                 statRow("Owner sharing", teamService.activeDutySession == nil ? "Off" : "On")
 
@@ -374,6 +387,7 @@ struct TeamWorkspaceView: View {
         activeMemberCount >= team.memberLimit
             || !team.effectivePlanStatus().allowsTeamWrite
             || !teamService.teamOperationsControl.teamWritesEnabled
+            || !teamService.teamUsageControl.allowsCreate(in: TeamFirebaseSchema.Collection.members)
             || isWorking
             || teamService.isLoading
     }
@@ -446,6 +460,54 @@ struct TeamWorkspaceView: View {
                 .accessibilityIdentifier("teamDuplicateWarningsCard")
             }
         }
+    }
+
+    private func teamUsageSafeguardCard(_ control: TeamUsageControl) -> some View {
+        let isLimited = !control.allowsWrite()
+        let tint = isLimited ? Color.statusNotInterested : Color.statusNotHome
+
+        return TeamInfoCard {
+            Label(
+                isLimited ? "Team updates paused briefly" : "Team usage is elevated",
+                systemImage: isLimited ? "pause.circle.fill" : "gauge.with.dots.needle.67percent"
+            )
+            .font(.obsidianCallout)
+            .foregroundColor(tint)
+
+            Text(control.displayMessage)
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ProgressView(value: max(control.dailyUsageFraction, control.velocityUsageFraction))
+                .tint(tint)
+
+            if !control.blockedCollections.isEmpty {
+                Text("New \(usageCapacityLabels(control.blockedCollections)) are paused at the workspace capacity. Existing records can still be edited or removed.")
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func usageCapacityLabels(_ collections: Set<String>) -> String {
+        collections.sorted().map { collection in
+            switch collection {
+            case TeamFirebaseSchema.Collection.leads:
+                return "leads"
+            case TeamFirebaseSchema.Collection.bookings:
+                return "bookings"
+            case TeamFirebaseSchema.Collection.dutyLocationPoints:
+                return "GPS route points"
+            case TeamFirebaseSchema.Collection.activityLog:
+                return "activity entries"
+            case TeamFirebaseSchema.Collection.ownerNotifications:
+                return "owner alerts"
+            default:
+                return "Team records"
+            }
+        }.joined(separator: ", ")
     }
 
     private var activityLogCard: some View {
@@ -1098,6 +1160,7 @@ struct TeamWorkspaceView: View {
         let canStartDuty = TeamAccessPolicy.canStartDutySession(planStatus: team.effectivePlanStatus(), role: member.role)
             && member.status == .active
             && teamService.teamOperationsControl.teamWritesEnabled
+            && teamService.teamUsageControl.allowsWrite()
         return teamActionButton(
             title: isOnDuty ? offTitle : onTitle,
             icon: isOnDuty ? "location.slash.fill" : "location.fill",
@@ -1486,6 +1549,7 @@ struct TeamWorkspaceView: View {
             lastUploadAt: lastTeamLocationUploadAt,
             lastCoordinate: lastTeamLocationUploadCoordinate,
             newCoordinate: coordinate,
+            usageLevel: teamService.teamUsageControl.level,
             now: now
         ) else {
             return
@@ -1535,6 +1599,7 @@ struct TeamWorkspaceView: View {
             && currentMember.status == .active
             && team.effectivePlanStatus().allowsTeamWrite
             && teamService.teamOperationsControl.teamWritesEnabled
+            && teamService.teamUsageControl.allowsWrite()
             && member.role == .member
             && member.status == .active
             && !member.isPendingInvite

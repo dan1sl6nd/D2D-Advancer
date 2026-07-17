@@ -89,6 +89,27 @@ struct TeamWorkspaceTests {
         )
     }
 
+    @Test func currentTeamLoadReusesHealthyRealtimeListenersAcrossTabs() {
+        #expect(TeamCurrentTeamLoadPolicy.shouldReuseActiveListeners(
+            forceRefresh: false,
+            hasActiveTeam: true,
+            hasCurrentMember: true,
+            listenerCount: 8
+        ))
+        #expect(!TeamCurrentTeamLoadPolicy.shouldReuseActiveListeners(
+            forceRefresh: true,
+            hasActiveTeam: true,
+            hasCurrentMember: true,
+            listenerCount: 8
+        ))
+        #expect(!TeamCurrentTeamLoadPolicy.shouldReuseActiveListeners(
+            forceRefresh: false,
+            hasActiveTeam: true,
+            hasCurrentMember: true,
+            listenerCount: 0
+        ))
+    }
+
     @Test func teamFirestoreMergePayloadUsesExplicitNullsForClearedFields() {
         #expect(TeamFirestoreMergePayloadValue.nullable(nil as String?) is NSNull)
         #expect(TeamFirestoreMergePayloadValue.nullable(nil as Double?) is NSNull)
@@ -763,7 +784,7 @@ struct TeamWorkspaceTests {
         #expect(workspaces[1].routePoints.map(\.id) == [endedSessionPoint.id])
     }
 
-    @Test func locationSharingPolicyUploadsFirstStaleOrMeaningfullyMovedPoints() {
+    @Test func locationSharingPolicyUploadsFirstMovedOrHeartbeatPointsWithoutBursting() {
         let now = Date(timeIntervalSince1970: 30_000)
         let first = TeamCoordinate(latitude: 43.6500, longitude: -79.3800)
         let tinyMove = TeamCoordinate(latitude: 43.65001, longitude: -79.38001)
@@ -781,17 +802,66 @@ struct TeamWorkspaceTests {
             newCoordinate: tinyMove,
             now: now
         ))
-        #expect(TeamLocationSharingPolicy.shouldUploadLocation(
+        #expect(!TeamLocationSharingPolicy.shouldUploadLocation(
             lastUploadAt: now.addingTimeInterval(-10),
             lastCoordinate: first,
             newCoordinate: meaningfulMove,
             now: now
         ))
-        #expect(TeamLocationSharingPolicy.shouldUploadLocation(
+        #expect(!TeamLocationSharingPolicy.shouldUploadLocation(
             lastUploadAt: now.addingTimeInterval(-45),
             lastCoordinate: first,
             newCoordinate: tinyMove,
             now: now
+        ))
+        #expect(TeamLocationSharingPolicy.shouldUploadLocation(
+            lastUploadAt: now.addingTimeInterval(-45),
+            lastCoordinate: first,
+            newCoordinate: meaningfulMove,
+            now: now
+        ))
+        #expect(TeamLocationSharingPolicy.shouldUploadLocation(
+            lastUploadAt: now.addingTimeInterval(-130),
+            lastCoordinate: first,
+            newCoordinate: tinyMove,
+            now: now
+        ))
+        #expect(!TeamLocationSharingPolicy.shouldUploadLocation(
+            lastUploadAt: now.addingTimeInterval(-130),
+            lastCoordinate: first,
+            newCoordinate: meaningfulMove,
+            usageLevel: .warning,
+            now: now
+        ))
+    }
+
+    @Test func localWriteLimiterStopsBurstsAndRecoversAfterItsWindow() {
+        let now = Date(timeIntervalSince1970: 31_000)
+        var limiter = TeamLocalWriteLimiter(window: 60, maximumUnits: 5)
+
+        #expect(limiter.retryDelayIfBlocked(units: 3, now: now) == nil)
+        #expect(limiter.retryDelayIfBlocked(units: 2, now: now.addingTimeInterval(1)) == nil)
+        #expect(limiter.retryDelayIfBlocked(units: 1, now: now.addingTimeInterval(2)) == 58)
+        #expect(limiter.retryDelayIfBlocked(units: 5, now: now.addingTimeInterval(61)) == nil)
+    }
+
+    @Test func teamUsageControlRecoversFromCooldownButKeepsCollectionCapacity() {
+        let now = Date(timeIntervalSince1970: 32_000)
+        var control = TeamUsageControl.normal
+        control.level = .limited
+        control.writesAllowed = false
+        control.limitedUntil = now.addingTimeInterval(60)
+        control.blockedCollections = [TeamFirebaseSchema.Collection.leads]
+
+        #expect(!control.allowsWrite(now: now))
+        #expect(control.allowsWrite(now: now.addingTimeInterval(61)))
+        #expect(!control.allowsCreate(
+            in: TeamFirebaseSchema.Collection.leads,
+            now: now.addingTimeInterval(61)
+        ))
+        #expect(control.allowsCreate(
+            in: TeamFirebaseSchema.Collection.bookings,
+            now: now.addingTimeInterval(61)
         ))
     }
 

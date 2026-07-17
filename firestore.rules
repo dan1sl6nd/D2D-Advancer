@@ -29,11 +29,36 @@ service cloud.firestore {
       return /databases/$(database)/documents/serviceControls/teamOperations;
     }
 
+    function teamUsageControlPath(teamId) {
+      return /databases/$(database)/documents/teamUsageControls/$(teamId);
+    }
+
     function teamOperationsAllowWrite() {
       return !exists(teamOperationsControlPath())
         || (
           "teamWritesEnabled" in get(teamOperationsControlPath()).data
           && get(teamOperationsControlPath()).data.teamWritesEnabled == true
+        );
+    }
+
+    function teamUsageAllowsWrite(teamId) {
+      return !exists(teamUsageControlPath(teamId))
+        || !("writesAllowed" in get(teamUsageControlPath(teamId)).data)
+        || get(teamUsageControlPath(teamId)).data.writesAllowed == true
+        || (
+          "limitedUntil" in get(teamUsageControlPath(teamId)).data
+          && get(teamUsageControlPath(teamId)).data.limitedUntil is timestamp
+          && get(teamUsageControlPath(teamId)).data.limitedUntil <= request.time
+        );
+    }
+
+    function teamUsageAllowsCreate(teamId, collectionId) {
+      return teamUsageAllowsWrite(teamId)
+        && (
+          !exists(teamUsageControlPath(teamId))
+          || !("blockedCollections" in get(teamUsageControlPath(teamId)).data)
+          || !(get(teamUsageControlPath(teamId)).data.blockedCollections is list)
+          || !(collectionId in get(teamUsageControlPath(teamId)).data.blockedCollections)
         );
     }
 
@@ -110,6 +135,7 @@ service cloud.firestore {
 
     function teamAllowsWrite(teamId) {
       return teamOperationsAllowWrite()
+        && teamUsageAllowsWrite(teamId)
         && exists(teamPath(teamId))
         && (
           legacyTeamAllowsWrite(get(teamPath(teamId)).data)
@@ -119,6 +145,7 @@ service cloud.firestore {
 
     function teamWillAllowWrite(teamId) {
       return teamOperationsAllowWrite()
+        && teamUsageAllowsWrite(teamId)
         && existsAfter(teamPath(teamId))
         && (
           legacyTeamAllowsWrite(getAfter(teamPath(teamId)).data)
@@ -416,6 +443,19 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
 
+    match /teamUsageControls/{teamId} {
+      allow get: if isTeamMember(teamId);
+      allow list, create, update, delete: if false;
+    }
+
+    match /teamUsageCounters/{teamId} {
+      allow read, write: if false;
+    }
+
+    match /teamUsageEvents/{eventId} {
+      allow read, write: if false;
+    }
+
     match /users/{userId} {
       allow read, write: if isSelf(userId);
 
@@ -505,8 +545,11 @@ service cloud.firestore {
             isTeamOwner(teamId)
             || (isTeamMember(teamId) && isAssignedTeamRecordInTeamPath(resource.data))
           );
-        allow create: if (teamAllowsWrite(teamId) && isTeamOwner(teamId) && isTeamScoped(request.resource.data, teamId))
-          || isAssignedTeamRecordCreate(teamId);
+        allow create: if teamUsageAllowsCreate(teamId, "leads")
+          && (
+            (teamAllowsWrite(teamId) && isTeamOwner(teamId) && isTeamScoped(request.resource.data, teamId))
+            || isAssignedTeamRecordCreate(teamId)
+          );
         allow update: if teamAllowsWrite(teamId)
           && (
             (
@@ -530,8 +573,11 @@ service cloud.firestore {
             isTeamOwner(teamId)
             || (isTeamMember(teamId) && isAssignedTeamRecordInTeamPath(resource.data))
           );
-        allow create: if (teamAllowsWrite(teamId) && isTeamOwner(teamId) && isTeamScoped(request.resource.data, teamId))
-          || isAssignedTeamRecordCreate(teamId);
+        allow create: if teamUsageAllowsCreate(teamId, "bookings")
+          && (
+            (teamAllowsWrite(teamId) && isTeamOwner(teamId) && isTeamScoped(request.resource.data, teamId))
+            || isAssignedTeamRecordCreate(teamId)
+          );
         allow update: if teamAllowsWrite(teamId)
           && (
             (
@@ -547,7 +593,8 @@ service cloud.firestore {
       match /ownerNotifications/{notificationId} {
         allow read: if teamAllowsRead(teamId) && isTeamOwner(teamId);
         allow update, delete: if teamAllowsWrite(teamId) && isTeamOwner(teamId);
-        allow create: if isOwnerNotificationCreate(teamId);
+        allow create: if teamUsageAllowsCreate(teamId, "ownerNotifications")
+          && isOwnerNotificationCreate(teamId);
       }
 
       match /activityLog/{entryId} {
@@ -566,8 +613,13 @@ service cloud.firestore {
           && request.resource.data.teamId == teamId
           && request.resource.data.actorUserId == request.auth.uid
           && (
-            (teamAllowsWrite(teamId) && isTeamMember(teamId))
-            || (teamWillAllowWrite(teamId) && willBeTeamMember(teamId))
+            (
+              teamUsageAllowsCreate(teamId, "activityLog")
+              && (
+                (teamAllowsWrite(teamId) && isTeamMember(teamId))
+                || (teamWillAllowWrite(teamId) && willBeTeamMember(teamId))
+              )
+            )
             || isExitActivityLogCreate(teamId)
           );
         allow update, delete: if false;
@@ -618,7 +670,11 @@ service cloud.firestore {
             isTeamOwner(teamId)
             || isVisibleDutyRecordInTeamPath(teamId, resource.data)
           );
-        allow create, update: if teamAllowsWrite(teamId)
+        allow create: if teamUsageAllowsCreate(teamId, "dutyLocationPoints")
+          && teamAllowsWrite(teamId)
+          && isTeamMember(teamId)
+          && isRepSessionOwner(request.resource.data, teamId);
+        allow update: if teamAllowsWrite(teamId)
           && isTeamMember(teamId)
           && isRepSessionOwner(request.resource.data, teamId);
         allow delete: if teamAllowsWrite(teamId) && isTeamOwner(teamId);

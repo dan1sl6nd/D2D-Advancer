@@ -226,7 +226,10 @@ struct SettingsView: View {
                 subtitle: selectedSyncProvider.displayName,
                 trailingContent: {
                     Picker("Cloud storage provider", selection: $selectedSyncProvider) {
-                        ForEach(CloudSyncProvider.allCases, id: \.self) { provider in
+                        ForEach(
+                            PersonalCloudMigrationPolicy.availableProviders(current: CloudSyncProvider.current),
+                            id: \.self
+                        ) { provider in
                             Label(provider.displayName, systemImage: provider.icon)
                                 .tag(provider)
                         }

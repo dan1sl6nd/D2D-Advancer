@@ -10,18 +10,29 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onMessagePublished } from "firebase-functions/v2/pubsub";
 import {
   CREATE_TEAM_RATE_LIMIT,
   evaluateFixedWindowRateLimit,
   evaluateTeamBudgetAlert,
+  evaluateTeamUsage,
   FixedWindowRateLimitPolicy,
   FixedWindowRateLimitState,
+  METERED_TEAM_COLLECTIONS,
   SYNC_ENTITLEMENT_RATE_LIMIT,
   TEAM_BUDGET_TOPIC,
   TEAM_OPERATIONS_CONTROL_COLLECTION,
   TEAM_OPERATIONS_CONTROL_DOCUMENT,
-  TEAM_OPERATIONS_PAUSED_MESSAGE
+  TEAM_OPERATIONS_PAUSED_MESSAGE,
+  TEAM_USAGE_CONTROL_COLLECTION,
+  TEAM_USAGE_COUNTER_COLLECTION,
+  TEAM_USAGE_EVENT_COLLECTION,
+  TEAM_USAGE_EVENT_RETENTION_MS,
+  TEAM_USAGE_POLICY,
+  TeamUsageCounterState,
+  TeamUsageDecision,
+  TeamUsageLevel
 } from "./costControl";
 import {
   AppStoreTeamTransaction,
@@ -250,6 +261,102 @@ function teamOperationsControlRef() {
     .doc(TEAM_OPERATIONS_CONTROL_DOCUMENT);
 }
 
+function teamUsageCounterRef(teamId: string) {
+  return getFirestore().collection(TEAM_USAGE_COUNTER_COLLECTION).doc(teamId);
+}
+
+function teamUsageControlRef(teamId: string) {
+  return getFirestore().collection(TEAM_USAGE_CONTROL_COLLECTION).doc(teamId);
+}
+
+function teamUsageCounterFromData(data: Record<string, unknown> | undefined): TeamUsageCounterState | null {
+  if (!data) {
+    return null;
+  }
+  const activeRecordsValue = data.activeRecords;
+  const activeRecords = typeof activeRecordsValue === "object"
+    && activeRecordsValue !== null
+    && !Array.isArray(activeRecordsValue)
+    ? Object.fromEntries(
+      Object.entries(activeRecordsValue).map(([key, value]) => [
+        key,
+        typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0
+      ])
+    )
+    : {};
+  const lastPublishedAtMillis = data.lastPublishedAt instanceof Timestamp
+    ? data.lastPublishedAt.toMillis()
+    : 0;
+  const publishedLevel: TeamUsageLevel = data.publishedLevel === "warning"
+    || data.publishedLevel === "limited"
+    ? data.publishedLevel
+    : "normal";
+
+  return {
+    activeRecords,
+    dailyWrites: typeof data.dailyWrites === "number" ? Math.max(0, Math.trunc(data.dailyWrites)) : 0,
+    dayKey: typeof data.dayKey === "string" ? data.dayKey : "",
+    lastPublishedAtMillis,
+    publishedLevel,
+    velocityWrites: typeof data.velocityWrites === "number"
+      ? Math.max(0, Math.trunc(data.velocityWrites))
+      : 0,
+    windowKey: typeof data.windowKey === "string" ? data.windowKey : ""
+  };
+}
+
+function teamUsageCounterData(
+  teamId: string,
+  decision: TeamUsageDecision,
+  now: Timestamp
+): Record<string, unknown> {
+  return {
+    activeRecords: decision.activeRecords,
+    dailyWrites: decision.dailyWrites,
+    dayKey: decision.dayKey,
+    lastPublishedAt: Timestamp.fromMillis(decision.lastPublishedAtMillis),
+    publishedLevel: decision.publishedLevel,
+    teamId,
+    updatedAt: now,
+    velocityWrites: decision.velocityWrites,
+    windowKey: decision.windowKey
+  };
+}
+
+function teamUsageControlData(
+  teamId: string,
+  decision: TeamUsageDecision,
+  now: Timestamp
+): Record<string, unknown> {
+  return {
+    activeRecords: decision.activeRecords,
+    blockedCollections: decision.blockedCollections,
+    dailyWriteLimit: TEAM_USAGE_POLICY.dailyWriteLimit,
+    dailyWrites: decision.dailyWrites,
+    level: decision.level,
+    limitedUntil: decision.limitedUntilMillis === null
+      ? null
+      : Timestamp.fromMillis(decision.limitedUntilMillis),
+    message: decision.message,
+    recordLimits: TEAM_USAGE_POLICY.recordLimits,
+    teamId,
+    updatedAt: now,
+    velocityWindowMinutes: TEAM_USAGE_POLICY.velocityWindowMs / 60_000,
+    velocityWriteLimit: TEAM_USAGE_POLICY.velocityWriteLimit,
+    velocityWrites: decision.velocityWrites,
+    writesAllowed: decision.writesAllowed
+  };
+}
+
+function initialTeamUsageDecision(nowMillis: number): TeamUsageDecision {
+  const first = evaluateTeamUsage(null, { collectionId: "members", recordDelta: 0 }, nowMillis);
+  return {
+    ...first,
+    dailyWrites: 0,
+    velocityWrites: 0
+  };
+}
+
 function assertTeamOperationsDataAllowsWrite(data: Record<string, unknown> | undefined): void {
   if (data !== undefined && data.teamWritesEnabled !== true) {
     const message = typeof data.message === "string" && data.message.trim()
@@ -420,6 +527,8 @@ export const createTeamWorkspace = onCall(TEAM_CALLABLE_OPTIONS, async (request)
   const bindingRef = db.collection("teamSubscriptionTransactions").doc(verifiedTransaction.originalTransactionId);
   const accountRef = db.collection("teamBillingAccounts").doc(verifiedTransaction.appAccountToken);
   const entitlementRef = db.collection("teamEntitlements").doc(ownerUserId);
+  const usageCounterRef = teamUsageCounterRef(teamId);
+  const usageControlRef = teamUsageControlRef(teamId);
 
   await db.runTransaction(async (firestoreTransaction) => {
     const operationsSnapshot = await firestoreTransaction.get(teamOperationsControlRef());
@@ -439,6 +548,7 @@ export const createTeamWorkspace = onCall(TEAM_CALLABLE_OPTIONS, async (request)
     );
 
     const timestamp = Timestamp.fromDate(now);
+    const initialUsage = initialTeamUsageDecision(now.getTime());
     firestoreTransaction.set(bindingRef, {
       appAccountToken: verifiedTransaction.appAccountToken,
       environment: verifiedTransaction.environment,
@@ -490,6 +600,14 @@ export const createTeamWorkspace = onCall(TEAM_CALLABLE_OPTIONS, async (request)
       targetUserId: ownerUserId,
       teamId
     });
+    firestoreTransaction.set(
+      usageCounterRef,
+      teamUsageCounterData(teamId, initialUsage, timestamp)
+    );
+    firestoreTransaction.set(
+      usageControlRef,
+      teamUsageControlData(teamId, initialUsage, timestamp)
+    );
   });
 
   return {
@@ -497,6 +615,80 @@ export const createTeamWorkspace = onCall(TEAM_CALLABLE_OPTIONS, async (request)
     planStatus: state.planStatus,
     teamId
   };
+});
+
+export const meterTeamUsage = onDocumentWritten({
+  document: "teams/{teamId}/{collectionId}/{documentId}",
+  retry: true
+}, async (event) => {
+  const change = event.data;
+  const teamId = event.params.teamId;
+  const collectionId = event.params.collectionId;
+  if (!change || typeof teamId !== "string" || !METERED_TEAM_COLLECTIONS.has(collectionId)) {
+    return;
+  }
+
+  const existedBefore = change.before.exists;
+  const existsAfter = change.after.exists;
+  const recordDelta = existedBefore === existsAfter ? 0 : existsAfter ? 1 : -1;
+  const eventId = createHash("sha256")
+    .update(event.id)
+    .digest("hex");
+  const db = getFirestore();
+  const eventRef = db.collection(TEAM_USAGE_EVENT_COLLECTION).doc(eventId);
+  const counterRef = teamUsageCounterRef(teamId);
+  const controlRef = teamUsageControlRef(teamId);
+  const nowMillis = Date.now();
+  const now = Timestamp.fromMillis(nowMillis);
+
+  const publishedDecision = await db.runTransaction<TeamUsageDecision | null>(async (firestoreTransaction) => {
+    const eventSnapshot = await firestoreTransaction.get(eventRef);
+    if (eventSnapshot.exists) {
+      return null;
+    }
+    const counterSnapshot = await firestoreTransaction.get(counterRef);
+    const decision = evaluateTeamUsage(
+      teamUsageCounterFromData(counterSnapshot.data()),
+      { collectionId, recordDelta },
+      nowMillis
+    );
+
+    firestoreTransaction.create(eventRef, {
+      collectionId,
+      eventId: event.id,
+      expiresAt: Timestamp.fromMillis(nowMillis + TEAM_USAGE_EVENT_RETENTION_MS),
+      processedAt: now,
+      teamId
+    });
+    firestoreTransaction.set(
+      counterRef,
+      teamUsageCounterData(teamId, decision, now)
+    );
+    if (decision.shouldPublish) {
+      firestoreTransaction.set(
+        controlRef,
+        teamUsageControlData(teamId, decision, now)
+      );
+      return decision;
+    }
+    return null;
+  });
+
+  if (publishedDecision?.level === "limited") {
+    logger.error("Team usage limiter paused writes", {
+      dailyWrites: publishedDecision.dailyWrites,
+      limitedUntilMillis: publishedDecision.limitedUntilMillis,
+      teamId,
+      velocityWrites: publishedDecision.velocityWrites
+    });
+  } else if (publishedDecision?.level === "warning") {
+    logger.warn("Team usage is approaching an included limit", {
+      blockedCollections: publishedDecision.blockedCollections,
+      dailyWrites: publishedDecision.dailyWrites,
+      teamId,
+      velocityWrites: publishedDecision.velocityWrites
+    });
+  }
 });
 
 async function applyNotificationTransaction(

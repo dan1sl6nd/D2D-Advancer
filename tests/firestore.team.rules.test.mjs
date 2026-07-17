@@ -778,6 +778,102 @@ describe("D2D team Firestore rules", () => {
     await assertSucceeds(leaveBatch.commit());
   });
 
+  it("pauses ordinary writes for a live team cooldown while preserving reads and safe exits", async () => {
+    await seedTeamWithTwoRepsAndWork();
+    const now = Timestamp.now();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "teamUsageControls/team-1"), teamUsageControlData({
+        now,
+        level: "limited",
+        writesAllowed: false,
+        limitedUntil: Timestamp.fromMillis(Date.now() + 60_000)
+      }));
+    });
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+    const repDb = testEnv.authenticatedContext("rep-2").firestore();
+
+    await assertSucceeds(getDoc(doc(ownerDb, "teamUsageControls/team-1")));
+    await assertSucceeds(getDoc(doc(ownerDb, "teams/team-1/leads/lead-rep-1")));
+    await assertFails(setDoc(
+      doc(ownerDb, "teams/team-1/leads/cooldown-lead"),
+      leadData("owner-1", now)
+    ));
+    await assertFails(updateDoc(doc(ownerDb, "teamUsageControls/team-1"), {
+      writesAllowed: true
+    }));
+
+    const dutyEndBatch = writeBatch(repDb);
+    dutyEndBatch.update(doc(repDb, "teams/team-1/dutySessions/seeded-session-rep-2"), {
+      status: "ended",
+      endedAt: now,
+      deleteAfter: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    });
+    dutyEndBatch.set(doc(repDb, "teams/team-1/activityLog/usage-duty-ended"), activityLogData({
+      actorUserId: "rep-2",
+      kind: "duty_ended",
+      subjectId: "seeded-session-rep-2",
+      subjectTitle: "duty",
+      targetUserId: "rep-2",
+      now
+    }));
+    await assertSucceeds(dutyEndBatch.commit());
+  });
+
+  it("blocks only capped collection creates while allowing edits and other collections", async () => {
+    await seedTeamWithTwoRepsAndWork();
+    const now = Timestamp.now();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "teamUsageControls/team-1"), teamUsageControlData({
+        now,
+        level: "warning",
+        writesAllowed: true,
+        blockedCollections: ["leads"]
+      }));
+    });
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+
+    await assertFails(setDoc(
+      doc(ownerDb, "teams/team-1/leads/capacity-lead"),
+      leadData("owner-1", now)
+    ));
+    await assertSucceeds(updateDoc(doc(ownerDb, "teams/team-1/leads/lead-rep-1"), {
+      name: "Updated Lead",
+      updatedAt: now,
+      updatedByUserId: "owner-1"
+    }));
+    await assertSucceeds(setDoc(
+      doc(ownerDb, "teams/team-1/bookings/capacity-booking"),
+      bookingData("owner-1", now)
+    ));
+  });
+
+  it("allows writes after a team usage cooldown expires", async () => {
+    await seedOwnerTeam();
+    const now = Timestamp.now();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "teamUsageControls/team-1"), teamUsageControlData({
+        now,
+        level: "limited",
+        writesAllowed: false,
+        limitedUntil: Timestamp.fromMillis(Date.now() - 60_000)
+      }));
+    });
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+    await assertSucceeds(setDoc(
+      doc(ownerDb, "teams/team-1/leads/recovered-lead"),
+      leadData("owner-1", now)
+    ));
+  });
+
   it("blocks unauthenticated team access", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
 
@@ -893,6 +989,31 @@ function teamProfileData(teamId, role, now) {
   return {
     teamId,
     role,
+    updatedAt: now
+  };
+}
+
+function teamUsageControlData({
+  now,
+  level = "normal",
+  writesAllowed = true,
+  limitedUntil = null,
+  blockedCollections = []
+}) {
+  return {
+    teamId: "team-1",
+    level,
+    writesAllowed,
+    limitedUntil,
+    blockedCollections,
+    dailyWrites: 0,
+    dailyWriteLimit: 5_000,
+    velocityWrites: 0,
+    velocityWriteLimit: 300,
+    velocityWindowMinutes: 15,
+    activeRecords: {},
+    recordLimits: {},
+    message: level === "normal" ? "Team usage is normal." : "Team usage is temporarily limited.",
     updatedAt: now
   };
 }

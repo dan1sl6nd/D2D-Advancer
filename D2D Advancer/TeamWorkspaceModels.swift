@@ -96,6 +96,7 @@ enum TeamFirebaseSchema {
         static let activityLog = "activityLog"
         static let teamProfile = "teamProfile"
         static let serviceControls = "serviceControls"
+        static let teamUsageControls = "teamUsageControls"
     }
 
     enum Field {
@@ -170,6 +171,17 @@ enum TeamFirebaseSchema {
         static let reason = "reason"
         static let source = "source"
         static let pausedAt = "pausedAt"
+        static let level = "level"
+        static let writesAllowed = "writesAllowed"
+        static let limitedUntil = "limitedUntil"
+        static let blockedCollections = "blockedCollections"
+        static let dailyWrites = "dailyWrites"
+        static let dailyWriteLimit = "dailyWriteLimit"
+        static let velocityWrites = "velocityWrites"
+        static let velocityWriteLimit = "velocityWriteLimit"
+        static let velocityWindowMinutes = "velocityWindowMinutes"
+        static let activeRecords = "activeRecords"
+        static let recordLimits = "recordLimits"
     }
 
     enum InviteStatus {
@@ -199,6 +211,99 @@ struct TeamOperationsControl: Equatable, Sendable {
             return Self.defaultPausedMessage
         }
         return message
+    }
+}
+
+enum TeamUsageLevel: String, Codable, CaseIterable, Sendable {
+    case normal
+    case warning
+    case limited
+}
+
+struct TeamUsageControl: Equatable, Sendable {
+    static let defaultLimitedMessage = "Team updates are temporarily limited because usage increased unusually fast. Existing data remains available."
+    static let normal = TeamUsageControl(
+        level: .normal,
+        writesAllowed: true,
+        limitedUntil: nil,
+        blockedCollections: [],
+        dailyWrites: 0,
+        dailyWriteLimit: 5_000,
+        velocityWrites: 0,
+        velocityWriteLimit: 300,
+        velocityWindowMinutes: 15,
+        activeRecords: [:],
+        recordLimits: [:],
+        message: nil
+    )
+
+    var level: TeamUsageLevel
+    var writesAllowed: Bool
+    var limitedUntil: Date?
+    var blockedCollections: Set<String>
+    var dailyWrites: Int
+    var dailyWriteLimit: Int
+    var velocityWrites: Int
+    var velocityWriteLimit: Int
+    var velocityWindowMinutes: Int
+    var activeRecords: [String: Int]
+    var recordLimits: [String: Int]
+    var message: String?
+
+    func allowsWrite(now: Date = Date()) -> Bool {
+        writesAllowed || limitedUntil.map { $0 <= now } == true
+    }
+
+    func allowsCreate(in collection: String, now: Date = Date()) -> Bool {
+        allowsWrite(now: now) && !blockedCollections.contains(collection)
+    }
+
+    var displayMessage: String {
+        guard let message = message?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !message.isEmpty else {
+            return Self.defaultLimitedMessage
+        }
+        return message
+    }
+
+    var dailyUsageFraction: Double {
+        guard dailyWriteLimit > 0 else { return 0 }
+        return min(1, Double(dailyWrites) / Double(dailyWriteLimit))
+    }
+
+    var velocityUsageFraction: Double {
+        guard velocityWriteLimit > 0 else { return 0 }
+        return min(1, Double(velocityWrites) / Double(velocityWriteLimit))
+    }
+}
+
+struct TeamLocalWriteSample: Equatable, Sendable {
+    var date: Date
+    var units: Int
+}
+
+struct TeamLocalWriteLimiter: Equatable, Sendable {
+    static let defaultWindow: TimeInterval = 15 * 60
+    static let defaultMaximumUnits = 150
+
+    var window: TimeInterval = Self.defaultWindow
+    var maximumUnits: Int = Self.defaultMaximumUnits
+    private(set) var samples: [TeamLocalWriteSample] = []
+
+    mutating func retryDelayIfBlocked(units: Int, now: Date = Date()) -> TimeInterval? {
+        samples.removeAll { now.timeIntervalSince($0.date) >= window }
+        let requestedUnits = max(1, units)
+        let usedUnits = samples.reduce(0) { $0 + $1.units }
+        guard usedUnits + requestedUnits <= maximumUnits else {
+            guard let oldestDate = samples.first?.date else { return window }
+            return max(1, window - now.timeIntervalSince(oldestDate))
+        }
+        samples.append(TeamLocalWriteSample(date: now, units: requestedUnits))
+        return nil
+    }
+
+    mutating func reset() {
+        samples = []
     }
 }
 
@@ -593,6 +698,8 @@ struct OwnerInstruction: Identifiable, Codable, Equatable, Sendable {
 }
 
 struct TeamOwnerNotification: Identifiable, Codable, Equatable, Sendable {
+    static let retentionInterval: TimeInterval = 60 * 24 * 60 * 60
+
     var id: String
     var teamId: String
     var leadId: String
@@ -1082,19 +1189,27 @@ enum TeamLeadAttentionPolicy {
 
 enum TeamLocationSharingPolicy {
     static let minimumUploadInterval: TimeInterval = 30
-    static let minimumDistanceMeters: Double = 20
+    static let maximumUploadInterval: TimeInterval = 2 * 60
+    static let minimumDistanceMeters: Double = 50
+    static let sessionHeartbeatInterval: TimeInterval = 5 * 60
 
     static func shouldUploadLocation(
         lastUploadAt: Date?,
         lastCoordinate: TeamCoordinate?,
         newCoordinate: TeamCoordinate,
+        usageLevel: TeamUsageLevel = .normal,
         now: Date = Date()
     ) -> Bool {
         guard let lastUploadAt, let lastCoordinate else { return true }
-        if now.timeIntervalSince(lastUploadAt) >= minimumUploadInterval {
-            return true
-        }
-        return distanceMeters(from: lastCoordinate, to: newCoordinate) >= minimumDistanceMeters
+        let elapsed = now.timeIntervalSince(lastUploadAt)
+        let isElevatedUsage = usageLevel != .normal
+        let minimumInterval = isElevatedUsage ? 45.0 : minimumUploadInterval
+        let maximumInterval = isElevatedUsage ? 3 * 60.0 : maximumUploadInterval
+        let minimumDistance = isElevatedUsage ? 75.0 : minimumDistanceMeters
+
+        guard elapsed >= minimumInterval else { return false }
+        return elapsed >= maximumInterval
+            || distanceMeters(from: lastCoordinate, to: newCoordinate) >= minimumDistance
     }
 
     private static func distanceMeters(from start: TeamCoordinate, to end: TeamCoordinate) -> Double {
@@ -1382,6 +1497,8 @@ enum TeamActivityLogKind: String, Codable, CaseIterable, Sendable {
 }
 
 struct TeamActivityLogEntry: Identifiable, Codable, Equatable, Sendable {
+    static let retentionInterval: TimeInterval = 90 * 24 * 60 * 60
+
     var id: String
     var teamId: String
     var actorUserId: String
