@@ -272,11 +272,11 @@ extension Lead {
         }
     }
 
-    /// Advance the follow-up date by the cadence interval. Returns the new date or nil if no cadence.
-    func advanceFollowUpByCadence() -> Date? {
+    /// Advance recurring work from its due date, or from the contact time when it is already overdue.
+    func advanceFollowUpByCadence(after referenceDate: Date = Date()) -> Date? {
         let cadence = followUpCadence
         guard cadence != .none else { return nil }
-        let base = followUpDate ?? Date()
+        let base = max(followUpDate ?? referenceDate, referenceDate)
         let calendar = Calendar.current
         guard let next = calendar.date(byAdding: .day, value: cadence.days, to: base),
               let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: next) else { return nil }

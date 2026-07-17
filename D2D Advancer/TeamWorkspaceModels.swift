@@ -121,12 +121,15 @@ enum TeamFirebaseSchema {
         static let estimatedValue = "estimatedValue"
         static let eventType = "eventType"
         static let expiresAt = "expiresAt"
+        static let followUpDate = "followUpDate"
         static let graceEndsAt = "graceEndsAt"
         static let highPriorityReason = "highPriorityReason"
         static let horizontalAccuracy = "horizontalAccuracy"
         static let isHighPriority = "isHighPriority"
         static let joinedAt = "joinedAt"
         static let lastLocationAt = "lastLocationAt"
+        static let lastContactedAt = "lastContactedAt"
+        static let lastContactSummary = "lastContactSummary"
         static let leadId = "leadId"
         static let latitude = "latitude"
         static let location = "location"
@@ -524,6 +527,9 @@ struct TeamLead: Identifiable, Codable, Equatable, Sendable {
     var updatedAt: Date
     var isHighPriority: Bool = false
     var highPriorityReason: String?
+    var followUpDate: Date? = nil
+    var lastContactedAt: Date? = nil
+    var lastContactSummary: String? = nil
 
     static func newRepLead(
         teamId: String,
@@ -1451,6 +1457,7 @@ enum TeamActivityLogKind: String, Codable, CaseIterable, Sendable {
     case bookingStatusUpdated = "booking_status_updated"
     case leadStatusUpdated = "lead_status_updated"
     case leadHighPriority = "lead_high_priority"
+    case leadFollowUpRecorded = "lead_follow_up_recorded"
     case repStatusReply = "rep_status_reply"
     case dutyStarted = "duty_started"
     case dutyEnded = "duty_ended"
@@ -1484,6 +1491,8 @@ enum TeamActivityLogKind: String, Codable, CaseIterable, Sendable {
             return "updated lead"
         case .leadHighPriority:
             return "marked high priority"
+        case .leadFollowUpRecorded:
+            return "recorded follow-up for"
         case .repStatusReply:
             return "replied"
         case .dutyStarted:

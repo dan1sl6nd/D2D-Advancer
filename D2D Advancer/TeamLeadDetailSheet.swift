@@ -27,6 +27,7 @@ struct TeamLeadDetailSheet: View {
     @State private var editNotes = ""
     @State private var jobStartDate = Date().addingTimeInterval(60 * 60)
     @State private var jobDurationHours = 2
+    @State private var followUpDateDraft = FollowUpQueueContent.quickSnoozeDate(days: 1)
 
     private var lead: TeamLead {
         teamService.teamLeads.first(where: { $0.id == initialLead.id }) ?? initialLead
@@ -258,6 +259,8 @@ struct TeamLeadDetailSheet: View {
                             priorityRow
                             assignmentRow
                         }
+
+                        followUpSection
 
                         editableFieldsSection
                         technicianDispatchSection
@@ -532,6 +535,87 @@ struct TeamLeadDetailSheet: View {
         .padding(.vertical, 8)
     }
 
+    private var followUpSection: some View {
+        TeamLeadDetailSection("Follow-Up", systemImage: "calendar.badge.clock") {
+            if let followUpDate = lead.followUpDate {
+                TeamLeadDetailFieldRow(
+                    title: "Next follow-up",
+                    value: followUpDate.formatted(date: .abbreviated, time: .shortened),
+                    onCopy: copyField
+                )
+            } else {
+                TeamLeadDetailInlineNotice(
+                    text: "No follow-up is scheduled for this lead.",
+                    icon: "calendar.badge.minus"
+                )
+            }
+
+            if let lastContactedAt = lead.lastContactedAt {
+                TeamLeadDetailFieldRow(
+                    title: "Last contact",
+                    value: lastContactedAt.formatted(date: .abbreviated, time: .shortened),
+                    onCopy: copyField
+                )
+            }
+
+            if let summary = copyableValue(lead.lastContactSummary) {
+                TeamLeadDetailFieldRow(title: "Last outcome", value: summary, onCopy: copyField)
+            }
+
+            if canWriteLead {
+                DatePicker(
+                    "Follow-up date",
+                    selection: $followUpDateDraft,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .datePickerStyle(.compact)
+                .tint(Color.electricViolet)
+                .accessibilityIdentifier("teamLeadDetailFollowUpDatePicker")
+
+                HStack(spacing: 10) {
+                    Button {
+                        followUpDateDraft = FollowUpQueueContent.quickSnoozeDate(days: 1)
+                    } label: {
+                        Label("Tomorrow", systemImage: "sunrise.fill")
+                            .font(.micro)
+                            .foregroundColor(Color.electricViolet)
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .background(Color.electricViolet.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        saveFollowUpDate()
+                    } label: {
+                        Label("Save", systemImage: "checkmark.circle.fill")
+                            .font(.micro)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .background(Color.electricViolet)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSaving)
+                    .accessibilityIdentifier("teamLeadDetailSaveFollowUpButton")
+                }
+
+                if lead.followUpDate != nil {
+                    Button(role: .destructive) {
+                        clearFollowUpDate()
+                    } label: {
+                        Label("Clear follow-up", systemImage: "calendar.badge.minus")
+                            .font(.micro)
+                            .foregroundColor(Color.statusNotInterested)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSaving)
+                    .accessibilityIdentifier("teamLeadDetailClearFollowUpButton")
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var editableFieldsSection: some View {
         if canWriteLead {
@@ -754,8 +838,33 @@ struct TeamLeadDetailSheet: View {
     }
 
     private func updateLead(status: TeamLeadStatus) {
+        let shouldScheduleFollowUp = status == .followUp && lead.followUpDate == nil
         runLeadUpdate {
-            try await teamService.updateTeamLead(leadId: lead.id, status: status)
+            try await teamService.updateTeamLead(
+                leadId: lead.id,
+                status: status,
+                followUpDate: shouldScheduleFollowUp ? FollowUpQueueContent.quickSnoozeDate(days: 1) : nil,
+                shouldReplaceFollowUpDate: shouldScheduleFollowUp
+            )
+        }
+    }
+
+    private func saveFollowUpDate() {
+        runLeadUpdate(successMessage: "Follow-up scheduled.") {
+            try await teamService.updateTeamLead(
+                leadId: lead.id,
+                followUpDate: followUpDateDraft,
+                shouldReplaceFollowUpDate: true
+            )
+        }
+    }
+
+    private func clearFollowUpDate() {
+        runLeadUpdate(successMessage: "Follow-up cleared.") {
+            try await teamService.updateTeamLead(
+                leadId: lead.id,
+                shouldReplaceFollowUpDate: true
+            )
         }
     }
 
@@ -841,6 +950,7 @@ struct TeamLeadDetailSheet: View {
         editEstimatedValue = lead.estimatedValue > 0 ? numberEditText(lead.estimatedValue) : ""
         editTags = lead.tags.joined(separator: ", ")
         editNotes = lead.notes
+        followUpDateDraft = lead.followUpDate ?? FollowUpQueueContent.quickSnoozeDate(days: 1)
     }
 
     private func decimalValue(_ text: String) -> Double {
@@ -1354,7 +1464,7 @@ private struct TeamLeadDetailActivityRow: View {
             return "star.fill"
         case .leadAssigned, .bookingAssigned:
             return "person.crop.circle.badge.checkmark"
-        case .leadStatusUpdated, .repStatusReply, .bookingStatusUpdated:
+        case .leadStatusUpdated, .leadFollowUpRecorded, .repStatusReply, .bookingStatusUpdated:
             return "bubble.left.and.bubble.right.fill"
         case .leadCreated:
             return "mappin.circle.fill"

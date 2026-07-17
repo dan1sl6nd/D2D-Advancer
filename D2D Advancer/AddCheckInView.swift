@@ -142,21 +142,31 @@ struct AddCheckInView: View {
     }
     
     private func saveCheckIn() {
+        let now = Date()
         let resultingStatus = FollowUpCheckIn.resolvedLeadStatus(
             after: outcome,
             currentStatus: lead.leadStatus
         )
+        let workflowOutcome = workflowOutcomeChoice(for: outcome)
+        let suggestedNextFollowUp = FollowUpWorkflowPolicy.resolvedNextDate(
+            for: workflowOutcome,
+            selectedDate: scheduledNextFollowUp,
+            cadenceDate: lead.advanceFollowUpByCadence(after: now),
+            now: now
+        )
         let effectiveNextFollowUp = FollowUpCheckIn.effectiveScheduledNextFollowUp(
-            scheduledNextFollowUp,
+            suggestedNextFollowUp,
             resultingStatus: resultingStatus
         )
 
         let checkIn = FollowUpCheckIn.create(in: viewContext, for: lead)
+        checkIn.checkInDate = now
         checkIn.checkInTypeEnum = checkInType
         checkIn.outcomeEnum = outcome
         checkIn.notes = notes.isEmpty ? nil : notes
         checkIn.scheduledNextFollowUp = effectiveNextFollowUp
-        
+
+        lead.lastContactDate = now
         lead.applyLeadStatus(
             resultingStatus,
             followUpDate: effectiveNextFollowUp,
@@ -174,6 +184,23 @@ struct AddCheckInView: View {
         } catch {
             let nsError = error as NSError
             print("Save error: \(nsError), \(nsError.userInfo)")
+        }
+    }
+
+    private func workflowOutcomeChoice(for outcome: FollowUpCheckIn.Outcome) -> FollowUpOutcomeChoice {
+        switch outcome {
+        case .successful:
+            return .done
+        case .noAnswer:
+            return .noAnswer
+        case .interested:
+            return .interested
+        case .converted:
+            return .sold
+        case .notInterested:
+            return .pass
+        case .reschedule, .callback:
+            return .later
         }
     }
     

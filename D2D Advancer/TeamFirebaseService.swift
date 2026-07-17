@@ -723,6 +723,10 @@ final class TeamFirebaseService: ObservableObject {
         highPriorityReason: String? = nil,
         repStatusNote: String? = nil,
         editableFields: TeamLeadEditableFields? = nil,
+        followUpDate: Date? = nil,
+        shouldReplaceFollowUpDate: Bool = false,
+        lastContactedAt: Date? = nil,
+        lastContactSummary: String? = nil,
         now: Date = Date()
     ) async throws -> TeamLead {
         try await prepareFirestoreForTeamUse()
@@ -760,6 +764,18 @@ final class TeamFirebaseService: ObservableObject {
         if let editableFields {
             after = editableFields.applying(to: after, updatedByUserId: user.uid, now: now)
         }
+        if shouldReplaceFollowUpDate {
+            after.followUpDate = followUpDate
+        }
+        if let lastContactedAt {
+            after.lastContactedAt = lastContactedAt
+        }
+        if let lastContactSummary {
+            after.lastContactSummary = Self.nilIfBlank(lastContactSummary)
+        }
+        if after.status == .converted || after.status == .notInterested || after.status == .booked {
+            after.followUpDate = nil
+        }
         after.updatedByUserId = user.uid
         after.updatedAt = now
 
@@ -767,6 +783,7 @@ final class TeamFirebaseService: ObservableObject {
         let batch = db.batch()
         batch.setData(leadData(after), forDocument: leadRef(teamId: team.id, leadId: leadId), merge: true)
         addOwnerNotifications(to: batch, team: team, lead: after, events: events, createdAt: now)
+        var activityWriteCount = 0
         if before.status != after.status {
             addActivityLog(
                 to: batch,
@@ -778,6 +795,7 @@ final class TeamFirebaseService: ObservableObject {
                 targetUserId: after.assignedToUserId,
                 createdAt: now
             )
+            activityWriteCount += 1
         }
         if before.isHighPriority != true && after.isHighPriority {
             addActivityLog(
@@ -790,6 +808,7 @@ final class TeamFirebaseService: ObservableObject {
                 targetUserId: after.assignedToUserId,
                 createdAt: now
             )
+            activityWriteCount += 1
         }
         if repStatusNote != nil {
             addActivityLog(
@@ -802,6 +821,7 @@ final class TeamFirebaseService: ObservableObject {
                 targetUserId: after.assignedToUserId,
                 createdAt: now
             )
+            activityWriteCount += 1
         }
         if editableFields != nil {
             addActivityLog(
@@ -814,8 +834,22 @@ final class TeamFirebaseService: ObservableObject {
                 targetUserId: after.assignedToUserId,
                 createdAt: now
             )
+            activityWriteCount += 1
         }
-        try await commitTeamBatch(batch, pendingWriteCount: events.count + 1)
+        if lastContactedAt != nil {
+            addActivityLog(
+                to: batch,
+                teamId: team.id,
+                actor: member,
+                kind: .leadFollowUpRecorded,
+                subjectId: after.id,
+                subjectTitle: after.name,
+                targetUserId: after.assignedToUserId,
+                createdAt: now
+            )
+            activityWriteCount += 1
+        }
+        try await commitTeamBatch(batch, pendingWriteCount: events.count + activityWriteCount + 1)
 
         if let index = teamLeads.firstIndex(where: { $0.id == after.id }) {
             teamLeads[index] = after
@@ -2486,7 +2520,10 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.createdAt: Timestamp(date: lead.createdAt),
             TeamFirebaseSchema.Field.updatedAt: Timestamp(date: lead.updatedAt),
             TeamFirebaseSchema.Field.isHighPriority: lead.isHighPriority,
-            TeamFirebaseSchema.Field.highPriorityReason: TeamFirestoreMergePayloadValue.nullable(lead.highPriorityReason)
+            TeamFirebaseSchema.Field.highPriorityReason: TeamFirestoreMergePayloadValue.nullable(lead.highPriorityReason),
+            TeamFirebaseSchema.Field.followUpDate: TeamFirestoreMergePayloadValue.nullable(optionalTimestamp(lead.followUpDate)),
+            TeamFirebaseSchema.Field.lastContactedAt: TeamFirestoreMergePayloadValue.nullable(optionalTimestamp(lead.lastContactedAt)),
+            TeamFirebaseSchema.Field.lastContactSummary: TeamFirestoreMergePayloadValue.nullable(lead.lastContactSummary)
         ].filterNilValues()
     }
 
@@ -2923,7 +2960,10 @@ private extension TeamFirebaseService {
             createdAt: createdAt,
             updatedAt: updatedAt,
             isHighPriority: data[TeamFirebaseSchema.Field.isHighPriority] as? Bool ?? false,
-            highPriorityReason: data[TeamFirebaseSchema.Field.highPriorityReason] as? String
+            highPriorityReason: data[TeamFirebaseSchema.Field.highPriorityReason] as? String,
+            followUpDate: Self.dateValue(data[TeamFirebaseSchema.Field.followUpDate]),
+            lastContactedAt: Self.dateValue(data[TeamFirebaseSchema.Field.lastContactedAt]),
+            lastContactSummary: data[TeamFirebaseSchema.Field.lastContactSummary] as? String
         )
     }
 

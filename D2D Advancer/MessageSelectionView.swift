@@ -3,6 +3,7 @@ import MessageUI
 
 struct MessageSelectionView: View {
     let lead: Lead
+    var onContactCompleted: ((FollowUpContactMethod) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var templateManager = FollowUpMessageTemplates.shared
     @State private var selectedTemplate: MessageTemplate?
@@ -83,7 +84,12 @@ struct MessageSelectionView: View {
                 MessageComposeView(
                     recipients: [lead.phone ?? ""],
                     messageBody: getMessageText()
-                )
+                ) { result in
+                    guard result == .sent else { return }
+                    showingMessageComposer = false
+                    onContactCompleted?(.sms)
+                    dismiss()
+                }
             } else {
                 Text("SMS not available on this device")
             }
@@ -94,7 +100,12 @@ struct MessageSelectionView: View {
                     recipients: [lead.email ?? ""],
                     subject: "Follow-up: \(lead.displayName)",
                     messageBody: getMessageText()
-                )
+                ) { result in
+                    guard result == .sent else { return }
+                    showingEmailComposer = false
+                    onContactCompleted?(.email)
+                    dismiss()
+                }
             } else {
                 Text("Email not configured on this device")
             }
@@ -574,6 +585,7 @@ struct TemplateRowView: View {
 struct MessageComposeView: UIViewControllerRepresentable {
     let recipients: [String]
     let messageBody: String
+    var onFinished: (MessageComposeResult) -> Void = { _ in }
     
     func makeUIViewController(context: Context) -> MFMessageComposeViewController {
         let composer = MFMessageComposeViewController()
@@ -586,13 +598,20 @@ struct MessageComposeView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: MFMessageComposeViewController, context: Context) {}
     
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(onFinished: onFinished)
     }
     
     class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
+        let onFinished: (MessageComposeResult) -> Void
+
+        init(onFinished: @escaping (MessageComposeResult) -> Void) {
+            self.onFinished = onFinished
+        }
+
         func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
             DispatchQueue.main.async {
                 controller.dismiss(animated: true)
+                self.onFinished(result)
             }
         }
     }
@@ -602,6 +621,7 @@ struct EmailComposeView: UIViewControllerRepresentable {
     let recipients: [String]
     let subject: String
     let messageBody: String
+    var onFinished: (MFMailComposeResult) -> Void = { _ in }
     
     func makeUIViewController(context: Context) -> MFMailComposeViewController {
         let composer = MFMailComposeViewController()
@@ -615,13 +635,20 @@ struct EmailComposeView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: MFMailComposeViewController, context: Context) {}
     
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(onFinished: onFinished)
     }
     
     class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
+        let onFinished: (MFMailComposeResult) -> Void
+
+        init(onFinished: @escaping (MFMailComposeResult) -> Void) {
+            self.onFinished = onFinished
+        }
+
         func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
             DispatchQueue.main.async {
                 controller.dismiss(animated: true)
+                self.onFinished(result)
             }
         }
     }

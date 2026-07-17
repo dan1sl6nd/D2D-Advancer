@@ -2465,6 +2465,147 @@ struct D2D_AdvancerTests {
         )
     }
 
+    @Test func followUpWorkflowAppliesSmartDefaultDates() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let now = try #require(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 17, hour: 14, minute: 30))
+        )
+
+        let tomorrow = try #require(FollowUpWorkflowPolicy.defaultNextDate(for: .noAnswer, now: now, calendar: calendar))
+        let interested = try #require(FollowUpWorkflowPolicy.defaultNextDate(for: .interested, now: now, calendar: calendar))
+
+        #expect(calendar.dateComponents([.day, .hour, .minute], from: now, to: tomorrow).day == 0)
+        #expect(calendar.component(.day, from: tomorrow) == 18)
+        #expect(calendar.component(.hour, from: tomorrow) == 9)
+        #expect(calendar.component(.day, from: interested) == 20)
+        #expect(calendar.component(.hour, from: interested) == 9)
+        #expect(FollowUpWorkflowPolicy.defaultNextDate(for: .sold, now: now, calendar: calendar) == nil)
+        #expect(FollowUpWorkflowPolicy.defaultNextDate(for: .pass, now: now, calendar: calendar) == nil)
+    }
+
+    @Test func followUpWorkflowPrioritizesHighPriorityThenInterested() {
+        let due = Date(timeIntervalSince1970: 1_800_000_000)
+        let highPriority = FollowUpPriorityAttributes(
+            isHighPriority: true,
+            isInterested: false,
+            dueDate: due.addingTimeInterval(3_600),
+            value: 0,
+            name: "High"
+        )
+        let interested = FollowUpPriorityAttributes(
+            isHighPriority: false,
+            isInterested: true,
+            dueDate: due,
+            value: 100,
+            name: "Interested"
+        )
+        let ordinary = FollowUpPriorityAttributes(
+            isHighPriority: false,
+            isInterested: false,
+            dueDate: due.addingTimeInterval(-3_600),
+            value: 1_000,
+            name: "Ordinary"
+        )
+
+        #expect(FollowUpWorkflowPolicy.priorityComesFirst(lhs: highPriority, rhs: interested))
+        #expect(FollowUpWorkflowPolicy.priorityComesFirst(lhs: interested, rhs: ordinary))
+    }
+
+    @MainActor
+    @Test func completedRecurringFollowUpAdvancesAndRecordsContactHistory() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let lead = Lead.create(in: context)
+        let originalDueDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let contactDate = originalDueDate.addingTimeInterval(21 * 86_400)
+        lead.name = "Recurring Customer"
+        lead.leadStatus = .interested
+        lead.followUpDate = originalDueDate
+        lead.followUpCadence = .weekly
+        let expectedDate = try #require(lead.advanceFollowUpByCadence(after: contactDate))
+
+        try FollowUpOutcomeRecorder.recordPersonal(
+            lead: lead,
+            outcome: .done,
+            method: .phoneCall,
+            note: "Reached customer",
+            selectedNextDate: nil,
+            in: context,
+            now: contactDate
+        )
+
+        #expect(lead.followUpDate == expectedDate)
+        #expect(expectedDate > contactDate)
+        #expect(lead.lastContactDate == contactDate)
+        #expect(lead.sortedCheckIns.count == 1)
+        #expect(lead.lastCheckIn?.checkInTypeEnum == .phoneCall)
+        #expect(lead.lastCheckIn?.outcomeEnum == .successful)
+        #expect(lead.lastCheckIn?.notes == "Reached customer")
+        #expect(lead.lastCheckIn?.scheduledNextFollowUp == expectedDate)
+    }
+
+    @MainActor
+    @Test func completedOneTimeFollowUpClearsReminderButKeepsHistory() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let lead = Lead.create(in: context)
+        lead.followUpDate = Date(timeIntervalSince1970: 1_800_000_000)
+        lead.followUpCadence = .none
+
+        try FollowUpOutcomeRecorder.recordPersonal(
+            lead: lead,
+            outcome: .done,
+            method: .manual,
+            note: nil,
+            selectedNextDate: nil,
+            in: context
+        )
+
+        #expect(lead.followUpDate == nil)
+        #expect(lead.sortedCheckIns.count == 1)
+    }
+
+    @Test func teamFollowUpOutcomePolicyUsesExpectedStatuses() {
+        #expect(FollowUpOutcomeChoice.noAnswer.teamStatus(from: .contacted) == .notHome)
+        #expect(FollowUpOutcomeChoice.interested.teamStatus(from: .notContacted) == .interested)
+        #expect(FollowUpOutcomeChoice.later.teamStatus(from: .interested) == .followUp)
+        #expect(FollowUpOutcomeChoice.sold.teamStatus(from: .interested) == .converted)
+        #expect(FollowUpOutcomeChoice.pass.teamStatus(from: .followUp) == .notInterested)
+    }
+
+    @Test func legacyTeamLeadPayloadDecodesWithoutFollowUpFields() throws {
+        let lead = TeamLead(
+            id: "lead-1",
+            teamId: "team-1",
+            name: "Legacy Lead",
+            address: "1 Main Street",
+            phone: nil,
+            email: nil,
+            latitude: 43.5,
+            longitude: -79.7,
+            status: .notContacted,
+            assignedToUserId: "rep-1",
+            createdByUserId: "owner-1",
+            updatedByUserId: "owner-1",
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_100)
+        )
+        let encoded = try JSONEncoder().encode(lead)
+        var payload = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        payload.removeValue(forKey: "followUpDate")
+        payload.removeValue(forKey: "lastContactedAt")
+        payload.removeValue(forKey: "lastContactSummary")
+
+        let legacyData = try JSONSerialization.data(withJSONObject: payload)
+        let decoded = try JSONDecoder().decode(TeamLead.self, from: legacyData)
+
+        #expect(decoded.followUpDate == nil)
+        #expect(decoded.lastContactedAt == nil)
+        #expect(decoded.lastContactSummary == nil)
+        #expect(decoded.name == "Legacy Lead")
+    }
+
     @MainActor
     @Test func activeFollowUpPredicateExcludesTerminalLeadsAndIncludesOpenStatuses() throws {
         let persistence = PersistenceController(inMemory: true)

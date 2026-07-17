@@ -5,11 +5,6 @@ struct FollowUpView: View {
     let isEmbeddedInWork: Bool
 
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.managedObjectContext) private var viewContext
-    @ObservedObject private var paywallManager = PaywallManager.shared
-    @State private var selectedLead: Lead?
-    @State private var leadForMessaging: Lead?
-    @State private var leadForCheckIn: Lead?
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Lead.followUpDate, ascending: true)],
@@ -17,6 +12,16 @@ struct FollowUpView: View {
         animation: .default
     )
     private var followUpLeads: FetchedResults<Lead>
+
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \FollowUpCheckIn.checkInDate, ascending: false)],
+        predicate: NSPredicate(
+            format: "checkInDate >= %@",
+            Date().addingTimeInterval(-30 * 24 * 60 * 60) as NSDate
+        ),
+        animation: .default
+    )
+    private var recentCheckIns: FetchedResults<FollowUpCheckIn>
 
     init(isEmbeddedInWork: Bool = false) {
         self.isEmbeddedInWork = isEmbeddedInWork
@@ -46,171 +51,17 @@ struct FollowUpView: View {
                     ObsidianHeaderView("Follow Up")
                 }
 
-                if followUpLeads.isEmpty {
-                    emptyStateView
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            // OVERDUE section
-                            if !overdueLeads.isEmpty {
-                                followUpSectionHeader("OVERDUE", color: Color.statusNotInterested, count: overdueLeads.count)
-                                ForEach(overdueLeads, id: \.id) { lead in
-                                    followUpRow(for: lead)
-                                }
-                            }
-
-                            // TODAY section
-                            if !todayLeads.isEmpty {
-                                followUpSectionHeader("TODAY", color: Color.electricViolet, count: todayLeads.count)
-                                ForEach(todayLeads, id: \.id) { lead in
-                                    followUpRow(for: lead)
-                                }
-                            }
-
-                            // UPCOMING section
-                            if !upcomingLeads.isEmpty {
-                                followUpSectionHeader("UPCOMING", color: Color.textSecondary, count: upcomingLeads.count)
-                                ForEach(upcomingLeads, id: \.id) { lead in
-                                    followUpRow(for: lead)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 8)
-                        .padding(.bottom, 12)
-                    }
-                }
+                FollowUpQueueContent(
+                    personalLeads: Array(followUpLeads),
+                    recentCheckIns: Array(recentCheckIns)
+                )
             }
             .ignoresSafeArea(.all, edges: isEmbeddedInWork ? [] : .top)
         }
         .navigationBarHidden(true)
         .background(Color.obsidianBackground(for: colorScheme))
         .accessibilityIdentifier("followUpScreen")
-        .sheet(item: $selectedLead) { lead in
-            FollowUpDetailView(lead: lead)
-        }
-        .sheet(item: $leadForMessaging) { lead in
-            MessageSelectionView(lead: lead)
-        }
-        .sheet(item: $leadForCheckIn) { lead in
-            AddCheckInView(lead: lead)
-        }
     }
-
-    private func deleteLeads(offsets: IndexSet) {
-        guard paywallManager.gateAction() else { return }
-        withAnimation {
-            offsets.map { followUpLeads[$0] }.forEach { lead in
-                // Instead of deleting the lead, just remove the follow-up date
-                lead.setFollowUpDate(nil)
-            }
-
-            // Note: Context save is handled by setFollowUpDate()
-
-            // Trigger immediate sync for follow-up deletions
-            print("🔄 Follow-ups deleted, triggering immediate sync...")
-            UserDataSyncManager.shared.syncWithServer()
-        }
-    }
-
-    // MARK: - Urgency Grouping
-
-    private var overdueLeads: [Lead] {
-        followUpLeads.filter { lead in
-            guard let date = lead.followUpDate else { return false }
-            return date < Date() && !Calendar.current.isDateInToday(date)
-        }
-    }
-
-    private var todayLeads: [Lead] {
-        followUpLeads.filter { lead in
-            guard let date = lead.followUpDate else { return false }
-            return Calendar.current.isDateInToday(date)
-        }
-    }
-
-    private var upcomingLeads: [Lead] {
-        followUpLeads.filter { lead in
-            guard let date = lead.followUpDate else { return false }
-            return date > Date() && !Calendar.current.isDateInToday(date)
-        }
-    }
-
-    private func followUpSectionHeader(_ title: String, color: Color, count: Int) -> some View {
-        HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(color)
-                .frame(width: 3, height: 14)
-            Text(title)
-                .font(.micro)
-                .textCase(.uppercase)
-                .tracking(0.8)
-                .foregroundColor(color)
-            Text("\(count)")
-                .font(.micro)
-                .foregroundColor(color.opacity(0.7))
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 4)
-    }
-
-    @ViewBuilder
-    private func followUpRow(for lead: Lead) -> some View {
-        FollowUpInteractiveRowView(
-            lead: lead,
-            onTap: {
-                selectedLead = lead
-            },
-            onMessageTap: {
-                guard paywallManager.gateAction() else { return }
-                leadForMessaging = lead
-            },
-            onCheckInTap: {
-                guard paywallManager.gateAction() else { return }
-                leadForCheckIn = lead
-            },
-            onDelete: {
-                guard paywallManager.gateAction() else { return }
-                // Remove follow-up date instead of deleting lead
-                lead.setFollowUpDate(nil)
-                UserDataSyncManager.shared.syncWithServer()
-            }
-        )
-        .onLongPressGesture {
-            guard paywallManager.gateAction() else { return }
-            // Haptic feedback
-            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-            impactFeedback.impactOccurred()
-
-            // Show delete confirmation
-            let alert = UIAlertController(
-                title: "Remove Follow-up",
-                message: "Remove follow-up reminder for \(lead.displayName)?",
-                preferredStyle: .alert
-            )
-            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-            alert.addAction(UIAlertAction(title: "Remove", style: .destructive) { _ in
-                lead.setFollowUpDate(nil)
-                UserDataSyncManager.shared.syncWithServer()
-            })
-
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let window = windowScene.windows.first {
-                window.rootViewController?.present(alert, animated: true)
-            }
-        }
-    }
-
-    private var emptyStateView: some View {
-        ObsidianEmptyState(
-            icon: "calendar.badge.clock",
-            title: "No Follow Ups",
-            message: "Set a follow-up date on any lead and it will appear here in priority order.",
-            verticalOffset: -56
-        )
-    }
-
 }
 
 struct FollowUpInteractiveRowView: View {
@@ -444,12 +295,15 @@ struct FollowUpInteractiveRowView: View {
 
 struct FollowUpDetailView: View {
     @ObservedObject var lead: Lead
+    @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var leadForMessaging: Lead?
     @State private var leadForCheckIn: Lead?
     @State private var showingLeadDetail = false
     @State private var showingRescheduleView = false
+    @State private var showingHistory = false
+    @State private var outcomeRequest: FollowUpOutcomeRequest?
 
     var body: some View {
         NavigationStack {
@@ -459,6 +313,7 @@ struct FollowUpDetailView: View {
                         followUpHeaderSection
                         followUpDetailsSection
                         followUpActionsSection
+                        followUpHistorySection
                     }
                     .padding()
                     .padding(.bottom, 16)
@@ -473,7 +328,15 @@ struct FollowUpDetailView: View {
                 backButtonAccessibilityIdentifier: "followUpDetailBackButton"
             )
             .sheet(item: $leadForMessaging) { lead in
-                MessageSelectionView(lead: lead)
+                MessageSelectionView(lead: lead) { method in
+                    leadForMessaging = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        outcomeRequest = FollowUpOutcomeRequest(
+                            target: .personal(lead),
+                            method: method
+                        )
+                    }
+                }
             }
             .sheet(item: $leadForCheckIn) { lead in
                 AddCheckInView(lead: lead)
@@ -483,6 +346,12 @@ struct FollowUpDetailView: View {
             }
             .sheet(isPresented: $showingRescheduleView) {
                 RescheduleFollowUpView(lead: lead, currentDate: lead.followUpDate ?? Date())
+            }
+            .sheet(isPresented: $showingHistory) {
+                FollowUpHistoryView(lead: lead)
+            }
+            .sheet(item: $outcomeRequest) { request in
+                FollowUpOutcomeSheet(request: request) {}
             }
         }
         .obsidianModalBackground()
@@ -643,6 +512,56 @@ struct FollowUpDetailView: View {
     }
 
     @ViewBuilder
+    private var followUpHistorySection: some View {
+        if !lead.sortedCheckIns.isEmpty {
+            LeadFormSectionCard(title: "Recent Contact", icon: "clock.arrow.circlepath") {
+                VStack(spacing: 12) {
+                    ForEach(Array(lead.sortedCheckIns.prefix(3)), id: \.objectID) { checkIn in
+                        HStack(alignment: .top, spacing: 10) {
+                            ObsidianIconTile(
+                                icon: checkIn.checkInTypeEnum.icon,
+                                tint: historyTint(for: checkIn),
+                                size: 34
+                            )
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(checkIn.outcomeEnum?.displayName ?? checkIn.checkInTypeEnum.displayName)
+                                    .font(.obsidianCallout)
+                                    .foregroundColor(Color.textPrimary)
+
+                                Text(checkIn.checkInDate?.formatted(.dateTime.month().day().hour().minute()) ?? "Date unavailable")
+                                    .font(.obsidianFootnote)
+                                    .foregroundColor(Color.textSecondary)
+
+                                if let notes = checkIn.notes, !notes.isEmpty {
+                                    Text(notes)
+                                        .font(.obsidianFootnote)
+                                        .foregroundColor(Color.textSecondary)
+                                        .lineLimit(2)
+                                }
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                    }
+
+                    Button {
+                        showingHistory = true
+                    } label: {
+                        Label("View all contact history", systemImage: "chevron.right")
+                            .font(.obsidianFootnote)
+                            .fontWeight(.semibold)
+                            .foregroundColor(Color.electricViolet)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("followUpDetailHistoryButton")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
     private var followUpBottomBar: some View {
         HStack(spacing: 12) {
             if lead.followUpDate != nil {
@@ -791,8 +710,34 @@ struct FollowUpDetailView: View {
     }
 
     private func completeFollowUp() {
-        lead.setFollowUpDate(nil)
-        dismiss()
+        do {
+            try FollowUpOutcomeRecorder.recordPersonal(
+                lead: lead,
+                outcome: .done,
+                method: .manual,
+                note: "Completed from follow-up detail",
+                selectedNextDate: nil,
+                in: viewContext
+            )
+            dismiss()
+        } catch {
+            print("Failed to complete follow-up: \(error.localizedDescription)")
+        }
+    }
+
+    private func historyTint(for checkIn: FollowUpCheckIn) -> Color {
+        switch checkIn.outcomeEnum {
+        case .interested, .successful:
+            return Color.statusInterested
+        case .converted:
+            return Color.statusConverted
+        case .notInterested:
+            return Color.statusNotInterested
+        case .callback, .reschedule, .noAnswer:
+            return Color.statusNotHome
+        case .none:
+            return Color.electricViolet
+        }
     }
 }
 

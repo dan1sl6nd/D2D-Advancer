@@ -1662,7 +1662,7 @@ struct TeamWorkspaceView: View {
             return "mappin.circle.fill"
         case .leadAssigned, .bookingAssigned:
             return "person.crop.circle.badge.checkmark"
-        case .leadStatusUpdated, .repStatusReply, .bookingStatusUpdated:
+        case .leadStatusUpdated, .leadFollowUpRecorded, .repStatusReply, .bookingStatusUpdated:
             return "bubble.left.and.bubble.right.fill"
         case .leadHighPriority:
             return "star.fill"

@@ -2015,6 +2015,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapButton(app, "tab_Work", timeout: 12)
         tapButton(app, "workSection_followUps", timeout: 8)
         waitForIdentifiedElement(app, "followUpScreen", timeout: 12)
+        tapButton(app, "followUpSegment_upcoming", timeout: 8)
 
         let followUpRow = scrollToFollowUpRow(app, leadName: leadName)
         tapElement(app, followUpRow, description: "created follow-up row")
