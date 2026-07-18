@@ -55,7 +55,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>D2D Advancer uses the camera when you choose to attach a property or job photo to a lead.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>D2D Advancer accesses Contacts only when you choose to import matching service contacts or save a lead to Contacts.</string>
+	<string>D2D Advancer accesses Contacts only when you choose to scan service contact details and notes, import selected matches, or save a lead to Contacts.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>D2D Advancer uses local network access only in debug UI tests to connect to Firebase emulators on this Mac.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

@@ -31,6 +31,13 @@ Use this checklist before a TestFlight or App Store build. Do not treat one gree
 - Deleted appointments and leads do not reappear from sync after local removal.
 - Offline/pending Team edits recover or show a clear failure message.
 
+## Apple Contacts Import
+
+- Contact-note matching remains fallback-safe until Apple approves the restricted `com.apple.developer.contacts.notes` entitlement.
+- After approval, add the entitlement to the app target and regenerate both development and App Store provisioning profiles before release.
+- Verify on a physical device that a note-only Window Cleaning or Gutter Cleaning contact is matched, reviewed, imported into `Lead.notes`, and displayed at its geocoded address on the map.
+- Keep the Contacts purpose string and published privacy policy aligned with the fields scanned and imported.
+
 ## UI Proof
 
 - Smoke the primary tabs in light and dark mode.

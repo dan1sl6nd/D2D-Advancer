@@ -145,6 +145,22 @@ struct D2D_AdvancerTests {
         #expect(candidate.address?.contains("Toronto") == true)
     }
 
+    @Test func appleContactImportMatchesAndPreservesAnAuthorizedContactNote() throws {
+        let contact = CNMutableContact()
+        contact.givenName = "Jordan"
+        contact.familyName = "Customer"
+        contact.note = "Requested gutter cleaning after the next rainfall. Call before visiting."
+
+        #expect(AppleContactLeadImportService.candidate(from: contact) == nil)
+
+        let candidate = try #require(
+            AppleContactLeadImportService.candidate(from: contact, includeNotes: true)
+        )
+
+        #expect(candidate.service == .gutterCleaning)
+        #expect(candidate.note == contact.note)
+    }
+
     @Test func appleContactImportDetectsExistingLeadByContactFieldsButNotNameAlone() {
         let index = AppleContactLeadDuplicateIndex(
             existingLeads: [
@@ -163,6 +179,7 @@ struct D2D_AdvancerTests {
             phone: "647-555-0198",
             email: nil,
             address: nil,
+            note: nil,
             service: .windowCleaning,
             coordinate: nil
         )
@@ -172,6 +189,7 @@ struct D2D_AdvancerTests {
             phone: nil,
             email: nil,
             address: "100 MAIN ST TORONTO ON",
+            note: nil,
             service: .gutterCleaning,
             coordinate: nil
         )
@@ -181,6 +199,7 @@ struct D2D_AdvancerTests {
             phone: nil,
             email: nil,
             address: "200 Other Street, Toronto, ON",
+            note: nil,
             service: .windowCleaning,
             coordinate: nil
         )
@@ -197,6 +216,7 @@ struct D2D_AdvancerTests {
             phone: nil,
             email: nil,
             address: "100 Main Street",
+            note: nil,
             service: .windowCleaning,
             coordinate: nil
         )
@@ -206,6 +226,7 @@ struct D2D_AdvancerTests {
             phone: nil,
             email: nil,
             address: "100 Main Street",
+            note: nil,
             service: .gutterCleaning,
             coordinate: AppleContactLeadCoordinate(latitude: 43.6532, longitude: -79.3832)
         )
