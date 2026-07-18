@@ -286,6 +286,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launchArguments.append("-resetAppointmentTypesForUITests")
         app.launchArguments.append("-resetUITestAppointments")
         app.launchArguments.append("-resetServiceCategoriesForUITests")
+        app.launchArguments.append("-resetDefaultServiceForUITests")
         app.launchArguments.append("-resetSyncSettingsForUITests")
         app.launchArguments.append("-resetSearchPresetsForUITests")
         app.launchArguments.append("-resetUITestLeads")
@@ -1643,6 +1644,55 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testDefaultServicePreferenceAppliesToNewLeadAndCanBeChanged() throws {
+        let app = makeApp()
+        app.launchArguments.append("-openMoreTabForUITests")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        scrollToIdentifiedElement(app, "moreAppPreferencesCard", direction: .down)
+        tapIdentifiedElement(app, "moreAppPreferencesCard", direction: .down, timeout: 8)
+        waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
+
+        let defaultServicePicker = waitForIdentifiedElement(
+            app,
+            "appPreferenceDefaultServicePicker",
+            timeout: 8
+        )
+        defaultServicePicker.tap()
+
+        let windowCleaningOption = app.buttons["Window Cleaning"].firstMatch
+        XCTAssertTrue(
+            windowCleaningOption.waitForExistence(timeout: 8),
+            "Default service menu should include Window Cleaning"
+        )
+        windowCleaningOption.tap()
+        XCTAssertEqual(defaultServicePicker.value as? String, "Window Cleaning")
+
+        tapIdentifiedElement(app, "tab_Map", timeout: 8)
+        _ = waitForMapReady(app)
+        tapButton(app, "addLeadButton", timeout: 12)
+
+        let windowCleaningChip = waitForIdentifiedElement(
+            app,
+            "addLeadServiceCategoryChip_window_cleaning",
+            timeout: 8
+        )
+        XCTAssertEqual(windowCleaningChip.value as? String, "Selected")
+
+        let gutterCleaningChip = waitForIdentifiedElement(
+            app,
+            "addLeadServiceCategoryChip_gutter_cleaning",
+            timeout: 8
+        )
+        gutterCleaningChip.tap()
+        XCTAssertEqual(gutterCleaningChip.value as? String, "Selected")
+        XCTAssertEqual(windowCleaningChip.value as? String, "Not selected")
+
+        tapButton(app, "addLeadCancelButton", timeout: 8)
+    }
+
+    @MainActor
     func testAppointmentLeadPickerOpensAndDismissesSmoke() throws {
         let app = makeApp()
         app.launchArguments.append("-openAppointmentsTabForUITests")
@@ -2541,6 +2591,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         scrollToIdentifiedElement(app, "moreAppPreferencesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppPreferencesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
+        waitForIdentifiedElement(app, "appPreferenceDefaultServicePicker", timeout: 8)
         waitForIdentifiedElement(app, "appPreferenceLeadStatusPicker", timeout: 8)
         waitForIdentifiedElement(app, "appPreferenceLeadSortPicker", timeout: 8)
         scrollToIdentifiedElement(app, "appPreferenceBackupFrequencyPicker", direction: .down, requireHittable: false)

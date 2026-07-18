@@ -44,6 +44,7 @@ class FirebaseService: ObservableObject {
         "leadSortPreference",
         "leadSortAscending",
         "defaultLeadStatus",
+        "defaultServiceCategoryID",
         "defaultFollowUpTime",
         "autoBackupFrequency",
         "mapDefaultView",

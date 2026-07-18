@@ -1887,6 +1887,7 @@ struct MapView: View {
                 // Create the lead at the pressed coordinate with the resolved address.
                 let newLead = Lead.create(in: viewContext)
                 newLead.applyLeadStatus(status, autoSave: false)
+                newLead.setServiceCategory(AppPreferences.shared.defaultServiceCategory)
                 newLead.latitude = seed.coordinate.latitude
                 newLead.longitude = seed.coordinate.longitude
                 newLead.name = nil
@@ -2400,6 +2401,7 @@ struct InterestedQuickForm: View {
 
         let newLead = Lead.create(in: viewContext)
         newLead.applyLeadStatus(.interested, autoSave: false)
+        newLead.setServiceCategory(AppPreferences.shared.defaultServiceCategory)
         newLead.latitude = resolvedCoordinate.latitude
         newLead.longitude = resolvedCoordinate.longitude
         newLead.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2904,6 +2906,7 @@ struct ComeBackLaterSheet: View {
 
         let newLead = Lead.create(in: viewContext)
         newLead.applyLeadStatus(.notHome, followUpDate: followUpDate, shouldReplaceFollowUpDate: true, autoSave: false)
+        newLead.setServiceCategory(AppPreferences.shared.defaultServiceCategory)
         newLead.latitude = resolvedCoordinate.latitude
         newLead.longitude = resolvedCoordinate.longitude
         newLead.address = effectiveAddress

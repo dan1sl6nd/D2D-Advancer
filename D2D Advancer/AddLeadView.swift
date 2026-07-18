@@ -120,6 +120,7 @@ struct AddLeadView: View {
         let locationSeed = AddLeadLocationSeed(coordinate: coordinate, address: initialAddress)
         self.locationSeed = locationSeed
         _address = State(initialValue: locationSeed.address ?? "")
+        _selectedServiceCategory = State(initialValue: AppPreferences.shared.defaultServiceCategory)
     }
     
     var body: some View {
@@ -137,6 +138,7 @@ struct AddLeadView: View {
                         Button("Clear") {
                             name = ""; phone = ""; email = ""; notes = ""; priceText = ""; price = 0
                             status = AppPreferences.shared.defaultLeadStatusEnum
+                            selectedServiceCategory = AppPreferences.shared.defaultServiceCategory
                             clearDraft()
                             // Re-geocode for the current location
                             reverseGeocodeCoordinate()
@@ -714,7 +716,8 @@ struct AddLeadView: View {
             "longitude": String(format: "%.8f", coordinate.longitude),
             "notes": notes,
             "price": priceText,
-            "status": status.rawValue
+            "status": status.rawValue,
+            "serviceCategory": selectedServiceCategory?.id ?? ""
         ]
         UserDefaults.standard.set(draft, forKey: Self.draftKey)
         print("📝 Lead draft saved")
@@ -751,6 +754,12 @@ struct AddLeadView: View {
         }
         if let statusRaw = draft["status"], let savedStatus = Lead.Status(rawValue: statusRaw) {
             status = savedStatus
+        }
+        if let serviceCategoryID = draft["serviceCategory"] {
+            selectedServiceCategory = DefaultServicePreferencePolicy.resolvedCategory(
+                storedID: serviceCategoryID,
+                availableCategories: categoryManager.allCategories
+            )
         }
         hasDraft = true
         print("📝 Lead draft restored")
@@ -1329,6 +1338,7 @@ struct ServiceCategoryChip: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityIdentifier("addLeadServiceCategoryChip_\(category?.id ?? "none")")
     }
 }

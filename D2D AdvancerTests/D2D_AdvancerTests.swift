@@ -106,6 +106,66 @@ struct D2D_AdvancerTests {
         #expect(AppleContactLeadMatchPolicy.matchedService(in: ["Gutter Repair"]) == nil)
     }
 
+    @Test func defaultServicePreferenceResolvesAvailableCategoriesOnly() throws {
+        let windowCleaning = ServiceCategory(
+            id: "window_cleaning",
+            name: "Window Cleaning",
+            icon: "drop.fill",
+            color: "blue"
+        )
+        let customService = ServiceCategory(
+            id: "custom_service",
+            name: "Custom Service",
+            icon: "sparkles",
+            color: "green",
+            isCustom: true
+        )
+        let categories = [windowCleaning, customService]
+
+        #expect(DefaultServicePreferencePolicy.resolvedCategory(storedID: "", availableCategories: categories) == nil)
+        #expect(
+            DefaultServicePreferencePolicy.resolvedCategory(
+                storedID: " window_cleaning ",
+                availableCategories: categories
+            ) == windowCleaning
+        )
+        #expect(
+            DefaultServicePreferencePolicy.resolvedCategory(
+                storedID: customService.id,
+                availableCategories: categories
+            ) == customService
+        )
+        #expect(DefaultServicePreferencePolicy.resolvedCategory(storedID: "deleted_service", availableCategories: categories) == nil)
+    }
+
+    @MainActor
+    @Test func aLeadServiceCanOverrideItsCreationDefault() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let windowCleaning = ServiceCategory(
+            id: "window_cleaning",
+            name: "Window Cleaning",
+            icon: "drop.fill",
+            color: "blue"
+        )
+        let gutterCleaning = ServiceCategory(
+            id: "gutter_cleaning",
+            name: "Gutter Cleaning",
+            icon: "water.waves",
+            color: "teal"
+        )
+        let lead = Lead.create(in: context)
+
+        lead.setServiceCategory(windowCleaning)
+        #expect(lead.serviceCategory == windowCleaning.id)
+
+        lead.setServiceCategory(gutterCleaning)
+        #expect(lead.serviceCategory == gutterCleaning.id)
+
+        lead.setServiceCategory(nil)
+        #expect(lead.serviceCategory == nil)
+    }
+
     @Test func appleContactImportUsesTheFirstMatchingServicePhrase() {
         #expect(
             AppleContactLeadMatchPolicy.matchedService(

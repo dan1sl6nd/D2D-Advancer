@@ -1315,6 +1315,7 @@ struct PasswordChangeView: View {
 
 struct AppPreferencesView: View {
     @ObservedObject private var preferences = AppPreferences.shared
+    @ObservedObject private var categoryManager = ServiceCategoryManager.shared
     
     var body: some View {
         ScrollView {
@@ -1324,6 +1325,25 @@ struct AppPreferencesView: View {
                     icon: "person.badge.plus",
                     subtitle: "Starting values for new leads."
                 ) {
+                    PreferenceCardView(
+                        icon: "tag.fill",
+                        iconColor: Color.statusInterested,
+                        title: "Default Service",
+                        subtitle: "Preselected for new leads",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default service",
+                                selection: defaultServiceSelection,
+                                options: [(value: "", label: "None")] + categoryManager.allCategories.map {
+                                    (value: $0.id, label: $0.name)
+                                },
+                                accessibilityIdentifier: "appPreferenceDefaultServicePicker"
+                            )
+                        }
+                    )
+
+                    preferencesDivider
+
                     PreferenceCardView(
                         icon: "person.badge.plus",
                         iconColor: Color.electricViolet,
@@ -1483,6 +1503,18 @@ struct AppPreferencesView: View {
             .fill(Color.obsidianBorder.opacity(0.45))
             .frame(height: 0.5)
             .padding(.leading, 74)
+    }
+
+    private var defaultServiceSelection: Binding<String> {
+        Binding(
+            get: {
+                DefaultServicePreferencePolicy.resolvedCategory(
+                    storedID: preferences.defaultServiceCategoryID,
+                    availableCategories: categoryManager.allCategories
+                )?.id ?? ""
+            },
+            set: { preferences.defaultServiceCategoryID = $0 }
+        )
     }
 
     private func preferenceMenu(
