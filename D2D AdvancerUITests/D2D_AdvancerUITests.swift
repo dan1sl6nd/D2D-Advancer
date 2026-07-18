@@ -1678,8 +1678,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         windowCleaningOption.tap()
         XCTAssertEqual(defaultServicePicker.value as? String, "Window Cleaning")
 
-        tapIdentifiedElement(app, "appPreferencesBackButton", timeout: 8)
-        tapIdentifiedElement(app, "tab_Map", timeout: 8)
+        tapButton(app, "appPreferencesBackButton", timeout: 8)
+        tapButton(app, "tab_Map", timeout: 8)
         _ = waitForMapReady(app)
         tapButton(app, "addLeadButton", timeout: 12)
 
@@ -1719,8 +1719,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         )
         XCTAssertEqual(defaultServicePicker.value as? String, "Window Cleaning")
 
-        tapIdentifiedElement(app, "appPreferencesBackButton", timeout: 8)
-        tapIdentifiedElement(app, "tab_Map", timeout: 8)
+        tapButton(app, "appPreferencesBackButton", timeout: 8)
+        tapButton(app, "tab_Map", timeout: 8)
         _ = waitForMapReady(app)
         tapButton(app, "addLeadButton", timeout: 12)
 
