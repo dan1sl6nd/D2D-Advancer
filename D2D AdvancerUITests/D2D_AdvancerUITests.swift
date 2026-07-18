@@ -2192,6 +2192,72 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testAppleContactImportSeededStoreFlow() throws {
+#if !D2D_SEEDED_CONTACT_IMPORT_TEST
+        guard ProcessInfo.processInfo.environment["D2D_RUN_SEEDED_CONTACT_IMPORT"] == "1" else {
+            throw XCTSkip("Requires the AppleContactImportFixture.vcf seeded into the target simulator")
+        }
+#endif
+
+        let app = makeApp()
+        app.launchArguments.append("-openMoreTabForUITests")
+        app.launch()
+
+        let importCard = scrollToIdentifiedElement(
+            app,
+            "moreAppleContactsImportCard",
+            direction: .down,
+            maxSwipes: 6
+        )
+        tapElement(app, importCard, description: "moreAppleContactsImportCard")
+        tapButton(app, "scanAppleContactsButton", timeout: 10)
+
+        waitForTextContaining(app, "Seeded A Window Import", timeout: 45)
+        waitForTextContaining(app, "Seeded B Gutter Import", timeout: 45)
+        XCTAssertFalse(app.staticTexts["Seeded Y Roofing Ignore"].exists)
+
+        let importButton = app.buttons["importSelectedAppleContactsButton"]
+        let importDeadline = Date().addingTimeInterval(60)
+        while Date() < importDeadline, (!importButton.exists || !importButton.isEnabled) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        XCTAssertTrue(importButton.exists && importButton.isEnabled, "Two geocoded contacts should be ready to import")
+        XCTAssertTrue(importButton.label.contains("Import 2"), "Only the two unique service contacts should be selected")
+        let duplicateCandidateButtons = app.buttons.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@ AND label CONTAINS[c] %@",
+                "appleContactCandidate_",
+                "Already in Leads"
+            )
+        )
+        XCTAssertEqual(duplicateCandidateButtons.count, 1)
+        tapElement(app, importButton, description: "importSelectedAppleContactsButton")
+
+        waitForTextContaining(app, "2 leads added to Leads and Map", timeout: 15)
+        tapButton(app, "rescanAppleContactsButton", timeout: 10)
+
+        let duplicateDeadline = Date().addingTimeInterval(45)
+        let duplicateCandidates = app.buttons.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@ AND label CONTAINS[c] %@",
+                "appleContactCandidate_",
+                "Already in Leads"
+            )
+        )
+        while Date() < duplicateDeadline, duplicateCandidates.count < 3 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        XCTAssertEqual(duplicateCandidates.count, 3, "Rescanning should mark every matching contact as already imported")
+        XCTAssertFalse(importButton.isEnabled, "Duplicate contacts must not be importable")
+
+        tapButton(app, "tab_Leads", timeout: 12)
+        waitForIdentifiedElement(app, "leadsScreen", timeout: 12)
+        waitForTextContaining(app, "Seeded A Window Import", timeout: 12)
+        waitForTextContaining(app, "Seeded B Gutter Import", timeout: 12)
+        screenshot(app, name: "Apple Contacts import - seeded success")
+    }
+
+    @MainActor
     func testPaywallPlanSelectionPurchaseErrorAndDismissSmoke() throws {
         let app = makePaywallApp()
         app.launch()

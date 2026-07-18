@@ -377,9 +377,9 @@ struct AppleContactLeadImportView: View {
             hasLimitedAccess = result.hasLimitedAccess
             candidates = result.candidates
 
-            let duplicateIndex = AppleContactLeadDuplicateIndex(existingLeads: existingLeadSnapshots)
+            var duplicateIndex = AppleContactLeadDuplicateIndex(existingLeads: existingLeadSnapshots)
             duplicateCandidateIDs = Set(
-                candidates.filter(duplicateIndex.contains).map(\.id)
+                candidates.filter { !duplicateIndex.registerIfUnique($0) }.map(\.id)
             )
 
             let indicesToGeocode = candidates.indices.filter { index in
@@ -414,11 +414,23 @@ struct AppleContactLeadImportView: View {
     private func importSelectedContacts() {
         guard PaywallManager.shared.gateAction() else { return }
 
-        let selected = candidates.filter {
-            selectedCandidateIDs.contains($0.id) &&
-                $0.isReadyForImport &&
-                !duplicateCandidateIDs.contains($0.id)
+        var currentDuplicateIndex = AppleContactLeadDuplicateIndex(existingLeads: existingLeadSnapshots)
+        var selected: [AppleContactLeadCandidate] = []
+        var newlyDuplicateIDs: Set<String> = []
+
+        for candidate in candidates where
+            selectedCandidateIDs.contains(candidate.id) &&
+            candidate.isReadyForImport &&
+            !duplicateCandidateIDs.contains(candidate.id) {
+            if currentDuplicateIndex.registerIfUnique(candidate) {
+                selected.append(candidate)
+            } else {
+                newlyDuplicateIDs.insert(candidate.id)
+            }
         }
+
+        duplicateCandidateIDs.formUnion(newlyDuplicateIDs)
+        selectedCandidateIDs.subtract(newlyDuplicateIDs)
         guard !selected.isEmpty else { return }
 
         phase = .importing

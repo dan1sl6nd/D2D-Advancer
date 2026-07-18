@@ -89,9 +89,9 @@ struct AppleContactExistingLeadSnapshot: Hashable, Sendable {
 }
 
 struct AppleContactLeadDuplicateIndex: Sendable {
-    private let phones: Set<String>
-    private let emails: Set<String>
-    private let addresses: Set<String>
+    private var phones: Set<String>
+    private var emails: Set<String>
+    private var addresses: Set<String>
 
     init(existingLeads: [AppleContactExistingLeadSnapshot]) {
         phones = Set(existingLeads.compactMap { AppleContactLeadMatchPolicy.normalizedPhone($0.phone) })
@@ -110,6 +110,21 @@ struct AppleContactLeadDuplicateIndex: Sendable {
             return true
         }
         return false
+    }
+
+    mutating func registerIfUnique(_ candidate: AppleContactLeadCandidate) -> Bool {
+        guard !contains(candidate) else { return false }
+
+        if let phone = AppleContactLeadMatchPolicy.normalizedPhone(candidate.phone) {
+            phones.insert(phone)
+        }
+        if let email = AppleContactLeadMatchPolicy.normalizedEmail(candidate.email) {
+            emails.insert(email)
+        }
+        if let address = AppleContactLeadMatchPolicy.normalizedAddress(candidate.address) {
+            addresses.insert(address)
+        }
+        return true
     }
 }
 

@@ -188,6 +188,24 @@ struct D2D_AdvancerTests {
         #expect(index.contains(matchingPhone))
         #expect(index.contains(matchingAddress))
         #expect(!index.contains(nameOnly))
+
+        var batchIndex = AppleContactLeadDuplicateIndex(existingLeads: [])
+        let repeatedPhone = AppleContactLeadCandidate(
+            id: "phone-match-2",
+            displayName: "Repeated Contact",
+            phone: "+1 647 555 0198",
+            email: nil,
+            address: "300 Different Street, Toronto, ON",
+            service: .gutterCleaning,
+            coordinate: nil
+        )
+        let registeredFirstPhone = batchIndex.registerIfUnique(matchingPhone)
+        let registeredRepeatedPhone = batchIndex.registerIfUnique(repeatedPhone)
+        let registeredDifferentContact = batchIndex.registerIfUnique(nameOnly)
+
+        #expect(registeredFirstPhone)
+        #expect(!registeredRepeatedPhone)
+        #expect(registeredDifferentContact)
     }
 
     @Test func appleContactImportRequiresAValidMapCoordinate() {
