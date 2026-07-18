@@ -30,7 +30,6 @@ struct AppleContactLeadImportView: View {
     @State private var selectedCandidateIDs: Set<String> = []
     @State private var duplicateCandidateIDs: Set<String> = []
     @State private var hasLimitedAccess = false
-    @State private var didScanNotes = false
     @State private var errorMessage: String?
     @State private var permissionNeedsSettings = false
     @State private var lastImportedCount: Int?
@@ -49,15 +48,6 @@ struct AppleContactLeadImportView: View {
                         icon: "person.crop.circle.badge.questionmark",
                         title: "Limited Contacts Access",
                         message: "Only contacts currently shared with D2D Advancer can be scanned.",
-                        tint: Color.statusNotHome
-                    )
-                }
-
-                if phase == .ready && !didScanNotes && errorMessage == nil {
-                    ObsidianStatusBanner(
-                        icon: "note.text.badge.plus",
-                        title: "Contact Notes Unavailable",
-                        message: "Apple Contacts did not allow note access. Name, company, department, and job-title matches are still shown.",
                         tint: Color.statusNotHome
                     )
                 }
@@ -81,7 +71,7 @@ struct AppleContactLeadImportView: View {
                     ObsidianStatusBanner(
                         icon: "person.crop.circle.badge.xmark",
                         title: "No Matching Contacts",
-                        message: noMatchesMessage,
+                        message: "No accessible contact contains Window Cleaning or Gutter Cleaning in its name, company, department, or job title.",
                         tint: Color.textSecondary
                     )
                 }
@@ -111,7 +101,7 @@ struct AppleContactLeadImportView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 9) {
-                importFeatureRow(icon: "text.magnifyingglass", text: "Checks name, company, department, job title, and available notes")
+                importFeatureRow(icon: "text.magnifyingglass", text: "Checks name, company, department, and job title")
                 importFeatureRow(icon: "map.fill", text: "Maps each postal address before import")
                 importFeatureRow(icon: "person.2.slash.fill", text: "Skips existing phone, email, or address matches")
             }
@@ -127,11 +117,10 @@ struct AppleContactLeadImportView: View {
                 .accessibilityIdentifier("scanAppleContactsButton")
             }
 
-            Text("Matching contact notes are copied into the lead notes field. Nothing is imported until you confirm the selection.")
+            Text("Contact notes are not scanned. Nothing is imported until you confirm the selection.")
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("appleContactNotesImportDisclosure")
         }
     }
 
@@ -304,13 +293,6 @@ struct AppleContactLeadImportView: View {
                             .lineLimit(3)
                     }
 
-                    if let note = candidate.note {
-                        Label(note, systemImage: "note.text")
-                            .font(.obsidianFootnote)
-                            .foregroundColor(Color.textSecondary)
-                            .lineLimit(3)
-                    }
-
                     let contactLine = [candidate.phone, candidate.email].compactMap { $0 }.joined(separator: " | ")
                     if !contactLine.isEmpty {
                         Text(contactLine)
@@ -387,14 +369,12 @@ struct AppleContactLeadImportView: View {
         errorMessage = nil
         permissionNeedsSettings = false
         lastImportedCount = nil
-        didScanNotes = false
         selectedCandidateIDs.removeAll()
         duplicateCandidateIDs.removeAll()
 
         do {
             let result = try await AppleContactLeadImportService.shared.loadMatchingContacts()
             hasLimitedAccess = result.hasLimitedAccess
-            didScanNotes = result.didScanNotes
             candidates = result.candidates
 
             let duplicateIndex = AppleContactLeadDuplicateIndex(existingLeads: existingLeadSnapshots)
@@ -419,14 +399,12 @@ struct AppleContactLeadImportView: View {
         } catch let importError as AppleContactLeadImportError {
             candidates = []
             hasLimitedAccess = false
-            didScanNotes = false
             errorMessage = importError.localizedDescription
             permissionNeedsSettings = importError.needsSettings
             phase = .ready
         } catch {
             candidates = []
             hasLimitedAccess = false
-            didScanNotes = false
             errorMessage = error.localizedDescription
             phase = .ready
         }
@@ -457,7 +435,6 @@ struct AppleContactLeadImportView: View {
             lead.longitude = coordinate.longitude
             lead.serviceCategory = candidate.service.serviceCategoryID
             lead.source = "Apple Contacts"
-            lead.notes = candidate.note
             lead.applyLeadStatus(.notContacted, autoSave: false)
             return lead
         }
@@ -486,13 +463,6 @@ struct AppleContactLeadImportView: View {
                 address: $0.address
             )
         }
-    }
-
-    private var noMatchesMessage: String {
-        let fields = didScanNotes
-            ? "name, company, department, job title, or notes"
-            : "name, company, department, or job title"
-        return "No accessible contact contains Window Cleaning or Gutter Cleaning in its \(fields)."
     }
 }
 

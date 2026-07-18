@@ -43,7 +43,6 @@ struct AppleContactLeadCandidate: Identifiable, Hashable, Sendable {
     let phone: String?
     let email: String?
     let address: String?
-    let note: String?
     let service: AppleContactLeadServiceKind
     var coordinate: AppleContactLeadCoordinate?
     var didAttemptGeocoding = false
@@ -56,12 +55,6 @@ struct AppleContactLeadCandidate: Identifiable, Hashable, Sendable {
 struct AppleContactLeadScanResult: Sendable {
     let candidates: [AppleContactLeadCandidate]
     let hasLimitedAccess: Bool
-    let didScanNotes: Bool
-}
-
-private struct AppleContactLeadFetchResult: Sendable {
-    let candidates: [AppleContactLeadCandidate]
-    let didScanNotes: Bool
 }
 
 enum AppleContactLeadImportError: LocalizedError, Equatable {
@@ -196,13 +189,12 @@ final class AppleContactLeadImportService {
         }
 
         do {
-            let fetchResult = try await Task.detached(priority: .userInitiated) {
-                try Self.fetchMatchingContactsPreferringNotes()
+            let candidates = try await Task.detached(priority: .userInitiated) {
+                try Self.fetchMatchingContacts()
             }.value
             return AppleContactLeadScanResult(
-                candidates: fetchResult.candidates,
-                hasLimitedAccess: status == .limited,
-                didScanNotes: fetchResult.didScanNotes
+                candidates: candidates,
+                hasLimitedAccess: status == .limited
             )
         } catch let error as AppleContactLeadImportError {
             throw error
@@ -223,23 +215,8 @@ final class AppleContactLeadImportService {
         }
     }
 
-    private static func fetchMatchingContactsPreferringNotes() throws -> AppleContactLeadFetchResult {
-        do {
-            return AppleContactLeadFetchResult(
-                candidates: try fetchMatchingContacts(includeNotes: true),
-                didScanNotes: true
-            )
-        } catch {
-            guard isUnauthorizedNotesError(error) else { throw error }
-            return AppleContactLeadFetchResult(
-                candidates: try fetchMatchingContacts(includeNotes: false),
-                didScanNotes: false
-            )
-        }
-    }
-
-    private static func fetchMatchingContacts(includeNotes: Bool) throws -> [AppleContactLeadCandidate] {
-        var keys: [CNKeyDescriptor] = [
+    private static func fetchMatchingContacts() throws -> [AppleContactLeadCandidate] {
+        let keys: [CNKeyDescriptor] = [
             CNContactIdentifierKey as CNKeyDescriptor,
             CNContactGivenNameKey as CNKeyDescriptor,
             CNContactMiddleNameKey as CNKeyDescriptor,
@@ -252,37 +229,26 @@ final class AppleContactLeadImportService {
             CNContactEmailAddressesKey as CNKeyDescriptor,
             CNContactPostalAddressesKey as CNKeyDescriptor
         ]
-        if includeNotes {
-            keys.append(CNContactNoteKey as CNKeyDescriptor)
-        }
-
         let request = CNContactFetchRequest(keysToFetch: keys)
         request.unifyResults = true
         request.sortOrder = .userDefault
 
         var matches: [AppleContactLeadCandidate] = []
         try CNContactStore().enumerateContacts(with: request) { contact, _ in
-            guard let candidate = candidate(from: contact, includeNotes: includeNotes) else { return }
+            guard let candidate = candidate(from: contact) else { return }
             matches.append(candidate)
         }
         return matches
     }
 
-    private static func isUnauthorizedNotesError(_ error: Error) -> Bool {
-        let nsError = error as NSError
-        return nsError.domain == CNErrorDomain && nsError.code == CNError.Code.unauthorizedKeys.rawValue
-    }
-
-    static func candidate(from contact: CNContact, includeNotes: Bool = false) -> AppleContactLeadCandidate? {
+    static func candidate(from contact: CNContact) -> AppleContactLeadCandidate? {
         let displayName = displayName(for: contact)
-        let note = includeNotes ? cleaned(contact.note) : nil
         let searchableFields = [
             displayName,
             contact.nickname,
             contact.organizationName,
             contact.departmentName,
-            contact.jobTitle,
-            note ?? ""
+            contact.jobTitle
         ]
 
         guard let service = AppleContactLeadMatchPolicy.matchedService(in: searchableFields) else {
@@ -295,15 +261,9 @@ final class AppleContactLeadImportService {
             phone: preferredPhone(from: contact),
             email: preferredEmail(from: contact),
             address: preferredAddress(from: contact),
-            note: note,
             service: service,
             coordinate: nil
         )
-    }
-
-    private static func cleaned(_ value: String) -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func displayName(for contact: CNContact) -> String {
