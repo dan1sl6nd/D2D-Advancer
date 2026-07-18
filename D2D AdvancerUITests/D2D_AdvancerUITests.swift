@@ -2257,6 +2257,113 @@ final class D2D_AdvancerUITests: XCTestCase {
         screenshot(app, name: "Apple Contacts import - seeded success")
     }
 
+#if D2D_PHYSICAL_CONTACT_IMPORT_TEST
+    @MainActor
+    func testAppleContactImportPhysicalStoreFlow() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append("-openAppleContactImportForDeviceQA")
+
+        addUIInterruptionMonitor(withDescription: "Apple Contacts permission") { alert in
+            for buttonTitle in ["Allow Full Access", "Allow", "Continue"] {
+                let button = alert.buttons[buttonTitle]
+                if button.exists {
+                    button.tap()
+                    return true
+                }
+            }
+            return false
+        }
+
+        app.launch()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
+        waitForIdentifiedElement(app, "appleContactImportScreen", timeout: 15)
+        tapButton(app, "scanAppleContactsButton", timeout: 12)
+
+        // This harmless top-corner tap lets XCTest service a system permission alert.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.96, dy: 0.04)).tap()
+
+        func waitForCompletedScan(timeout: TimeInterval) {
+            let matchesValue = app.staticTexts["appleContactSummaryMatchesValue"]
+            let deadline = Date().addingTimeInterval(timeout)
+            var idleSince: Date?
+
+            while Date() < deadline {
+                if matchesValue.exists && app.progressIndicators.count == 0 {
+                    if let idleSince {
+                        if Date().timeIntervalSince(idleSince) >= 1.5 {
+                            return
+                        }
+                    } else {
+                        idleSince = Date()
+                    }
+                } else {
+                    idleSince = nil
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            }
+            XCTFail("Apple Contacts scan did not finish within \(Int(timeout)) seconds")
+        }
+
+        func summaryValue(_ identifier: String) -> Int {
+            let element = app.staticTexts[identifier]
+            guard element.waitForExistence(timeout: 5) else {
+                XCTFail("Missing Contacts import summary value: \(identifier)")
+                return -1
+            }
+            guard let value = Int(element.label.filter(\.isNumber)) else {
+                XCTFail("Invalid Contacts import summary value for \(identifier): \(element.label)")
+                return -1
+            }
+            return value
+        }
+
+        waitForCompletedScan(timeout: 900)
+        XCTAssertFalse(
+            app.staticTexts["Limited Contacts Access"].exists,
+            "Full Contacts access is required to verify every matching contact"
+        )
+
+        let initialMatches = summaryValue("appleContactSummaryMatchesValue")
+        let initialReady = summaryValue("appleContactSummaryReadyValue")
+        let initialDuplicates = summaryValue("appleContactSummaryDuplicateValue")
+        let initialUnavailable = summaryValue("appleContactSummaryUnavailableValue")
+        XCTAssertEqual(initialMatches, initialReady + initialDuplicates + initialUnavailable)
+
+        if initialReady > 0 {
+            let importButton = app.buttons["importSelectedAppleContactsButton"]
+            XCTAssertTrue(importButton.waitForExistence(timeout: 8))
+            XCTAssertTrue(importButton.isEnabled)
+            XCTAssertTrue(importButton.label.contains("Import \(initialReady)"))
+            tapElement(app, importButton, description: "importSelectedAppleContactsButton")
+            waitForTextContaining(app, "\(initialReady) leads added to Leads and Map", timeout: 60)
+            tapButton(app, "rescanAppleContactsButton", timeout: 12)
+            waitForCompletedScan(timeout: 900)
+        }
+
+        let finalMatches = summaryValue("appleContactSummaryMatchesValue")
+        let finalReady = summaryValue("appleContactSummaryReadyValue")
+        let finalDuplicates = summaryValue("appleContactSummaryDuplicateValue")
+        let finalUnavailable = summaryValue("appleContactSummaryUnavailableValue")
+
+        XCTAssertEqual(finalMatches, initialMatches)
+        XCTAssertEqual(finalReady, 0, "Every map-ready matching contact should now exist in Leads")
+        XCTAssertEqual(finalMatches, finalDuplicates + finalUnavailable)
+        XCTAssertGreaterThanOrEqual(finalDuplicates, initialDuplicates + initialReady)
+
+        let report = "D2D_PHYSICAL_CONTACT_IMPORT_RESULT " +
+            "initial_matches=\(initialMatches) initial_ready=\(initialReady) " +
+            "initial_duplicates=\(initialDuplicates) initial_unavailable=\(initialUnavailable) " +
+            "final_matches=\(finalMatches) final_ready=\(finalReady) " +
+            "final_duplicates=\(finalDuplicates) final_unavailable=\(finalUnavailable)"
+        print(report)
+        let attachment = XCTAttachment(string: report)
+        attachment.name = "Physical Apple Contacts Import Result"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        screenshot(app, name: "Apple Contacts import - physical verification")
+    }
+#endif
+
     @MainActor
     func testPaywallPlanSelectionPurchaseErrorAndDismissSmoke() throws {
         let app = makePaywallApp()

@@ -1,4 +1,5 @@
 import Contacts
+import CoreData
 import CoreLocation
 import Foundation
 import MapKit
@@ -170,6 +171,43 @@ enum AppleContactLeadMatchPolicy {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    static func sanitizedLeadName(_ value: String?) -> String? {
+        guard var sanitized = cleaned(value) else { return nil }
+
+        for service in AppleContactLeadServiceKind.allCases {
+            while let range = sanitized.range(
+                of: service.title,
+                options: [.caseInsensitive, .diacriticInsensitive]
+            ) {
+                sanitized.replaceSubrange(range, with: " ")
+            }
+        }
+
+        sanitized = sanitized.replacingOccurrences(
+            of: #"\(\s*\)|\[\s*\]|\{\s*\}"#,
+            with: " ",
+            options: .regularExpression
+        )
+        sanitized = sanitized.replacingOccurrences(
+            of: #"(?:\s*[-_|/,:;]\s*){2,}"#,
+            with: " ",
+            options: .regularExpression
+        )
+        sanitized = sanitized.replacingOccurrences(
+            of: #"\s+"#,
+            with: " ",
+            options: .regularExpression
+        )
+
+        let edgeCharacters = CharacterSet.whitespacesAndNewlines
+            .union(.punctuationCharacters)
+            .union(CharacterSet(charactersIn: "&+"))
+        sanitized = sanitized.trimmingCharacters(in: edgeCharacters)
+
+        guard sanitized.contains(where: { $0.isLetter || $0.isNumber }) else { return nil }
+        return sanitized
+    }
+
     private static func cleaned(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
@@ -180,6 +218,25 @@ final class AppleContactLeadImportService {
     static let shared = AppleContactLeadImportService()
 
     private init() {}
+
+    static func sanitizeImportedLeadNames(in context: NSManagedObjectContext) throws -> Int {
+        let request = Lead.fetchRequest(in: context)
+        request.predicate = NSPredicate(format: "source ==[c] %@", "Apple Contacts")
+
+        var updateCount = 0
+        for lead in try context.fetch(request) {
+            guard let existingName = lead.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !existingName.isEmpty else { continue }
+
+            let sanitizedName = AppleContactLeadMatchPolicy.sanitizedLeadName(existingName) ?? "Apple Contact"
+            guard sanitizedName != existingName else { continue }
+
+            lead.name = sanitizedName
+            lead.updatedDate = Date()
+            updateCount += 1
+        }
+        return updateCount
+    }
 
     func loadMatchingContacts() async throws -> AppleContactLeadScanResult {
         var status = CNContactStore.authorizationStatus(for: .contacts)
@@ -257,9 +314,9 @@ final class AppleContactLeadImportService {
     }
 
     static func candidate(from contact: CNContact) -> AppleContactLeadCandidate? {
-        let displayName = displayName(for: contact)
+        let rawDisplayName = displayName(for: contact)
         let searchableFields = [
-            displayName,
+            rawDisplayName,
             contact.nickname,
             contact.organizationName,
             contact.departmentName,
@@ -269,6 +326,10 @@ final class AppleContactLeadImportService {
         guard let service = AppleContactLeadMatchPolicy.matchedService(in: searchableFields) else {
             return nil
         }
+
+        let displayName = [rawDisplayName, contact.nickname, contact.organizationName]
+            .compactMap(AppleContactLeadMatchPolicy.sanitizedLeadName)
+            .first ?? "Apple Contact"
 
         return AppleContactLeadCandidate(
             id: contact.identifier,

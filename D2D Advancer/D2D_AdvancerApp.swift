@@ -158,7 +158,23 @@ struct D2D_AdvancerApp: App {
 
                 let cleanupContext = persistence.container.newBackgroundContext()
                 cleanupContext.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
-                Utilities.removeDuplicateLeads(from: cleanupContext)
+                cleanupContext.perform {
+                    do {
+                        let sanitizedCount = try AppleContactLeadImportService.sanitizeImportedLeadNames(
+                            in: cleanupContext
+                        )
+                        if cleanupContext.hasChanges {
+                            try cleanupContext.save()
+                        }
+                        if sanitizedCount > 0 {
+                            print("🧹 Sanitized \(sanitizedCount) Apple Contacts lead name(s)")
+                        }
+                    } catch {
+                        print("⚠️ Apple Contacts lead-name cleanup failed: \(error.localizedDescription)")
+                    }
+
+                    Utilities.removeDuplicateLeads(from: cleanupContext)
+                }
             }
         }
 
@@ -183,8 +199,20 @@ struct D2D_AdvancerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            Group {
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-openAppleContactImportForDeviceQA") {
+                    NavigationStack {
+                        AppleContactLeadImportView()
+                    }
+                } else {
+                    ContentView()
+                }
+                #else
+                ContentView()
+                #endif
+            }
+            .environment(\.managedObjectContext, persistenceController.container.viewContext)
             .preferredColorScheme(isDarkMode ? .dark : .light)
             .customThemed()
             .alert("Save Password to Keychain", isPresented: $userAccountManager.shouldShowPasswordSavePrompt) {

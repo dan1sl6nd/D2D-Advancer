@@ -114,6 +114,52 @@ struct D2D_AdvancerTests {
         )
     }
 
+    @Test func appleContactImportRemovesServicePhrasesFromLeadNames() {
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Emma Window Cleaning Ad") == "Emma Ad")
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("ACME - Gutter Cleaning") == "ACME")
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Emma - Window Cleaning - Ad") == "Emma Ad")
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Premium WÍNDOW CLEANING Services") == "Premium Services")
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Window Cleaning & Gutter Cleaning") == nil)
+    }
+
+    @Test func appleContactImportBuildsAServiceFreeCandidateName() throws {
+        let contact = CNMutableContact()
+        contact.givenName = "Emma"
+        contact.familyName = "Window Cleaning Ad"
+        contact.organizationName = "Northstar Window Cleaning"
+
+        let candidate = try #require(AppleContactLeadImportService.candidate(from: contact))
+
+        #expect(candidate.displayName == "Emma Ad")
+        #expect(candidate.service == .windowCleaning)
+        #expect(candidate.service.serviceCategoryID == "window_cleaning")
+    }
+
+    @MainActor
+    @Test func appleContactImportNameMigrationOnlyUpdatesImportedLeads() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+
+        let importedLead = Lead.create(in: context)
+        importedLead.name = "Emma Window Cleaning Ad"
+        importedLead.source = "Apple Contacts"
+        importedLead.serviceCategory = "window_cleaning"
+
+        let manualLead = Lead.create(in: context)
+        manualLead.name = "Mike Gutter Cleaning"
+        manualLead.source = "Manual"
+        manualLead.serviceCategory = "gutter_cleaning"
+
+        let updateCount = try AppleContactLeadImportService.sanitizeImportedLeadNames(in: context)
+
+        #expect(updateCount == 1)
+        #expect(importedLead.name == "Emma Ad")
+        #expect(importedLead.serviceCategory == "window_cleaning")
+        #expect(manualLead.name == "Mike Gutter Cleaning")
+        #expect(manualLead.serviceCategory == "gutter_cleaning")
+        #expect(try AppleContactLeadImportService.sanitizeImportedLeadNames(in: context) == 0)
+    }
+
     @Test func appleContactImportBuildsCandidateFromAccessibleContactFields() throws {
         let contact = CNMutableContact()
         contact.givenName = "Alex"

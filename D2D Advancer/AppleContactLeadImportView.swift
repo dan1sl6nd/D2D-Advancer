@@ -169,13 +169,33 @@ struct AppleContactLeadImportView: View {
                 progressRow(title: "Adding selected leads", detail: "Saving them to your personal workspace")
             }
 
-            summaryRow(title: "Matches", value: candidates.count, tint: Color.electricViolet)
+            summaryRow(
+                title: "Matches",
+                value: candidates.count,
+                tint: Color.electricViolet,
+                accessibilityIdentifier: "appleContactSummaryMatchesValue"
+            )
             summaryDivider
-            summaryRow(title: "Ready", value: readyCandidates.count, tint: Color.statusInterested)
+            summaryRow(
+                title: "Ready",
+                value: readyCandidates.count,
+                tint: Color.statusInterested,
+                accessibilityIdentifier: "appleContactSummaryReadyValue"
+            )
             summaryDivider
-            summaryRow(title: "Already in Leads", value: duplicateCandidateIDs.count, tint: Color.statusNotHome)
+            summaryRow(
+                title: "Already in Leads",
+                value: duplicateCandidateIDs.count,
+                tint: Color.statusNotHome,
+                accessibilityIdentifier: "appleContactSummaryDuplicateValue"
+            )
             summaryDivider
-            summaryRow(title: "Needs a map location", value: unavailableCandidateCount, tint: Color.statusNotInterested)
+            summaryRow(
+                title: "Needs a map location",
+                value: unavailableCandidateCount,
+                tint: Color.statusNotInterested,
+                accessibilityIdentifier: "appleContactSummaryUnavailableValue"
+            )
         }
     }
 
@@ -198,7 +218,12 @@ struct AppleContactLeadImportView: View {
         .padding(.bottom, 2)
     }
 
-    private func summaryRow(title: String, value: Int, tint: Color) -> some View {
+    private func summaryRow(
+        title: String,
+        value: Int,
+        tint: Color,
+        accessibilityIdentifier: String
+    ) -> some View {
         HStack {
             Text(title)
                 .font(.obsidianCallout)
@@ -208,6 +233,7 @@ struct AppleContactLeadImportView: View {
                 .font(.obsidianHeadline)
                 .foregroundColor(tint)
                 .monospacedDigit()
+                .accessibilityIdentifier(accessibilityIdentifier)
         }
     }
 
