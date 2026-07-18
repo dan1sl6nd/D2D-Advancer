@@ -1509,7 +1509,7 @@ struct AppPreferencesView: View {
         Binding(
             get: {
                 DefaultServicePreferencePolicy.resolvedCategory(
-                    storedID: preferences.defaultServiceCategoryID,
+                    storedID: preferences.effectiveDefaultServiceCategoryID,
                     availableCategories: categoryManager.allCategories
                 )?.id ?? ""
             },

@@ -300,6 +300,15 @@ final class D2D_AdvancerUITests: XCTestCase {
         return app
     }
 
+    private func makeDataPreservingApp(defaultServiceCategoryID: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append("-skipOnboardingForUITests")
+        app.launchArguments.append("-openMoreTabForUITests")
+        app.launchArguments.append("-defaultServiceForUITests")
+        app.launchArguments.append(defaultServiceCategoryID)
+        return app
+    }
+
     private func makePaywallApp(showTeamOffer: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append("-skipOnboardingForUITests")
@@ -1669,6 +1678,48 @@ final class D2D_AdvancerUITests: XCTestCase {
         windowCleaningOption.tap()
         XCTAssertEqual(defaultServicePicker.value as? String, "Window Cleaning")
 
+        tapIdentifiedElement(app, "appPreferencesBackButton", timeout: 8)
+        tapIdentifiedElement(app, "tab_Map", timeout: 8)
+        _ = waitForMapReady(app)
+        tapButton(app, "addLeadButton", timeout: 12)
+
+        let windowCleaningChip = waitForIdentifiedElement(
+            app,
+            "addLeadServiceCategoryChip_window_cleaning",
+            timeout: 8
+        )
+        XCTAssertEqual(windowCleaningChip.value as? String, "Selected")
+
+        let gutterCleaningChip = waitForIdentifiedElement(
+            app,
+            "addLeadServiceCategoryChip_gutter_cleaning",
+            timeout: 8
+        )
+        gutterCleaningChip.tap()
+        XCTAssertEqual(gutterCleaningChip.value as? String, "Selected")
+        XCTAssertEqual(windowCleaningChip.value as? String, "Not selected")
+
+        tapButton(app, "addLeadCancelButton", timeout: 8)
+    }
+
+    @MainActor
+    func testPhysicalDefaultServiceSmokePreservingUserData() throws {
+        let app = makeDataPreservingApp(defaultServiceCategoryID: "window_cleaning")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        scrollToIdentifiedElement(app, "moreAppPreferencesCard", direction: .down)
+        tapIdentifiedElement(app, "moreAppPreferencesCard", direction: .down, timeout: 8)
+        waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
+
+        let defaultServicePicker = waitForIdentifiedElement(
+            app,
+            "appPreferenceDefaultServicePicker",
+            timeout: 8
+        )
+        XCTAssertEqual(defaultServicePicker.value as? String, "Window Cleaning")
+
+        tapIdentifiedElement(app, "appPreferencesBackButton", timeout: 8)
         tapIdentifiedElement(app, "tab_Map", timeout: 8)
         _ = waitForMapReady(app)
         tapButton(app, "addLeadButton", timeout: 12)

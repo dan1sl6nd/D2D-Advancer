@@ -32,9 +32,20 @@ class AppPreferences: ObservableObject {
         return Lead.Status(rawValue: defaultLeadStatus) ?? .notContacted
     }
 
+    var effectiveDefaultServiceCategoryID: String {
+        #if DEBUG
+        let launchArguments = ProcessInfo.processInfo.arguments
+        if let flagIndex = launchArguments.firstIndex(of: "-defaultServiceForUITests"),
+           launchArguments.indices.contains(flagIndex + 1) {
+            return launchArguments[flagIndex + 1]
+        }
+        #endif
+        return defaultServiceCategoryID
+    }
+
     var defaultServiceCategory: ServiceCategory? {
         DefaultServicePreferencePolicy.resolvedCategory(
-            storedID: defaultServiceCategoryID,
+            storedID: effectiveDefaultServiceCategoryID,
             availableCategories: ServiceCategoryManager.shared.allCategories
         )
     }
