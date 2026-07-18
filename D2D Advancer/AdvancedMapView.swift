@@ -1491,12 +1491,8 @@ enum LeadMapAnnotationPriorityPolicy {
 }
 
 enum LeadMapAnnotationLabelPolicy {
-    static func showsName(status: Lead.Status, name: String) -> Bool {
-        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return false
-        }
-
-        return status == .converted || status == .interested
+    static func showsName(status _: Lead.Status, name: String) -> Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

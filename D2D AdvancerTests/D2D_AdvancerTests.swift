@@ -3564,12 +3564,12 @@ struct D2D_AdvancerTests {
         )
     }
 
-    @Test func mapOnlyShowsNamesForInterestedAndSoldLeads() {
+    @Test func mapShowsEveryNonEmptyLeadNameRegardlessOfStatus() {
         #expect(LeadMapAnnotationLabelPolicy.showsName(status: .converted, name: "Sold Customer"))
         #expect(LeadMapAnnotationLabelPolicy.showsName(status: .interested, name: "Interested Customer"))
-        #expect(!LeadMapAnnotationLabelPolicy.showsName(status: .notContacted, name: "New Lead"))
-        #expect(!LeadMapAnnotationLabelPolicy.showsName(status: .notHome, name: "Away Lead"))
-        #expect(!LeadMapAnnotationLabelPolicy.showsName(status: .notInterested, name: "Passed Lead"))
+        #expect(LeadMapAnnotationLabelPolicy.showsName(status: .notContacted, name: "New Lead"))
+        #expect(LeadMapAnnotationLabelPolicy.showsName(status: .notHome, name: "Away Lead"))
+        #expect(LeadMapAnnotationLabelPolicy.showsName(status: .notInterested, name: "Passed Lead"))
         #expect(!LeadMapAnnotationLabelPolicy.showsName(status: .converted, name: "   "))
     }
 
