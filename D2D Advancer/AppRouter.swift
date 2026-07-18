@@ -22,6 +22,7 @@ final class AppRouter: ObservableObject {
     @Published var selectedTab: Int = MainAppTab.map.rawValue
     @Published var selectedWorkSection: WorkTabSection = .followUps
     @Published var targetLeadID: UUID? = nil
+    @Published var targetMapLeadID: UUID? = nil
     @Published var openMessageForLeadID: UUID? = nil
     @Published var targetAppointmentID: UUID? = nil
 
@@ -30,6 +31,11 @@ final class AppRouter: ObservableObject {
     func openLead(_ id: UUID) {
         selectedTab = MainAppTab.leads.rawValue
         targetLeadID = id
+    }
+
+    func showLeadOnMap(_ id: UUID) {
+        targetMapLeadID = id
+        selectedTab = MainAppTab.map.rawValue
     }
 
     func openMessage(forLead id: UUID) {

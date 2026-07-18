@@ -1893,6 +1893,34 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testLeadDetailShowOnMapFocusesLead() throws {
+        let app = makeApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        _ = waitForMapReady(app)
+        let leadName = "UI Map Focus \(Int(Date().timeIntervalSince1970))"
+        createInterestedLead(app, name: leadName)
+
+        tapButton(app, "tab_Leads", timeout: 12)
+        waitForIdentifiedElement(app, "leadsScreen", timeout: 12)
+        waitForTextContaining(app, leadName, timeout: 15)
+
+        let personalLeadRow = app.descendants(matching: .any)["personalLeadRow"].firstMatch
+        XCTAssertTrue(personalLeadRow.waitForExistence(timeout: 10), "Created lead should be visible in Leads")
+        tapElement(app, personalLeadRow, description: "personalLeadRow")
+
+        waitForIdentifiedElement(app, "leadDetailShowOnMapButton", timeout: 8)
+        tapButton(app, "leadDetailShowOnMapButton", timeout: 8)
+
+        XCTAssertTrue(app.buttons["addLeadButton"].waitForExistence(timeout: 12), "Show on Map should switch to the Map tab")
+        let focusedLeadLabel = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", leadName))
+            .firstMatch
+        XCTAssertTrue(focusedLeadLabel.waitForExistence(timeout: 12), "Focused lead name should be visible on the map")
+    }
+
+    @MainActor
     func testLeadsQuickFilterPresetSmoke() throws {
         let app = makeApp()
         app.launchArguments.append("-openLeadsTabForUITests")

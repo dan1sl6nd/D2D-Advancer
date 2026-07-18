@@ -3573,6 +3573,18 @@ struct D2D_AdvancerTests {
         #expect(!LeadMapAnnotationLabelPolicy.showsName(status: .converted, name: "   "))
     }
 
+    @Test func mapLeadFocusUsesNeighborhoodZoomAndRejectsMissingCoordinates() throws {
+        let coordinate = CLLocationCoordinate2D(latitude: 43.5597, longitude: -79.7072)
+        let region = try #require(MapLeadFocusPolicy.region(for: coordinate))
+
+        #expect(region.center.latitude == coordinate.latitude)
+        #expect(region.center.longitude == coordinate.longitude)
+        #expect(region.span.latitudeDelta == 0.0045)
+        #expect(region.span.longitudeDelta == 0.0045)
+        #expect(MapLeadFocusPolicy.region(for: CLLocationCoordinate2D(latitude: 0, longitude: 0)) == nil)
+        #expect(MapLeadFocusPolicy.region(for: CLLocationCoordinate2D(latitude: 95, longitude: 0)) == nil)
+    }
+
     @Test func leadClusterInteractionOpensAreaSheetBeforeExtremeZoom() {
         let route = LeadClusterInteractionPolicy.route(
             mapSpan: 0.035,

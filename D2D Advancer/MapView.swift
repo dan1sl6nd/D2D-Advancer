@@ -306,6 +306,21 @@ enum MapLaunchCenteringPolicy {
     }
 }
 
+enum MapLeadFocusPolicy {
+    private static let focusedSpan = MKCoordinateSpan(latitudeDelta: 0.0045, longitudeDelta: 0.0045)
+
+    static func region(for coordinate: CLLocationCoordinate2D) -> MKCoordinateRegion? {
+        guard CLLocationCoordinate2DIsValid(coordinate),
+              (-90...90).contains(coordinate.latitude),
+              (-180...180).contains(coordinate.longitude),
+              coordinate.latitude != 0 || coordinate.longitude != 0 else {
+            return nil
+        }
+
+        return MKCoordinateRegion(center: coordinate, span: focusedSpan)
+    }
+}
+
 struct MapView: View {
     let isVisible: Bool
 
@@ -313,6 +328,7 @@ struct MapView: View {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var locationManager = LocationManager.shared
     @ObservedObject private var onboardingManager = OnboardingManager.shared
+    @ObservedObject private var router = AppRouter.shared
     private let teamService = TeamFirebaseService.shared
     private let firebaseService = FirebaseService.shared
     private let userAccountManager = FirebaseUserAccountManager.shared
@@ -436,7 +452,8 @@ struct MapView: View {
                 prepareHiddenMapLeadState()
                 return
             }
-            if !isRunningUITests || shouldExerciseMapRuntimeEffects {
+            let focusedPendingLead = consumePendingMapLeadFocusIfNeeded()
+            if !focusedPendingLead && (!isRunningUITests || shouldExerciseMapRuntimeEffects) {
                 prepareLaunchMapCentering()
             }
             scheduleOpeningMapLeadRenderUpdate()
@@ -447,7 +464,8 @@ struct MapView: View {
         }
         .onChange(of: isVisible) { _, isVisible in
             if isVisible {
-                if !isRunningUITests || shouldExerciseMapRuntimeEffects {
+                let focusedPendingLead = consumePendingMapLeadFocusIfNeeded()
+                if !focusedPendingLead && (!isRunningUITests || shouldExerciseMapRuntimeEffects) {
                     prepareLaunchMapCentering()
                 }
                 scheduleOpeningMapLeadRenderUpdate()
@@ -455,6 +473,10 @@ struct MapView: View {
                 prepareHiddenMapLeadState()
             }
         }
+            .onChange(of: router.targetMapLeadID) { _, targetLeadID in
+                guard targetLeadID != nil else { return }
+                _ = consumePendingMapLeadFocusIfNeeded()
+            }
             .onChange(of: selectedMapMode) { _, _ in
                 guard isVisible else { return }
                 scheduleInteractiveMapLeadRenderUpdate(after: 0.03)
@@ -1832,16 +1854,60 @@ struct MapView: View {
     }
 
     private func focusLead(_ lead: Lead, openDetail: Bool) {
-        let newRegion = MKCoordinateRegion(
-            center: lead.coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.0045, longitudeDelta: 0.0045)
-        )
+        guard let newRegion = MapLeadFocusPolicy.region(for: lead.coordinate) else { return }
         triggerMapAnimation = true
         locationManager.region = newRegion
 
         if openDetail {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                 selectedLead = lead
+            }
+        }
+    }
+
+    @discardableResult
+    private func consumePendingMapLeadFocusIfNeeded() -> Bool {
+        guard isVisible, let leadID = router.targetMapLeadID else { return false }
+        router.targetMapLeadID = nil
+
+        guard let lead = fetchLeadForMapFocus(leadID),
+              let focusRegion = MapLeadFocusPolicy.region(for: lead.coordinate) else {
+            showMapFocusError("That lead cannot be shown on the map")
+            return true
+        }
+
+        didCenterMapOnLaunch = true
+        didRequestLaunchLocationCenter = true
+        didConfirmVisibleMapCenteredOnLaunch = true
+        locationManager.shouldUseUserLocation = false
+        selectedMapMode = .all
+        visibleMapRegion = focusRegion
+        focusLead(lead, openDetail: false)
+        scheduleInteractiveMapLeadRenderUpdate(after: 0)
+        return true
+    }
+
+    private func fetchLeadForMapFocus(_ id: UUID) -> Lead? {
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: viewContext)
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.fetchLimit = 1
+
+        do {
+            return try viewContext.fetch(request).first
+        } catch {
+            AppLog.warning("Map", "Could not load requested map lead: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func showMapFocusError(_ message: String) {
+        toastMessage = message
+        withAnimation {
+            showToast = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation {
+                showToast = false
             }
         }
     }

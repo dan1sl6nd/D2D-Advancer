@@ -41,6 +41,7 @@ struct LeadDetailView: View {
 
     @ObservedObject private var categoryManager = ServiceCategoryManager.shared
     @ObservedObject private var paywallManager = PaywallManager.shared
+    private let router = AppRouter.shared
     
     @FetchRequest private var checkIns: FetchedResults<FollowUpCheckIn>
     
@@ -612,6 +613,18 @@ struct LeadDetailView: View {
         VStack(spacing: 16) {
             LeadFormSectionCard(title: "Quick Actions", icon: "bolt.fill") {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
+                if canShowLeadOnMap {
+                    leadActionButton(
+                        title: "Show on Map",
+                        subtitle: "Locate",
+                        icon: "map.fill",
+                        color: Color.dataCyan,
+                        accessibilityIdentifier: "leadDetailShowOnMapButton"
+                    ) {
+                        showLeadOnMap()
+                    }
+                }
+
                 if lead.address?.isEmpty == false {
                     leadActionButton(
                         title: "Navigate",
@@ -775,6 +788,18 @@ struct LeadDetailView: View {
     
     private var shouldShowScheduleButton: Bool {
         lead.leadStatus == .interested || lead.leadStatus == .converted
+    }
+
+    private var canShowLeadOnMap: Bool {
+        lead.id != nil && MapLeadFocusPolicy.region(for: lead.coordinate) != nil
+    }
+
+    private func showLeadOnMap() {
+        guard let leadID = lead.id, canShowLeadOnMap else { return }
+        dismiss()
+        DispatchQueue.main.async {
+            router.showLeadOnMap(leadID)
+        }
     }
     
     private var leadAppointments: [Appointment] {
