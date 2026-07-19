@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreData
 import UniformTypeIdentifiers
+import UIKit
 
 enum SyncStatusSummaryPolicy {
     static func shortText(
@@ -981,6 +982,7 @@ struct DataSyncHubView: View {
     @ObservedObject private var syncManager = UserDataSyncManager.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var importBatchStore = LeadImportBatchStore.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
     @State private var showingCloudProviderSheet = false
     @State private var showingSyncSettings = false
     @State private var exportFile: LeadExportFile?
@@ -991,6 +993,7 @@ struct DataSyncHubView: View {
     @State private var importResult: LeadImportResult?
     @State private var undoResult: LeadImportUndoResult?
     @State private var importFailure: LeadImportFailure?
+    @State private var supportReportFailure: LeadImportFailure?
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: false)],
@@ -1134,6 +1137,25 @@ struct DataSyncHubView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("moreAppleContactsImportCard")
                 }
+
+                MoreSectionGroup(
+                    title: "Support Diagnostics",
+                    icon: "stethoscope",
+                    subtitle: "Stored on this device for up to 30 days and exported only when you share it.",
+                    accentColor: Color.statusInterested
+                ) {
+                    Button(action: exportSupportReport) {
+                        MoreCardView(
+                            icon: "doc.text.magnifyingglass",
+                            iconColor: Color.statusInterested,
+                            title: "Export Support Report",
+                            subtitle: "App and sync health without customer or account details",
+                            showChevron: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("exportSupportReportButton")
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
@@ -1175,6 +1197,13 @@ struct DataSyncHubView: View {
         .alert(item: $importFailure) { failure in
             Alert(
                 title: Text("Import Failed"),
+                message: Text(failure.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .alert(item: $supportReportFailure) { failure in
+            Alert(
+                title: Text("Support Report Failed"),
                 message: Text(failure.message),
                 dismissButton: .default(Text("OK"))
             )
@@ -1253,6 +1282,98 @@ struct DataSyncHubView: View {
         } catch {
             importFailure = LeadImportFailure(message: "Export failed: \(error.localizedDescription)")
         }
+    }
+
+    private func exportSupportReport() {
+        do {
+            exportFile = LeadExportFile(
+                url: try SupportDiagnosticsReport.export(snapshot: supportDiagnosticsSnapshot)
+            )
+        } catch {
+            supportReportFailure = LeadImportFailure(
+                message: "The support report could not be created. Please try again."
+            )
+            AppLog.warning("Storage", "Support report export failed: \(error.localizedDescription)")
+        }
+    }
+
+    private var supportDiagnosticsSnapshot: SupportDiagnosticsSnapshot {
+        SupportDiagnosticsSnapshot(
+            appVersion: AppVersionDisplay.current,
+            buildConfiguration: buildConfiguration,
+            systemName: UIDevice.current.systemName,
+            systemVersion: UIDevice.current.systemVersion,
+            localeIdentifier: Locale.current.identifier,
+            cloudProvider: CloudSyncProvider.current.rawValue,
+            syncState: diagnosticSyncState,
+            autoSyncEnabled: syncManager.isAutoSyncEnabled,
+            syncInterval: syncManager.syncInterval.rawValue,
+            lastSyncAt: syncManager.lastSyncDate,
+            personalLeadCount: allLeads.count,
+            importBatchCount: importBatchStore.batches.count,
+            accountSessionActive: userAccountManager.hasActiveSession,
+            teamWorkspaceActive: teamService.activeTeam != nil && teamService.currentMember?.status == .active,
+            teamRole: teamService.currentMember?.role.rawValue,
+            teamWorkType: teamService.currentMember?.workType.rawValue,
+            teamPlanStatus: teamService.activeTeam?.effectivePlanStatus().rawValue,
+            teamMemberCount: teamService.teamMembers.count,
+            teamLeadCount: teamService.teamLeads.count,
+            teamBookingCount: teamService.teamBookings.count,
+            teamWriteState: diagnosticTeamWriteState,
+            teamWritesEnabled: diagnosticTeamWritesEnabled,
+            teamUsageLevel: teamService.teamUsageControl.level.rawValue
+        )
+    }
+
+    private var diagnosticSyncState: String {
+        switch syncManager.syncStatus {
+        case .idle: return "idle"
+        case .syncing: return "syncing"
+        case .uploading: return "uploading"
+        case .downloading: return "downloading"
+        case .completed: return "completed"
+        case .failed(let message):
+            let code = ReleaseDiagnosticClassifier.code(
+                for: message,
+                category: .cloudSync,
+                severity: .error
+            )
+            return "failed:\(code.rawValue)"
+        }
+    }
+
+    private var diagnosticTeamWriteState: String {
+        switch teamService.syncWriteState {
+        case .idle:
+            return "idle"
+        case .pending(let count):
+            return "pending:\(count)"
+        case .failed(let message):
+            let code = ReleaseDiagnosticClassifier.code(
+                for: message,
+                category: .team,
+                severity: .error
+            )
+            return "failed:\(code.rawValue)"
+        }
+    }
+
+    private var diagnosticTeamWritesEnabled: Bool {
+        guard let team = teamService.activeTeam,
+              teamService.currentMember?.status == .active,
+              team.effectivePlanStatus().allowsTeamWrite else {
+            return false
+        }
+        return teamService.teamOperationsControl.teamWritesEnabled
+            && teamService.teamUsageControl.allowsWrite()
+    }
+
+    private var buildConfiguration: String {
+        #if DEBUG
+        return "debug"
+        #else
+        return "release"
+        #endif
     }
 
     private func handleImportResult(_ result: Result<[URL], Error>) {

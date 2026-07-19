@@ -471,6 +471,7 @@ class UserDataSyncManager: ObservableObject {
         await MainActor.run {
             syncStatus = .syncing
         }
+        AppLog.event(.cloudSync, .syncStarted)
 
         do {
             print("☁️ Starting iCloud background sync operations...")
@@ -496,12 +497,14 @@ class UserDataSyncManager: ObservableObject {
                 syncStatus = .completed
                 lastSyncDate = Date()
             }
+            AppLog.event(.cloudSync, .syncCompleted)
             print("✅ iCloud data sync completed successfully")
         } catch {
             await MainActor.run {
                 print("⚠️ iCloud data sync failed: \(error.localizedDescription)")
                 syncStatus = .failed(error.localizedDescription)
             }
+            AppLog.warning("Sync", "iCloud data sync failed: \(error.localizedDescription)")
         }
     }
     
@@ -510,6 +513,7 @@ class UserDataSyncManager: ObservableObject {
         await MainActor.run {
             syncStatus = .syncing
         }
+        AppLog.event(.cloudSync, .syncStarted)
         
         let retryOperation = RetryableOperation(maxRetries: 3, retryDelay: 2.0)
         
@@ -586,6 +590,7 @@ class UserDataSyncManager: ObservableObject {
                 syncStatus = .completed
                 lastSyncDate = Date()
             }
+            AppLog.event(.cloudSync, .syncCompleted)
             print("✅ Data sync completed successfully")
             
         } catch {
@@ -597,6 +602,7 @@ class UserDataSyncManager: ObservableObject {
                 } else {
                     ErrorHandler.shared.handle(error, context: "Data Sync")
                     syncStatus = .failed(error.localizedDescription)
+                    AppLog.warning("Sync", "Personal data sync failed: \(error.localizedDescription)")
                 }
             }
         }

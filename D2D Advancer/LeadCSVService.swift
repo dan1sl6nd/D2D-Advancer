@@ -317,13 +317,15 @@ enum LeadCSVService {
             }
         }
 
-        return LeadImportResult(
+        let result = LeadImportResult(
             created: createdLeads.count,
             updated: updatedLeads.count,
             skipped: skipped,
             errors: errors,
             batchID: batchID
         )
+        AppLog.event(.importData, .importCompleted)
+        return result
     }
 
     @MainActor

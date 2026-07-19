@@ -726,11 +726,13 @@ struct AppleContactLeadImportView: View {
                 updated: updatedLeadIDs.count,
                 undoAvailable: undoAvailable
             )
+            AppLog.event(.importData, .importCompleted)
             phase = .ready
             NotificationService.shared.refreshAllNotifications()
             UserDataSyncManager.shared.syncWithServer()
         } catch {
             viewContext.rollback()
+            AppLog.warning("Import", "Apple Contacts import failed: \(error.localizedDescription)")
             errorMessage = "The selected contacts were not imported: \(error.localizedDescription)"
             phase = .ready
         }

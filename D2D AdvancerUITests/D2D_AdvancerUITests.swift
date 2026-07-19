@@ -2955,6 +2955,9 @@ final class D2D_AdvancerUITests: XCTestCase {
             screenName: "Personal iCloud Sync"
         )
         tapIdentifiedElement(app, "cloudProviderCloseButton", timeout: 8)
+        waitForIdentifiedElement(app, "dataSyncHubScreen", timeout: 8)
+        scrollToIdentifiedElement(app, "exportSupportReportButton", direction: .down)
+        waitForIdentifiedElement(app, "exportSupportReportButton", timeout: 8)
 
         relaunch(app, opening: "-openMoreTabForUITests")
         openAppSettingsHub(app)
@@ -2976,6 +2979,22 @@ final class D2D_AdvancerUITests: XCTestCase {
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "moreMessageTemplatesCard", timeout: 12)
         waitForTextContaining(app, "Manage reusable SMS", timeout: 12)
+    }
+
+    @MainActor
+    func testSupportDiagnosticsIsReachableFromDataSync() {
+        let app = makeApp()
+        app.launchArguments.append("-openMoreTabForUITests")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForText(app, "More", timeout: 10)
+        openDataSyncHub(app)
+        scrollToIdentifiedElement(app, "exportSupportReportButton", direction: .down)
+        let exportButton = waitForIdentifiedElement(app, "exportSupportReportButton", timeout: 8)
+
+        XCTAssertTrue(exportButton.isHittable, "Support report export should be reachable in Data & Sync")
+        XCTAssertGreaterThanOrEqual(exportButton.frame.height, 44, "Support report export needs a 44pt tap target")
     }
 
     @MainActor

@@ -23,15 +23,27 @@ enum AppLog {
     }
 
     static func warning(_ category: String, _ message: @autoclosure () -> String) {
+        let resolvedMessage = message()
         #if DEBUG
-        print("⚠️ [\(category)] \(message())")
+        print("⚠️ [\(category)] \(resolvedMessage)")
         #endif
+        ReleaseDiagnostics.record(category: category, severity: .warning, message: resolvedMessage)
     }
 
     static func error(_ category: String, _ message: @autoclosure () -> String) {
+        let resolvedMessage = message()
         #if DEBUG
-        print("❌ [\(category)] \(message())")
+        print("❌ [\(category)] \(resolvedMessage)")
         #endif
+        ReleaseDiagnostics.record(category: category, severity: .error, message: resolvedMessage)
+    }
+
+    static func event(
+        _ category: DiagnosticCategory,
+        _ code: DiagnosticEventCode,
+        severity: DiagnosticSeverity = .info
+    ) {
+        ReleaseDiagnostics.record(category: category, code: code, severity: severity)
     }
 }
 

@@ -21,6 +21,7 @@ struct D2D_AdvancerApp: App {
     @StateObject private var teamService: TeamFirebaseService
     @AppStorage("isDarkMode") private var isDarkMode = false
     init() {
+        AppLog.event(.app, .appLaunched)
         let launchArguments = ProcessInfo.processInfo.arguments
         let shouldSkipOnboardingForUITests = launchArguments.contains("-skipOnboardingForUITests")
         let shouldShowOnboardingForUITests = launchArguments.contains("-showOnboardingForUITests")
