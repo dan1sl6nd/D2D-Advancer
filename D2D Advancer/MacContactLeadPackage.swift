@@ -183,18 +183,19 @@ enum MacContactLeadPackageService {
             return nil
         }
 
-        let displayName = [rawDisplayName, record.nickname, record.organization]
-            .compactMap(AppleContactLeadMatchPolicy.sanitizedLeadName)
-            .first ?? "Apple Contact"
+        let nameSanitization = [rawDisplayName, record.nickname, record.organization]
+            .map(AppleContactLeadMatchPolicy.sanitizedLeadNameResult)
+            .first { $0.displayName != nil }
+            ?? AppleContactLeadNameSanitization(displayName: "Apple Contact", movedLabels: [])
 
         return AppleContactLeadCandidate(
             id: identifier,
-            displayName: displayName,
+            displayName: nameSanitization.displayName ?? "Apple Contact",
             phone: preferredValue(record.phoneNumbers, kind: .phone),
             email: preferredValue(record.emailAddresses, kind: .email),
             address: preferredAddress(record.postalAddresses),
             service: service,
-            notes: note,
+            notes: nameSanitization.mergingMovedLabels(into: note),
             price: AppleContactLeadPricePolicy.resolvedPrice(
                 explicitPrice: record.price,
                 note: note

@@ -55,6 +55,30 @@ struct AppleContactLeadCandidate: Identifiable, Hashable, Sendable {
     }
 }
 
+struct AppleContactLeadNameSanitization: Equatable, Sendable {
+    let displayName: String?
+    let movedLabels: [String]
+
+    func mergingMovedLabels(into notes: String?) -> String? {
+        let existingNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let retainedNotes = existingNotes?.isEmpty == false ? existingNotes : nil
+        let missingAnnotations = movedLabels.compactMap { label -> String? in
+            let annotation = "Contact label: \(label)"
+            guard retainedNotes?.range(
+                of: annotation,
+                options: [.caseInsensitive, .diacriticInsensitive]
+            ) == nil else {
+                return nil
+            }
+            return annotation
+        }
+
+        guard !missingAnnotations.isEmpty else { return retainedNotes }
+        let annotationBlock = missingAnnotations.joined(separator: "\n")
+        return retainedNotes.map { $0 + "\n\n" + annotationBlock } ?? annotationBlock
+    }
+}
+
 struct AppleContactLeadScanResult: Sendable {
     let candidates: [AppleContactLeadCandidate]
     let hasLimitedAccess: Bool
@@ -444,6 +468,16 @@ struct AppleContactLeadDuplicateIndex: Sendable {
 }
 
 enum AppleContactLeadMatchPolicy {
+    private static let movableNameLabels: [(canonical: String, expression: NSRegularExpression)] = [
+        (
+            canonical: "Ad",
+            expression: try! NSRegularExpression(
+                pattern: #"(?<![\p{L}\p{N}])ad(?=[\s\p{P}]*$)"#,
+                options: [.caseInsensitive]
+            )
+        )
+    ]
+
     static func matchedService(in fields: [String]) -> AppleContactLeadServiceKind? {
         let text = fields
             .map(normalizedSearchText)
@@ -486,7 +520,15 @@ enum AppleContactLeadMatchPolicy {
     }
 
     static func sanitizedLeadName(_ value: String?) -> String? {
-        guard var sanitized = cleaned(value) else { return nil }
+        sanitizedLeadNameResult(value).displayName
+    }
+
+    static func sanitizedLeadNameResult(_ value: String?) -> AppleContactLeadNameSanitization {
+        guard var sanitized = cleaned(value) else {
+            return AppleContactLeadNameSanitization(displayName: nil, movedLabels: [])
+        }
+
+        var movedLabels: [String] = []
 
         for service in AppleContactLeadServiceKind.allCases {
             while let range = sanitized.range(
@@ -495,6 +537,20 @@ enum AppleContactLeadMatchPolicy {
             ) {
                 sanitized.replaceSubrange(range, with: " ")
             }
+        }
+
+        for movableLabel in movableNameLabels {
+            let searchRange = NSRange(sanitized.startIndex..<sanitized.endIndex, in: sanitized)
+            guard movableLabel.expression.firstMatch(in: sanitized, range: searchRange) != nil else {
+                continue
+            }
+
+            sanitized = movableLabel.expression.stringByReplacingMatches(
+                in: sanitized,
+                range: searchRange,
+                withTemplate: " "
+            )
+            movedLabels.append(movableLabel.canonical)
         }
 
         sanitized = sanitized.replacingOccurrences(
@@ -518,8 +574,13 @@ enum AppleContactLeadMatchPolicy {
             .union(CharacterSet(charactersIn: "&+"))
         sanitized = sanitized.trimmingCharacters(in: edgeCharacters)
 
-        guard sanitized.contains(where: { $0.isLetter || $0.isNumber }) else { return nil }
-        return sanitized
+        let displayName = sanitized.contains(where: { $0.isLetter || $0.isNumber })
+            ? sanitized
+            : nil
+        return AppleContactLeadNameSanitization(
+            displayName: displayName,
+            movedLabels: movedLabels
+        )
     }
 
     private static func cleaned(_ value: String?) -> String? {
@@ -542,10 +603,13 @@ final class AppleContactLeadImportService {
             guard let existingName = lead.name?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !existingName.isEmpty else { continue }
 
-            let sanitizedName = AppleContactLeadMatchPolicy.sanitizedLeadName(existingName) ?? "Apple Contact"
-            guard sanitizedName != existingName else { continue }
+            let sanitization = AppleContactLeadMatchPolicy.sanitizedLeadNameResult(existingName)
+            let sanitizedName = sanitization.displayName ?? "Apple Contact"
+            let sanitizedNotes = sanitization.mergingMovedLabels(into: lead.notes)
+            guard sanitizedName != existingName || sanitizedNotes != lead.notes else { continue }
 
             lead.name = sanitizedName
+            lead.notes = sanitizedNotes
             lead.updatedDate = Date()
             updateCount += 1
         }
@@ -741,17 +805,19 @@ final class AppleContactLeadImportService {
             return nil
         }
 
-        let displayName = [rawDisplayName, contact.nickname, contact.organizationName]
-            .compactMap(AppleContactLeadMatchPolicy.sanitizedLeadName)
-            .first ?? "Apple Contact"
+        let nameSanitization = [rawDisplayName, contact.nickname, contact.organizationName]
+            .map(AppleContactLeadMatchPolicy.sanitizedLeadNameResult)
+            .first { $0.displayName != nil }
+            ?? AppleContactLeadNameSanitization(displayName: "Apple Contact", movedLabels: [])
 
         return AppleContactLeadCandidate(
             id: contact.identifier,
-            displayName: displayName,
+            displayName: nameSanitization.displayName ?? "Apple Contact",
             phone: preferredPhone(from: contact),
             email: preferredEmail(from: contact),
             address: preferredAddress(from: contact),
             service: service,
+            notes: nameSanitization.mergingMovedLabels(into: nil),
             coordinate: nil
         )
     }

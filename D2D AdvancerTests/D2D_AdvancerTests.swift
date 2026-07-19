@@ -174,12 +174,31 @@ struct D2D_AdvancerTests {
         )
     }
 
-    @Test func appleContactImportRemovesServicePhrasesFromLeadNames() {
-        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Emma Window Cleaning Ad") == "Emma Ad")
+    @Test func appleContactImportRemovesServicePhrasesAndAdLabelsFromLeadNames() {
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Emma Window Cleaning Ad") == "Emma")
         #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("ACME - Gutter Cleaning") == "ACME")
-        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Emma - Window Cleaning - Ad") == "Emma Ad")
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Emma - Window Cleaning - Ad") == "Emma")
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Emma (Ad)") == "Emma")
         #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Premium WÍNDOW CLEANING Services") == "Premium Services")
         #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Window Cleaning & Gutter Cleaning") == nil)
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Adam Window Cleaning") == "Adam")
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Adelaide Gutter Cleaning") == "Adelaide")
+        #expect(AppleContactLeadMatchPolicy.sanitizedLeadName("Ad Smith Window Cleaning") == "Ad Smith")
+
+        let sanitization = AppleContactLeadMatchPolicy.sanitizedLeadNameResult(
+            "Emma - Window Cleaning - Ad"
+        )
+        #expect(sanitization.displayName == "Emma")
+        #expect(sanitization.movedLabels == ["Ad"])
+        #expect(
+            sanitization.mergingMovedLabels(into: "Customer prefers mornings.")
+                == "Customer prefers mornings.\n\nContact label: Ad"
+        )
+        #expect(
+            sanitization.mergingMovedLabels(
+                into: "Customer prefers mornings.\n\nContact label: Ad"
+            ) == "Customer prefers mornings.\n\nContact label: Ad"
+        )
     }
 
     @Test func appleContactImportBuildsAServiceFreeCandidateName() throws {
@@ -190,9 +209,10 @@ struct D2D_AdvancerTests {
 
         let candidate = try #require(AppleContactLeadImportService.candidate(from: contact))
 
-        #expect(candidate.displayName == "Emma Ad")
+        #expect(candidate.displayName == "Emma")
         #expect(candidate.service == .windowCleaning)
         #expect(candidate.service.serviceCategoryID == "window_cleaning")
+        #expect(candidate.notes == "Contact label: Ad")
     }
 
     @MainActor
@@ -204,6 +224,7 @@ struct D2D_AdvancerTests {
         importedLead.name = "Emma Window Cleaning Ad"
         importedLead.source = "Apple Contacts"
         importedLead.serviceCategory = "window_cleaning"
+        importedLead.notes = "Customer prefers mornings."
 
         let manualLead = Lead.create(in: context)
         manualLead.name = "Mike Gutter Cleaning"
@@ -213,7 +234,8 @@ struct D2D_AdvancerTests {
         let updateCount = try AppleContactLeadImportService.sanitizeImportedLeadNames(in: context)
 
         #expect(updateCount == 1)
-        #expect(importedLead.name == "Emma Ad")
+        #expect(importedLead.name == "Emma")
+        #expect(importedLead.notes == "Customer prefers mornings.\n\nContact label: Ad")
         #expect(importedLead.serviceCategory == "window_cleaning")
         #expect(manualLead.name == "Mike Gutter Cleaning")
         #expect(manualLead.serviceCategory == "gutter_cleaning")
@@ -273,7 +295,7 @@ struct D2D_AdvancerTests {
     @Test func macContactPackageImportsNotesPriceAndMapReadyLeadFields() throws {
         let record = MacContactPackageRecord(
             identifier: "mac-contact-1",
-            name: "Alex Customer",
+            name: "Alex Customer Ad",
             firstName: "Alex",
             middleName: nil,
             lastName: "Customer",
@@ -321,6 +343,7 @@ struct D2D_AdvancerTests {
         #expect(candidate.email == "alex@example.com")
         #expect(candidate.address == "100 Main Street, Toronto ON M5V 2T6")
         #expect(candidate.notes?.contains("prefers Friday") == true)
+        #expect(candidate.notes?.contains("Contact label: Ad") == true)
         #expect(candidate.price == 249)
 
         candidate.coordinate = AppleContactLeadCoordinate(
@@ -337,6 +360,7 @@ struct D2D_AdvancerTests {
 
         #expect(lead.name == "Alex Customer")
         #expect(lead.notes?.contains("prefers Friday") == true)
+        #expect(lead.notes?.contains("Contact label: Ad") == true)
         #expect(lead.price == 249)
         #expect(lead.estimatedValue == 249)
         #expect(lead.serviceCategory == "window_cleaning")
