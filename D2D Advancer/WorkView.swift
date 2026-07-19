@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreData
 
 struct WorkView: View {
     let roleContext: TeamRoleContext
@@ -6,8 +7,16 @@ struct WorkView: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var paywallManager = PaywallManager.shared
+    @ObservedObject private var appointmentManager = AppointmentManager.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
     @State private var showingScheduleView = false
     @State private var selectedLead: Lead?
+
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \Lead.followUpDate, ascending: true)],
+        predicate: Lead.Status.activeFollowUpPredicate,
+        animation: .default
+    ) private var followUpLeads: FetchedResults<Lead>
 
     var body: some View {
         NavigationStack {
@@ -21,7 +30,7 @@ struct WorkView: View {
                         roleContext.workScreenTitle,
                         titleAccessibilityIdentifier: "workScreen"
                     ) {
-                        if router.selectedWorkSection == .schedule {
+                        if router.selectedWorkSection == .schedule && roleContext != .technician {
                             ObsidianCompactIconButton(
                                 icon: "plus",
                                 accessibilityLabel: roleContext.workScheduleActionTitle,
@@ -34,7 +43,13 @@ struct WorkView: View {
                         }
                     }
 
-                    sectionControl
+                    if roleContext != .technician {
+                        sectionControl
+                    }
+
+                    if overdueFollowUpCount > 0 || todayJobCount > 0 {
+                        todayWorkStrip
+                    }
 
                     Group {
                         if router.selectedWorkSection == .followUps {
@@ -49,6 +64,16 @@ struct WorkView: View {
             }
             .navigationBarHidden(true)
             .background(Color.obsidianBackground(for: colorScheme))
+            .onAppear {
+                if roleContext == .technician {
+                    router.selectedWorkSection = .schedule
+                }
+            }
+            .onChange(of: roleContext) { _, newRole in
+                if newRole == .technician {
+                    router.selectedWorkSection = .schedule
+                }
+            }
             .sheet(isPresented: $showingScheduleView) {
                 SelectLeadForAppointmentView { lead in
                     selectedLead = lead
@@ -88,6 +113,103 @@ struct WorkView: View {
         .background(Color.obsidianBackground(for: colorScheme))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Work sections")
+    }
+
+    private var todayWorkStrip: some View {
+        HStack(spacing: 8) {
+            if roleContext != .technician && overdueFollowUpCount > 0 {
+                todayWorkButton(
+                    value: overdueFollowUpCount,
+                    title: "Overdue",
+                    icon: "bell.badge.fill",
+                    color: Color.statusNotHome
+                ) {
+                    router.selectedWorkSection = .followUps
+                }
+            }
+
+            if todayJobCount > 0 {
+                todayWorkButton(
+                    value: todayJobCount,
+                    title: roleContext == .technician ? "Jobs today" : "Today",
+                    icon: "calendar.badge.clock",
+                    color: Color.electricViolet
+                ) {
+                    router.selectedWorkSection = .schedule
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .accessibilityIdentifier("workTodaySummary")
+    }
+
+    private func todayWorkButton(
+        value: Int,
+        title: String,
+        icon: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.obsidianFootnote)
+                Text("\(value)")
+                    .font(.obsidianCallout)
+                Text(title)
+                    .font(.obsidianFootnote)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.micro)
+            }
+            .foregroundColor(color)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(color.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(color.opacity(0.22), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var overdueFollowUpCount: Int {
+        let now = Date()
+        let personal = followUpLeads.filter { ($0.followUpDate ?? .distantFuture) <= now }.count
+        guard let member = teamService.currentMember else { return personal }
+        let team = teamService.teamLeads.filter { lead in
+            guard lead.assignedToUserId == member.userId,
+                  let date = lead.followUpDate,
+                  date <= now else { return false }
+            return lead.status != .booked
+                && lead.status != .converted
+                && lead.status != .notInterested
+        }.count
+        return personal + team
+    }
+
+    private var todayJobCount: Int {
+        let calendar = Calendar.current
+        let personal = appointmentManager.appointments.filter {
+            calendar.isDateInToday($0.startDate)
+                && $0.status != .completed
+                && $0.status != .cancelled
+        }.count
+
+        guard let member = teamService.currentMember else { return personal }
+        let team = teamService.teamBookings.filter { booking in
+            let isVisible = member.role == .owner || booking.assignedToUserId == member.userId
+            return isVisible
+                && calendar.isDateInToday(booking.startDate)
+                && booking.status != .completed
+                && booking.status != .cancelled
+        }.count
+        return personal + team
     }
 
     private func sectionButton(

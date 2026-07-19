@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import UIKit
 
 struct MainTabView: View {
     @Environment(\.colorScheme) private var colorScheme
@@ -11,6 +12,7 @@ struct MainTabView: View {
     @State private var didApplyRoleDefaultTab = false
     @State private var shouldKeepMapAlive = false
     @State private var mapPrewarmTask: Task<Void, Never>?
+    @State private var mapReleaseTask: Task<Void, Never>?
     @State private var overdueLeadBadgeCount = 0
     @State private var overdueLeadBadgeTask: Task<Void, Never>?
     @State private var teamLeadBadgeCount = 0
@@ -158,14 +160,28 @@ struct MainTabView: View {
             if newTab == MainAppTab.map.rawValue {
                 mapPrewarmTask?.cancel()
                 mapPrewarmTask = nil
+                mapReleaseTask?.cancel()
+                mapReleaseTask = nil
                 shouldKeepMapAlive = true
+            } else if shouldKeepMapAlive {
+                scheduleMapReleaseIfNeeded()
             } else {
                 scheduleMapPrewarmIfNeeded()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            guard router.selectedTab != MainAppTab.map.rawValue else { return }
+            mapPrewarmTask?.cancel()
+            mapPrewarmTask = nil
+            mapReleaseTask?.cancel()
+            mapReleaseTask = nil
+            shouldKeepMapAlive = false
+        }
         .onDisappear {
             mapPrewarmTask?.cancel()
             mapPrewarmTask = nil
+            mapReleaseTask?.cancel()
+            mapReleaseTask = nil
             overdueLeadBadgeTask?.cancel()
             overdueLeadBadgeTask = nil
             teamPresentationRefreshTask?.cancel()
@@ -275,10 +291,24 @@ struct MainTabView: View {
         guard mapPrewarmTask == nil else { return }
 
         mapPrewarmTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 150_000_000)
-            guard !Task.isCancelled else { return }
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled,
+                  router.selectedTab != MainAppTab.map.rawValue else { return }
             shouldKeepMapAlive = true
             mapPrewarmTask = nil
+            scheduleMapReleaseIfNeeded()
+        }
+    }
+
+    private func scheduleMapReleaseIfNeeded(after delay: TimeInterval = 45) {
+        guard router.selectedTab != MainAppTab.map.rawValue else { return }
+        mapReleaseTask?.cancel()
+        mapReleaseTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled,
+                  router.selectedTab != MainAppTab.map.rawValue else { return }
+            shouldKeepMapAlive = false
+            mapReleaseTask = nil
         }
     }
 
@@ -380,6 +410,8 @@ struct TabBarButton: View {
             .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isSelected)
         }
         .buttonStyle(PlainButtonStyle())
+        .frame(maxWidth: .infinity, minHeight: 56)
+        .contentShape(Rectangle())
         .accessibilityLabel(title)
         .accessibilityIdentifier(accessibilityID)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])

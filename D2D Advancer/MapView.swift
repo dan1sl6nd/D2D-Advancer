@@ -329,7 +329,7 @@ struct MapView: View {
     @ObservedObject private var locationManager = LocationManager.shared
     @ObservedObject private var onboardingManager = OnboardingManager.shared
     @ObservedObject private var router = AppRouter.shared
-    private let teamService = TeamFirebaseService.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
     private let firebaseService = FirebaseService.shared
     private let userAccountManager = FirebaseUserAccountManager.shared
     private let paywallManager = PaywallManager.shared
@@ -420,6 +420,10 @@ struct MapView: View {
             dutyLocationPoints: teamService.dutyLocationPoints,
             ownerNotifications: teamService.ownerNotifications
         )
+    }
+
+    private var roleContext: TeamRoleContext {
+        TeamRoleContext(summary: teamSurfaceSummary)
     }
 
     var body: some View {
@@ -619,15 +623,9 @@ struct MapView: View {
             .sheet(isPresented: $showingMapTools) {
                 MapToolsSheetHost(
                     selectedMode: selectedMapMode,
-                    selectedStyle: MapStyleChoice.choice(for: mapType),
-                    is3DModeEnabled: is3DModeEnabled,
                     isLeadSnapshotReady: mapLeadRenderSnapshot.isReady,
                     matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount,
                     onSelectMode: setMapMode,
-                    onSelectMapStyle: { choice in
-                        setMapType(choice.mapType)
-                    },
-                    onToggle3D: toggle3DMode,
                     onOpenRoutePlanner: {
                         showingRoutePlanner = true
                     },
@@ -1290,9 +1288,24 @@ struct MapView: View {
     }
 
     private var floatingActionBar: some View {
+        Group {
+            if roleContext == .technician {
+                technicianMapActionBar
+            } else {
+                prospectingMapActionBar
+            }
+        }
+    }
+
+    private var prospectingMapActionBar: some View {
         HStack(spacing: 8) {
             // Quick status buttons
-            quickActionButton(icon: "house.slash", label: "Away", color: .statusNotHome) {
+            quickActionButton(
+                icon: "house.slash",
+                label: "Not Home",
+                color: .statusNotHome,
+                accessibilityIdentifier: "quickAction_away"
+            ) {
                 guard paywallManager.gateAction() else { return }
                 createQuickLead(status: .notHome)
             }
@@ -1305,7 +1318,12 @@ struct MapView: View {
                 guard paywallManager.gateAction() else { return }
                 createQuickLead(status: .notInterested)
             }
-            quickActionButton(icon: "star", label: "Interest", color: .statusInterested) {
+            quickActionButton(
+                icon: "star",
+                label: "Interested",
+                color: .statusInterested,
+                accessibilityIdentifier: "quickAction_interest"
+            ) {
                 guard paywallManager.gateAction() else { return }
                 interestedFormCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
                 showingInterestedForm = true
@@ -1347,11 +1365,47 @@ struct MapView: View {
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
     }
 
+    private var technicianMapActionBar: some View {
+        HStack(spacing: 8) {
+            mapRoleActionButton(title: "My Jobs", icon: "briefcase.fill", color: Color.statusConverted) {
+                router.openAppointments()
+            }
+
+            mapRoleActionButton(title: "Team Map", icon: "person.3.fill", color: Color.electricViolet) {
+                openTeamFieldMap()
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .mapOverlayCapsule()
+        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+    }
+
+    private func mapRoleActionButton(
+        title: String,
+        icon: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.obsidianFootnote)
+                .fontWeight(.semibold)
+                .foregroundColor(color)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .padding(.horizontal, 14)
+                .background(color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
     @ViewBuilder
     private func quickActionButton(
         icon: String,
         label: String,
         color: Color,
+        accessibilityIdentifier: String? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -1361,13 +1415,14 @@ struct MapView: View {
                 Text(label)
                     .font(.nano)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.68)
             }
             .foregroundColor(color)
             .frame(width: 48, height: 44)
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityLabel(label)
-        .accessibilityIdentifier("quickAction_\(label.lowercased())")
+        .accessibilityIdentifier(accessibilityIdentifier ?? "quickAction_\(label.lowercased())")
     }
 
     static func currentLocationAddLeadSeed(
@@ -4168,13 +4223,9 @@ private struct MapToolsSheetHost: View {
     @ObservedObject private var syncManager = UserDataSyncManager.shared
 
     let selectedMode: MapWorkflowMode
-    let selectedStyle: MapStyleChoice
-    let is3DModeEnabled: Bool
     let isLeadSnapshotReady: Bool
     let matchingLeadCount: Int
     let onSelectMode: (MapWorkflowMode) -> Void
-    let onSelectMapStyle: (MapStyleChoice) -> Void
-    let onToggle3D: () -> Void
     let onOpenRoutePlanner: () -> Void
     let onOpenTeamMap: () -> Void
 
@@ -4216,13 +4267,9 @@ private struct MapToolsSheetHost: View {
     var body: some View {
         MapToolsSheet(
             selectedMode: selectedMode,
-            selectedStyle: selectedStyle,
-            is3DModeEnabled: is3DModeEnabled,
             workflowStatusText: workflowStatusText,
             teamSummary: teamSummary,
             onSelectMode: onSelectMode,
-            onSelectMapStyle: onSelectMapStyle,
-            onToggle3D: onToggle3D,
             onOpenRoutePlanner: onOpenRoutePlanner,
             onOpenTeamMap: onOpenTeamMap
         )
@@ -4234,13 +4281,9 @@ private struct MapToolsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let selectedMode: MapWorkflowMode
-    let selectedStyle: MapStyleChoice
-    let is3DModeEnabled: Bool
     let workflowStatusText: String?
     let teamSummary: TeamWorkspaceSurfaceSummary?
     let onSelectMode: (MapWorkflowMode) -> Void
-    let onSelectMapStyle: (MapStyleChoice) -> Void
-    let onToggle3D: () -> Void
     let onOpenRoutePlanner: () -> Void
     let onOpenTeamMap: () -> Void
 
@@ -4273,31 +4316,6 @@ private struct MapToolsSheet: View {
                                     }
                                 }
                             }
-                        }
-                    }
-
-                    MapToolSection(title: "Map Style") {
-                        LazyVGrid(columns: optionColumns, spacing: 10) {
-                            ForEach(MapStyleChoice.allCases) { style in
-                                MapToolOptionButton(
-                                    title: style.title,
-                                    icon: style.icon,
-                                    color: Color.electricViolet,
-                                    isSelected: selectedStyle == style,
-                                    accessibilityIdentifier: "mapStyle_\(style.rawValue)"
-                                ) {
-                                    onSelectMapStyle(style)
-                                }
-                            }
-
-                            MapToolOptionButton(
-                                title: "3D",
-                                icon: "cube.fill",
-                                color: Color.statusInterested,
-                                isSelected: is3DModeEnabled,
-                                accessibilityIdentifier: "threeDMapButton",
-                                action: onToggle3D
-                            )
                         }
                     }
 
@@ -4573,7 +4591,7 @@ struct LeadClusterSheet: View {
                         lead.setFollowUpDate(followUpDate, autoSave: false)
                     }
                 }
-                clusterActionButton(title: "Interest", icon: "heart.fill", color: Color.statusInterested) {
+                clusterActionButton(title: "Interested", icon: "heart.fill", color: Color.statusInterested) {
                     updateClusterLeads("Cluster marked interested") { lead in
                         if lead.leadStatus.allowsActiveFollowUp {
                             lead.applyLeadStatus(.interested, autoSave: false)

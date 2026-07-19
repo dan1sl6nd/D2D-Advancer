@@ -100,12 +100,8 @@ struct MoreView: View {
                     ScrollView {
                         LazyVStack(spacing: 16) {
                             accountHeroCard
-                            todayActivityCard
                             workspaceSection
-                            dataSyncSection
-                            preferencesSection
-                            accountSection
-                            legalSupportSection
+                            moreSettingsHubSection
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
@@ -215,7 +211,7 @@ struct MoreView: View {
 
     private var workspaceSection: some View {
         MoreSectionGroup(
-            title: roleContext.workspaceMenuTitle,
+            title: "Workspace",
             icon: "square.grid.2x2.fill",
             subtitle: workspaceSectionSubtitle,
             accentColor: Color.electricViolet
@@ -276,6 +272,69 @@ struct MoreView: View {
             }
             .buttonStyle(PlainButtonStyle())
             .accessibilityIdentifier("moreMessageTemplatesCard")
+        }
+    }
+
+    private var moreSettingsHubSection: some View {
+        MoreSectionGroup(
+            title: "Settings & Support",
+            icon: "gearshape.2.fill",
+            subtitle: "Data, defaults, account, and help.",
+            accentColor: Color.statusNotHome
+        ) {
+            NavigationLink(destination: DataSyncHubView()) {
+                MoreCardView(
+                    icon: "externaldrive.connected.to.line.below.fill",
+                    iconColor: cloudProviderColor,
+                    title: "Data & Sync",
+                    subtitle: "iCloud, import, export, and backup controls",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("moreDataSyncCard")
+
+            moreDivider
+
+            NavigationLink(destination: AppSettingsHubView()) {
+                MoreCardView(
+                    icon: "slider.horizontal.3",
+                    iconColor: Color.statusNotHome,
+                    title: "App Settings",
+                    subtitle: "Notifications, calendar, defaults, and job types",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("moreAppSettingsCard")
+
+            moreDivider
+
+            NavigationLink(destination: AccountAppearanceHubView()) {
+                MoreCardView(
+                    icon: "person.crop.circle.fill",
+                    iconColor: accountHeroColor,
+                    title: "Account & Appearance",
+                    subtitle: "Profile, theme, and app version",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("moreAccountAppearanceCard")
+
+            moreDivider
+
+            NavigationLink(destination: HelpLegalHubView()) {
+                MoreCardView(
+                    icon: "questionmark.circle.fill",
+                    iconColor: Color.statusInterested,
+                    title: "Help & Legal",
+                    subtitle: "Support, privacy, and terms",
+                    showChevron: true
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("moreHelpLegalCard")
         }
     }
 
@@ -917,11 +976,529 @@ struct MoreView: View {
     }
 }
 
+struct DataSyncHubView: View {
+    @Environment(\.managedObjectContext) private var viewContext
+    @ObservedObject private var syncManager = UserDataSyncManager.shared
+    @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    @State private var showingCloudProviderSheet = false
+    @State private var showingSyncSettings = false
+    @State private var exportFile: LeadExportFile?
+    @State private var showingImportPicker = false
+    @State private var importResult: LeadImportResult?
+    @State private var importFailure: LeadImportFailure?
+
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: false)],
+        animation: .default
+    ) private var allLeads: FetchedResults<Lead>
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                MoreSectionGroup(
+                    title: "Cloud",
+                    icon: CloudSyncProvider.current.icon,
+                    subtitle: "Choose where personal data is stored and refresh it on demand.",
+                    accentColor: providerColor
+                ) {
+                    Button {
+                        showingCloudProviderSheet = true
+                    } label: {
+                        MoreCardView(
+                            icon: CloudSyncProvider.current.icon,
+                            iconColor: providerColor,
+                            title: "Personal Data",
+                            subtitle: providerSubtitle,
+                            showChevron: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("moreCloudStorageButton")
+
+                    if userAccountManager.hasActiveSession || CloudSyncProvider.current == .icloud {
+                        hubDivider
+
+                        Button {
+                            guard !syncManager.syncStatus.isBusy else { return }
+                            syncManager.syncWithServer()
+                        } label: {
+                            MoreCardView(
+                                icon: syncStatusIcon,
+                                iconColor: syncStatusColor,
+                                title: "Sync Now",
+                                subtitle: syncStatusText,
+                                trailingContent: {
+                                    if syncManager.syncStatus.isBusy {
+                                        ProgressView().scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "arrow.clockwise")
+                                            .font(.obsidianFootnote)
+                                            .foregroundColor(Color.electricViolet)
+                                    }
+                                }
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(syncManager.syncStatus.isBusy)
+                        .accessibilityIdentifier("moreSyncDataButton")
+
+                        hubDivider
+
+                        Button {
+                            showingSyncSettings = true
+                        } label: {
+                            MoreCardView(
+                                icon: "gearshape.fill",
+                                iconColor: Color.electricViolet,
+                                title: "Sync Settings",
+                                subtitle: syncManager.isAutoSyncEnabled
+                                    ? "Auto-sync \(syncManager.syncInterval.shortDisplayName)"
+                                    : "Manual sync only",
+                                showChevron: true
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("moreSyncSettingsButton")
+                    }
+                }
+
+                MoreSectionGroup(
+                    title: "Move Data",
+                    icon: "arrow.up.arrow.down.square.fill",
+                    subtitle: "Export a backup or bring leads into this device.",
+                    accentColor: Color.electricViolet
+                ) {
+                    Button(action: exportLeadsToCSV) {
+                        MoreCardView(
+                            icon: "square.and.arrow.up",
+                            iconColor: allLeads.isEmpty ? Color.textMuted : Color.electricViolet,
+                            title: "Export Leads",
+                            subtitle: allLeads.isEmpty ? "No leads to export" : "\(allLeads.count) leads",
+                            showChevron: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(allLeads.isEmpty)
+                    .accessibilityIdentifier("moreExportLeadsButton")
+
+                    hubDivider
+
+                    Button {
+                        showingImportPicker = true
+                    } label: {
+                        MoreCardView(
+                            icon: "square.and.arrow.down",
+                            iconColor: Color.electricViolet,
+                            title: "Import CSV",
+                            subtitle: "Merge leads from a file",
+                            showChevron: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("moreImportLeadsButton")
+
+                    hubDivider
+
+                    NavigationLink(destination: AppleContactLeadImportView()) {
+                        MoreCardView(
+                            icon: "person.crop.circle.badge.plus",
+                            iconColor: Color.electricViolet,
+                            title: "Apple Contacts",
+                            subtitle: "Scan iPhone contacts or import a Mac package",
+                            showChevron: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("moreAppleContactsImportCard")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 28)
+        }
+        .obsidianScreenBackground()
+        .accessibilityIdentifier("dataSyncHubScreen")
+        .obsidianPushedNavigation("Data & Sync", backButtonAccessibilityIdentifier: "dataSyncBackButton")
+        .sheet(isPresented: $showingCloudProviderSheet) {
+            CloudProviderSheet().presentationDetents([.height(360)])
+        }
+        .sheet(isPresented: $showingSyncSettings) {
+            SyncSettingsView()
+        }
+        .sheet(item: $exportFile) { file in
+            ShareSheet(activityItems: [file.url])
+        }
+        .fileImporter(
+            isPresented: $showingImportPicker,
+            allowedContentTypes: [UTType.commaSeparatedText, UTType.plainText, UTType.text],
+            allowsMultipleSelection: false,
+            onCompletion: handleImportResult
+        )
+        .alert(item: $importResult) { result in
+            Alert(
+                title: Text("Import Complete"),
+                message: Text(result.summary),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .alert(item: $importFailure) { failure in
+            Alert(
+                title: Text("Import Failed"),
+                message: Text(failure.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+
+    private var hubDivider: some View {
+        Rectangle()
+            .fill(Color.obsidianBorder.opacity(0.5))
+            .frame(height: 0.5)
+            .padding(.leading, 68)
+    }
+
+    private var providerSubtitle: String {
+        switch CloudSyncProvider.current {
+        case .firebase: return "Legacy Firebase personal sync"
+        case .icloud: return "iCloud with the Apple ID on this device"
+        case .off: return "Stored only on this device"
+        }
+    }
+
+    private var providerColor: Color {
+        switch CloudSyncProvider.current {
+        case .firebase: return Color.electricViolet
+        case .icloud: return Color.statusConverted
+        case .off: return Color.textSecondary
+        }
+    }
+
+    private var syncStatusIcon: String {
+        switch syncManager.syncStatus {
+        case .idle: return "icloud.and.arrow.up"
+        case .syncing, .downloading: return "arrow.clockwise"
+        case .uploading: return "icloud.and.arrow.up.fill"
+        case .completed: return "checkmark.icloud"
+        case .failed: return "exclamationmark.icloud"
+        }
+    }
+
+    private var syncStatusColor: Color {
+        switch syncManager.syncStatus {
+        case .failed: return Color.statusNotInterested
+        case .completed: return Color.statusInterested
+        default: return Color.electricViolet
+        }
+    }
+
+    private var syncStatusText: String {
+        SyncStatusSummaryPolicy.shortText(
+            for: syncManager.syncStatus,
+            autoSyncEnabled: syncManager.isAutoSyncEnabled,
+            intervalShortName: syncManager.syncInterval.shortDisplayName
+        )
+    }
+
+    private func exportLeadsToCSV() {
+        do {
+            exportFile = LeadExportFile(url: try LeadCSVService.exportAllLeads(from: viewContext))
+        } catch {
+            importFailure = LeadImportFailure(message: "Export failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func handleImportResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            do {
+                let result = try LeadCSVService.importLeads(from: url, into: viewContext)
+                if NotificationService.shouldRefreshNotificationsAfterLeadDataMutation(
+                    inserted: result.created,
+                    updated: result.updated
+                ) {
+                    NotificationService.shared.refreshAllNotifications()
+                }
+                importResult = result
+            } catch {
+                importFailure = LeadImportFailure(message: error.localizedDescription)
+            }
+        case .failure(let error):
+            importFailure = LeadImportFailure(message: error.localizedDescription)
+        }
+    }
+}
+
+struct AppSettingsHubView: View {
+    var body: some View {
+        ScrollView {
+            MoreSectionGroup(
+                title: "App Settings",
+                icon: "slider.horizontal.3",
+                subtitle: "Defaults and integrations used during daily work.",
+                accentColor: Color.statusNotHome
+            ) {
+                settingsLink(
+                    destination: NotificationSettingsView(),
+                    icon: "bell.fill",
+                    color: Color.statusNotHome,
+                    title: "Notifications",
+                    subtitle: "Reminders and daily summary",
+                    identifier: "moreNotificationsCard"
+                )
+                divider
+                settingsLink(
+                    destination: CalendarSettingsView(),
+                    icon: "calendar",
+                    color: Color.statusNotInterested,
+                    title: "Calendar",
+                    subtitle: "Apple Calendar sync and alerts",
+                    identifier: "moreCalendarSettingsCard"
+                )
+                divider
+                settingsLink(
+                    destination: AppPreferencesView(),
+                    icon: "gearshape.2.fill",
+                    color: Color.textSecondary,
+                    title: "Defaults",
+                    subtitle: "Lead, follow-up, service, and map defaults",
+                    identifier: "moreAppPreferencesCard"
+                )
+                divider
+                settingsLink(
+                    destination: AppointmentTypePresetsView(),
+                    icon: "calendar.badge.plus",
+                    color: Color.electricViolet,
+                    title: "Appointment Types",
+                    subtitle: "Default and custom job labels",
+                    identifier: "moreAppointmentTypesCard"
+                )
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 28)
+        }
+        .obsidianScreenBackground()
+        .accessibilityIdentifier("appSettingsHubScreen")
+        .obsidianPushedNavigation("App Settings", backButtonAccessibilityIdentifier: "appSettingsHubBackButton")
+    }
+
+    private func settingsLink<Destination: View>(
+        destination: Destination,
+        icon: String,
+        color: Color,
+        title: String,
+        subtitle: String,
+        identifier: String
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            MoreCardView(
+                icon: icon,
+                iconColor: color,
+                title: title,
+                subtitle: subtitle,
+                showChevron: true
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.obsidianBorder.opacity(0.5))
+            .frame(height: 0.5)
+            .padding(.leading, 68)
+    }
+}
+
+struct AccountAppearanceHubView: View {
+    @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    @AppStorage("isDarkMode") private var darkModeEnabled = false
+    @State private var showingAuthentication = false
+    @State private var showingCloudProviderSheet = false
+
+    var body: some View {
+        ScrollView {
+            MoreSectionGroup(
+                title: "Account & Appearance",
+                icon: "person.crop.circle.fill",
+                subtitle: "Identity, display, and app information.",
+                accentColor: Color.electricViolet
+            ) {
+                accountControl
+
+                divider
+
+                MoreCardView(
+                    icon: "moon.fill",
+                    iconColor: Color.electricViolet,
+                    title: "Dark Mode",
+                    subtitle: darkModeEnabled ? "Enabled" : "Disabled",
+                    trailingContent: {
+                        Toggle("Dark Mode", isOn: $darkModeEnabled)
+                            .labelsHidden()
+                            .accessibilityIdentifier("moreDarkModeToggle")
+                    }
+                )
+
+                divider
+
+                MoreCardView(
+                    icon: "info.circle",
+                    iconColor: Color.electricViolet,
+                    title: "Version",
+                    subtitle: "D2D Advancer",
+                    trailingContent: {
+                        Text(AppVersionDisplay.current)
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                    }
+                )
+
+                if userAccountManager.hasActiveSession {
+                    divider
+                    SignOutCardView(userAccountManager: userAccountManager)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 28)
+        }
+        .obsidianScreenBackground()
+        .accessibilityIdentifier("accountAppearanceHubScreen")
+        .obsidianPushedNavigation("Account & Appearance", backButtonAccessibilityIdentifier: "accountAppearanceBackButton")
+        .sheet(isPresented: $showingAuthentication) {
+            AuthenticationSheetWrapper(isPresented: $showingAuthentication)
+        }
+        .sheet(isPresented: $showingCloudProviderSheet) {
+            CloudProviderSheet().presentationDetents([.height(360)])
+        }
+    }
+
+    @ViewBuilder
+    private var accountControl: some View {
+        if userAccountManager.isLoggedIn {
+            NavigationLink(destination: AccountManagementView(userAccountManager: userAccountManager)) {
+                accountCard
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("moreAccountCard")
+        } else {
+            Button {
+                if CloudSyncProvider.current == .firebase {
+                    showingAuthentication = true
+                } else {
+                    showingCloudProviderSheet = true
+                }
+            } label: {
+                accountCard
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("moreAccountCard")
+        }
+    }
+
+    private var accountCard: some View {
+        MoreCardView(
+            icon: userAccountManager.hasActiveSession ? "person.fill" : CloudSyncProvider.current.icon,
+            iconColor: Color.electricViolet,
+            title: userAccountManager.hasActiveSession ? "Account" : "Cloud & Account",
+            subtitle: userAccountManager.currentUserDisplayName ?? "Manage sign-in and sync identity",
+            showChevron: true
+        )
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.obsidianBorder.opacity(0.5))
+            .frame(height: 0.5)
+            .padding(.leading, 68)
+    }
+}
+
+struct HelpLegalHubView: View {
+    var body: some View {
+        ScrollView {
+            MoreSectionGroup(
+                title: "Help & Legal",
+                icon: "questionmark.circle.fill",
+                subtitle: "Support and policies for D2D Advancer.",
+                accentColor: Color.statusInterested
+            ) {
+                externalLink(
+                    url: "https://dan1sl6nd.github.io/D2D-Advancer/SUPPORT.html",
+                    icon: "lifepreserver.fill",
+                    color: Color.statusNotHome,
+                    title: "Help & Support",
+                    subtitle: "Troubleshooting and contact information",
+                    identifier: "moreSupportLink"
+                )
+                divider
+                externalLink(
+                    url: "https://dan1sl6nd.github.io/D2D-Advancer/PRIVACY_POLICY.html",
+                    icon: "hand.raised.fill",
+                    color: Color.statusInterested,
+                    title: "Privacy Policy",
+                    subtitle: "How account, Team, and location data are handled",
+                    identifier: "morePrivacyPolicyLink"
+                )
+                divider
+                externalLink(
+                    url: "https://dan1sl6nd.github.io/D2D-Advancer/TERMS_OF_USE.html",
+                    icon: "doc.text.fill",
+                    color: Color.electricViolet,
+                    title: "Terms of Use",
+                    subtitle: "Subscription and service terms",
+                    identifier: "moreTermsOfUseLink"
+                )
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 28)
+        }
+        .obsidianScreenBackground()
+        .accessibilityIdentifier("helpLegalHubScreen")
+        .obsidianPushedNavigation("Help & Legal", backButtonAccessibilityIdentifier: "helpLegalBackButton")
+    }
+
+    private func externalLink(
+        url: String,
+        icon: String,
+        color: Color,
+        title: String,
+        subtitle: String,
+        identifier: String
+    ) -> some View {
+        Link(destination: URL(string: url)!) {
+            MoreCardView(
+                icon: icon,
+                iconColor: color,
+                title: title,
+                subtitle: subtitle,
+                showChevron: true
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.obsidianBorder.opacity(0.5))
+            .frame(height: 0.5)
+            .padding(.leading, 68)
+    }
+}
+
 // Helper type for alert(item:)
 
 
 struct OverviewContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
+    @ObservedObject private var router = AppRouter.shared
+    @ObservedObject private var appointmentManager = AppointmentManager.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
     @State private var statistics: LeadStatistics = LeadStatistics()
     @State private var isLoading = true
     @State private var statisticsErrorMessage: String?
@@ -944,9 +1521,7 @@ struct OverviewContentView: View {
                         tint: Color.statusNotHome
                     )
                 } else {
-                    overviewSection
-                    statusBreakdownSection
-                    activitySection
+                    actionMetricsSection
                 }
             }
             .padding(.horizontal, 16)
@@ -1007,6 +1582,16 @@ struct OverviewContentView: View {
                         }
                     }
 
+                    let soldLeadsRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+                    soldLeadsRequest.predicate = NSPredicate(
+                        format: "status == %@",
+                        Lead.Status.converted.rawValue
+                    )
+                    soldLeadsRequest.fetchBatchSize = 200
+                    stats.soldRevenue = try context.fetch(soldLeadsRequest).reduce(0) {
+                        $0 + max(0, $1.price)
+                    }
+
                     // Leads added today (exclude notHome and notInterested - no info collected)
                     let now = Date()
                     let today = Calendar.current.startOfDay(for: Date())
@@ -1032,6 +1617,10 @@ struct OverviewContentView: View {
                     followUpRequest.predicate = Lead.Status.activeFollowUpPredicate(dueFrom: now, through: weekFromNow)
                     stats.followUpsDueThisWeek = try context.count(for: followUpRequest)
 
+                    let overdueRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+                    overdueRequest.predicate = Lead.Status.activeFollowUpPredicate(dueBefore: now)
+                    stats.overdueFollowUpsCount = try context.count(for: overdueRequest)
+
                     print("📊 Loaded statistics: \(stats.activeLeadsCount) active leads, \(stats.convertedCount) converted")
                     return stats
                 }
@@ -1051,7 +1640,159 @@ struct OverviewContentView: View {
         isLoading = false
     }
     
-    private var overviewSection: some View {
+    private var actionMetricsSection: some View {
+        MoreSectionGroup(
+            title: "Business Snapshot",
+            icon: "chart.line.uptrend.xyaxis",
+            subtitle: "Open a metric to continue the work behind it.",
+            accentColor: Color.electricViolet
+        ) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10)
+                ],
+                spacing: 10
+            ) {
+                overviewMetricButton(
+                    title: "Sold",
+                    value: "\(statistics.convertedCount)",
+                    detail: soldRevenueText,
+                    icon: "checkmark.seal.fill",
+                    color: Color.statusConverted
+                ) {
+                    router.selectedTab = MainAppTab.leads.rawValue
+                }
+
+                overviewMetricButton(
+                    title: "Conversion",
+                    value: statistics.conversionRate.formatted(.percent.precision(.fractionLength(0))),
+                    detail: "of active leads",
+                    icon: "chart.bar.xaxis",
+                    color: Color.statusInterested
+                ) {
+                    router.selectedTab = MainAppTab.leads.rawValue
+                }
+
+                overviewMetricButton(
+                    title: "Overdue",
+                    value: "\(statistics.overdueFollowUpsCount)",
+                    detail: "follow-ups",
+                    icon: "bell.badge.fill",
+                    color: Color.statusNotHome
+                ) {
+                    router.openFollowUps()
+                }
+
+                overviewMetricButton(
+                    title: "Next 7 Days",
+                    value: "\(upcomingJobCount)",
+                    detail: "scheduled jobs",
+                    icon: "calendar.badge.clock",
+                    color: Color.electricViolet
+                ) {
+                    router.openAppointments()
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
+
+            HStack(spacing: 8) {
+                pipelineSummaryPill("\(statistics.interestedCount) interested", color: Color.statusInterested)
+                pipelineSummaryPill("\(statistics.notContactedCount) new", color: Color.textSecondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Business snapshot")
+    }
+
+    private func overviewMetricButton(
+        title: String,
+        value: String,
+        detail: String,
+        icon: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: icon)
+                        .font(.obsidianCallout)
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.micro)
+                }
+                .foregroundColor(color)
+
+                Text(value)
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Text(title)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
+
+                Text(detail)
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
+            .padding(12)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(color.opacity(0.24), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func pipelineSummaryPill(_ title: String, color: Color) -> some View {
+        Text(title)
+            .font(.obsidianFootnote)
+            .foregroundColor(color)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(color.opacity(0.1))
+            .clipShape(Capsule())
+    }
+
+    private var soldRevenueText: String {
+        statistics.soldRevenue.formatted(
+            .currency(code: "CAD").precision(.fractionLength(0))
+        )
+    }
+
+    private var upcomingJobCount: Int {
+        let now = Date()
+        let end = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now.addingTimeInterval(604_800)
+        let personal = appointmentManager.appointments.filter {
+            $0.startDate >= now
+                && $0.startDate <= end
+                && $0.status != .completed
+                && $0.status != .cancelled
+        }.count
+
+        guard let member = teamService.currentMember else { return personal }
+        let team = teamService.teamBookings.filter { booking in
+            let isVisible = member.role == .owner || booking.assignedToUserId == member.userId
+            return isVisible
+                && booking.startDate >= now
+                && booking.startDate <= end
+                && booking.status != .completed
+                && booking.status != .cancelled
+        }.count
+        return personal + team
+    }
+
+    private var legacyOverviewSection: some View {
         MoreSectionGroup(
             title: "Pipeline",
             icon: "chart.bar.fill",
@@ -1067,7 +1808,7 @@ struct OverviewContentView: View {
                 )
 
                 StatCardView(
-                    title: "Converted",
+                    title: "Sold",
                     value: "\(statistics.convertedCount)",
                     icon: "checkmark.circle.fill",
                     color: Color.statusInterested

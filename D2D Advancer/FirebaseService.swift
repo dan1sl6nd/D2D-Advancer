@@ -46,7 +46,6 @@ class FirebaseService: ObservableObject {
         "defaultLeadStatus",
         "defaultServiceCategoryID",
         "defaultFollowUpTime",
-        "autoBackupFrequency",
         "mapDefaultView",
         "defaultCheckInType",
         "targetIncomeMin",

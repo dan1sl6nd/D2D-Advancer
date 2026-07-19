@@ -119,7 +119,7 @@ extension Lead {
         var compactDisplayName: String {
             switch self {
             case .notContacted: return "New"
-            case .notHome: return "Away"
+            case .notHome: return "Not Home"
             case .interested: return "Interested"
             case .converted: return "Sold"
             case .notInterested: return "Pass"

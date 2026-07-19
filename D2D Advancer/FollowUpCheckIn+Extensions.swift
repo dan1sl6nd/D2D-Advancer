@@ -82,7 +82,7 @@ extension FollowUpCheckIn {
             case .interested:
                 return "Showed Interest"
             case .converted:
-                return "Converted"
+                return "Sold"
             case .reschedule:
                 return "Reschedule Needed"
             case .callback:

@@ -1430,7 +1430,7 @@ private extension TeamLeadStatus {
     var followUpDisplayName: String {
         switch self {
         case .notContacted: return "New"
-        case .notHome: return "Away"
+        case .notHome: return "Not Home"
         case .contacted: return "Contacted"
         case .interested: return "Interested"
         case .followUp: return "Follow Up"

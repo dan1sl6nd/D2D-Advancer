@@ -838,6 +838,52 @@ struct ObsidianStatusBanner: View {
     }
 }
 
+struct ObsidianUndoBanner: View {
+    let message: String
+    var icon: String = "trash"
+    let onUndo: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.obsidianCallout)
+                .foregroundColor(Color.statusNotInterested)
+                .frame(width: 34, height: 34)
+                .background(Color.statusNotInterested.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            Text(message)
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textPrimary)
+                .lineLimit(2)
+
+            Spacer(minLength: 8)
+
+            Button("Undo", action: onUndo)
+                .font(.obsidianFootnote)
+                .fontWeight(.semibold)
+                .foregroundColor(Color.electricViolet)
+                .frame(minWidth: 64, minHeight: 44)
+                .background(Color.electricViolet.opacity(0.12))
+                .clipShape(Capsule())
+                .contentShape(Capsule())
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("undoDeletionButton")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("undoDeletionBanner")
+    }
+}
+
 struct ObsidianIconTile: View {
     let icon: String
     let tint: Color

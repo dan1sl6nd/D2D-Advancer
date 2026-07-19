@@ -764,6 +764,7 @@ struct TeamTechnicianJobBoard: View {
     @ObservedObject private var teamService = TeamFirebaseService.shared
     let workspaces: [TeamRepWorkspace]
     let role: TeamRole
+    let bookingFilter: (TeamBooking) -> Bool
     @State private var savingBookingId: String?
     @State private var statusMessage: String?
 
@@ -772,7 +773,7 @@ struct TeamTechnicianJobBoard: View {
             .flatMap { workspace in
                 workspace.assignedBookings.map { TeamBookingInlineItem(workspace: workspace, booking: $0) }
             }
-            .filter { $0.booking.isFutureEditable || $0.booking.status == .needsOwnerFollowUp }
+            .filter { bookingFilter($0.booking) }
             .sorted {
                 if $0.booking.startDate != $1.booking.startDate {
                     return $0.booking.startDate < $1.booking.startDate
@@ -783,29 +784,9 @@ struct TeamTechnicianJobBoard: View {
 
     var body: some View {
         if !jobItems.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Image(systemName: "wrench.and.screwdriver.fill")
-                        .font(.obsidianSmall)
-                        .foregroundColor(Color.statusConverted)
-                        .frame(width: 30, height: 30)
-                        .background(Color.statusConverted.opacity(0.12))
-                        .clipShape(Circle())
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(role == .owner ? "Technician Jobs" : "My Job Board")
-                            .font(.obsidianFootnote)
-                            .foregroundColor(Color.textPrimary)
-                        Text("\(jobItems.count) active \(jobItems.count == 1 ? "job" : "jobs")")
-                            .font(.micro)
-                            .foregroundColor(Color.textSecondary)
-                    }
-
-                    Spacer()
-                }
-
+            VStack(alignment: .leading, spacing: 8) {
                 VStack(spacing: 0) {
-                    ForEach(Array(jobItems.prefix(4))) { item in
+                    ForEach(jobItems) { item in
                         TeamTechnicianJobRow(
                             item: item,
                             role: role,
@@ -814,7 +795,7 @@ struct TeamTechnicianJobBoard: View {
                             onStatus: { status in update(item.booking, status: status) }
                         )
 
-                        if item.id != jobItems.prefix(4).last?.id {
+                        if item.id != jobItems.last?.id {
                             Divider()
                                 .background(Color.obsidianBorder.opacity(0.35))
                         }
@@ -828,13 +809,6 @@ struct TeamTechnicianJobBoard: View {
                         .lineLimit(2)
                 }
             }
-            .padding(12)
-            .background(Color.obsidianElevated)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.statusConverted.opacity(0.22), lineWidth: 0.8)
-            )
         }
     }
 
@@ -950,8 +924,16 @@ private struct TeamTechnicianJobRow: View {
     }
 }
 
+enum TeamInlineWorkContent: Equatable {
+    case leads
+    case jobs
+}
+
 struct TeamWorkInlineSection: View {
     let summary: TeamWorkspaceSurfaceSummary
+    let content: TeamInlineWorkContent
+    var searchText: String = ""
+    var bookingFilter: (TeamBooking) -> Bool = { _ in true }
     @Binding var selectedRepUserId: String?
     let onOpenMap: () -> Void
     let onSelectLead: (TeamLead) -> Void
@@ -964,8 +946,16 @@ struct TeamWorkInlineSection: View {
     }
 
     private var visibleLeads: [TeamLeadInlineItem] {
-        visibleWorkspaces.flatMap { workspace in
+        let leads = visibleWorkspaces.flatMap { workspace in
             workspace.assignedLeads.map { TeamLeadInlineItem(workspace: workspace, lead: $0) }
+        }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return leads }
+        return leads.filter {
+            $0.lead.name.localizedCaseInsensitiveContains(query)
+                || $0.lead.address.localizedCaseInsensitiveContains(query)
+                || ($0.lead.phone?.localizedCaseInsensitiveContains(query) ?? false)
+                || ($0.lead.email?.localizedCaseInsensitiveContains(query) ?? false)
         }
     }
 
@@ -973,18 +963,11 @@ struct TeamWorkInlineSection: View {
         visibleWorkspaces.flatMap { workspace in
             workspace.assignedBookings.map { TeamBookingInlineItem(workspace: workspace, booking: $0) }
         }
-    }
-
-    private var shouldShowJobs: Bool {
-        summary.currentMemberWorkType == .technician || (visibleLeads.isEmpty && !visibleBookings.isEmpty)
+        .filter { bookingFilter($0.booking) }
     }
 
     private var rowsToShow: [TeamLeadInlineItem] {
         isExpanded ? visibleLeads : Array(visibleLeads.prefix(4))
-    }
-
-    private var jobRowsToShow: [TeamBookingInlineItem] {
-        isExpanded ? visibleBookings : Array(visibleBookings.prefix(4))
     }
 
     var body: some View {
@@ -1029,45 +1012,19 @@ struct TeamWorkInlineSection: View {
                 )
             }
 
-            HStack(spacing: 8) {
-                TeamSurfaceMetricPill(value: shouldShowJobs ? summary.upcomingBookingCount : summary.teamLeadCount, label: shouldShowJobs ? "Jobs" : "Leads", color: Color.electricViolet)
-                if !shouldShowJobs {
-                    TeamSurfaceMetricPill(value: summary.importantLeadCount, label: "Important", color: Color.statusInterested)
-                }
-                TeamSurfaceMetricPill(value: summary.activeRepCount, label: "On Duty", color: Color.statusConverted)
-            }
-
-            TeamCommandCenterCard(
-                summary: summary,
-                visibleWorkspaces: visibleWorkspaces
-            )
-
-            TeamTechnicianJobBoard(
-                workspaces: visibleWorkspaces,
-                role: summary.role
-            )
-
-            if shouldShowJobs {
-                if jobRowsToShow.isEmpty {
+            if content == .jobs {
+                if visibleBookings.isEmpty {
                     Text(summary.role == .owner ? "No assigned team jobs yet." : "No assigned service jobs yet.")
                         .font(.obsidianFootnote)
                         .foregroundColor(Color.textMuted)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 6)
                 } else {
-                    VStack(spacing: 0) {
-                        ForEach(jobRowsToShow) { item in
-                            TeamBookingInlineRow(
-                                booking: item.booking,
-                                repName: summary.role == .owner ? item.workspace.member.displayName : nil
-                            )
-
-                            if item.booking.id != jobRowsToShow.last?.booking.id {
-                                Divider()
-                                    .background(Color.obsidianBorder.opacity(0.35))
-                            }
-                        }
-                    }
+                    TeamTechnicianJobBoard(
+                        workspaces: visibleWorkspaces,
+                        role: summary.role,
+                        bookingFilter: bookingFilter
+                    )
                 }
             } else if rowsToShow.isEmpty {
                 Text("No assigned team leads yet.")
@@ -1097,14 +1054,14 @@ struct TeamWorkInlineSection: View {
                 }
             }
 
-            if (shouldShowJobs ? visibleBookings.count : visibleLeads.count) > 4 {
+            if content == .leads && visibleLeads.count > 4 {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isExpanded.toggle()
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Text(isExpanded ? "Show less" : "Show \((shouldShowJobs ? visibleBookings.count : visibleLeads.count) - 4) more")
+                        Text(isExpanded ? "Show less" : "Show \(visibleLeads.count - 4) more")
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                     }
                     .font(.obsidianFootnote)
@@ -1125,14 +1082,16 @@ struct TeamWorkInlineSection: View {
     }
 
     private var sectionIconName: String {
+        if content == .jobs { return "wrench.and.screwdriver.fill" }
         if summary.role == .owner { return "person.3.fill" }
-        if summary.currentMemberWorkType == .technician { return "wrench.and.screwdriver.fill" }
         return "briefcase.fill"
     }
 
     private var sectionTitle: String {
-        if summary.role == .owner { return "Team Work" }
-        if summary.currentMemberWorkType == .technician { return "My Jobs" }
+        if content == .jobs {
+            return summary.role == .owner ? "Team Jobs" : "My Jobs"
+        }
+        if summary.role == .owner { return "Team Leads" }
         return "My Leads"
     }
 }

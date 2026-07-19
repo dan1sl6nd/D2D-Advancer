@@ -573,6 +573,21 @@ final class D2D_AdvancerUITests: XCTestCase {
         denySystemPermissionIfPresented(timeout: 2)
     }
 
+    private func openDataSyncHub(_ app: XCUIApplication) {
+        tapIdentifiedElement(app, "moreDataSyncCard", direction: .down, timeout: 8)
+        waitForIdentifiedElement(app, "dataSyncHubScreen", timeout: 10)
+    }
+
+    private func openAppSettingsHub(_ app: XCUIApplication) {
+        tapIdentifiedElement(app, "moreAppSettingsCard", direction: .down, timeout: 8)
+        waitForIdentifiedElement(app, "appSettingsHubScreen", timeout: 10)
+    }
+
+    private func openAccountAppearanceHub(_ app: XCUIApplication) {
+        tapIdentifiedElement(app, "moreAccountAppearanceCard", direction: .down, timeout: 8)
+        waitForIdentifiedElement(app, "accountAppearanceHubScreen", timeout: 10)
+    }
+
     private func typeText(_ text: String, into field: XCUIElement, timeout: TimeInterval = 8) {
         XCTAssertTrue(field.waitForExistence(timeout: timeout), "Expected field to appear before typing: \(text)")
         field.tap()
@@ -1659,6 +1674,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)
 
+        openAppSettingsHub(app)
         scrollToIdentifiedElement(app, "moreAppPreferencesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppPreferencesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
@@ -1708,6 +1724,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)
 
+        openAppSettingsHub(app)
         scrollToIdentifiedElement(app, "moreAppPreferencesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppPreferencesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
@@ -2259,6 +2276,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         denySystemPermissionIfPresented(timeout: 2)
 
         tapButton(app, "tab_More", timeout: 12)
+        openDataSyncHub(app)
         waitForIdentifiedElement(app, "moreSyncSettingsButton", timeout: 12)
         tapIdentifiedElement(app, "moreSyncSettingsButton", timeout: 8)
 
@@ -2296,6 +2314,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)
 
+        openDataSyncHub(app)
         let importCard = scrollToIdentifiedElement(
             app,
             "moreAppleContactsImportCard",
@@ -2333,6 +2352,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launchArguments.append("-openMoreTabForUITests")
         app.launch()
 
+        openDataSyncHub(app)
         let importCard = scrollToIdentifiedElement(
             app,
             "moreAppleContactsImportCard",
@@ -2559,6 +2579,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)
 
+        openAccountAppearanceHub(app)
         let accountCard = scrollToButtonEitherDirection(app, "moreAccountCard", maxSwipesPerDirection: 8)
         waitForText(app, "Account UI", timeout: 25)
         tapElement(app, accountCard, description: "moreAccountCard")
@@ -2624,6 +2645,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)
 
+        openAccountAppearanceHub(app)
         let accountCard = scrollToButtonEitherDirection(app, "moreAccountCard", maxSwipesPerDirection: 8)
         waitForText(app, "Delete UI", timeout: 25)
         tapElement(app, accountCard, description: "moreAccountCard")
@@ -2651,6 +2673,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)
 
+        openAppSettingsHub(app)
         scrollToIdentifiedElement(app, "moreNotificationsCard", direction: .down)
         waitForIdentifiedElement(app, "moreCalendarSettingsCard", timeout: 8)
         waitForIdentifiedElement(app, "moreAppPreferencesCard", timeout: 8)
@@ -2662,30 +2685,32 @@ final class D2D_AdvancerUITests: XCTestCase {
         _ = scrollToButton(app, "notificationRefreshAllButton", direction: .down)
 
         relaunch(app, opening: "-openMoreTabForUITests")
+        openAppSettingsHub(app)
         scrollToIdentifiedElement(app, "moreCalendarSettingsCard", direction: .down)
         tapIdentifiedElement(app, "moreCalendarSettingsCard", direction: .down, timeout: 8)
         waitForText(app, "Calendar Settings", timeout: 10)
         waitForIdentifiedElement(app, "calendarSettingsEnableToggle", timeout: 8)
 
         relaunch(app, opening: "-openMoreTabForUITests")
+        openAppSettingsHub(app)
         scrollToIdentifiedElement(app, "moreAppPreferencesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppPreferencesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
         waitForIdentifiedElement(app, "appPreferenceDefaultServicePicker", timeout: 8)
         waitForIdentifiedElement(app, "appPreferenceLeadStatusPicker", timeout: 8)
         waitForIdentifiedElement(app, "appPreferenceLeadSortPicker", timeout: 8)
-        scrollToIdentifiedElement(app, "appPreferenceBackupFrequencyPicker", direction: .down, requireHittable: false)
-        let backupTitle = app.staticTexts["Auto Backup Frequency"]
-        let backupPicker = app.descendants(matching: .any)["appPreferenceBackupFrequencyPicker"].firstMatch
-        XCTAssertTrue(backupTitle.waitForExistence(timeout: 8), "Backup preference title should remain visible")
-        XCTAssertTrue(backupPicker.waitForExistence(timeout: 8), "Backup preference picker should remain visible")
-        XCTAssertFalse(
-            backupTitle.frame.intersects(backupPicker.frame),
-            "App Preferences labels and pickers should not overlap on compact layouts"
+        let mapPicker = scrollToIdentifiedElement(
+            app,
+            "appPreferenceMapTypePicker",
+            direction: .down,
+            requireHittable: false
         )
+        XCTAssertTrue(mapPicker.waitForExistence(timeout: 8), "Map preference should remain available")
+        XCTAssertFalse(app.staticTexts["Auto Backup Frequency"].exists, "Removed backup preference must stay out of the UI")
         screenshot(app, name: "App Preferences compact layout")
 
         relaunch(app, opening: "-openMoreTabForUITests")
+        openAppSettingsHub(app)
         scrollToIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
@@ -2751,12 +2776,13 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "teamWorkspaceCard", direction: .down, timeout: 8)
-        waitForText(app, "Team Workspace", timeout: 10)
+        waitForIdentifiedElement(app, "teamWorkspaceBackButton", timeout: 10)
         try assertLightTopChrome(app, screenName: "Team Workspace")
         try assertDarkFilledBackButton(app, identifier: "teamWorkspaceBackButton", screenName: "Team Workspace")
         assertPushedHeaderTitleAlignedAfterBack(app, title: "Team", backButtonIdentifier: "teamWorkspaceBackButton", screenName: "Team Workspace")
 
         relaunch(app, opening: "-openMoreTabForUITests")
+        openAppSettingsHub(app)
         scrollToIdentifiedElement(app, "moreNotificationsCard", direction: .down)
         tapIdentifiedElement(app, "moreNotificationsCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "notificationSettingsScreen", timeout: 10)
@@ -2765,6 +2791,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         assertPushedHeaderTitleAlignedAfterBack(app, title: "Notifications", backButtonIdentifier: "notificationSettingsBackButton", screenName: "Notification Settings")
 
         relaunch(app, opening: "-openMoreTabForUITests")
+        openAppSettingsHub(app)
         scrollToIdentifiedElement(app, "moreCalendarSettingsCard", direction: .down)
         tapIdentifiedElement(app, "moreCalendarSettingsCard", direction: .down, timeout: 8)
         waitForText(app, "Calendar Settings", timeout: 10)
@@ -2773,6 +2800,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         assertPushedHeaderTitleAlignedAfterBack(app, title: "Calendar Settings", backButtonIdentifier: "calendarSettingsBackButton", screenName: "Calendar Settings")
 
         relaunch(app, opening: "-openMoreTabForUITests")
+        openAppSettingsHub(app)
         scrollToIdentifiedElement(app, "moreAppPreferencesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppPreferencesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appPreferencesScreen", timeout: 10)
@@ -2781,6 +2809,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         assertPushedHeaderTitleAlignedAfterBack(app, title: "App Preferences", backButtonIdentifier: "appPreferencesBackButton", screenName: "App Preferences")
 
         relaunch(app, opening: "-openMoreTabForUITests")
+        openAppSettingsHub(app)
         scrollToIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down)
         tapIdentifiedElement(app, "moreAppointmentTypesCard", direction: .down, timeout: 8)
         waitForIdentifiedElement(app, "appointmentTypesScreen", timeout: 10)
@@ -2806,6 +2835,8 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForText(app, "More", timeout: 8)
         try assertLightTopChrome(app, screenName: "More")
 
+        openDataSyncHub(app)
+        try assertLightTopChrome(app, screenName: "Data & Sync")
         tapIdentifiedElement(app, "moreCloudStorageButton", timeout: 8)
         let cloudProviderSheet = waitForIdentifiedElement(app, "cloudProviderSheet", timeout: 8)
         try assertLightSurfaceAround(
@@ -2818,7 +2849,7 @@ final class D2D_AdvancerUITests: XCTestCase {
             cloudProviderSheet.waitForNonExistence(timeout: 5),
             "Cloud Storage sheet should fully dismiss before opening another More modal"
         )
-        waitForText(app, "More", timeout: 8)
+        waitForIdentifiedElement(app, "dataSyncHubScreen", timeout: 8)
 
         let syncSettingsButton = app.descendants(matching: .any)["moreSyncSettingsButton"].firstMatch
         if syncSettingsButton.waitForExistence(timeout: 3) {
@@ -2838,7 +2869,7 @@ final class D2D_AdvancerUITests: XCTestCase {
                 screenName: "Sync Settings"
             )
             tapElement(app, syncCloseButton, description: "syncSettingsCloseButton")
-            waitForText(app, "More", timeout: 8)
+            waitForIdentifiedElement(app, "dataSyncHubScreen", timeout: 8)
         }
     }
 
@@ -2849,6 +2880,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         denySystemPermissionIfPresented(timeout: 2)
 
         _ = waitForMapReady(app)
+        for identifier in ["tab_Map", "tab_Leads", "tab_Work", "tab_More"] {
+            let tab = waitForIdentifiedElement(app, identifier, timeout: 8)
+            XCTAssertGreaterThanOrEqual(tab.frame.width, 44, "Tab should have a 44pt minimum tap width: \(identifier)")
+            XCTAssertGreaterThanOrEqual(tab.frame.height, 44, "Tab should have a 44pt minimum tap height: \(identifier)")
+        }
         for identifier in [
             "addLeadButton",
             "mapStyleButton",
@@ -2871,8 +2907,10 @@ final class D2D_AdvancerUITests: XCTestCase {
         try assertLightTopChrome(app, screenName: "Leads")
         let filterButton = waitForIdentifiedElement(app, "leadsFilterButton", timeout: 8)
         let sortButton = waitForIdentifiedElement(app, "leadsSortButton", timeout: 8)
+        let addButton = waitForIdentifiedElement(app, "leadsAddButton", timeout: 8)
         XCTAssertGreaterThanOrEqual(filterButton.frame.height, 44, "Lead filter control should have a 44pt minimum tap height")
         XCTAssertGreaterThanOrEqual(sortButton.frame.height, 44, "Lead sort control should have a 44pt minimum tap height")
+        XCTAssertGreaterThanOrEqual(addButton.frame.height, 44, "Lead add control should have a 44pt minimum tap height")
 
         tapButton(app, "tab_Work", timeout: 12)
         tapButton(app, "workSection_followUps", timeout: 8)
@@ -2897,17 +2935,17 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "moreOverviewCard", timeout: 8)
         waitForIdentifiedElement(app, "teamWorkspaceCard", timeout: 8)
         waitForIdentifiedElement(app, "moreMessageTemplatesCard", timeout: 8)
+        scrollToIdentifiedElement(app, "moreDataSyncCard", direction: .down)
+        waitForIdentifiedElement(app, "moreAppSettingsCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreAccountAppearanceCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreHelpLegalCard", timeout: 8)
+
+        relaunch(app, opening: "-openMoreTabForUITests")
+        openDataSyncHub(app)
         waitForIdentifiedElement(app, "moreCloudStorageButton", timeout: 8)
         waitForIdentifiedElement(app, "moreExportLeadsButton", timeout: 8)
         waitForIdentifiedElement(app, "moreImportLeadsButton", timeout: 8)
-        scrollToIdentifiedElement(app, "moreNotificationsCard", direction: .down)
-        waitForIdentifiedElement(app, "moreCalendarSettingsCard", timeout: 8)
-        waitForIdentifiedElement(app, "moreAppPreferencesCard", timeout: 8)
-        waitForIdentifiedElement(app, "moreAppointmentTypesCard", timeout: 8)
-        scrollToIdentifiedElement(app, "moreAccountCard", direction: .down)
-        waitForIdentifiedElement(app, "moreDarkModeCard", timeout: 8)
-
-        relaunch(app, opening: "-openMoreTabForUITests")
+        waitForIdentifiedElement(app, "moreAppleContactsImportCard", timeout: 8)
         tapIdentifiedElement(app, "moreCloudStorageButton", timeout: 8)
         waitForIdentifiedElement(app, "cloudProviderSheet", timeout: 8)
         waitForText(app, "Personal iCloud Sync", timeout: 8)
@@ -2919,9 +2957,21 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapIdentifiedElement(app, "cloudProviderCloseButton", timeout: 8)
 
         relaunch(app, opening: "-openMoreTabForUITests")
+        openAppSettingsHub(app)
+        waitForIdentifiedElement(app, "moreNotificationsCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreCalendarSettingsCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreAppPreferencesCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreAppointmentTypesCard", timeout: 8)
+
+        relaunch(app, opening: "-openMoreTabForUITests")
+        openAccountAppearanceHub(app)
+        waitForIdentifiedElement(app, "moreAccountCard", timeout: 8)
+        waitForIdentifiedElement(app, "moreDarkModeToggle", timeout: 8)
+
+        relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "moreOverviewCard", timeout: 12)
         waitForIdentifiedElement(app, "overviewScreen", timeout: 12)
-        waitForText(app, "Pipeline", timeout: 12)
+        waitForText(app, "Business Snapshot", timeout: 12)
 
         relaunch(app, opening: "-openMoreTabForUITests")
         tapIdentifiedElement(app, "moreMessageTemplatesCard", timeout: 12)
@@ -3084,18 +3134,11 @@ final class D2D_AdvancerUITests: XCTestCase {
             "mapWorkflowMode_hot",
             "mapWorkflowMode_due",
             "mapWorkflowMode_sold",
-            "mapStyle_standard",
-            "mapStyle_satellite",
-            "mapStyle_hybrid",
             "nextBestLeadButton",
             "routePlannerButton"
         ] {
             waitForIdentifiedElement(app, identifier, timeout: 8)
         }
-
-        tapIdentifiedElement(app, "mapStyle_satellite", timeout: 8)
-        tapIdentifiedElement(app, "mapStyle_hybrid", timeout: 8)
-        tapIdentifiedElement(app, "mapStyle_standard", timeout: 8)
 
         tapIdentifiedElement(app, "mapWorkflowMode_hot", timeout: 8)
         XCTAssertTrue(app.staticTexts["Map Tools"].waitForNonExistence(timeout: 5), "Map tools should close after applying Hot")

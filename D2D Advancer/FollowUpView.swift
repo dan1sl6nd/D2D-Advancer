@@ -125,7 +125,7 @@ struct FollowUpInteractiveRowView: View {
 
             HStack(spacing: 8) {
                 followUpActionButton(
-                    title: "Message",
+                    title: "Contact",
                     icon: "message.fill",
                     tint: Color.electricViolet,
                     isEnabled: hasContactInfo,
@@ -133,13 +133,62 @@ struct FollowUpInteractiveRowView: View {
                 )
 
                 followUpActionButton(
-                    title: "Check-in",
+                    title: "Outcome",
                     icon: "checkmark.circle.fill",
                     tint: Color.statusInterested,
                     action: onCheckInTap
                 )
 
                 Spacer(minLength: 0)
+
+                Menu {
+                    Button(action: onTap) {
+                        Label("View Details", systemImage: "eye")
+                    }
+
+                    Button(action: callLead) {
+                        Label("Call", systemImage: "phone.fill")
+                    }
+                    .disabled(!hasPhoneNumber)
+
+                    Button(action: navigateToLead) {
+                        Label("Directions", systemImage: "location.north.fill")
+                    }
+                    .disabled(!hasLocation)
+
+                    Divider()
+
+                    Button {
+                        rescheduleTo(days: 1)
+                    } label: {
+                        Label("Snooze Until Tomorrow", systemImage: "sunrise")
+                    }
+
+                    Button {
+                        rescheduleTo(days: 7)
+                    } label: {
+                        Label("Snooze One Week", systemImage: "calendar.badge.plus")
+                    }
+
+                    Divider()
+
+                    Button(role: .destructive, action: onDelete) {
+                        Label("Remove Follow-up", systemImage: "bell.slash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textSecondary)
+                        .frame(width: 44, height: 44)
+                        .background(Color.obsidianElevated)
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
+                        )
+                }
+                .accessibilityLabel("More follow-up actions")
+                .accessibilityIdentifier("followUpMoreActionsButton")
             }
         }
         .padding(14)
@@ -223,7 +272,7 @@ struct FollowUpInteractiveRowView: View {
                 .font(.micro)
                 .foregroundColor(isEnabled ? tint : Color.textMuted)
                 .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .frame(minHeight: 44)
                 .background(Capsule().fill((isEnabled ? tint : Color.textMuted).opacity(0.12)))
         }
         .buttonStyle(PlainButtonStyle())
@@ -232,6 +281,16 @@ struct FollowUpInteractiveRowView: View {
 
     private var hasContactInfo: Bool {
         !(lead.phone?.isEmpty ?? true) || !(lead.email?.isEmpty ?? true)
+    }
+
+    private var hasPhoneNumber: Bool {
+        !(lead.phone?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+
+    private var hasLocation: Bool {
+        let hasCoordinates = abs(lead.latitude) > 0.000_001 || abs(lead.longitude) > 0.000_001
+        let hasAddress = !(lead.address?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        return hasCoordinates || hasAddress
     }
 
     private var leadInitial: String {
@@ -254,6 +313,19 @@ struct FollowUpInteractiveRowView: View {
         UserDataSyncManager.shared.syncWithServer()
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
+    }
+
+    private func callLead() {
+        guard let phone = lead.phone, !phone.isEmpty else { return }
+        Utilities.makePhoneCall(to: phone)
+    }
+
+    private func navigateToLead() {
+        if abs(lead.latitude) > 0.000_001 || abs(lead.longitude) > 0.000_001 {
+            Utilities.openMapsDirections(latitude: lead.latitude, longitude: lead.longitude)
+        } else if let address = lead.address, !address.isEmpty {
+            Utilities.openMapsSearch(query: address)
+        }
     }
 
     private func timeIcon(for date: Date) -> String {

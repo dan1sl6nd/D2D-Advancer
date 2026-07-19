@@ -1358,7 +1358,7 @@ struct AppPreferencesView: View {
                                     (value: "interested", label: "Interested"),
                                     (value: "not_interested", label: "Not Interested"),
                                     (value: "not_home", label: "Not Home"),
-                                    (value: "converted", label: "Converted")
+                                    (value: "converted", label: "Sold")
                                 ],
                                 accessibilityIdentifier: "appPreferenceLeadStatusPicker"
                             )
@@ -1439,9 +1439,9 @@ struct AppPreferencesView: View {
                 }
 
                 MoreSectionGroup(
-                    title: "Map & Backup",
+                    title: "Map",
                     icon: "map",
-                    subtitle: "Map mode and backup rhythm.",
+                    subtitle: "Choose the map style used at launch.",
                     accentColor: Color.dataCyan
                 ) {
                     PreferenceCardView(
@@ -1463,27 +1463,6 @@ struct AppPreferencesView: View {
                         }
                     )
 
-                    preferencesDivider
-
-                    PreferenceCardView(
-                        icon: "icloud.and.arrow.up",
-                        iconColor: Color.electricViolet,
-                        title: "Auto Backup Frequency",
-                        subtitle: "Automatic backup rhythm",
-                        trailingContent: {
-                            preferenceMenu(
-                                title: "Auto backup frequency",
-                                selection: $preferences.autoBackupFrequency,
-                                options: [
-                                    (value: "daily", label: "Daily"),
-                                    (value: "weekly", label: "Weekly"),
-                                    (value: "monthly", label: "Monthly"),
-                                    (value: "never", label: "Never")
-                                ],
-                                accessibilityIdentifier: "appPreferenceBackupFrequencyPicker"
-                            )
-                        }
-                    )
                 }
             }
             .padding(.horizontal, 16)

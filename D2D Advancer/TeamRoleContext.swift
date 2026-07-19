@@ -49,6 +49,8 @@ enum TeamRoleContext: Equatable {
         switch self {
         case .salesRep:
             return "Mine"
+        case .technician:
+            return "Customers"
         default:
             return "Leads"
         }
@@ -79,7 +81,7 @@ enum TeamRoleContext: Equatable {
         case .salesRep:
             return "My Leads"
         case .technician:
-            return "Work"
+            return "Customers"
         default:
             return "Leads"
         }

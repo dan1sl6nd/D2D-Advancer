@@ -18,6 +18,11 @@ struct AppointmentsView: View {
     @State private var teamFieldMapSummary: TeamWorkspaceSurfaceSummary?
     @State private var selectedTeamRepUserId: String?
     @State private var selectedView: AppointmentView = .active
+    @State private var selectedSource: AppointmentSourceScope = .personal
+    @State private var appointmentPendingDeletionConfirmation: Appointment?
+    @State private var showingAppointmentDeletionConfirmation = false
+    @State private var pendingAppointmentDeletion: Appointment?
+    @State private var pendingAppointmentDeletionTask: Task<Void, Never>?
     @ObservedObject private var paywallManager = PaywallManager.shared
 
     private var isRunningUITests: Bool {
@@ -62,20 +67,29 @@ struct AppointmentsView: View {
             }
         }
     }
+
+    private enum AppointmentSourceScope: String, CaseIterable {
+        case personal = "Personal"
+        case team = "Team"
+    }
     
     var filteredAppointments: [Appointment] {
         switch selectedView {
         case .active:
             return appointmentManager.appointments
-                .filter { $0.status != .completed && $0.status != .cancelled }
+                .filter {
+                    $0.status != .completed
+                        && $0.status != .cancelled
+                        && $0.id != pendingAppointmentDeletion?.id
+                }
                 .sorted { $0.startDate < $1.startDate }
         case .completed:
             return appointmentManager.appointments
-                .filter { $0.status == .completed }
+                .filter { $0.status == .completed && $0.id != pendingAppointmentDeletion?.id }
                 .sorted { $0.startDate > $1.startDate }
         case .cancelled:
             return appointmentManager.appointments
-                .filter { $0.status == .cancelled }
+                .filter { $0.status == .cancelled && $0.id != pendingAppointmentDeletion?.id }
                 .sorted { $0.startDate > $1.startDate }
         }
     }
@@ -100,16 +114,22 @@ struct AppointmentsView: View {
                         roleContext.appointmentScreenTitle,
                         titleAccessibilityIdentifier: "appointmentsScreen"
                     ) {
-                        ObsidianCompactIconButton(
-                            icon: "plus",
-                            accessibilityLabel: "Schedule appointment",
-                            accessibilityIdentifier: "appointmentsScheduleButton",
-                            size: 44
-                        ) {
-                            guard paywallManager.gateAction() else { return }
-                            showingScheduleView = true
+                        if roleContext != .technician {
+                            ObsidianCompactIconButton(
+                                icon: "plus",
+                                accessibilityLabel: "Schedule appointment",
+                                accessibilityIdentifier: "appointmentsScheduleButton",
+                                size: 44
+                            ) {
+                                guard paywallManager.gateAction() else { return }
+                                showingScheduleView = true
+                            }
                         }
                     }
+                }
+
+                if teamSurfaceSummary != nil && roleContext != .technician {
+                    sourceSelectionView
                 }
 
                 tabSelectionView
@@ -153,9 +173,37 @@ struct AppointmentsView: View {
                 selectedRepUserId: $selectedTeamRepUserId
             )
         }
+        .alert(
+            "Delete Appointment?",
+            isPresented: $showingAppointmentDeletionConfirmation,
+            presenting: appointmentPendingDeletionConfirmation
+        ) { appointment in
+            Button("Delete", role: .destructive) {
+                beginPendingAppointmentDeletion(appointment)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { appointment in
+            Text("Remove \(appointment.title)? You can undo this for a few seconds.")
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let pendingAppointmentDeletion {
+                ObsidianUndoBanner(message: "\(pendingAppointmentDeletion.title) removed") {
+                    undoPendingAppointmentDeletion()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+        }
         .onAppear {
             print("🗓️ AppointmentsView appeared - listener already active")
             Task { await loadTeamWorkspaceIfNeeded() }
+        }
+        .onChange(of: roleContext) { _, newRole in
+            if newRole == .technician || newRole == .salesRep {
+                selectedSource = .team
+            } else if teamSurfaceSummary == nil {
+                selectedSource = .personal
+            }
         }
         .onChange(of: router.targetAppointmentID) { _, newValue in
             guard let id = newValue else { return }
@@ -163,6 +211,9 @@ struct AppointmentsView: View {
                 selectedAppointment = appt
             }
             router.targetAppointmentID = nil
+        }
+        .onDisappear {
+            commitPendingAppointmentDeletion()
         }
     }
     
@@ -172,6 +223,38 @@ struct AppointmentsView: View {
             Rectangle()
                 .fill(Color.obsidianBackground(for: colorScheme))
                 .frame(height: ObsidianLayout.safeAreaTop(geometry))
+    }
+
+    private var sourceSelectionView: some View {
+        HStack(spacing: 4) {
+            ForEach(AppointmentSourceScope.allCases, id: \.self) { source in
+                let isSelected = selectedSource == source
+                Button {
+                    selectedSource = source
+                } label: {
+                    Text(source.rawValue)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(isSelected ? .white : Color.textSecondary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .fill(isSelected ? Color.electricViolet : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("appointmentSource_\(source.rawValue.lowercased())")
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+            }
+        }
+        .padding(4)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
     }
     
     private var tabSelectionView: some View {
@@ -221,7 +304,13 @@ struct AppointmentsView: View {
     
     private var appointmentContentView: some View {
         Group {
-            if filteredAppointments.isEmpty && teamSurfaceSummary == nil {
+            if selectedSource == .team {
+                if teamSurfaceSummary == nil {
+                    emptyStateView
+                } else {
+                    appointmentScrollView
+                }
+            } else if filteredAppointments.isEmpty {
                 emptyStateView
             } else {
                 appointmentScrollView
@@ -232,9 +321,11 @@ struct AppointmentsView: View {
     private var appointmentScrollView: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
-                if let summary = teamSurfaceSummary {
+                if selectedSource == .team, let summary = teamSurfaceSummary {
                     TeamWorkInlineSection(
                         summary: summary,
+                        content: .jobs,
+                        bookingFilter: teamBookingMatchesSelectedView,
                         selectedRepUserId: $selectedTeamRepUserId,
                         onOpenMap: { teamFieldMapSummary = teamSurfaceSummary },
                         onSelectLead: { selectedTeamLead = $0 }
@@ -243,31 +334,32 @@ struct AppointmentsView: View {
                     .padding(.bottom, 4)
                 }
 
-                ForEach(filteredAppointments) { appointment in
-                    AppointmentInteractiveRowView(
-                        appointment: appointment,
-                        onTap: { selectedAppointment = appointment },
-                        onComplete: { updateAppointmentStatus(appointment, to: .completed) },
-                        onCancel: { updateAppointmentStatus(appointment, to: .cancelled) },
-                        onReactivate: { updateAppointmentStatus(appointment, to: .scheduled) },
-                        onDelete: { deleteAppointment(appointment) }
-                    )
-                    .onLongPressGesture {
-                        handleLongPressDelete(appointment)
+                if selectedSource == .personal {
+                    ForEach(filteredAppointments) { appointment in
+                        AppointmentInteractiveRowView(
+                            appointment: appointment,
+                            onTap: { selectedAppointment = appointment },
+                            onComplete: { updateAppointmentStatus(appointment, to: .completed) },
+                            onCancel: { updateAppointmentStatus(appointment, to: .cancelled) },
+                            onReactivate: { updateAppointmentStatus(appointment, to: .scheduled) },
+                            onDelete: { requestAppointmentDeletion(appointment) }
+                        )
                     }
-                }
-
-                if filteredAppointments.isEmpty && teamSurfaceSummary != nil {
-                    Text(emptyMessage)
-                        .font(.obsidianFootnote)
-                        .foregroundColor(Color.textMuted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
                 }
             }
             .padding(.vertical, 8)
             .padding(.bottom, 12)
+        }
+    }
+
+    private func teamBookingMatchesSelectedView(_ booking: TeamBooking) -> Bool {
+        switch selectedView {
+        case .active:
+            return booking.status != .completed && booking.status != .cancelled
+        case .completed:
+            return booking.status == .completed
+        case .cancelled:
+            return booking.status == .cancelled
         }
     }
 
@@ -295,25 +387,39 @@ struct AppointmentsView: View {
         }
     }
 
-    private func handleLongPressDelete(_ appointment: Appointment) {
+    private func requestAppointmentDeletion(_ appointment: Appointment) {
         guard paywallManager.gateAction() else { return }
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
-        
-        let alert = UIAlertController(
-            title: "Delete Appointment",
-            message: "Delete appointment '\(appointment.title)'?",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
-            deleteAppointment(appointment)
-        })
-        
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
-            window.rootViewController?.present(alert, animated: true)
+
+        appointmentPendingDeletionConfirmation = appointment
+        showingAppointmentDeletionConfirmation = true
+    }
+
+    private func beginPendingAppointmentDeletion(_ appointment: Appointment) {
+        commitPendingAppointmentDeletion()
+        pendingAppointmentDeletion = appointment
+
+        pendingAppointmentDeletionTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled,
+                  pendingAppointmentDeletion?.id == appointment.id else { return }
+            commitPendingAppointmentDeletion()
         }
+    }
+
+    private func undoPendingAppointmentDeletion() {
+        pendingAppointmentDeletionTask?.cancel()
+        pendingAppointmentDeletionTask = nil
+        pendingAppointmentDeletion = nil
+    }
+
+    private func commitPendingAppointmentDeletion() {
+        pendingAppointmentDeletionTask?.cancel()
+        pendingAppointmentDeletionTask = nil
+        guard let appointment = pendingAppointmentDeletion else { return }
+        pendingAppointmentDeletion = nil
+        deleteAppointment(appointment)
     }
     
     private func deleteAppointments(offsets: IndexSet) {

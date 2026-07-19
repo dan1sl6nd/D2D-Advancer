@@ -70,45 +70,17 @@ struct TeamWorkspaceView: View {
                             .frame(height: 0)
                             .id(scrollTopAnchor)
 
-                        introCard
-
-                        if let statusMessage = visibleStatusMessage {
-                            statusCard(
-                                statusMessage,
-                                color: statusMessageIsError ? Color.statusNotInterested : Color.statusInterested
-                            )
+                        if canUseTeamWorkspace, teamService.activeTeam != nil {
+                            introCard
                         }
 
-                        if canUseTeamWorkspace,
-                           !teamService.teamOperationsControl.teamWritesEnabled {
-                            statusCard(
-                                teamService.teamOperationsControl.displayMessage,
-                                color: Color.statusNotHome
-                            )
-                        }
-
-                        if canUseTeamWorkspace,
-                           teamService.teamUsageControl.level != .normal {
-                            teamUsageSafeguardCard(teamService.teamUsageControl)
-                        }
+                        primaryStatusNotice
 
                         #if DEBUG
                         if FirebaseEmulatorConfiguration.isEnabled {
                             statusCard("Firebase emulator mode active: \(FirebaseEmulatorConfiguration.activeHostDescription)")
                         }
                         #endif
-
-                        if let syncHealth = visibleTeamSyncHealthSnapshot {
-                            teamSyncHealthCard(syncHealth)
-                        }
-
-                        if let errorMessage = visibleUserAuthErrorMessage {
-                            statusCard(errorMessage, color: Color.statusNotInterested)
-                        }
-
-                        if let errorMessage = visibleAppleAuthErrorMessage {
-                            statusCard(errorMessage, color: Color.statusNotInterested)
-                        }
 
                         if shouldShowInitialLoadingCard {
                             loadingCard("Loading team workspace...")
@@ -221,6 +193,31 @@ struct TeamWorkspaceView: View {
             return "Use this screen for team access and duty sharing. Your daily sales work is in My Leads."
         }
         return "Create or join a team. Personal leads stay private unless you create or assign work inside Team."
+    }
+
+    @ViewBuilder
+    private var primaryStatusNotice: some View {
+        if let errorMessage = visibleUserAuthErrorMessage {
+            statusCard(errorMessage, color: Color.statusNotInterested)
+        } else if let errorMessage = visibleAppleAuthErrorMessage {
+            statusCard(errorMessage, color: Color.statusNotInterested)
+        } else if let statusMessage = visibleStatusMessage {
+            statusCard(
+                statusMessage,
+                color: statusMessageIsError ? Color.statusNotInterested : Color.statusInterested
+            )
+        } else if canUseTeamWorkspace,
+                  !teamService.teamOperationsControl.teamWritesEnabled {
+            statusCard(
+                teamService.teamOperationsControl.displayMessage,
+                color: Color.statusNotHome
+            )
+        } else if canUseTeamWorkspace,
+                  teamService.teamUsageControl.level != .normal {
+            teamUsageSafeguardCard(teamService.teamUsageControl)
+        } else if let syncHealth = visibleTeamSyncHealthSnapshot {
+            teamSyncHealthCard(syncHealth)
+        }
     }
 
     private func planStateCard(_ team: TeamWorkspace, member: TeamMember) -> some View {
@@ -351,14 +348,6 @@ struct TeamWorkspaceView: View {
             statRow("Sales reps", "\(activeSalesReps.count)")
             statRow("Technicians", "\(activeTechnicians.count)")
             statRow("Seats used", "\(activeMemberCount)/\(team.memberLimit)")
-            statRow(
-                "Cloud updates today",
-                "\(teamService.teamUsageControl.dailyWrites)/\(teamService.teamUsageControl.dailyWriteLimit)"
-            )
-            statRow(
-                "Recent update pace",
-                "\(teamService.teamUsageControl.velocityWrites)/\(teamService.teamUsageControl.velocityWriteLimit)"
-            )
             if let member = teamService.currentMember {
                 statRow("Owner sharing", teamService.activeDutySession == nil ? "Off" : "On")
 
@@ -1212,6 +1201,7 @@ struct TeamWorkspaceView: View {
     }
 
     private var visibleStatusMessage: String? {
+        guard canUseTeamWorkspace else { return nil }
         guard let statusMessage else { return nil }
         if statusMessage == teamSyncStatusMessage {
             return nil

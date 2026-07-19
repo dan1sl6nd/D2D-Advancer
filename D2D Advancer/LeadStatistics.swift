@@ -10,8 +10,15 @@ struct LeadStatistics {
     var leadsAddedToday: Int = 0
     var leadsUpdatedThisWeek: Int = 0
     var followUpsDueThisWeek: Int = 0
+    var overdueFollowUpsCount: Int = 0
+    var soldRevenue: Double = 0
 
     var statusCounts: [Lead.Status: Int] = [:]
+
+    var conversionRate: Double {
+        guard activeLeadsCount > 0 else { return 0 }
+        return Double(convertedCount) / Double(activeLeadsCount)
+    }
 }
 
 enum LeadCountDisplay {

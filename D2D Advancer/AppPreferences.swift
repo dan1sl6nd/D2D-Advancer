@@ -20,7 +20,6 @@ class AppPreferences: ObservableObject {
     @AppStorage("defaultLeadStatus") var defaultLeadStatus = "not_contacted"
     @AppStorage("defaultServiceCategoryID") var defaultServiceCategoryID = ""
     @AppStorage("defaultFollowUpTime") var defaultFollowUpTime = "1_day"
-    @AppStorage("autoBackupFrequency") var autoBackupFrequency = "weekly"
     @AppStorage("mapDefaultView") var mapDefaultView = "standard"
     @AppStorage("defaultCheckInType") var defaultCheckInType = "door_knock"
     

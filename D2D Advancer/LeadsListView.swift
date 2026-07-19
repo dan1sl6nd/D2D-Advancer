@@ -1,5 +1,18 @@
 import SwiftUI
 import CoreData
+import CoreLocation
+
+private struct PendingLeadDeletion: Identifiable {
+    let lead: Lead
+    let name: String
+
+    var id: NSManagedObjectID { lead.objectID }
+}
+
+private enum LeadSourceScope: String, CaseIterable {
+    case personal = "Personal"
+    case team = "Team"
+}
 
 struct LeadsListView: View {
     @Environment(\.colorScheme) private var colorScheme
@@ -8,6 +21,7 @@ struct LeadsListView: View {
     @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var teamService = TeamFirebaseService.shared
+    @ObservedObject private var locationManager = LocationManager.shared
     @StateObject private var searchFilterManager = SearchFilterManager()
     @State private var selectedTab: LeadTab = .active
     @State private var showingFilters = false
@@ -22,6 +36,12 @@ struct LeadsListView: View {
     @State private var leadOpenErrorMessage: String?
     @State private var teamFieldMapSummary: TeamWorkspaceSurfaceSummary?
     @State private var selectedTeamRepUserId: String?
+    @State private var showingAddLead = false
+    @State private var leadPendingDeletionConfirmation: Lead?
+    @State private var showingLeadDeletionConfirmation = false
+    @State private var pendingLeadDeletion: PendingLeadDeletion?
+    @State private var pendingLeadDeletionTask: Task<Void, Never>?
+    @State private var selectedSource: LeadSourceScope = .personal
     @ObservedObject private var paywallManager = PaywallManager.shared
     
     private let pageSize = 50
@@ -132,7 +152,19 @@ struct LeadsListView: View {
                     ObsidianHeaderView(
                         roleContext.leadScreenTitle,
                         titleAccessibilityIdentifier: "leadsScreen"
-                    )
+                    ) {
+                        if roleContext != .technician {
+                            ObsidianCompactIconButton(
+                                icon: "plus",
+                                accessibilityLabel: "Add lead",
+                                accessibilityIdentifier: "leadsAddButton",
+                                size: 44
+                            ) {
+                                locationManager.requestImmediateLocation()
+                                showingAddLead = true
+                            }
+                        }
+                    }
                     searchAndFiltersSection
                     leadsContentSection
                 }
@@ -148,6 +180,11 @@ struct LeadsListView: View {
             }
             .sheet(item: $messageLead) { lead in
                 MessageSelectionView(lead: lead)
+            }
+            .sheet(isPresented: $showingAddLead) {
+                AddLeadView(
+                    coordinate: locationManager.location?.coordinate ?? locationManager.region.center
+                )
             }
             .sheet(isPresented: $showingFilters) {
                 LeadFilterSheet(
@@ -198,6 +235,37 @@ struct LeadsListView: View {
                 }
                 router.openMessageForLeadID = nil
             }
+            .onChange(of: roleContext) { _, newRole in
+                if newRole == .technician || newRole == .salesRep {
+                    selectedSource = .team
+                } else if teamSurfaceSummary == nil {
+                    selectedSource = .personal
+                }
+            }
+            .alert(
+                "Delete Lead?",
+                isPresented: $showingLeadDeletionConfirmation,
+                presenting: leadPendingDeletionConfirmation
+            ) { lead in
+                Button("Delete", role: .destructive) {
+                    beginPendingLeadDeletion(lead)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { lead in
+                Text("Remove \(lead.displayName)? You can undo this for a few seconds.")
+            }
+            .safeAreaInset(edge: .bottom) {
+                if let pendingLeadDeletion {
+                    ObsidianUndoBanner(message: "\(pendingLeadDeletion.name) removed") {
+                        undoPendingLeadDeletion()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                }
+            }
+            .onDisappear {
+                commitPendingLeadDeletion()
+            }
         }
     }
     
@@ -209,7 +277,12 @@ struct LeadsListView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Search leads")
 
-            HStack(spacing: 10) {
+            if teamSurfaceSummary != nil && roleContext != .technician {
+                leadSourceControl
+            }
+
+            if selectedSource == .personal {
+                HStack(spacing: 10) {
                 Button {
                     showingFilters = true
                 } label: {
@@ -284,10 +357,50 @@ struct LeadsListView: View {
                 .accessibilityIdentifier("leadsSortButton")
                 .accessibilityLabel("Sort leads")
                 .accessibilityValue("\(sortBy.rawValue), \(sortAscending ? "ascending" : "descending")")
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            } else {
+                Text("Search and filter the assigned Team leads shown below.")
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
         }
+    }
+
+    private var leadSourceControl: some View {
+        HStack(spacing: 4) {
+            ForEach(LeadSourceScope.allCases, id: \.self) { source in
+                let isSelected = selectedSource == source
+                Button {
+                    selectedSource = source
+                } label: {
+                    Text(source.rawValue)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(isSelected ? .white : Color.textSecondary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .fill(isSelected ? Color.electricViolet : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("leadSource_\(source.rawValue.lowercased())")
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+            }
+        }
+        .padding(4)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
     }
 
     private var activeFilterCount: Int {
@@ -316,7 +429,9 @@ struct LeadsListView: View {
             }
 
             Group {
-                if paginatedLeads.isEmpty && !isLoadingMore && teamSurfaceSummary == nil {
+                if selectedSource == .personal && paginatedLeads.isEmpty && !isLoadingMore {
+                    emptyStateView
+                } else if selectedSource == .team && teamSurfaceSummary == nil {
                     emptyStateView
                 } else {
                     leadsScrollView
@@ -405,9 +520,11 @@ struct LeadsListView: View {
     
     private var leadsScrollView: some View {
         List {
-            if let summary = teamSurfaceSummary {
+            if selectedSource == .team, let summary = teamSurfaceSummary {
                 TeamWorkInlineSection(
                     summary: summary,
+                    content: .leads,
+                    searchText: searchFilterManager.currentFilter.text,
                     selectedRepUserId: $selectedTeamRepUserId,
                     onOpenMap: { teamFieldMapSummary = teamSurfaceSummary },
                     onSelectLead: { selectedTeamLead = $0 }
@@ -417,49 +534,50 @@ struct LeadsListView: View {
                 .listRowSeparator(.hidden)
             }
 
-            ForEach(paginatedLeads, id: \.id) { lead in
-                LeadRowView(
-                    lead: lead,
-                    onTap: { selectedLead = lead },
-                    onDelete: {
-                        guard paywallManager.gateAction() else { return }
-                        handleLongPressDelete(lead)
-                    },
-                    onCall: {
-                        guard paywallManager.gateAction() else { return }
-                        if let phone = lead.phone, !phone.isEmpty {
-                            Utilities.makePhoneCall(to: phone)
+            if selectedSource == .personal && roleContext != .technician {
+                ForEach(paginatedLeads, id: \.id) { lead in
+                    LeadRowView(
+                        lead: lead,
+                        onTap: { selectedLead = lead },
+                        onDelete: {
+                            guard paywallManager.gateAction() else { return }
+                            requestLeadDeletion(lead)
+                        },
+                        onCall: {
+                            guard paywallManager.gateAction() else { return }
+                            if let phone = lead.phone, !phone.isEmpty {
+                                Utilities.makePhoneCall(to: phone)
+                            }
+                        },
+                        onMessage: {
+                            guard paywallManager.gateAction() else { return }
+                            messageLead = lead
+                        },
+                        onFollowUp: {
+                            guard paywallManager.gateAction() else { return }
+                            quickSetFollowUp(for: lead)
                         }
-                    },
-                    onMessage: {
-                        guard paywallManager.gateAction() else { return }
-                        messageLead = lead
-                    },
-                    onFollowUp: {
-                        guard paywallManager.gateAction() else { return }
-                        quickSetFollowUp(for: lead)
-                    }
-                )
-                .onLongPressGesture {
-                    guard paywallManager.gateAction() else { return }
-                    handleLongPressDelete(lead)
-                }
-                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                .listRowBackground(Color.obsidianBackground(for: colorScheme))
-                .listRowSeparator(.hidden)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Lead: \(lead.displayName)")
-                .accessibilityHint("Double tap to view lead details, long press to delete")
-                .accessibilityValue(leadAccessibilityValue(for: lead))
-                .accessibilityIdentifier("personalLeadRow")
-                .onAppear {
-                    if lead == paginatedLeads.last {
-                        loadMoreLeadsIfNeeded()
+                    )
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowBackground(Color.obsidianBackground(for: colorScheme))
+                    .listRowSeparator(.hidden)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Lead: \(lead.displayName)")
+                    .accessibilityHint("Double tap to view lead details. Swipe or use the context menu for actions.")
+                    .accessibilityValue(leadAccessibilityValue(for: lead))
+                    .accessibilityIdentifier("personalLeadRow")
+                    .onAppear {
+                        if lead == paginatedLeads.last {
+                            loadMoreLeadsIfNeeded()
+                        }
                     }
                 }
             }
 
-            if paginatedLeads.isEmpty && !isLoadingMore && teamSurfaceSummary != nil {
+            if selectedSource == .personal,
+               paginatedLeads.isEmpty,
+               !isLoadingMore,
+               teamSurfaceSummary != nil {
                 Text("No personal leads match this filter.")
                     .font(.obsidianFootnote)
                     .foregroundColor(Color.textMuted)
@@ -471,7 +589,7 @@ struct LeadsListView: View {
             }
 
             // Loading indicator at bottom
-            if isLoadingMore && hasMoreData {
+            if selectedSource == .personal && isLoadingMore && hasMoreData {
                 HStack {
                     ProgressView()
                         .scaleEffect(0.8)
@@ -504,24 +622,44 @@ struct LeadsListView: View {
         )
     }
     
-    private func handleLongPressDelete(_ lead: Lead) {
+    private func requestLeadDeletion(_ lead: Lead) {
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
-        
-        let alert = UIAlertController(
-            title: "Delete Lead",
-            message: "Delete \(lead.displayName)? This action cannot be undone.",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
-            deleteLead(lead)
-        })
-        
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
-            window.rootViewController?.present(alert, animated: true)
+
+        leadPendingDeletionConfirmation = lead
+        showingLeadDeletionConfirmation = true
+    }
+
+    private func beginPendingLeadDeletion(_ lead: Lead) {
+        commitPendingLeadDeletion()
+
+        let pending = PendingLeadDeletion(lead: lead, name: lead.displayName)
+        pendingLeadDeletion = pending
+        withAnimation(.easeInOut(duration: 0.2)) {
+            paginatedLeads.removeAll { $0.objectID == lead.objectID }
         }
+
+        pendingLeadDeletionTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled,
+                  pendingLeadDeletion?.id == pending.id else { return }
+            commitPendingLeadDeletion()
+        }
+    }
+
+    private func undoPendingLeadDeletion() {
+        pendingLeadDeletionTask?.cancel()
+        pendingLeadDeletionTask = nil
+        pendingLeadDeletion = nil
+        resetAndLoadLeads()
+    }
+
+    private func commitPendingLeadDeletion() {
+        pendingLeadDeletionTask?.cancel()
+        pendingLeadDeletionTask = nil
+        guard let pending = pendingLeadDeletion else { return }
+        pendingLeadDeletion = nil
+        deleteLead(pending.lead)
     }
     
     private func deleteLead(_ lead: Lead) {
