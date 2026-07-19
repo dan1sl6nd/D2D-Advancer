@@ -980,11 +980,16 @@ struct DataSyncHubView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var syncManager = UserDataSyncManager.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    @ObservedObject private var importBatchStore = LeadImportBatchStore.shared
     @State private var showingCloudProviderSheet = false
     @State private var showingSyncSettings = false
     @State private var exportFile: LeadExportFile?
     @State private var showingImportPicker = false
+    @State private var pendingCSVPreview: LeadCSVImportPreview?
+    @State private var isCommittingCSVImport = false
+    @State private var showingUndoImportConfirmation = false
     @State private var importResult: LeadImportResult?
+    @State private var undoResult: LeadImportUndoResult?
     @State private var importFailure: LeadImportFailure?
 
     @FetchRequest(
@@ -1097,6 +1102,24 @@ struct DataSyncHubView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("moreImportLeadsButton")
 
+                    if let latestBatch = importBatchStore.latestBatch {
+                        hubDivider
+
+                        Button {
+                            showingUndoImportConfirmation = true
+                        } label: {
+                            MoreCardView(
+                                icon: "arrow.uturn.backward.circle.fill",
+                                iconColor: Color.statusNotHome,
+                                title: "Undo Last Import",
+                                subtitle: undoImportSubtitle(for: latestBatch),
+                                showChevron: true
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("undoLastLeadImportButton")
+                    }
+
                     hubDivider
 
                     NavigationLink(destination: AppleContactLeadImportView()) {
@@ -1128,6 +1151,14 @@ struct DataSyncHubView: View {
         .sheet(item: $exportFile) { file in
             ShareSheet(activityItems: [file.url])
         }
+        .sheet(item: $pendingCSVPreview) { preview in
+            LeadCSVImportPreviewSheet(
+                preview: preview,
+                isImporting: $isCommittingCSVImport,
+                onCancel: { pendingCSVPreview = nil },
+                onImport: { commitCSVImport(preview) }
+            )
+        }
         .fileImporter(
             isPresented: $showingImportPicker,
             allowedContentTypes: [UTType.commaSeparatedText, UTType.plainText, UTType.text],
@@ -1147,6 +1178,23 @@ struct DataSyncHubView: View {
                 message: Text(failure.message),
                 dismissButton: .default(Text("OK"))
             )
+        }
+        .alert(item: $undoResult) { result in
+            Alert(
+                title: Text("Import Undone"),
+                message: Text(result.summary),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .confirmationDialog(
+            "Undo the last import?",
+            isPresented: $showingUndoImportConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Undo Import", role: .destructive, action: undoLatestImport)
+            Button("Keep Import", role: .cancel) {}
+        } message: {
+            Text("Only leads that have not changed since the import will be removed or restored.")
         }
     }
 
@@ -1212,19 +1260,138 @@ struct DataSyncHubView: View {
         case .success(let urls):
             guard let url = urls.first else { return }
             do {
-                let result = try LeadCSVService.importLeads(from: url, into: viewContext)
-                if NotificationService.shouldRefreshNotificationsAfterLeadDataMutation(
-                    inserted: result.created,
-                    updated: result.updated
-                ) {
-                    NotificationService.shared.refreshAllNotifications()
-                }
-                importResult = result
+                pendingCSVPreview = try LeadCSVService.previewImport(from: url, in: viewContext)
             } catch {
                 importFailure = LeadImportFailure(message: error.localizedDescription)
             }
         case .failure(let error):
             importFailure = LeadImportFailure(message: error.localizedDescription)
+        }
+    }
+
+    private func commitCSVImport(_ preview: LeadCSVImportPreview) {
+        guard !isCommittingCSVImport else { return }
+        isCommittingCSVImport = true
+        defer { isCommittingCSVImport = false }
+
+        do {
+            let result = try LeadCSVService.commitImport(
+                preview,
+                into: viewContext,
+                batchStore: importBatchStore
+            )
+            if NotificationService.shouldRefreshNotificationsAfterLeadDataMutation(
+                inserted: result.created,
+                updated: result.updated
+            ) {
+                NotificationService.shared.refreshAllNotifications()
+            }
+            pendingCSVPreview = nil
+            importResult = result
+            syncManager.syncWithServer()
+        } catch {
+            importFailure = LeadImportFailure(message: error.localizedDescription)
+        }
+    }
+
+    private func undoLatestImport() {
+        do {
+            guard let result = try importBatchStore.undoLatest(in: viewContext) else { return }
+            undoResult = result
+            NotificationService.shared.refreshAllNotifications()
+            syncManager.syncWithServer()
+        } catch {
+            importFailure = LeadImportFailure(message: "Undo failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func undoImportSubtitle(for batch: LeadImportBatch) -> String {
+        let leadText = "\(batch.affectedCount) lead\(batch.affectedCount == 1 ? "" : "s")"
+        return "\(batch.source.displayName) · \(leadText) · \(batch.createdAt.formatted(date: .abbreviated, time: .shortened))"
+    }
+}
+
+private struct LeadCSVImportPreviewSheet: View {
+    let preview: LeadCSVImportPreview
+    @Binding var isImporting: Bool
+    let onCancel: () -> Void
+    let onImport: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    LeadFormSectionCard(title: "Import Summary", icon: "doc.badge.arrow.up") {
+                        previewMetric(title: "New leads", value: preview.created, color: Color.statusInterested)
+                        previewMetric(title: "Existing leads updated", value: preview.updated, color: Color.electricViolet)
+                        previewMetric(title: "Rows skipped", value: preview.skipped, color: Color.statusNotHome)
+                    }
+
+                    if !preview.errors.isEmpty {
+                        LeadFormSectionCard(title: "Review Notes", icon: "exclamationmark.triangle.fill") {
+                            ForEach(Array(preview.errors.prefix(5).enumerated()), id: \.offset) { _, message in
+                                Text(message)
+                                    .font(.obsidianFootnote)
+                                    .foregroundColor(Color.textSecondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            if preview.errors.count > 5 {
+                                Text("Plus \(preview.errors.count - 5) more note\(preview.errors.count - 5 == 1 ? "" : "s").")
+                                    .font(.obsidianFootnote)
+                                    .foregroundColor(Color.textMuted)
+                            }
+                        }
+                    }
+
+                    Text("The import is saved as one reversible batch. Undo will preserve any lead you edit afterward.")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 12)
+                }
+                .padding(16)
+            }
+            .obsidianScreenBackground()
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HStack(spacing: 12) {
+                    Button("Cancel", action: onCancel)
+                        .buttonStyle(ObsidianSecondaryButtonStyle())
+
+                    Button(action: onImport) {
+                        HStack(spacing: 8) {
+                            if isImporting {
+                                ProgressView().tint(Color.obsidianBlack)
+                            } else {
+                                Image(systemName: "square.and.arrow.down.fill")
+                            }
+                            Text(isImporting ? "Importing" : "Import \(preview.changeCount)")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ObsidianPrimaryButtonStyle())
+                    .disabled(isImporting || preview.changeCount == 0)
+                    .accessibilityIdentifier("confirmCSVImportButton")
+                }
+                .padding(16)
+                .background(Color.obsidianSurface)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Color.obsidianBorder.opacity(0.5)).frame(height: 0.5)
+                }
+            }
+            .obsidianPushedNavigation("Review Import", backButtonAccessibilityIdentifier: "csvImportPreviewBackButton")
+        }
+    }
+
+    private func previewMetric(title: String, value: Int, color: Color) -> some View {
+        HStack {
+            Text(title)
+                .font(.obsidianBody)
+                .foregroundColor(Color.textSecondary)
+            Spacer()
+            Text("\(value)")
+                .font(.obsidianHeadline)
+                .foregroundColor(color)
         }
     }
 }

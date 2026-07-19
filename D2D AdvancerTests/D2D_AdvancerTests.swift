@@ -2558,6 +2558,139 @@ struct D2D_AdvancerTests {
     }
 
     @MainActor
+    @Test func csvImportPreviewIsReadOnlyAndUndoRemovesUntouchedLeads() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let historyURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lead-import-history-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: historyURL) }
+        let batchStore = LeadImportBatchStore(fileURL: historyURL)
+        let csv = """
+        Name,Status,Latitude,Longitude
+        Preview Lead,Interested,43.5597,-79.7072
+        """
+
+        let preview = try LeadCSVService.previewImport(contents: csv, in: context)
+        #expect(preview.created == 1)
+        #expect(preview.updated == 0)
+        #expect(try context.count(for: Lead.fetchRequest(in: context)) == 0)
+
+        let result = try LeadCSVService.commitImport(preview, into: context, batchStore: batchStore)
+        #expect(result.created == 1)
+        #expect(result.batchID != nil)
+        #expect(try context.count(for: Lead.fetchRequest(in: context)) == 1)
+
+        let undo = try #require(try batchStore.undoLatest(in: context))
+        #expect(undo.deleted == 1)
+        #expect(undo.skippedModified == 0)
+        #expect(try context.count(for: Lead.fetchRequest(in: context)) == 0)
+    }
+
+    @MainActor
+    @Test func csvImportUndoRestoresExistingLeadSnapshot() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let existing = Lead.create(in: context)
+        let id = try #require(existing.id)
+        existing.name = "Original Name"
+        existing.phone = "555-0000"
+        existing.notes = "Keep this note"
+        existing.latitude = 43.5597
+        existing.longitude = -79.7072
+        try context.save()
+
+        let historyURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lead-import-history-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: historyURL) }
+        let batchStore = LeadImportBatchStore(fileURL: historyURL)
+        let csv = """
+        ID,Name,Phone,Notes
+        \(id.uuidString),Imported Name,555-1234,Imported note
+        """
+
+        let preview = try LeadCSVService.previewImport(contents: csv, in: context)
+        let result = try LeadCSVService.commitImport(preview, into: context, batchStore: batchStore)
+        #expect(result.updated == 1)
+        #expect(existing.name == "Imported Name")
+
+        let undo = try #require(try batchStore.undoLatest(in: context))
+        #expect(undo.restored == 1)
+        #expect(existing.name == "Original Name")
+        #expect(existing.phone == "555-0000")
+        #expect(existing.notes == "Keep this note")
+    }
+
+    @MainActor
+    @Test func importUndoPreservesLeadEditedAfterImport() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let historyURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lead-import-history-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: historyURL) }
+        let batchStore = LeadImportBatchStore(fileURL: historyURL)
+        let csv = """
+        Name,Latitude,Longitude
+        Edited Later,43.5597,-79.7072
+        """
+
+        let preview = try LeadCSVService.previewImport(contents: csv, in: context)
+        _ = try LeadCSVService.commitImport(preview, into: context, batchStore: batchStore)
+        let lead = try #require(try context.fetch(Lead.fetchRequest(in: context)).first)
+        lead.notes = "User added this after import"
+        lead.updatedDate = Date().addingTimeInterval(10)
+        try context.save()
+
+        let undo = try #require(try batchStore.undoLatest(in: context))
+        #expect(undo.deleted == 0)
+        #expect(undo.skippedModified == 1)
+        #expect(try context.count(for: Lead.fetchRequest(in: context)) == 1)
+        #expect(lead.notes == "User added this after import")
+    }
+
+    @MainActor
+    @Test func importUndoPreservesLeadWithNewCheckInAfterImport() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let historyURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lead-import-history-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: historyURL) }
+        let batchStore = LeadImportBatchStore(fileURL: historyURL)
+        let csv = """
+        Name,Latitude,Longitude
+        Checked In Later,43.5597,-79.7072
+        """
+
+        let preview = try LeadCSVService.previewImport(contents: csv, in: context)
+        _ = try LeadCSVService.commitImport(preview, into: context, batchStore: batchStore)
+        let lead = try #require(try context.fetch(Lead.fetchRequest(in: context)).first)
+        _ = FollowUpCheckIn.create(in: context, for: lead)
+        try context.save()
+
+        let undo = try #require(try batchStore.undoLatest(in: context))
+        #expect(undo.deleted == 0)
+        #expect(undo.skippedModified == 1)
+        #expect(try context.count(for: Lead.fetchRequest(in: context)) == 1)
+        #expect(lead.checkInCount == 1)
+    }
+
+    @MainActor
+    @Test func csvImportPreviewRejectsDuplicateIDsWithinFile() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let id = UUID()
+        let csv = """
+        ID,Name,Latitude,Longitude
+        \(id.uuidString),First,43.5597,-79.7072
+        \(id.uuidString),Second,43.5598,-79.7073
+        """
+
+        let preview = try LeadCSVService.previewImport(contents: csv, in: context)
+        #expect(preview.created == 1)
+        #expect(preview.skipped == 1)
+        #expect(preview.errors.contains { $0.contains("duplicate ID") })
+    }
+
+    @MainActor
     @Test func csvImportSkipsNewRowsWithoutUsableCoordinates() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext

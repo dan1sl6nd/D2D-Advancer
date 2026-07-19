@@ -12,15 +12,18 @@ struct AppleContactLeadImportView: View {
     private struct ImportOutcome {
         let created: Int
         let updated: Int
+        let undoAvailable: Bool
 
         var message: String {
+            let result: String
             if updated == 0 {
-                return "\(created) lead\(created == 1 ? "" : "s") added to Leads and Map."
+                result = "\(created) lead\(created == 1 ? "" : "s") added to Leads and Map."
+            } else if created == 0 {
+                result = "\(updated) existing lead\(updated == 1 ? "" : "s") updated with Mac contact details."
+            } else {
+                result = "\(created) added and \(updated) updated with Mac contact details."
             }
-            if created == 0 {
-                return "\(updated) existing lead\(updated == 1 ? "" : "s") updated with Mac contact details."
-            }
-            return "\(created) added and \(updated) updated with Mac contact details."
+            return undoAvailable ? result + " Undo is available in Data & Sync." : result
         }
     }
 
@@ -676,13 +679,20 @@ struct AppleContactLeadImportView: View {
         let leadByID = existingLeadsByID
         var updatedCandidateIDs: Set<String> = []
         var updatedLeadIDs: Set<UUID> = []
+        var updatedLeads: [Lead] = []
+        var updatedBeforeSnapshots: [UUID: LeadImportSnapshot] = [:]
         for candidate in selectedUpdateCandidates {
             guard let leadID = existingLeadIDByCandidateID[candidate.id],
                   let existingLead = leadByID[leadID] else {
                 continue
             }
+            let beforeSnapshot = LeadImportSnapshot(lead: existingLead)
             if AppleContactLeadImportService.updateLead(existingLead, from: candidate) {
                 updatedLeadIDs.insert(leadID)
+                updatedLeads.append(existingLead)
+                if let beforeSnapshot {
+                    updatedBeforeSnapshots[leadID] = beforeSnapshot
+                }
             }
             updatedCandidateIDs.insert(candidate.id)
         }
@@ -693,15 +703,31 @@ struct AppleContactLeadImportView: View {
 
         do {
             try viewContext.save()
+            let batchSource: LeadImportSource = candidateSource == .device
+                ? .appleContactsDevice
+                : .appleContactsMac
+            var undoAvailable = false
+            do {
+                undoAvailable = try LeadImportBatchStore.shared.record(
+                    source: batchSource,
+                    createdLeads: insertedLeads,
+                    updatedBeforeSnapshots: updatedBeforeSnapshots,
+                    updatedLeads: updatedLeads
+                ) != nil
+            } catch {
+                AppLog.warning("Import", "Apple Contacts import history could not be persisted.")
+            }
             let importedIDs = Set(selectedNewCandidates.map(\.id)).union(updatedCandidateIDs)
             duplicateCandidateIDs.formUnion(importedIDs)
             updateCandidateIDs.subtract(updatedCandidateIDs)
             selectedCandidateIDs.subtract(importedIDs)
             lastImportOutcome = ImportOutcome(
                 created: insertedLeads.count,
-                updated: updatedLeadIDs.count
+                updated: updatedLeadIDs.count,
+                undoAvailable: undoAvailable
             )
             phase = .ready
+            NotificationService.shared.refreshAllNotifications()
             UserDataSyncManager.shared.syncWithServer()
         } catch {
             viewContext.rollback()
