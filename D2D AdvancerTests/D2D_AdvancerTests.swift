@@ -341,7 +341,7 @@ struct D2D_AdvancerTests {
         #expect(lead.estimatedValue == 249)
         #expect(lead.serviceCategory == "window_cleaning")
         #expect(lead.source == "Apple Contacts")
-        #expect(lead.leadStatus == .notContacted)
+        #expect(lead.leadStatus == .converted)
         #expect(lead.latitude == 43.6532)
         #expect(lead.longitude == -79.3832)
     }
@@ -360,6 +360,89 @@ struct D2D_AdvancerTests {
         } catch let error as MacContactLeadPackageError {
             #expect(error == .unsupportedSchema(99))
         }
+    }
+
+    @Test func macContactPackageConsolidatesDuplicatesWithoutLosingSaleOrNotes() throws {
+        let unpriced = AppleContactLeadCandidate(
+            id: "duplicate-unpriced",
+            displayName: "Existing Customer",
+            phone: "(416) 555-0100",
+            email: nil,
+            address: "100 Main Street, Toronto, ON",
+            service: .windowCleaning,
+            notes: "Prefers Friday afternoon."
+        )
+        let priced = AppleContactLeadCandidate(
+            id: "duplicate-priced",
+            displayName: "Existing Customer",
+            phone: "4165550100",
+            email: "customer@example.com",
+            address: "100 Main Street, Toronto, ON",
+            service: .windowCleaning,
+            notes: "Window cleaning quote: $349",
+            price: 349
+        )
+
+        let consolidated = AppleContactLeadCandidateConsolidator.consolidatingDuplicates([
+            unpriced,
+            priced
+        ])
+        let candidate = try #require(consolidated.first)
+
+        #expect(consolidated.count == 1)
+        #expect(candidate.id == "duplicate-priced")
+        #expect(candidate.price == 349)
+        #expect(candidate.email == "customer@example.com")
+        #expect(candidate.notes?.contains("Prefers Friday afternoon.") == true)
+        #expect(candidate.notes?.contains("Window cleaning quote: $349") == true)
+        #expect(AppleContactLeadImportStatusPolicy.status(forNew: candidate) == .converted)
+    }
+
+    @Test func macContactPackageConsolidationHandlesTransitiveMatchesButNotNamesAlone() {
+        let first = AppleContactLeadCandidate(
+            id: "transitive-phone",
+            displayName: "Same Display Name",
+            phone: "416-555-0100",
+            email: nil,
+            address: nil,
+            service: .windowCleaning
+        )
+        let bridge = AppleContactLeadCandidate(
+            id: "transitive-bridge",
+            displayName: "Different Name",
+            phone: "416-555-0100",
+            email: "shared@example.com",
+            address: nil,
+            service: .windowCleaning
+        )
+        let last = AppleContactLeadCandidate(
+            id: "transitive-email",
+            displayName: "Third Name",
+            phone: nil,
+            email: "shared@example.com",
+            address: nil,
+            service: .windowCleaning,
+            price: 500
+        )
+        let nameOnly = AppleContactLeadCandidate(
+            id: "same-name-only",
+            displayName: "Same Display Name",
+            phone: "647-555-0199",
+            email: nil,
+            address: nil,
+            service: .windowCleaning
+        )
+
+        let consolidated = AppleContactLeadCandidateConsolidator.consolidatingDuplicates([
+            first,
+            bridge,
+            last,
+            nameOnly
+        ])
+
+        #expect(consolidated.count == 2)
+        #expect(consolidated.contains { $0.id == "transitive-email" && $0.price == 500 })
+        #expect(consolidated.contains { $0.id == "same-name-only" })
     }
 
     @MainActor
@@ -409,6 +492,7 @@ struct D2D_AdvancerTests {
         #expect(lead.price == 249)
         #expect(lead.estimatedValue == 249)
         #expect(lead.serviceCategory == "window_cleaning")
+        #expect(lead.leadStatus == .converted)
         #expect(!AppleContactLeadImportService.canUpdateLead(lead, from: candidate))
         #expect(!AppleContactLeadImportService.updateLead(lead, from: candidate))
     }
@@ -441,6 +525,50 @@ struct D2D_AdvancerTests {
         #expect(lead.estimatedValue == 350)
         #expect(lead.notes?.contains("Manual app note.") == true)
         #expect(lead.notes?.contains("Window cleaning quote: $249") == true)
+        #expect(lead.leadStatus == .converted)
+    }
+
+    @MainActor
+    @Test func macContactImportStatusPolicyPromotesActiveLeadsWithoutDowngradingTerminalHistory() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let candidate = AppleContactLeadCandidate(
+            id: "mac-contact-no-price",
+            displayName: "Interested Customer",
+            phone: "416-555-0134",
+            email: nil,
+            address: nil,
+            service: .windowCleaning,
+            notes: nil,
+            price: nil,
+            coordinate: nil
+        )
+
+        #expect(AppleContactLeadImportStatusPolicy.status(forNew: candidate) == .interested)
+
+        let activeLead = Lead.create(in: context)
+        activeLead.name = candidate.displayName
+        activeLead.phone = candidate.phone
+        activeLead.serviceCategory = candidate.service.serviceCategoryID
+        activeLead.applyLeadStatus(.notHome, autoSave: false)
+        #expect(AppleContactLeadImportService.updateLead(activeLead, from: candidate))
+        #expect(activeLead.leadStatus == .interested)
+
+        let soldLead = Lead.create(in: context)
+        soldLead.name = candidate.displayName
+        soldLead.phone = candidate.phone
+        soldLead.serviceCategory = candidate.service.serviceCategoryID
+        soldLead.applyLeadStatus(.converted, autoSave: false)
+        #expect(!AppleContactLeadImportService.updateLead(soldLead, from: candidate))
+        #expect(soldLead.leadStatus == .converted)
+
+        let passedLead = Lead.create(in: context)
+        passedLead.name = candidate.displayName
+        passedLead.phone = candidate.phone
+        passedLead.serviceCategory = candidate.service.serviceCategoryID
+        passedLead.applyLeadStatus(.notInterested, autoSave: false)
+        #expect(!AppleContactLeadImportService.updateLead(passedLead, from: candidate))
+        #expect(passedLead.leadStatus == .notInterested)
     }
 
     @MainActor
@@ -464,7 +592,12 @@ struct D2D_AdvancerTests {
         )
 
         #expect(AppleContactLeadImportService.needsGeocodingForUpdate(lead, from: candidate))
-        #expect(!AppleContactLeadImportService.canUpdateLead(lead, from: candidate))
+        #expect(AppleContactLeadImportService.canUpdateLead(lead, from: candidate))
+        #expect(AppleContactLeadImportService.updateLead(lead, from: candidate))
+        #expect(lead.leadStatus == .interested)
+        #expect(lead.address == nil)
+        #expect(lead.latitude == 0)
+        #expect(lead.longitude == 0)
 
         candidate.coordinate = AppleContactLeadCoordinate(
             latitude: 43.6532,

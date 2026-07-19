@@ -280,6 +280,129 @@ enum AppleContactLeadMergePolicy {
     }
 }
 
+enum AppleContactLeadImportStatusPolicy {
+    static func status(forNew candidate: AppleContactLeadCandidate) -> Lead.Status {
+        candidate.price.map { $0 > 0 } == true ? .converted : .interested
+    }
+
+    static func status(
+        forExisting currentStatus: Lead.Status,
+        candidate: AppleContactLeadCandidate
+    ) -> Lead.Status {
+        if candidate.price.map({ $0 > 0 }) == true {
+            return .converted
+        }
+
+        switch currentStatus {
+        case .converted, .notInterested:
+            return currentStatus
+        case .notContacted, .notHome, .interested:
+            return .interested
+        }
+    }
+}
+
+enum AppleContactLeadCandidateConsolidator {
+    static func consolidatingDuplicates(
+        _ candidates: [AppleContactLeadCandidate]
+    ) -> [AppleContactLeadCandidate] {
+        guard candidates.count > 1 else { return candidates }
+
+        var parents = Array(candidates.indices)
+        var firstIndexByMatchKey: [String: Int] = [:]
+
+        func root(of index: Int) -> Int {
+            var current = index
+            while parents[current] != current {
+                current = parents[current]
+            }
+            return current
+        }
+
+        func union(_ lhs: Int, _ rhs: Int) {
+            let lhsRoot = root(of: lhs)
+            let rhsRoot = root(of: rhs)
+            if lhsRoot != rhsRoot {
+                parents[rhsRoot] = lhsRoot
+            }
+        }
+
+        for (index, candidate) in candidates.enumerated() {
+            for key in matchKeys(for: candidate) {
+                if let existingIndex = firstIndexByMatchKey[key] {
+                    union(index, existingIndex)
+                } else {
+                    firstIndexByMatchKey[key] = index
+                }
+            }
+        }
+
+        var groupedIndices: [Int: [Int]] = [:]
+        for index in candidates.indices {
+            groupedIndices[root(of: index), default: []].append(index)
+        }
+
+        return groupedIndices.values
+            .sorted { ($0.min() ?? 0) < ($1.min() ?? 0) }
+            .map { indices in
+                mergedCandidate(indices.map { candidates[$0] })
+            }
+    }
+
+    private static func matchKeys(for candidate: AppleContactLeadCandidate) -> [String] {
+        var keys: [String] = []
+        if let phone = AppleContactLeadMatchPolicy.normalizedPhone(candidate.phone) {
+            keys.append("phone:\(phone)")
+        }
+        if let email = AppleContactLeadMatchPolicy.normalizedEmail(candidate.email) {
+            keys.append("email:\(email)")
+        }
+        if let address = AppleContactLeadMatchPolicy.normalizedAddress(candidate.address) {
+            keys.append("address:\(address)")
+        }
+        return keys
+    }
+
+    private static func mergedCandidate(
+        _ candidates: [AppleContactLeadCandidate]
+    ) -> AppleContactLeadCandidate {
+        let preferred = candidates.first { $0.price.map({ $0 > 0 }) == true }
+            ?? candidates[0]
+        let address = cleaned(preferred.address)
+            ?? candidates.lazy.compactMap { cleaned($0.address) }.first
+        let normalizedAddress = AppleContactLeadMatchPolicy.normalizedAddress(address)
+        let coordinate = candidates.first {
+            $0.coordinate?.isValid == true
+                && AppleContactLeadMatchPolicy.normalizedAddress($0.address) == normalizedAddress
+        }?.coordinate
+        var notes: String?
+        for candidate in candidates {
+            notes = AppleContactLeadMergePolicy.mergedNotes(
+                existing: notes,
+                imported: candidate.notes
+            )
+        }
+
+        return AppleContactLeadCandidate(
+            id: preferred.id,
+            displayName: preferred.displayName,
+            phone: cleaned(preferred.phone) ?? candidates.lazy.compactMap { cleaned($0.phone) }.first,
+            email: cleaned(preferred.email) ?? candidates.lazy.compactMap { cleaned($0.email) }.first,
+            address: address,
+            service: preferred.service,
+            notes: notes,
+            price: preferred.price,
+            coordinate: coordinate,
+            didAttemptGeocoding: candidates.contains(where: \.didAttemptGeocoding)
+        )
+    }
+
+    private static func cleaned(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+}
+
 struct AppleContactLeadDuplicateIndex: Sendable {
     private var phones: Set<String>
     private var emails: Set<String>
@@ -453,7 +576,10 @@ final class AppleContactLeadImportService {
             lead.price = price
             lead.estimatedValue = price
         }
-        lead.applyLeadStatus(.notContacted, autoSave: false)
+        lead.applyLeadStatus(
+            AppleContactLeadImportStatusPolicy.status(forNew: candidate),
+            autoSave: false
+        )
         return lead
     }
 
@@ -461,27 +587,44 @@ final class AppleContactLeadImportService {
     static func updateLead(_ lead: Lead, from candidate: AppleContactLeadCandidate) -> Bool {
         let existing = mergeSnapshot(for: lead)
         let plan = AppleContactLeadMergePolicy.plan(existing: existing, candidate: candidate)
-        guard plan.hasChanges(comparedWith: existing) else { return false }
+        let resolvedStatus = AppleContactLeadImportStatusPolicy.status(
+            forExisting: lead.leadStatus,
+            candidate: candidate
+        )
+        let hasFieldChanges = plan.hasChanges(comparedWith: existing)
+        let hasStatusChange = resolvedStatus != lead.leadStatus
+        guard hasFieldChanges || hasStatusChange else { return false }
 
-        lead.name = plan.name
-        lead.phone = plan.phone
-        lead.email = plan.email
-        lead.address = plan.address
-        lead.notes = plan.notes
-        lead.serviceCategory = plan.serviceCategory
-        lead.latitude = plan.latitude
-        lead.longitude = plan.longitude
-        lead.price = plan.price
-        lead.estimatedValue = plan.estimatedValue
-        lead.updatedDate = Date()
+        if hasFieldChanges {
+            lead.name = plan.name
+            lead.phone = plan.phone
+            lead.email = plan.email
+            lead.address = plan.address
+            lead.notes = plan.notes
+            lead.serviceCategory = plan.serviceCategory
+            lead.latitude = plan.latitude
+            lead.longitude = plan.longitude
+            lead.price = plan.price
+            lead.estimatedValue = plan.estimatedValue
+        }
+        if hasStatusChange {
+            lead.applyLeadStatus(resolvedStatus, autoSave: false)
+        } else {
+            lead.updatedDate = Date()
+        }
         return true
     }
 
     static func canUpdateLead(_ lead: Lead, from candidate: AppleContactLeadCandidate) -> Bool {
         let existing = mergeSnapshot(for: lead)
-        return AppleContactLeadMergePolicy
+        let fieldsCanChange = AppleContactLeadMergePolicy
             .plan(existing: existing, candidate: candidate)
             .hasChanges(comparedWith: existing)
+        let resolvedStatus = AppleContactLeadImportStatusPolicy.status(
+            forExisting: lead.leadStatus,
+            candidate: candidate
+        )
+        return fieldsCanChange || resolvedStatus != lead.leadStatus
     }
 
     static func needsGeocodingForUpdate(

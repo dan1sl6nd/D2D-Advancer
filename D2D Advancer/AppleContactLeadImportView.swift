@@ -423,7 +423,7 @@ struct AppleContactLeadImportView: View {
 
     private func candidateStatus(_ candidate: AppleContactLeadCandidate) -> (text: String, icon: String, tint: Color) {
         if updateCandidateIDs.contains(candidate.id) {
-            return ("Update Notes & Price", "arrow.triangle.2.circlepath", Color.statusInterested)
+            return ("Update Details & Status", "arrow.triangle.2.circlepath", Color.statusInterested)
         }
         if duplicateCandidateIDs.contains(candidate.id) {
             return ("Already in Leads", "checkmark.circle", Color.statusNotHome)
@@ -541,7 +541,10 @@ struct AppleContactLeadImportView: View {
             let packageCandidates = try await Task.detached(priority: .userInitiated) {
                 try MacContactLeadPackageService.loadCandidates(from: url)
             }.value
-            await prepareCandidates(packageCandidates, hasLimitedAccess: false)
+            await prepareCandidates(
+                AppleContactLeadCandidateConsolidator.consolidatingDuplicates(packageCandidates),
+                hasLimitedAccess: false
+            )
         } catch {
             candidates = []
             hasLimitedAccess = false
@@ -578,15 +581,10 @@ struct AppleContactLeadImportView: View {
         var duplicates: Set<String> = []
         var updates: Set<String> = []
         var matchedLeadIDs: [String: UUID] = [:]
-        var claimedExistingLeadIDs: Set<UUID> = []
 
         for candidate in candidates {
             if let leadID = matchIndex.matchingLeadID(for: candidate),
                let existingLead = leadByID[leadID] {
-                guard claimedExistingLeadIDs.insert(leadID).inserted else {
-                    duplicates.insert(candidate.id)
-                    continue
-                }
                 matchedLeadIDs[candidate.id] = leadID
                 if candidateSource == .macPackage,
                    AppleContactLeadImportService.canUpdateLead(existingLead, from: candidate)
@@ -677,14 +675,14 @@ struct AppleContactLeadImportView: View {
         errorMessage = nil
         let leadByID = existingLeadsByID
         var updatedCandidateIDs: Set<String> = []
-        var updatedLeadCount = 0
+        var updatedLeadIDs: Set<UUID> = []
         for candidate in selectedUpdateCandidates {
             guard let leadID = existingLeadIDByCandidateID[candidate.id],
                   let existingLead = leadByID[leadID] else {
                 continue
             }
             if AppleContactLeadImportService.updateLead(existingLead, from: candidate) {
-                updatedLeadCount += 1
+                updatedLeadIDs.insert(leadID)
             }
             updatedCandidateIDs.insert(candidate.id)
         }
@@ -701,7 +699,7 @@ struct AppleContactLeadImportView: View {
             selectedCandidateIDs.subtract(importedIDs)
             lastImportOutcome = ImportOutcome(
                 created: insertedLeads.count,
-                updated: updatedLeadCount
+                updated: updatedLeadIDs.count
             )
             phase = .ready
             UserDataSyncManager.shared.syncWithServer()
