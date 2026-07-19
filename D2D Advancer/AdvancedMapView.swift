@@ -2,6 +2,55 @@ import SwiftUI
 import MapKit
 import UIKit
 import CoreData
+import os
+
+enum MapPerformanceTrace {
+    static let log = OSLog(
+        subsystem: "dan1sland.D2D-Advancer",
+        category: "MapPerformance"
+    )
+}
+
+struct MapLeadAnnotationSignature: Equatable, Hashable {
+    let objectID: NSManagedObjectID
+    let latitude: Double
+    let longitude: Double
+    let status: String
+    let name: String
+    let address: String
+    let priority: Int16
+    let followUpDate: TimeInterval
+    let price: Double
+    let estimatedValue: Double
+
+    init(pin: MapLeadPin) {
+        self.objectID = pin.objectID
+        self.latitude = pin.latitude
+        self.longitude = pin.longitude
+        self.status = pin.status.rawValue
+        self.name = pin.name
+        self.address = pin.address
+        self.priority = pin.priority
+        self.followUpDate = pin.followUpDate?.timeIntervalSince1970 ?? 0
+        self.price = pin.price
+        self.estimatedValue = pin.estimatedValue
+    }
+}
+
+struct MapLeadAnnotationRevision: Equatable {
+    let pinCount: Int
+    private let contentHash: Int
+
+    init(pins: [MapLeadPin]) {
+        var hasher = Hasher()
+        hasher.combine(pins.count)
+        for pin in pins {
+            hasher.combine(MapLeadAnnotationSignature(pin: pin))
+        }
+        self.pinCount = pins.count
+        self.contentHash = hasher.finalize()
+    }
+}
 
 struct AdvancedMapView: UIViewRepresentable {
     @Binding var region: MKCoordinateRegion
@@ -15,6 +64,7 @@ struct AdvancedMapView: UIViewRepresentable {
     let launchLocationCenterRevision: Int
 
     let leads: [MapLeadPin]
+    let leadAnnotationRevision: MapLeadAnnotationRevision
     let isVisible: Bool
     @Binding var searchPin: SearchPin?
     let showsUserLocation: Bool
@@ -97,7 +147,11 @@ struct AdvancedMapView: UIViewRepresentable {
             if !showsUserLocation && mapView.showsUserLocation {
                 mapView.showsUserLocation = false
             }
-            coordinator.updateHiddenAnnotationsIfNeeded(mapView: mapView, leads: leads)
+            coordinator.updateHiddenAnnotationsIfNeeded(
+                mapView: mapView,
+                leads: leads,
+                revision: leadAnnotationRevision
+            )
             return
         }
 
@@ -286,7 +340,11 @@ struct AdvancedMapView: UIViewRepresentable {
             )
         }
 
-        coordinator.updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
+        coordinator.updateAnnotationsIfNeeded(
+            mapView: mapView,
+            leads: leads,
+            revision: leadAnnotationRevision
+        )
         coordinator.updateSearchPin(mapView: mapView, searchPin: searchPin)
     }
     
@@ -647,7 +705,8 @@ struct AdvancedMapView: UIViewRepresentable {
         private static let annotationBatchDelay: TimeInterval = 0.022
         private var currentAnnotations: [LeadMapAnnotation] = []
         private var currentSearchPinAnnotation: MKPointAnnotation?
-        private var currentAnnotationSignature: [LeadAnnotationSignature] = []
+        private var currentAnnotationSignature: [MapLeadAnnotationSignature] = []
+        private var currentAnnotationRevision: MapLeadAnnotationRevision?
         private var currentLeadClusteringMode: LeadClusterDisplayPolicy.Mode?
         private var annotationUpdateGeneration = 0
         private var pendingAnnotationWorkItems: [DispatchWorkItem] = []
@@ -818,9 +877,36 @@ struct AdvancedMapView: UIViewRepresentable {
             )
         }
         
-        func updateAnnotationsIfNeeded(mapView: MKMapView, leads: [MapLeadPin]) {
-            let newSignature = leads.map { LeadAnnotationSignature(pin: $0) }
-            guard newSignature != currentAnnotationSignature else { return }
+        func updateAnnotationsIfNeeded(
+            mapView: MKMapView,
+            leads: [MapLeadPin],
+            revision: MapLeadAnnotationRevision
+        ) {
+            guard revision != currentAnnotationRevision else { return }
+
+            let signpostID = OSSignpostID(log: MapPerformanceTrace.log)
+            os_signpost(
+                .begin,
+                log: MapPerformanceTrace.log,
+                name: "ReconcileLeadAnnotations",
+                signpostID: signpostID,
+                "pins=%{public}d",
+                leads.count
+            )
+            defer {
+                os_signpost(
+                    .end,
+                    log: MapPerformanceTrace.log,
+                    name: "ReconcileLeadAnnotations",
+                    signpostID: signpostID
+                )
+            }
+
+            let newSignature = leads.map { MapLeadAnnotationSignature(pin: $0) }
+            guard newSignature != currentAnnotationSignature else {
+                currentAnnotationRevision = revision
+                return
+            }
 
             annotationUpdateGeneration += 1
             let generation = annotationUpdateGeneration
@@ -863,6 +949,7 @@ struct AdvancedMapView: UIViewRepresentable {
             }
             currentAnnotations = newAnnotations
             currentAnnotationSignature = newSignature
+            currentAnnotationRevision = revision
 
             AppLog.debug("Map", "Updated map annotations: \(currentAnnotations.count) leads displayed")
         }
@@ -898,8 +985,12 @@ struct AdvancedMapView: UIViewRepresentable {
             .count
         }
 
-        func updateHiddenAnnotationsIfNeeded(mapView: MKMapView, leads: [MapLeadPin]) {
-            updateAnnotationsIfNeeded(mapView: mapView, leads: leads)
+        func updateHiddenAnnotationsIfNeeded(
+            mapView: MKMapView,
+            leads: [MapLeadPin],
+            revision: MapLeadAnnotationRevision
+        ) {
+            updateAnnotationsIfNeeded(mapView: mapView, leads: leads, revision: revision)
         }
 
         private func cancelPendingAnnotationUpdates() {
@@ -969,32 +1060,6 @@ struct AdvancedMapView: UIViewRepresentable {
                 annotation.title = pin.title
                 mapView.addAnnotation(annotation)
                 currentSearchPinAnnotation = annotation
-            }
-        }
-
-        private struct LeadAnnotationSignature: Equatable, Hashable {
-            let objectID: NSManagedObjectID
-            let latitude: Double
-            let longitude: Double
-            let status: String
-            let name: String
-            let address: String
-            let priority: Int16
-            let followUpDate: TimeInterval
-            let price: Double
-            let estimatedValue: Double
-
-            init(pin: MapLeadPin) {
-                self.objectID = pin.objectID
-                self.latitude = pin.latitude
-                self.longitude = pin.longitude
-                self.status = pin.status.rawValue
-                self.name = pin.name
-                self.address = pin.address
-                self.priority = pin.priority
-                self.followUpDate = pin.followUpDate?.timeIntervalSince1970 ?? 0
-                self.price = pin.price
-                self.estimatedValue = pin.estimatedValue
             }
         }
 

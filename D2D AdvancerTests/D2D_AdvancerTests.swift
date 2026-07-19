@@ -3704,6 +3704,39 @@ struct D2D_AdvancerTests {
     }
 
     @MainActor
+    @Test func mapLeadAnnotationRevisionTracksOnlyRenderedMarkerContent() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let lead = Lead.create(in: context)
+        lead.name = "Original"
+        lead.address = "100 Main Street"
+        lead.status = Lead.Status.notContacted.rawValue
+        lead.latitude = 43.55
+        lead.longitude = -79.70
+        lead.updatedDate = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let originalPin = try #require(MapLeadPin(lead: lead))
+        let originalRevision = MapLeadAnnotationRevision(pins: [originalPin])
+        #expect(originalRevision == MapLeadAnnotationRevision(pins: [originalPin]))
+        #expect(originalRevision.pinCount == 1)
+
+        lead.updatedDate = Date(timeIntervalSince1970: 1_800_000_500)
+        let metadataOnlyPin = try #require(MapLeadPin(lead: lead))
+        #expect(originalRevision == MapLeadAnnotationRevision(pins: [metadataOnlyPin]))
+
+        lead.name = "Updated"
+        let renamedPin = try #require(MapLeadPin(lead: lead))
+        #expect(originalRevision != MapLeadAnnotationRevision(pins: [renamedPin]))
+
+        lead.status = Lead.Status.interested.rawValue
+        let statusChangedPin = try #require(MapLeadPin(lead: lead))
+        #expect(
+            MapLeadAnnotationRevision(pins: [renamedPin])
+                != MapLeadAnnotationRevision(pins: [statusChangedPin])
+        )
+    }
+
+    @MainActor
     @Test func mapLeadRenderSelectionKeepsSmallSetsCompleteAndCountsAllMatches() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
@@ -4615,6 +4648,7 @@ struct D2D_AdvancerTests {
             launchCenteringResetToken: 0,
             launchLocationCenterRevision: 0,
             leads: [],
+            leadAnnotationRevision: MapLeadAnnotationRevision(pins: []),
             isVisible: true,
             searchPin: .constant(nil),
             showsUserLocation: true,

@@ -2,6 +2,7 @@ import SwiftUI
 import MapKit
 import CoreData
 import UIKit
+import os
 
 enum MapWorkflowMode: String, CaseIterable, Identifiable {
     case all
@@ -945,6 +946,7 @@ struct MapView: View {
             launchCenteringResetToken: launchCenteringResetToken,
             launchLocationCenterRevision: locationManager.initialMapCenterRevision,
             leads: mapLeadRenderSnapshot.renderedPins,
+            leadAnnotationRevision: mapLeadRenderSnapshot.annotationRevision,
             isVisible: isVisible,
             searchPin: $searchPin,
             // Keep the authorized user-location layer warm on the retained map.
@@ -3713,6 +3715,7 @@ private struct MapLeadRenderRequestSignature: Equatable {
 
 private struct MapLeadRenderSnapshot {
     let renderedPins: [MapLeadPin]
+    let annotationRevision: MapLeadAnnotationRevision
     let totalLeadCount: Int
     let matchingLeadCount: Int
     let isReady: Bool
@@ -3720,6 +3723,7 @@ private struct MapLeadRenderSnapshot {
 
     static let empty = MapLeadRenderSnapshot(
         renderedPins: [],
+        annotationRevision: MapLeadAnnotationRevision(pins: []),
         totalLeadCount: 0,
         matchingLeadCount: 0,
         isReady: false,
@@ -3729,9 +3733,11 @@ private struct MapLeadRenderSnapshot {
     func limited(to maxRenderedLeads: Int) -> MapLeadRenderSnapshot {
         guard maxRenderedLeads >= 0 else { return self }
         guard renderedPins.count > maxRenderedLeads else { return self }
+        let limitedPins = Array(renderedPins.prefix(maxRenderedLeads))
 
         return MapLeadRenderSnapshot(
-            renderedPins: Array(renderedPins.prefix(maxRenderedLeads)),
+            renderedPins: limitedPins,
+            annotationRevision: MapLeadAnnotationRevision(pins: limitedPins),
             totalLeadCount: totalLeadCount,
             matchingLeadCount: matchingLeadCount,
             isReady: isReady,
@@ -3758,6 +3764,7 @@ private struct MapLeadRenderSnapshot {
 
         return MapLeadRenderSnapshot(
             renderedPins: renderResult.renderedPins,
+            annotationRevision: MapLeadAnnotationRevision(pins: renderResult.renderedPins),
             totalLeadCount: cache.totalLeadCount,
             matchingLeadCount: renderResult.matchingLeadCount,
             isReady: cache.isReady,
@@ -3774,15 +3781,34 @@ private struct MapLeadRenderSnapshot {
         now: Date = Date()
     ) async -> MapLeadRenderSnapshot {
         await withCheckedContinuation { continuation in
+            let signpostID = OSSignpostID(log: MapPerformanceTrace.log)
+            os_signpost(
+                .begin,
+                log: MapPerformanceTrace.log,
+                name: "BuildLeadRenderSnapshot",
+                signpostID: signpostID,
+                "cached=%{public}d budget=%{public}d",
+                cache.pins.count,
+                maxRenderedLeads
+            )
             DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: make(
+                let snapshot = make(
                     from: cache,
                     mode: mode,
                     region: region,
                     fallbackCenter: fallbackCenter,
                     maxRenderedLeads: maxRenderedLeads,
                     now: now
-                ))
+                )
+                os_signpost(
+                    .end,
+                    log: MapPerformanceTrace.log,
+                    name: "BuildLeadRenderSnapshot",
+                    signpostID: signpostID,
+                    "rendered=%{public}d",
+                    snapshot.renderedPins.count
+                )
+                continuation.resume(returning: snapshot)
             }
         }
     }

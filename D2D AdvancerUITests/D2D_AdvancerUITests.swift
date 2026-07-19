@@ -3056,8 +3056,15 @@ final class D2D_AdvancerUITests: XCTestCase {
             ),
             "Map tools should remain immediately usable while the large lead snapshot is opening"
         )
+        let interactionDuration = ProcessInfo.processInfo.systemUptime - interactionStart
+        let timingAttachment = XCTAttachment(
+            string: String(format: "Map cold-open interaction path: %.3f seconds", interactionDuration)
+        )
+        timingAttachment.name = "Map cold-open timing"
+        timingAttachment.lifetime = .keepAlways
+        add(timingAttachment)
         XCTAssertLessThan(
-            ProcessInfo.processInfo.systemUptime - interactionStart,
+            interactionDuration,
             2.0,
             "Opening Map and using its first control should not stall under a 2,000-lead fixture"
         )
