@@ -32,8 +32,17 @@ struct TeamFieldMapView: UIViewRepresentable {
         mapView.removeOverlays(mapView.overlays)
 
         let leadAnnotations = visibleWorkspaces.flatMap { workspace in
-            workspace.assignedLeads.map { lead in
-                TeamLeadMapItemAnnotation(lead: lead, repName: workspace.member.displayName)
+            let bookedLeadIDs = Set(
+                workspace.assignedBookings
+                    .filter(\.isFutureEditable)
+                    .map(\.leadId)
+            )
+            return workspace.assignedLeads.map { lead in
+                TeamLeadMapItemAnnotation(
+                    lead: lead,
+                    repName: workspace.member.displayName,
+                    hasActiveBooking: bookedLeadIDs.contains(lead.id)
+                )
             }
         }
         let repAnnotations = visibleWorkspaces.compactMap { workspace -> TeamRepLiveAnnotation? in
@@ -81,8 +90,9 @@ struct TeamFieldMapView: UIViewRepresentable {
         workspaces.map { workspace in
             let live = workspace.liveLocation.map { "\($0.id):\($0.latitude):\($0.longitude)" } ?? "off"
             let leads = workspace.assignedLeads.map { "\($0.id):\($0.latitude):\($0.longitude):\($0.status.rawValue):\($0.isHighPriority):\($0.price):\($0.estimatedValue):\($0.updatedAt.timeIntervalSince1970)" }.joined(separator: ",")
+            let bookings = workspace.assignedBookings.map { "\($0.id):\($0.leadId):\($0.status.rawValue):\($0.updatedAt.timeIntervalSince1970)" }.joined(separator: ",")
             let route = workspace.routePoints.map { "\($0.id):\($0.latitude):\($0.longitude)" }.joined(separator: ",")
-            return "\(workspace.member.userId)|\(live)|\(leads)|\(route)"
+            return "\(workspace.member.userId)|\(live)|\(leads)|\(bookings)|\(route)"
         }
         .joined(separator: "|")
     }
@@ -182,8 +192,13 @@ struct TeamFieldMapView: UIViewRepresentable {
                 ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
             view.annotation = leadAnnotation
             view.canShowCallout = true
-            view.markerTintColor = uiColor(for: leadAnnotation.lead.status)
-            view.glyphImage = UIImage(systemName: TeamLeadAttentionPolicy.isActionableHighPriority(leadAnnotation.lead) ? "star.fill" : glyphName(for: leadAnnotation.lead.status))
+            view.markerTintColor = leadAnnotation.hasActiveBooking
+                ? .systemIndigo
+                : uiColor(for: leadAnnotation.lead.workflowStatus)
+            let glyph = leadAnnotation.hasActiveBooking
+                ? "calendar.badge.checkmark"
+                : glyphName(for: leadAnnotation.lead.workflowStatus)
+            view.glyphImage = UIImage(systemName: TeamLeadAttentionPolicy.isActionableHighPriority(leadAnnotation.lead) ? "star.fill" : glyph)
             view.clusteringIdentifier = "TeamLeadCluster"
             view.displayPriority = TeamLeadAttentionPolicy.needsOwnerAttention(leadAnnotation.lead) ? .required : .defaultHigh
             return view
@@ -259,44 +274,36 @@ struct TeamFieldMapView: UIViewRepresentable {
         }
 
         private func glyphName(for status: TeamLeadStatus) -> String {
-            switch status {
+            switch status.workflowStatus {
             case .notContacted:
                 return "person.circle"
             case .notHome:
                 return "house.slash.fill"
-            case .contacted:
-                return "bubble.left.and.bubble.right.fill"
             case .interested:
                 return "heart.circle"
-            case .followUp:
-                return "arrow.clockwise.circle.fill"
-            case .booked:
-                return "calendar.badge.checkmark"
             case .converted:
                 return "checkmark.circle"
             case .notInterested:
                 return "hand.raised.fill"
+            case .contacted, .followUp, .booked:
+                return "person.circle"
             }
         }
 
         private func uiColor(for status: TeamLeadStatus) -> UIColor {
-            switch status {
+            switch status.workflowStatus {
             case .notContacted:
                 return .systemGray
             case .notHome:
                 return .brown
-            case .contacted:
-                return .systemTeal
             case .interested:
                 return .systemOrange
-            case .followUp:
-                return .systemPurple
-            case .booked:
-                return .systemIndigo
             case .converted:
                 return .systemGreen
             case .notInterested:
                 return .systemRed
+            case .contacted, .followUp, .booked:
+                return .systemGray
             }
         }
     }
@@ -305,8 +312,9 @@ struct TeamFieldMapView: UIViewRepresentable {
 private final class TeamLeadMapItemAnnotation: NSObject, MKAnnotation {
     let lead: TeamLead
     let repName: String
+    let hasActiveBooking: Bool
     var clusterItem: TeamLeadClusterItem {
-        TeamLeadClusterItem(lead: lead, repName: repName)
+        TeamLeadClusterItem(lead: lead, repName: repName, hasActiveBooking: hasActiveBooking)
     }
 
     var coordinate: CLLocationCoordinate2D {
@@ -318,12 +326,13 @@ private final class TeamLeadMapItemAnnotation: NSObject, MKAnnotation {
     }
 
     var subtitle: String? {
-        "\(repName) • \(lead.status.rawValue.replacingOccurrences(of: "_", with: " "))"
+        "\(repName) • \(lead.workflowStatus.teamDisplayName)"
     }
 
-    init(lead: TeamLead, repName: String) {
+    init(lead: TeamLead, repName: String, hasActiveBooking: Bool) {
         self.lead = lead
         self.repName = repName
+        self.hasActiveBooking = hasActiveBooking
         super.init()
     }
 }
@@ -332,6 +341,7 @@ struct TeamLeadClusterItem: Identifiable, Equatable {
     var id: String { lead.id }
     let lead: TeamLead
     let repName: String
+    var hasActiveBooking = false
 }
 
 struct TeamLeadClusterSummary {
@@ -356,7 +366,7 @@ struct TeamLeadClusterSummary {
     }
 
     var bookedCount: Int {
-        items.filter { $0.lead.status == .booked }.count
+        items.filter { $0.hasActiveBooking || $0.lead.status == .booked }.count
     }
 
     var hotLeadCount: Int {
@@ -366,7 +376,7 @@ struct TeamLeadClusterSummary {
     }
 
     var convertedCount: Int {
-        items.filter { $0.lead.status == .converted }.count
+        items.filter { $0.lead.workflowStatus == .converted }.count
     }
 
     var repCount: Int {
@@ -375,7 +385,7 @@ struct TeamLeadClusterSummary {
 
     var statusCounts: [(status: TeamLeadStatus, count: Int)] {
         TeamLeadStatus.allCases
-            .map { status in (status, items.filter { $0.lead.status == status }.count) }
+            .map { status in (status, items.filter { $0.lead.workflowStatus == status }.count) }
             .filter { $0.count > 0 }
             .sorted { lhs, rhs in
                 if lhs.count != rhs.count { return lhs.count > rhs.count }
@@ -421,23 +431,19 @@ struct TeamLeadClusterSummary {
         guard let dominant = statusCounts.first?.status else {
             return .systemPurple
         }
-        switch dominant {
+        switch dominant.workflowStatus {
         case .notContacted:
             return .systemGray
         case .notHome:
             return .brown
-        case .contacted:
-            return .systemTeal
         case .interested:
             return .systemOrange
-        case .followUp:
-            return .systemPurple
-        case .booked:
-            return .systemIndigo
         case .converted:
             return .systemGreen
         case .notInterested:
             return .systemRed
+        case .contacted, .followUp, .booked:
+            return .systemGray
         }
     }
 

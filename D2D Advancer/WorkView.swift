@@ -186,9 +186,7 @@ struct WorkView: View {
             guard lead.assignedToUserId == member.userId,
                   let date = lead.followUpDate,
                   date <= now else { return false }
-            return lead.status != .booked
-                && lead.status != .converted
-                && lead.status != .notInterested
+            return lead.status.allowsFollowUpWorkflow && lead.status != .booked
         }.count
         return personal + team
     }

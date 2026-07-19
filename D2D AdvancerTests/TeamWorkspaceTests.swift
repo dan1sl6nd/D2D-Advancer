@@ -3,6 +3,41 @@ import Foundation
 @testable import D2D_Advancer
 
 struct TeamWorkspaceTests {
+    @Test func teamLeadWorkflowUsesFiveCanonicalStatesAndAdoptsLegacyValuesLazily() {
+        #expect(TeamLeadStatus.allCases == [
+            .notContacted,
+            .notHome,
+            .interested,
+            .converted,
+            .notInterested
+        ])
+        #expect(TeamLeadStatus.contacted.workflowStatus == .notContacted)
+        #expect(TeamLeadStatus.followUp.workflowStatus == .interested)
+        #expect(TeamLeadStatus.booked.workflowStatus == .interested)
+        #expect(TeamLeadStatus.persistedValue("follow_up") == .followUp)
+        #expect(TeamLeadStatus.persistedValue("Follow Up") == .followUp)
+        #expect(TeamLeadStatus.persistedValue("sold") == .converted)
+        #expect(TeamLeadStatus.booked.persistedWorkflowRawValue == TeamLeadStatus.interested.rawValue)
+    }
+
+    @Test func teamMapBookingCountComesFromBookingsInsteadOfLeadStatus() {
+        let lead = TeamLead.newRepLead(
+            teamId: "team-1",
+            creatorUserId: "rep-1",
+            name: "Booked customer",
+            address: "10 Main St",
+            coordinate: TeamCoordinate(latitude: 43.65, longitude: -79.38),
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+        let summary = TeamLeadClusterSummary(items: [
+            TeamLeadClusterItem(lead: lead, repName: "Rep", hasActiveBooking: true)
+        ])
+
+        #expect(lead.workflowStatus == .notContacted)
+        #expect(summary.bookedCount == 1)
+        #expect(summary.headline == "1 booked")
+    }
+
     @Test func teamRoleContextRoutesTechniciansToJobs() {
         let summary = TeamWorkspaceSurfaceSummary(
             role: .member,
@@ -606,6 +641,15 @@ struct TeamWorkspaceTests {
         var converted = editedAgain
         converted.status = .converted
         #expect(TeamNotificationPolicy.ownerLeadEvents(before: editedAgain, after: converted) == [.converted])
+
+        var legacyFollowUp = before
+        legacyFollowUp.status = .followUp
+        var adoptedFollowUp = legacyFollowUp
+        adoptedFollowUp.status = .interested
+        #expect(TeamNotificationPolicy.ownerLeadEvents(before: legacyFollowUp, after: adoptedFollowUp).isEmpty)
+
+        adoptedFollowUp.followUpDate = Date(timeIntervalSince1970: 5_000)
+        #expect(TeamNotificationPolicy.ownerLeadEvents(before: legacyFollowUp, after: adoptedFollowUp) == [.followUp])
     }
 
     @Test func repCreatedImportantLeadNotifiesOwnerImmediately() {

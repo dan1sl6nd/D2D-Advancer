@@ -180,23 +180,23 @@ struct TeamLeadDetailSheet: View {
             return "High-priority lead"
         }
 
-        switch lead.status {
+        if nextBooking != nil {
+            return "Scheduled job"
+        }
+
+        switch lead.workflowStatus {
         case .interested:
             return "Follow up while interest is fresh"
-        case .followUp:
-            return "Owner follow-up needed"
-        case .booked:
-            return "Booking needs review"
         case .converted:
             return "Converted lead"
         case .notHome:
             return "Comeback opportunity"
-        case .contacted:
-            return "Contacted, not closed"
         case .notContacted:
             return "New team lead"
         case .notInterested:
             return "Low-priority lead"
+        case .contacted, .followUp, .booked:
+            return "Team lead"
         }
     }
 
@@ -447,7 +447,7 @@ struct TeamLeadDetailSheet: View {
     private var statusChips: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                TeamLeadDetailFieldText(title: "Status", value: lead.status.teamDisplayName)
+                TeamLeadDetailFieldText(title: "Status", value: lead.workflowStatus.teamDisplayName)
                 Spacer()
                 if !canWriteLead {
                     Text("Read-only")
@@ -461,7 +461,7 @@ struct TeamLeadDetailSheet: View {
                     ForEach(TeamLeadStatus.allCases, id: \.rawValue) { status in
                         TeamLeadStatusChip(
                             status: status,
-                            isSelected: status == lead.status,
+                            isSelected: status == lead.workflowStatus,
                             isDisabled: !canWriteLead || isSaving
                         ) {
                             updateLead(status: status)
@@ -838,13 +838,10 @@ struct TeamLeadDetailSheet: View {
     }
 
     private func updateLead(status: TeamLeadStatus) {
-        let shouldScheduleFollowUp = status == .followUp && lead.followUpDate == nil
         runLeadUpdate {
             try await teamService.updateTeamLead(
                 leadId: lead.id,
-                status: status,
-                followUpDate: shouldScheduleFollowUp ? FollowUpQueueContent.quickSnoozeDate(days: 1) : nil,
-                shouldReplaceFollowUpDate: shouldScheduleFollowUp
+                status: status
             )
         }
     }

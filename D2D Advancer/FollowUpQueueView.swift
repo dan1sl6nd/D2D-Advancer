@@ -50,6 +50,7 @@ enum FollowUpQueueItem: Identifiable {
         case .personal(let lead):
             return lead.followUpDate
         case .team(let lead):
+            // Legacy follow-up records did not always persist a date.
             return lead.followUpDate ?? (lead.status == .followUp ? lead.updatedAt : nil)
         }
     }
@@ -99,7 +100,7 @@ enum FollowUpQueueItem: Identifiable {
     var statusIsInterested: Bool {
         switch self {
         case .personal(let lead): return lead.leadStatus == .interested
-        case .team(let lead): return lead.status == .interested
+        case .team(let lead): return lead.workflowStatus == .interested
         }
     }
 
@@ -1419,24 +1420,10 @@ private extension FollowUpOutcomeChoice {
 
 private extension TeamLeadStatus {
     var allowsFollowUpQueue: Bool {
-        switch self {
-        case .booked, .converted, .notInterested:
-            return false
-        case .notContacted, .notHome, .contacted, .interested, .followUp:
-            return true
-        }
+        allowsFollowUpWorkflow && self != .booked
     }
 
     var followUpDisplayName: String {
-        switch self {
-        case .notContacted: return "New"
-        case .notHome: return "Not Home"
-        case .contacted: return "Contacted"
-        case .interested: return "Interested"
-        case .followUp: return "Follow Up"
-        case .booked: return "Booked"
-        case .converted: return "Sold"
-        case .notInterested: return "Pass"
-        }
+        workflowStatus.teamDisplayName
     }
 }

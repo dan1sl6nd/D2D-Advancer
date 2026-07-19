@@ -112,13 +112,13 @@ enum FollowUpOutcomeChoice: String, CaseIterable, Identifiable, Sendable {
     func teamStatus(from currentStatus: TeamLeadStatus) -> TeamLeadStatus {
         switch self {
         case .done:
-            return currentStatus == .followUp ? .contacted : currentStatus
+            return currentStatus.workflowStatus
         case .noAnswer:
             return .notHome
         case .interested:
             return .interested
         case .later:
-            return .followUp
+            return .interested
         case .sold:
             return .converted
         case .pass:

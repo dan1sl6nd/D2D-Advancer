@@ -3338,7 +3338,7 @@ struct D2D_AdvancerTests {
     @Test func teamFollowUpOutcomePolicyUsesExpectedStatuses() {
         #expect(FollowUpOutcomeChoice.noAnswer.teamStatus(from: .contacted) == .notHome)
         #expect(FollowUpOutcomeChoice.interested.teamStatus(from: .notContacted) == .interested)
-        #expect(FollowUpOutcomeChoice.later.teamStatus(from: .interested) == .followUp)
+        #expect(FollowUpOutcomeChoice.later.teamStatus(from: .interested) == .interested)
         #expect(FollowUpOutcomeChoice.sold.teamStatus(from: .interested) == .converted)
         #expect(FollowUpOutcomeChoice.pass.teamStatus(from: .followUp) == .notInterested)
     }

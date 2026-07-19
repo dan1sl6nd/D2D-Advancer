@@ -239,7 +239,7 @@ struct TeamLeadClusterSheet: View {
                             .disabled(isSaving)
                         }
                     } label: {
-                        Label("Send sold/booked to technician", systemImage: "wrench.and.screwdriver.fill")
+                        Label("Send sold leads to technician", systemImage: "wrench.and.screwdriver.fill")
                             .font(.obsidianFootnote)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
@@ -455,12 +455,10 @@ struct TeamLeadClusterSheet: View {
     private func sendClusterJobs(to technician: TeamMember) {
         let sortedItems = summary.sortedItems
         let leads = sortedItems.map { $0.lead }
-        let dispatchableLeads = leads.filter { lead in
-            lead.status == .converted || lead.status == .booked || lead.price > 0
-        }
+        let dispatchableLeads = leads.filter(\.isDispatchReady)
 
         guard !dispatchableLeads.isEmpty else {
-            statusMessage = "No sold, booked, or priced leads in this cluster."
+            statusMessage = "No sold or priced leads in this cluster."
             return
         }
 
@@ -573,24 +571,7 @@ private struct TeamLeadClusterRow: View {
 }
 
 private func teamStatusColor(_ status: TeamLeadStatus) -> Color {
-    switch status {
-    case .notContacted:
-        return Color.textSecondary
-    case .notHome:
-        return Color.statusNotHome
-    case .contacted:
-        return Color.statusInterested
-    case .interested:
-        return Color.statusNotHome
-    case .followUp:
-        return Color.electricViolet
-    case .booked:
-        return Color.electricViolet
-    case .converted:
-        return Color.statusConverted
-    case .notInterested:
-        return Color.statusNotInterested
-    }
+    status.workflowStatus.teamColor
 }
 
 struct TeamUnifiedSummaryCard: View {
@@ -696,7 +677,7 @@ struct TeamCommandCenterCard: View {
     }
 
     private var dispatchReadyLeads: [TeamLead] {
-        leads.filter { $0.status == .converted || $0.status == .booked || $0.price > 0 }
+        leads.filter(\.isDispatchReady)
     }
 
     private var upcomingJobs: [TeamBooking] {
@@ -1321,61 +1302,53 @@ private extension View {
 
 extension TeamLeadStatus {
     var teamDisplayName: String {
-        switch self {
+        switch workflowStatus {
         case .notContacted:
             return "New"
         case .notHome:
             return "Not home"
-        case .contacted:
-            return "Contacted"
         case .interested:
             return "Interested"
-        case .followUp:
-            return "Follow-up"
-        case .booked:
-            return "Booked"
         case .converted:
             return "Sold"
         case .notInterested:
             return "Passed"
+        case .contacted, .followUp, .booked:
+            return "New"
         }
     }
 
     var teamIconName: String {
-        switch self {
+        switch workflowStatus {
         case .notContacted:
             return "person.circle"
         case .notHome:
             return "house.slash.fill"
-        case .contacted:
-            return "bubble.left.and.bubble.right.fill"
         case .interested:
             return "heart.fill"
-        case .followUp:
-            return "arrow.clockwise.circle.fill"
-        case .booked:
-            return "calendar.badge.checkmark"
         case .converted:
             return "checkmark.seal.fill"
         case .notInterested:
             return "hand.raised.fill"
+        case .contacted, .followUp, .booked:
+            return "person.circle"
         }
     }
 
     var teamColor: Color {
-        switch self {
+        switch workflowStatus {
         case .notContacted:
             return Color.textMuted
         case .notHome:
             return Color.statusNotHome
-        case .contacted, .interested:
+        case .interested:
             return Color.statusInterested
-        case .followUp, .booked:
-            return Color.electricViolet
         case .converted:
             return Color.statusConverted
         case .notInterested:
             return Color.statusNotInterested
+        case .contacted, .followUp, .booked:
+            return Color.textMuted
         }
     }
 }

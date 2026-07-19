@@ -497,12 +497,65 @@ enum TeamMemberRoster {
 enum TeamLeadStatus: String, Codable, CaseIterable, Sendable {
     case notContacted = "not_contacted"
     case notHome = "not_home"
+    // Compatibility-only values written by older Team builds.
     case contacted
     case interested
     case followUp = "follow_up"
     case booked
     case converted
     case notInterested = "not_interested"
+
+    static var allCases: [TeamLeadStatus] {
+        [.notContacted, .notHome, .interested, .converted, .notInterested]
+    }
+
+    static func persistedValue(_ rawValue: String) -> TeamLeadStatus? {
+        if let exact = TeamLeadStatus(rawValue: rawValue) {
+            return exact
+        }
+
+        let normalized = rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        switch normalized {
+        case "new", "cold", "not_contacted", "notcontacted": return .notContacted
+        case "away", "later", "no_answer", "not_home", "nothome": return .notHome
+        case "contacted": return .contacted
+        case "interested", "prospect": return .interested
+        case "follow_up", "followup": return .followUp
+        case "booked": return .booked
+        case "sold", "closed", "won": return .converted
+        case "converted": return .converted
+        case "pass", "lost", "not_interested", "notinterested": return .notInterested
+        default: return nil
+        }
+    }
+
+    /// The five-state sales pipeline used by current UI and all new writes.
+    var workflowStatus: TeamLeadStatus {
+        switch self {
+        case .contacted:
+            return .notContacted
+        case .followUp, .booked:
+            return .interested
+        case .notContacted, .notHome, .interested, .converted, .notInterested:
+            return self
+        }
+    }
+
+    var persistedWorkflowRawValue: String {
+        workflowStatus.rawValue
+    }
+
+    var isTerminalWorkflowStatus: Bool {
+        workflowStatus == .converted || workflowStatus == .notInterested
+    }
+
+    var allowsFollowUpWorkflow: Bool {
+        !isTerminalWorkflowStatus
+    }
 }
 
 struct TeamLead: Identifiable, Codable, Equatable, Sendable {
@@ -530,6 +583,14 @@ struct TeamLead: Identifiable, Codable, Equatable, Sendable {
     var followUpDate: Date? = nil
     var lastContactedAt: Date? = nil
     var lastContactSummary: String? = nil
+
+    var workflowStatus: TeamLeadStatus {
+        status.workflowStatus
+    }
+
+    var isDispatchReady: Bool {
+        workflowStatus == .converted || status == .booked || price > 0
+    }
 
     static func newRepLead(
         teamId: String,
@@ -585,6 +646,7 @@ struct TeamLeadEditableFields: Equatable, Sendable {
 
     func applying(to lead: TeamLead, updatedByUserId: String, now: Date = Date()) -> TeamLead {
         var updated = lead
+        updated.status = lead.workflowStatus
         updated.name = normalizedRequired(name, fallback: "New Lead")
         updated.address = normalizedRequired(address, fallback: "No address")
         updated.phone = normalizedOptional(phone)
@@ -1143,18 +1205,14 @@ struct TeamWorkspaceSurfaceSummary: Equatable, Identifiable, Sendable {
 
 enum TeamLeadImportance {
     static func rank(_ status: TeamLeadStatus) -> Int {
-        switch status {
+        switch status.workflowStatus {
         case .converted:
             return 5
-        case .booked:
-            return 4
         case .interested:
             return 3
-        case .followUp:
-            return 2
-        case .contacted:
-            return 1
         case .notContacted, .notHome, .notInterested:
+            return 0
+        case .contacted, .followUp, .booked:
             return 0
         }
     }
@@ -1175,21 +1233,11 @@ enum TeamLeadAttentionPolicy {
     }
 
     private static func isOpenForOwnerAttention(_ status: TeamLeadStatus) -> Bool {
-        switch status {
-        case .converted, .notInterested:
-            return false
-        case .notContacted, .notHome, .contacted, .interested, .followUp, .booked:
-            return true
-        }
+        !status.isTerminalWorkflowStatus
     }
 
     private static func statusNeedsOwnerAttention(_ status: TeamLeadStatus) -> Bool {
-        switch status {
-        case .interested, .followUp, .booked:
-            return true
-        case .notContacted, .notHome, .contacted, .converted, .notInterested:
-            return false
-        }
+        status.workflowStatus == .interested
     }
 }
 
@@ -1317,6 +1365,7 @@ enum TeamAssignmentPolicy {
 
     static func assign(_ lead: TeamLead, to target: TeamMember, by actor: TeamMember, now: Date = Date()) -> TeamLead {
         var updated = lead
+        updated.status = lead.workflowStatus
         updated.assignedToUserId = target.userId
         updated.updatedByUserId = actor.userId
         updated.updatedAt = now
@@ -1941,19 +1990,21 @@ enum TeamNotificationPolicy {
     static func ownerLeadEvents(before: TeamLead?, after: TeamLead) -> [TeamOwnerLeadEvent] {
         var events: [TeamOwnerLeadEvent] = []
 
-        if before?.status != after.status {
-            switch after.status {
+        if before?.workflowStatus != after.workflowStatus {
+            switch after.workflowStatus {
             case .interested:
                 events.append(.interested)
-            case .followUp:
-                events.append(.followUp)
-            case .booked:
-                events.append(.booked)
             case .converted:
                 events.append(.converted)
             default:
                 break
             }
+        }
+
+        if before?.followUpDate != after.followUpDate,
+           after.followUpDate != nil,
+           !events.contains(.interested) {
+            events.append(.followUp)
         }
 
         if before?.isHighPriority != true && after.isHighPriority {

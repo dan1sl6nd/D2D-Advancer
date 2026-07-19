@@ -584,7 +584,7 @@ final class TeamFirebaseService: ObservableObject {
         )
         lead.phone = Self.nilIfBlank(phone)
         lead.email = Self.nilIfBlank(email)
-        lead.status = status
+        lead.status = status.workflowStatus
         lead.notes = notes
         lead.serviceCategory = Self.nilIfBlank(serviceCategory)
         lead.price = price
@@ -749,9 +749,7 @@ final class TeamFirebaseService: ObservableObject {
         }
 
         var after = before
-        if let status {
-            after.status = status
-        }
+        after.status = (status ?? after.status).workflowStatus
         if let isHighPriority {
             after.isHighPriority = isHighPriority
         }
@@ -773,7 +771,7 @@ final class TeamFirebaseService: ObservableObject {
         if let lastContactSummary {
             after.lastContactSummary = Self.nilIfBlank(lastContactSummary)
         }
-        if after.status == .converted || after.status == .notInterested || after.status == .booked {
+        if after.status.isTerminalWorkflowStatus {
             after.followUpDate = nil
         }
         after.updatedByUserId = user.uid
@@ -784,7 +782,7 @@ final class TeamFirebaseService: ObservableObject {
         batch.setData(leadData(after), forDocument: leadRef(teamId: team.id, leadId: leadId), merge: true)
         addOwnerNotifications(to: batch, team: team, lead: after, events: events, createdAt: now)
         var activityWriteCount = 0
-        if before.status != after.status {
+        if before.workflowStatus != after.workflowStatus {
             addActivityLog(
                 to: batch,
                 teamId: team.id,
@@ -1139,7 +1137,12 @@ final class TeamFirebaseService: ObservableObject {
 
         var after = before
         if let mappedStatus {
-            after.status = mappedStatus
+            after.status = mappedStatus.workflowStatus
+        } else {
+            after.status = after.status.workflowStatus
+        }
+        if status == .needsOwnerFollowUp, after.followUpDate == nil {
+            after.followUpDate = Calendar.current.date(byAdding: .day, value: 1, to: now)
         }
         after.notes = cleanNote
         after.updatedByUserId = user.uid
@@ -2508,7 +2511,7 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.email: TeamFirestoreMergePayloadValue.nullable(lead.email),
             TeamFirebaseSchema.Field.latitude: lead.latitude,
             TeamFirebaseSchema.Field.longitude: lead.longitude,
-            TeamFirebaseSchema.Field.status: lead.status.rawValue,
+            TeamFirebaseSchema.Field.status: lead.status.persistedWorkflowRawValue,
             TeamFirebaseSchema.Field.notes: lead.notes,
             TeamFirebaseSchema.Field.serviceCategory: TeamFirestoreMergePayloadValue.nullable(lead.serviceCategory),
             TeamFirebaseSchema.Field.price: lead.price,
@@ -2930,7 +2933,7 @@ private extension TeamFirebaseService {
               let latitude = data[TeamFirebaseSchema.Field.latitude] as? Double,
               let longitude = data[TeamFirebaseSchema.Field.longitude] as? Double,
               let statusRaw = data[TeamFirebaseSchema.Field.status] as? String,
-              let status = TeamLeadStatus(rawValue: statusRaw),
+              let status = TeamLeadStatus.persistedValue(statusRaw),
               let assignedToUserId = data[TeamFirebaseSchema.Field.assignedToUserId] as? String,
               let createdByUserId = data[TeamFirebaseSchema.Field.createdByUserId] as? String,
               let updatedByUserId = data[TeamFirebaseSchema.Field.updatedByUserId] as? String,
@@ -3130,7 +3133,7 @@ private extension TeamFirebaseService {
         case .customerNotHome:
             return .notHome
         case .needsOwnerFollowUp:
-            return .followUp
+            return .interested
         case .done, .couldNotComplete, .none:
             return nil
         }
