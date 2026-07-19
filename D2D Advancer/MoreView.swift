@@ -1840,23 +1840,10 @@ struct OverviewContentView: View {
                 let statistics = try await context.perform {
                     var stats = LeadStatistics()
 
-                    // Active leads count - only leads where we received information
-                    // Includes: notContacted, interested, converted
-                    // Excludes: notHome (no info collected), notInterested (no info collected)
-                    let activeLeadsRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
-                    activeLeadsRequest.predicate = NSPredicate(format: "status IN %@", [
-                        Lead.Status.notContacted.rawValue,
-                        Lead.Status.interested.rawValue,
-                        Lead.Status.converted.rawValue
-                    ])
-                    stats.activeLeadsCount = try context.count(for: activeLeadsRequest)
-
-                    // Status-specific counts
-                    for status in Lead.Status.allCases {
+                    for status in [Lead.Status.converted, .interested, .notContacted] {
                         let statusRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
                         statusRequest.predicate = NSPredicate(format: "status == %@", status.rawValue)
                         let count = try context.count(for: statusRequest)
-                        stats.statusCounts[status] = count
 
                         switch status {
                         case .converted:
@@ -1869,6 +1856,9 @@ struct OverviewContentView: View {
                             break
                         }
                     }
+                    stats.activeLeadsCount = stats.convertedCount
+                        + stats.interestedCount
+                        + stats.notContactedCount
 
                     let soldLeadsRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
                     soldLeadsRequest.predicate = NSPredicate(
@@ -1880,31 +1870,7 @@ struct OverviewContentView: View {
                         $0 + max(0, $1.price)
                     }
 
-                    // Leads added today (exclude notHome and notInterested - no info collected)
                     let now = Date()
-                    let today = Calendar.current.startOfDay(for: Date())
-                    let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today.addingTimeInterval(86_400)
-                    let todayRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
-                    todayRequest.predicate = NSPredicate(format: "createdDate >= %@ AND createdDate < %@ AND NOT (status IN %@)",
-                        today as NSDate,
-                        tomorrow as NSDate,
-                        [Lead.Status.notHome.rawValue, Lead.Status.notInterested.rawValue])
-                    stats.leadsAddedToday = try context.count(for: todayRequest)
-
-                    // Leads updated this week (exclude notHome and notInterested - no info collected)
-                    let weekAgo = Calendar.current.date(byAdding: .weekOfYear, value: -1, to: now) ?? now.addingTimeInterval(-604_800)
-                    let weekRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
-                    weekRequest.predicate = NSPredicate(format: "updatedDate >= %@ AND NOT (status IN %@)",
-                        weekAgo as NSDate,
-                        [Lead.Status.notHome.rawValue, Lead.Status.notInterested.rawValue])
-                    stats.leadsUpdatedThisWeek = try context.count(for: weekRequest)
-
-                    // Follow-ups due this week
-                    let weekFromNow = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: now) ?? now.addingTimeInterval(604_800)
-                    let followUpRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
-                    followUpRequest.predicate = Lead.Status.activeFollowUpPredicate(dueFrom: now, through: weekFromNow)
-                    stats.followUpsDueThisWeek = try context.count(for: followUpRequest)
-
                     let overdueRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
                     overdueRequest.predicate = Lead.Status.activeFollowUpPredicate(dueBefore: now)
                     stats.overdueFollowUpsCount = try context.count(for: overdueRequest)
@@ -2080,101 +2046,6 @@ struct OverviewContentView: View {
         return personal + team
     }
 
-    private var legacyOverviewSection: some View {
-        MoreSectionGroup(
-            title: "Pipeline",
-            icon: "chart.bar.fill",
-            subtitle: "Active sales work by outcome.",
-            accentColor: Color.electricViolet
-        ) {
-            VStack(spacing: 12) {
-                StatCardView(
-                    title: "Active Leads",
-                    value: "\(statistics.activeLeadsCount)",
-                    icon: "person.3.fill",
-                    color: Color.electricViolet
-                )
-
-                StatCardView(
-                    title: "Sold",
-                    value: "\(statistics.convertedCount)",
-                    icon: "checkmark.circle.fill",
-                    color: Color.statusInterested
-                )
-
-                StatCardView(
-                    title: "Interested",
-                    value: "\(statistics.interestedCount)",
-                    icon: "heart.fill",
-                    color: Color.statusNotHome
-                )
-            }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 14)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Statistics overview")
-    }
-    
-    private var statusBreakdownSection: some View {
-        MoreSectionGroup(
-            title: "Status Breakdown",
-            icon: "slider.horizontal.3",
-            subtitle: "Only statuses with useful customer information.",
-            accentColor: Color.statusInterested
-        ) {
-            VStack(spacing: 12) {
-                // Show only statuses where we have lead information.
-                ForEach(Lead.Status.allCases.filter { $0 != .notHome && $0 != .notInterested }, id: \.self) { status in
-                    StatusProgressCardView(
-                        status: status,
-                        count: statistics.statusCounts[status] ?? 0,
-                        total: statistics.activeLeadsCount
-                    )
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 14)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Status breakdown charts")
-    }
-    
-    private var activitySection: some View {
-        MoreSectionGroup(
-            title: "Activity",
-            icon: "clock.arrow.circlepath",
-            subtitle: "Recent work that needs attention.",
-            accentColor: Color.statusNotHome
-        ) {
-            VStack(spacing: 12) {
-                RecentActivityCardView(
-                    title: "Leads added today",
-                    count: statistics.leadsAddedToday,
-                    icon: "plus.circle.fill",
-                    color: Color.electricViolet
-                )
-
-                RecentActivityCardView(
-                    title: "Leads updated this week",
-                    count: statistics.leadsUpdatedThisWeek,
-                    icon: "pencil.circle.fill",
-                    color: Color.statusNotHome
-                )
-
-                RecentActivityCardView(
-                    title: "Follow ups due this week",
-                    count: statistics.followUpsDueThisWeek,
-                    icon: "clock.circle.fill",
-                    color: Color.electricViolet
-                )
-            }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 14)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Recent activity summary")
-    }
 }
 
 // MARK: - Card Components
@@ -2469,150 +2340,6 @@ struct SignOutCardView: View {
         } message: {
             Text("Are you sure you want to sign out? Your data will be safely stored and available when you sign back in.")
         }
-    }
-}
-
-// MARK: - Overview Card Components
-
-struct StatCardView: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 16) {
-            ObsidianIconTile(icon: icon, tint: color, size: 42)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-
-                Text(value)
-                    .font(.displayMedium)
-                    .foregroundColor(color)
-            }
-
-            Spacer()
-        }
-        .padding(14)
-        .background(Color.obsidianElevated)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
-        )
-        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
-    }
-}
-
-struct StatusProgressCardView: View {
-    let status: Lead.Status
-    let count: Int
-    let total: Int
-    
-    private var percentage: Double {
-        guard total > 0 else { return 0 }
-        return min(max(Double(count) / Double(total), 0), 1)
-    }
-    
-    private var statusColor: Color {
-        switch status {
-        case .notContacted: return Color.textSecondary
-        case .notHome: return .brown
-        case .interested: return Color.statusNotHome
-        case .converted: return Color.statusInterested
-        case .notInterested: return Color.statusNotInterested
-        }
-    }
-    
-    var body: some View {
-        HStack(spacing: 16) {
-            ObsidianIconTile(icon: statusIcon, tint: statusColor, size: 42)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(status.displayName)
-                        .font(.obsidianTitle)
-                        .foregroundColor(Color.textPrimary)
-
-                    Spacer()
-
-                    Text("\(count)")
-                        .font(.obsidianTitle)
-                        .foregroundColor(statusColor)
-                }
-
-                // Progress bar
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.obsidianElevated)
-                            .frame(height: 6)
-
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(statusColor)
-                            .frame(
-                                width: ObsidianLayout.finiteDimension(geometry.size.width) * CGFloat(percentage),
-                                height: 6
-                            )
-                    }
-                }
-                .frame(height: 6)
-            }
-        }
-        .padding(14)
-        .background(Color.obsidianElevated)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
-        )
-        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
-    }
-
-    private var statusIcon: String {
-        switch status {
-        case .notContacted: return "person.circle"
-        case .notHome: return "house.fill"
-        case .interested: return "heart.fill"
-        case .converted: return "checkmark.circle.fill"
-        case .notInterested: return "xmark.circle.fill"
-        }
-    }
-}
-
-struct RecentActivityCardView: View {
-    let title: String
-    let count: Int
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 16) {
-            ObsidianIconTile(icon: icon, tint: color, size: 42)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.obsidianTitle)
-                    .foregroundColor(Color.textPrimary)
-
-                Text("\(count)")
-                    .font(.obsidianSubheadline)
-                    .foregroundColor(color)
-            }
-
-            Spacer()
-        }
-        .padding(14)
-        .background(Color.obsidianSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
-        )
-        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
     }
 }
 

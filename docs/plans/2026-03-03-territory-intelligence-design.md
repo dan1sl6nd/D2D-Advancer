@@ -1,7 +1,9 @@
 # Territory Intelligence Design
 
 **Date:** 2026-03-03
-**Status:** Approved
+**Status:** Archived - not part of the current app
+
+> The unused neighborhood census/scoring prototype was removed in July 2026. Current map clustering and route planning do not depend on that prototype.
 
 ## Overview
 

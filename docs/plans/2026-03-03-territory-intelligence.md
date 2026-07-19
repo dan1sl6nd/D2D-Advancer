@@ -1,5 +1,7 @@
 # Territory Intelligence Implementation Plan
 
+> **Archived July 2026:** This plan was not completed as written. The disconnected neighborhood census/scoring prototype it referenced has been removed; current map clustering and route planning use separate production code.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Add heatmap visualization, route optimization, and scoring weight sliders to the map tab.

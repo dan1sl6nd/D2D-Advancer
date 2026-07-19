@@ -2982,6 +2982,24 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testOverviewLoadsCurrentBusinessSnapshot() {
+        let app = makeApp()
+        app.launchArguments.append("-openMoreTabForUITests")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        tapIdentifiedElement(app, "moreOverviewCard", timeout: 8)
+        waitForIdentifiedElement(app, "overviewScreen", timeout: 10)
+        waitForText(app, "Business Snapshot", timeout: 10)
+        for metric in ["Sold", "Conversion", "Overdue", "Next 7 Days"] {
+            XCTAssertTrue(
+                app.staticTexts[metric].waitForExistence(timeout: 5),
+                "Overview should show the \(metric) metric"
+            )
+        }
+    }
+
+    @MainActor
     func testSupportDiagnosticsIsReachableFromDataSync() {
         let app = makeApp()
         app.launchArguments.append("-openMoreTabForUITests")

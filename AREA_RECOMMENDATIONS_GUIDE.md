@@ -1,5 +1,7 @@
 # Area Recommendations Feature Guide
 
+> **Archived July 2026:** The demographic neighborhood recommendation prototype was never connected to the shipped app. Its unused census/scoring services were removed during release cleanup. This document is retained only as historical product research.
+
 ## Overview
 
 The Area Recommendations system helps you identify the best neighborhoods for door-to-door sales based on external demographic data (income, home values, population density) combined with your historical performance data.
