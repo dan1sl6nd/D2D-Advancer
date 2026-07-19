@@ -392,7 +392,7 @@ struct MoreView: View {
                     icon: "person.crop.circle.badge.plus",
                     iconColor: Color.electricViolet,
                     title: "Apple Contacts",
-                    subtitle: "Find Window or Gutter Cleaning leads",
+                    subtitle: "Scan iPhone or import a Mac export",
                     showChevron: true
                 )
             }

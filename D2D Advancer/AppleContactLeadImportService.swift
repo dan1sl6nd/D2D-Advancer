@@ -45,6 +45,8 @@ struct AppleContactLeadCandidate: Identifiable, Hashable, Sendable {
     let email: String?
     let address: String?
     let service: AppleContactLeadServiceKind
+    var notes: String? = nil
+    var price: Double? = nil
     var coordinate: AppleContactLeadCoordinate?
     var didAttemptGeocoding = false
 
@@ -87,6 +89,195 @@ struct AppleContactExistingLeadSnapshot: Hashable, Sendable {
     let phone: String?
     let email: String?
     let address: String?
+}
+
+struct AppleContactExistingLeadReference: Hashable, Sendable {
+    let id: UUID
+    let phone: String?
+    let email: String?
+    let address: String?
+}
+
+struct AppleContactLeadExistingMatchIndex: Sendable {
+    private var leadIDByPhone: [String: UUID] = [:]
+    private var leadIDByEmail: [String: UUID] = [:]
+    private var leadIDByAddress: [String: UUID] = [:]
+
+    init(existingLeads: [AppleContactExistingLeadReference]) {
+        for lead in existingLeads {
+            if let phone = AppleContactLeadMatchPolicy.normalizedPhone(lead.phone) {
+                if leadIDByPhone[phone] == nil {
+                    leadIDByPhone[phone] = lead.id
+                }
+            }
+            if let email = AppleContactLeadMatchPolicy.normalizedEmail(lead.email) {
+                if leadIDByEmail[email] == nil {
+                    leadIDByEmail[email] = lead.id
+                }
+            }
+            if let address = AppleContactLeadMatchPolicy.normalizedAddress(lead.address) {
+                if leadIDByAddress[address] == nil {
+                    leadIDByAddress[address] = lead.id
+                }
+            }
+        }
+    }
+
+    func matchingLeadID(for candidate: AppleContactLeadCandidate) -> UUID? {
+        if let phone = AppleContactLeadMatchPolicy.normalizedPhone(candidate.phone),
+           let leadID = leadIDByPhone[phone] {
+            return leadID
+        }
+        if let email = AppleContactLeadMatchPolicy.normalizedEmail(candidate.email),
+           let leadID = leadIDByEmail[email] {
+            return leadID
+        }
+        if let address = AppleContactLeadMatchPolicy.normalizedAddress(candidate.address),
+           let leadID = leadIDByAddress[address] {
+            return leadID
+        }
+        return nil
+    }
+}
+
+struct AppleContactExistingLeadMergeSnapshot: Equatable, Sendable {
+    let name: String?
+    let phone: String?
+    let email: String?
+    let address: String?
+    let notes: String?
+    let serviceCategory: String?
+    let latitude: Double
+    let longitude: Double
+    let price: Double
+    let estimatedValue: Double
+}
+
+struct AppleContactLeadMergePlan: Equatable, Sendable {
+    let name: String?
+    let phone: String?
+    let email: String?
+    let address: String?
+    let notes: String?
+    let serviceCategory: String?
+    let latitude: Double
+    let longitude: Double
+    let price: Double
+    let estimatedValue: Double
+
+    func hasChanges(comparedWith existing: AppleContactExistingLeadMergeSnapshot) -> Bool {
+        self != AppleContactLeadMergePlan(existing)
+    }
+
+    private init(_ existing: AppleContactExistingLeadMergeSnapshot) {
+        name = existing.name
+        phone = existing.phone
+        email = existing.email
+        address = existing.address
+        notes = existing.notes
+        serviceCategory = existing.serviceCategory
+        latitude = existing.latitude
+        longitude = existing.longitude
+        price = existing.price
+        estimatedValue = existing.estimatedValue
+    }
+
+    init(
+        name: String?,
+        phone: String?,
+        email: String?,
+        address: String?,
+        notes: String?,
+        serviceCategory: String?,
+        latitude: Double,
+        longitude: Double,
+        price: Double,
+        estimatedValue: Double
+    ) {
+        self.name = name
+        self.phone = phone
+        self.email = email
+        self.address = address
+        self.notes = notes
+        self.serviceCategory = serviceCategory
+        self.latitude = latitude
+        self.longitude = longitude
+        self.price = price
+        self.estimatedValue = estimatedValue
+    }
+}
+
+enum AppleContactLeadMergePolicy {
+    static func requiresGeocoding(
+        existing: AppleContactExistingLeadMergeSnapshot,
+        candidate: AppleContactLeadCandidate
+    ) -> Bool {
+        guard cleaned(candidate.address) != nil else { return false }
+        guard !hasValidCoordinate(existing) else { return false }
+
+        guard let existingAddress = cleaned(existing.address) else { return true }
+        return AppleContactLeadMatchPolicy.normalizedAddress(existingAddress)
+            == AppleContactLeadMatchPolicy.normalizedAddress(candidate.address)
+    }
+
+    static func plan(
+        existing: AppleContactExistingLeadMergeSnapshot,
+        candidate: AppleContactLeadCandidate
+    ) -> AppleContactLeadMergePlan {
+        let existingAddress = cleaned(existing.address)
+        let candidateAddress = cleaned(candidate.address)
+        let candidateHasValidCoordinate = candidate.coordinate?.isValid == true
+        let addressesMatch = AppleContactLeadMatchPolicy.normalizedAddress(existingAddress)
+            == AppleContactLeadMatchPolicy.normalizedAddress(candidateAddress)
+        let shouldFillAddress = existingAddress == nil
+            && candidateAddress != nil
+            && candidateHasValidCoordinate
+        let shouldFillCoordinates = candidateHasValidCoordinate
+            && !hasValidCoordinate(existing)
+            && (existingAddress == nil || addressesMatch)
+        let resolvedPrice = existing.price > 0 ? existing.price : (candidate.price ?? existing.price)
+        let resolvedEstimatedValue = existing.estimatedValue > 0
+            ? existing.estimatedValue
+            : (resolvedPrice > 0 ? resolvedPrice : existing.estimatedValue)
+
+        return AppleContactLeadMergePlan(
+            name: cleaned(existing.name) ?? cleaned(candidate.displayName),
+            phone: cleaned(existing.phone) ?? cleaned(candidate.phone),
+            email: cleaned(existing.email) ?? cleaned(candidate.email),
+            address: shouldFillAddress ? candidateAddress : existing.address,
+            notes: mergedNotes(existing: existing.notes, imported: candidate.notes),
+            serviceCategory: cleaned(existing.serviceCategory) ?? candidate.service.serviceCategoryID,
+            latitude: shouldFillCoordinates ? (candidate.coordinate?.latitude ?? existing.latitude) : existing.latitude,
+            longitude: shouldFillCoordinates ? (candidate.coordinate?.longitude ?? existing.longitude) : existing.longitude,
+            price: resolvedPrice,
+            estimatedValue: resolvedEstimatedValue
+        )
+    }
+
+    static func mergedNotes(existing: String?, imported: String?) -> String? {
+        guard let imported = cleaned(imported) else { return existing }
+        guard let existing = cleaned(existing) else { return imported }
+        guard existing.range(
+            of: imported,
+            options: [.caseInsensitive, .diacriticInsensitive]
+        ) == nil else {
+            return existing
+        }
+
+        return existing + "\n\nImported from Apple Contacts:\n" + imported
+    }
+
+    private static func cleaned(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    private static func hasValidCoordinate(_ existing: AppleContactExistingLeadMergeSnapshot) -> Bool {
+        AppleContactLeadCoordinate(
+            latitude: existing.latitude,
+            longitude: existing.longitude
+        ).isValid
+    }
 }
 
 struct AppleContactLeadDuplicateIndex: Sendable {
@@ -236,6 +427,86 @@ final class AppleContactLeadImportService {
             updateCount += 1
         }
         return updateCount
+    }
+
+    static func createLead(
+        from candidate: AppleContactLeadCandidate,
+        in context: NSManagedObjectContext
+    ) -> Lead? {
+        guard let address = candidate.address,
+              let coordinate = candidate.coordinate,
+              coordinate.isValid else {
+            return nil
+        }
+
+        let lead = Lead.create(in: context)
+        lead.name = candidate.displayName
+        lead.phone = candidate.phone
+        lead.email = candidate.email
+        lead.address = address
+        lead.latitude = coordinate.latitude
+        lead.longitude = coordinate.longitude
+        lead.serviceCategory = candidate.service.serviceCategoryID
+        lead.source = "Apple Contacts"
+        lead.notes = candidate.notes
+        if let price = candidate.price {
+            lead.price = price
+            lead.estimatedValue = price
+        }
+        lead.applyLeadStatus(.notContacted, autoSave: false)
+        return lead
+    }
+
+    @discardableResult
+    static func updateLead(_ lead: Lead, from candidate: AppleContactLeadCandidate) -> Bool {
+        let existing = mergeSnapshot(for: lead)
+        let plan = AppleContactLeadMergePolicy.plan(existing: existing, candidate: candidate)
+        guard plan.hasChanges(comparedWith: existing) else { return false }
+
+        lead.name = plan.name
+        lead.phone = plan.phone
+        lead.email = plan.email
+        lead.address = plan.address
+        lead.notes = plan.notes
+        lead.serviceCategory = plan.serviceCategory
+        lead.latitude = plan.latitude
+        lead.longitude = plan.longitude
+        lead.price = plan.price
+        lead.estimatedValue = plan.estimatedValue
+        lead.updatedDate = Date()
+        return true
+    }
+
+    static func canUpdateLead(_ lead: Lead, from candidate: AppleContactLeadCandidate) -> Bool {
+        let existing = mergeSnapshot(for: lead)
+        return AppleContactLeadMergePolicy
+            .plan(existing: existing, candidate: candidate)
+            .hasChanges(comparedWith: existing)
+    }
+
+    static func needsGeocodingForUpdate(
+        _ lead: Lead,
+        from candidate: AppleContactLeadCandidate
+    ) -> Bool {
+        AppleContactLeadMergePolicy.requiresGeocoding(
+            existing: mergeSnapshot(for: lead),
+            candidate: candidate
+        )
+    }
+
+    private static func mergeSnapshot(for lead: Lead) -> AppleContactExistingLeadMergeSnapshot {
+        AppleContactExistingLeadMergeSnapshot(
+            name: lead.name,
+            phone: lead.phone,
+            email: lead.email,
+            address: lead.address,
+            notes: lead.notes,
+            serviceCategory: lead.serviceCategory,
+            latitude: lead.latitude,
+            longitude: lead.longitude,
+            price: lead.price,
+            estimatedValue: lead.estimatedValue
+        )
     }
 
     func loadMatchingContacts() async throws -> AppleContactLeadScanResult {

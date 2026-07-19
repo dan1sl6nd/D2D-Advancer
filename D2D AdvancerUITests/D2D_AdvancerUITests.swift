@@ -2306,6 +2306,7 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         waitForIdentifiedElement(app, "appleContactImportScreen", timeout: 10)
         waitForIdentifiedElement(app, "scanAppleContactsButton", timeout: 8)
+        waitForIdentifiedElement(app, "importMacContactsPackageButton", timeout: 8)
         try assertDarkFilledBackButton(
             app,
             identifier: "appleContactImportBackButton",

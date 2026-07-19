@@ -251,6 +251,232 @@ struct D2D_AdvancerTests {
         #expect(candidate.address?.contains("Toronto") == true)
     }
 
+    @Test func macContactPriceParserRecognizesQuotesWithoutGuessingFromUnrelatedNumbers() {
+        #expect(AppleContactLeadPricePolicy.price(in: "Price: $249") == 249)
+        #expect(AppleContactLeadPricePolicy.price(in: "Quoted CAD 1,250.50") == 1_250.50)
+        #expect(AppleContactLeadPricePolicy.price(in: "$399 gutter cleaning") == 399)
+        #expect(AppleContactLeadPricePolicy.price(in: "249") == 249)
+        #expect(
+            AppleContactLeadPricePolicy.resolvedPrice(
+                explicitPrice: -1,
+                note: "Estimate 325"
+            ) == 325
+        )
+        #expect(
+            AppleContactLeadPricePolicy.price(
+                in: "Appointment 2026-07-18. Call 416-555-0184."
+            ) == nil
+        )
+    }
+
+    @MainActor
+    @Test func macContactPackageImportsNotesPriceAndMapReadyLeadFields() throws {
+        let record = MacContactPackageRecord(
+            identifier: "mac-contact-1",
+            name: "Alex Customer",
+            firstName: "Alex",
+            middleName: nil,
+            lastName: "Customer",
+            nickname: nil,
+            organization: nil,
+            department: nil,
+            jobTitle: nil,
+            note: "Window cleaning quote: $249\nCustomer prefers Friday afternoon.",
+            price: nil,
+            phoneNumbers: [
+                MacContactPackageLabeledValue(label: "work", value: "416-555-0100"),
+                MacContactPackageLabeledValue(label: "mobile", value: "647-555-0199")
+            ],
+            emailAddresses: [
+                MacContactPackageLabeledValue(label: "home", value: "alex@example.com")
+            ],
+            postalAddresses: [
+                MacContactPackageAddress(
+                    label: "home",
+                    formatted: "100 Main Street\nToronto ON M5V 2T6",
+                    street: "100 Main Street",
+                    city: "Toronto",
+                    state: "ON",
+                    postalCode: "M5V 2T6",
+                    country: "Canada",
+                    countryCode: "CA"
+                )
+            ]
+        )
+        let package = MacContactLeadPackage(
+            schemaVersion: MacContactLeadPackage.currentSchemaVersion,
+            exportedAt: "2026-07-18T14:00:00.000Z",
+            source: "macOS Contacts",
+            contacts: [record]
+        )
+        let candidates = try MacContactLeadPackageService.candidates(
+            from: JSONEncoder().encode(package)
+        )
+        var candidate = try #require(candidates.first)
+
+        #expect(candidates.count == 1)
+        #expect(candidate.displayName == "Alex Customer")
+        #expect(candidate.service == .windowCleaning)
+        #expect(candidate.phone == "647-555-0199")
+        #expect(candidate.email == "alex@example.com")
+        #expect(candidate.address == "100 Main Street, Toronto ON M5V 2T6")
+        #expect(candidate.notes?.contains("prefers Friday") == true)
+        #expect(candidate.price == 249)
+
+        candidate.coordinate = AppleContactLeadCoordinate(
+            latitude: 43.6532,
+            longitude: -79.3832
+        )
+        let persistence = PersistenceController(inMemory: true)
+        let lead = try #require(
+            AppleContactLeadImportService.createLead(
+                from: candidate,
+                in: persistence.container.viewContext
+            )
+        )
+
+        #expect(lead.name == "Alex Customer")
+        #expect(lead.notes?.contains("prefers Friday") == true)
+        #expect(lead.price == 249)
+        #expect(lead.estimatedValue == 249)
+        #expect(lead.serviceCategory == "window_cleaning")
+        #expect(lead.source == "Apple Contacts")
+        #expect(lead.leadStatus == .notContacted)
+        #expect(lead.latitude == 43.6532)
+        #expect(lead.longitude == -79.3832)
+    }
+
+    @Test func macContactPackageRejectsUnknownSchemaVersions() throws {
+        let package = MacContactLeadPackage(
+            schemaVersion: 99,
+            exportedAt: nil,
+            source: "macOS Contacts",
+            contacts: []
+        )
+
+        do {
+            _ = try MacContactLeadPackageService.candidates(from: JSONEncoder().encode(package))
+            Issue.record("Expected an unsupported schema error")
+        } catch let error as MacContactLeadPackageError {
+            #expect(error == .unsupportedSchema(99))
+        }
+    }
+
+    @MainActor
+    @Test func macContactPackageUpdatesExistingLeadWithoutOverwritingAppData() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let lead = Lead.create(in: context)
+        let leadID = try #require(lead.id)
+        lead.name = "Alex Customer"
+        lead.phone = "+1 (647) 555-0199"
+        lead.address = "100 Main Street, Toronto, ON"
+        lead.notes = "Owner follow-up required."
+        lead.price = 0
+        lead.estimatedValue = 0
+
+        let candidate = AppleContactLeadCandidate(
+            id: "mac-contact-update",
+            displayName: "Alex Customer",
+            phone: "647-555-0199",
+            email: "alex@example.com",
+            address: "100 Main Street, Toronto, ON",
+            service: .windowCleaning,
+            notes: "Window cleaning quote: $249",
+            price: 249,
+            coordinate: nil
+        )
+        let matchIndex = AppleContactLeadExistingMatchIndex(
+            existingLeads: [
+                AppleContactExistingLeadReference(
+                    id: leadID,
+                    phone: lead.phone,
+                    email: lead.email,
+                    address: lead.address
+                )
+            ]
+        )
+
+        #expect(matchIndex.matchingLeadID(for: candidate) == leadID)
+        #expect(AppleContactLeadImportService.canUpdateLead(lead, from: candidate))
+        #expect(AppleContactLeadImportService.updateLead(lead, from: candidate))
+        #expect(lead.name == "Alex Customer")
+        #expect(lead.phone == "+1 (647) 555-0199")
+        #expect(lead.email == "alex@example.com")
+        #expect(lead.notes?.contains("Owner follow-up required.") == true)
+        #expect(lead.notes?.contains("Imported from Apple Contacts:") == true)
+        #expect(lead.notes?.contains("Window cleaning quote: $249") == true)
+        #expect(lead.price == 249)
+        #expect(lead.estimatedValue == 249)
+        #expect(lead.serviceCategory == "window_cleaning")
+        #expect(!AppleContactLeadImportService.canUpdateLead(lead, from: candidate))
+        #expect(!AppleContactLeadImportService.updateLead(lead, from: candidate))
+    }
+
+    @MainActor
+    @Test func macContactPackagePreservesExistingPriceAndUsesItForMissingEstimate() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let lead = Lead.create(in: persistence.container.viewContext)
+        lead.name = "Existing Customer"
+        lead.phone = "416-555-0123"
+        lead.notes = "Manual app note."
+        lead.price = 350
+        lead.estimatedValue = 0
+        lead.serviceCategory = "window_cleaning"
+
+        let candidate = AppleContactLeadCandidate(
+            id: "mac-contact-price-preserve",
+            displayName: "Existing Customer",
+            phone: "416-555-0123",
+            email: nil,
+            address: nil,
+            service: .windowCleaning,
+            notes: "Window cleaning quote: $249",
+            price: 249,
+            coordinate: nil
+        )
+
+        #expect(AppleContactLeadImportService.updateLead(lead, from: candidate))
+        #expect(lead.price == 350)
+        #expect(lead.estimatedValue == 350)
+        #expect(lead.notes?.contains("Manual app note.") == true)
+        #expect(lead.notes?.contains("Window cleaning quote: $249") == true)
+    }
+
+    @MainActor
+    @Test func macContactPackageGeocodesOnlyWhenMatchedLeadNeedsMapLocation() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let lead = Lead.create(in: persistence.container.viewContext)
+        lead.name = "Existing Customer"
+        lead.phone = "416-555-0123"
+        lead.serviceCategory = "window_cleaning"
+        lead.latitude = 0
+        lead.longitude = 0
+
+        var candidate = AppleContactLeadCandidate(
+            id: "mac-contact-map-update",
+            displayName: "Existing Customer",
+            phone: "416-555-0123",
+            email: nil,
+            address: "100 Main Street, Toronto, ON",
+            service: .windowCleaning,
+            coordinate: nil
+        )
+
+        #expect(AppleContactLeadImportService.needsGeocodingForUpdate(lead, from: candidate))
+        #expect(!AppleContactLeadImportService.canUpdateLead(lead, from: candidate))
+
+        candidate.coordinate = AppleContactLeadCoordinate(
+            latitude: 43.6532,
+            longitude: -79.3832
+        )
+        #expect(AppleContactLeadImportService.updateLead(lead, from: candidate))
+        #expect(lead.address == "100 Main Street, Toronto, ON")
+        #expect(lead.latitude == 43.6532)
+        #expect(lead.longitude == -79.3832)
+        #expect(!AppleContactLeadImportService.needsGeocodingForUpdate(lead, from: candidate))
+    }
+
     @Test func appleContactImportDetectsExistingLeadByContactFieldsButNotNameAlone() {
         let index = AppleContactLeadDuplicateIndex(
             existingLeads: [

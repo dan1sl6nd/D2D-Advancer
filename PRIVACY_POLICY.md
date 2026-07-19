@@ -8,7 +8,7 @@ description: Privacy Policy for the D2D Advancer iOS app
 
 **Effective date:** July 12, 2026
 
-**Last updated:** July 17, 2026
+**Last updated:** July 18, 2026
 
 D2D Advancer ("we," "our," or "us") is a field-sales and service-work management app. This policy explains what information the app handles, why it is used, where it is stored, and the choices available to you.
 
@@ -24,7 +24,9 @@ When you create or join a Team workspace, the app may process your name, email a
 
 The app stores information that you enter about leads, customers, appointments, and service jobs. This may include names, phone numbers, email addresses, physical addresses, notes, status, quoted prices, service details, follow-up dates, arrival windows, assigned workers, and activity history.
 
-When you choose **More > Apple Contacts > Scan Contacts**, the app checks accessible contact name, company, department, and job-title fields on your device for the service phrases shown in the import screen. For matching contacts, the app also reads the available phone, email, and postal-address fields needed to prepare a lead. Contact notes are not scanned. Nothing is copied into D2D Advancer until you review and select a match. Imported contacts become personal workspace leads and follow the same local and optional iCloud storage rules described below.
+When you choose **More > Apple Contacts > Scan This iPhone**, the app checks accessible contact name, company, department, and job-title fields on your device for the service phrases shown in the import screen. For matching contacts, the app also reads the available phone, email, and postal-address fields needed to prepare a lead. Direct iPhone scans do not read contact notes.
+
+If you separately run the D2D Advancer Mac Contacts export helper, macOS asks you to approve access to the Contacts app. The helper writes a local JSON file containing only contacts that match the supported service phrases, including their contact fields, notes, and any price recognized from those notes. The file is not uploaded by the helper. The iOS app reads it only after you choose **Import Mac Export** and select the file. Nothing is copied into D2D Advancer until you review and select a match. Selected contacts create new personal workspace leads or safely fill missing details on matching leads; existing app notes and nonzero prices are preserved. These leads follow the same local and optional iCloud storage rules described below.
 
 You are responsible for having an appropriate business reason and any required consent before entering another person's information.
 

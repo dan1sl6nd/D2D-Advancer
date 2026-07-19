@@ -1,8 +1,29 @@
 import CoreData
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct AppleContactLeadImportView: View {
+    private enum CandidateSource {
+        case device
+        case macPackage
+    }
+
+    private struct ImportOutcome {
+        let created: Int
+        let updated: Int
+
+        var message: String {
+            if updated == 0 {
+                return "\(created) lead\(created == 1 ? "" : "s") added to Leads and Map."
+            }
+            if created == 0 {
+                return "\(updated) existing lead\(updated == 1 ? "" : "s") updated with Mac contact details."
+            }
+            return "\(created) added and \(updated) updated with Mac contact details."
+        }
+    }
+
     private enum ImportPhase: Equatable {
         case idle
         case scanning
@@ -29,10 +50,14 @@ struct AppleContactLeadImportView: View {
     @State private var candidates: [AppleContactLeadCandidate] = []
     @State private var selectedCandidateIDs: Set<String> = []
     @State private var duplicateCandidateIDs: Set<String> = []
+    @State private var updateCandidateIDs: Set<String> = []
+    @State private var existingLeadIDByCandidateID: [String: UUID] = [:]
     @State private var hasLimitedAccess = false
     @State private var errorMessage: String?
     @State private var permissionNeedsSettings = false
-    @State private var lastImportedCount: Int?
+    @State private var lastImportOutcome: ImportOutcome?
+    @State private var showingMacPackagePicker = false
+    @State private var candidateSource = CandidateSource.device
 
     var body: some View {
         ScrollView {
@@ -52,11 +77,11 @@ struct AppleContactLeadImportView: View {
                     )
                 }
 
-                if let lastImportedCount {
+                if let lastImportOutcome {
                     ObsidianStatusBanner(
                         icon: "checkmark.circle.fill",
                         title: "Import Complete",
-                        message: "\(lastImportedCount) lead\(lastImportedCount == 1 ? "" : "s") added to Leads and Map.",
+                        message: lastImportOutcome.message,
                         tint: Color.statusInterested
                     )
                 }
@@ -71,7 +96,7 @@ struct AppleContactLeadImportView: View {
                     ObsidianStatusBanner(
                         icon: "person.crop.circle.badge.xmark",
                         title: "No Matching Contacts",
-                        message: "No accessible contact contains Window Cleaning or Gutter Cleaning in its name, company, department, or job title.",
+                        message: noMatchesMessage,
                         tint: Color.textSecondary
                     )
                 }
@@ -86,6 +111,13 @@ struct AppleContactLeadImportView: View {
             titleAccessibilityIdentifier: "appleContactImportScreen",
             backButtonAccessibilityIdentifier: "appleContactImportBackButton"
         )
+        .fileImporter(
+            isPresented: $showingMacPackagePicker,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleMacPackageSelection(result)
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !candidates.isEmpty {
                 importActionBar
@@ -95,29 +127,41 @@ struct AppleContactLeadImportView: View {
 
     private var introductionSection: some View {
         LeadFormSectionCard(title: "Find Service Contacts", icon: "person.crop.circle.badge.plus") {
-            Text("Scan Apple Contacts for Window Cleaning or Gutter Cleaning, review the matches, then import only the leads you choose.")
+            Text("Scan this iPhone or import a Mac Contacts export, review the matches, then add only the leads you choose.")
                 .font(.obsidianBody)
                 .foregroundColor(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 9) {
-                importFeatureRow(icon: "text.magnifyingglass", text: "Checks name, company, department, and job title")
+                importFeatureRow(icon: "text.magnifyingglass", text: "Checks supported service phrases")
                 importFeatureRow(icon: "map.fill", text: "Maps each postal address before import")
-                importFeatureRow(icon: "person.2.slash.fill", text: "Skips existing phone, email, or address matches")
+                importFeatureRow(icon: "arrow.triangle.2.circlepath", text: "Safely fills missing details on matching leads")
+                importFeatureRow(icon: "note.text", text: "Mac exports preserve notes and recognized prices")
             }
 
             if phase == .idle || (phase == .ready && candidates.isEmpty) {
-                Button {
-                    Task { await scanContacts() }
-                } label: {
-                    Label("Scan Contacts", systemImage: "magnifyingglass")
-                        .frame(maxWidth: .infinity)
+                VStack(spacing: 10) {
+                    Button {
+                        Task { await scanContacts() }
+                    } label: {
+                        Label("Scan This iPhone", systemImage: "iphone.gen3")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ObsidianPrimaryButtonStyle())
+                    .accessibilityIdentifier("scanAppleContactsButton")
+
+                    Button {
+                        showingMacPackagePicker = true
+                    } label: {
+                        Label("Import Mac Export", systemImage: "laptopcomputer.and.arrow.down")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ObsidianSecondaryButtonStyle())
+                    .accessibilityIdentifier("importMacContactsPackageButton")
                 }
-                .buttonStyle(ObsidianPrimaryButtonStyle())
-                .accessibilityIdentifier("scanAppleContactsButton")
             }
 
-            Text("Contact notes are not scanned. Nothing is imported until you confirm the selection.")
+            Text("Direct iPhone scans cannot read contact notes. Mac exports can include them. Nothing is imported until you confirm the selection.")
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -166,7 +210,7 @@ struct AppleContactLeadImportView: View {
             } else if case .geocoding(let current, let total) = phase {
                 progressRow(title: "Checking map locations", detail: "Address \(current) of \(total)")
             } else if case .importing = phase {
-                progressRow(title: "Adding selected leads", detail: "Saving them to your personal workspace")
+                progressRow(title: "Saving selected contacts", detail: "Adding and updating your personal workspace")
             }
 
             summaryRow(
@@ -182,6 +226,15 @@ struct AppleContactLeadImportView: View {
                 tint: Color.statusInterested,
                 accessibilityIdentifier: "appleContactSummaryReadyValue"
             )
+            if candidateSource == .macPackage {
+                summaryDivider
+                summaryRow(
+                    title: "Updates Available",
+                    value: updateCandidateIDs.count,
+                    tint: Color.statusInterested,
+                    accessibilityIdentifier: "appleContactSummaryUpdateValue"
+                )
+            }
             summaryDivider
             summaryRow(
                 title: "Already in Leads",
@@ -248,23 +301,23 @@ struct AppleContactLeadImportView: View {
                     Text("Matched Contacts")
                         .font(.obsidianTitle)
                         .foregroundColor(Color.textPrimary)
-                    Text("Only ready contacts can be selected.")
+                    Text("Map-ready contacts and safe updates can be selected.")
                         .font(.obsidianFootnote)
                         .foregroundColor(Color.textSecondary)
                 }
 
                 Spacer()
 
-                Button(selectedCandidateIDs.isEmpty ? "Select Ready" : "Clear") {
+                Button(selectedCandidateIDs.isEmpty ? "Select Available" : "Clear") {
                     if selectedCandidateIDs.isEmpty {
-                        selectedCandidateIDs = Set(readyCandidates.map(\.id))
+                        selectedCandidateIDs = Set(selectableCandidates.map(\.id))
                     } else {
                         selectedCandidateIDs.removeAll()
                     }
                 }
                 .font(.obsidianFootnote)
                 .foregroundColor(Color.electricViolet)
-                .disabled(readyCandidates.isEmpty)
+                .disabled(selectableCandidates.isEmpty)
                 .accessibilityIdentifier("toggleReadyAppleContactsButton")
             }
 
@@ -275,7 +328,9 @@ struct AppleContactLeadImportView: View {
     }
 
     private func candidateCard(_ candidate: AppleContactLeadCandidate) -> some View {
-        let selectable = candidate.isReadyForImport && !duplicateCandidateIDs.contains(candidate.id) && !phase.isBusy
+        let selectable = (candidate.isReadyForImport || updateCandidateIDs.contains(candidate.id))
+            && !duplicateCandidateIDs.contains(candidate.id)
+            && !phase.isBusy
         let selected = selectedCandidateIDs.contains(candidate.id)
         let status = candidateStatus(candidate)
 
@@ -327,6 +382,25 @@ struct AppleContactLeadImportView: View {
                             .lineLimit(2)
                     }
 
+                    if let price = candidate.price {
+                        Label(
+                            price.formatted(
+                                .currency(code: "CAD")
+                                    .precision(.fractionLength(0...2))
+                            ),
+                            systemImage: "dollarsign.circle.fill"
+                        )
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.statusInterested)
+                    }
+
+                    if let notes = candidate.notes {
+                        Text(notes)
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                            .lineLimit(3)
+                    }
+
                     Label(status.text, systemImage: status.icon)
                         .font(.obsidianFootnote)
                         .foregroundColor(status.tint)
@@ -348,6 +422,9 @@ struct AppleContactLeadImportView: View {
     }
 
     private func candidateStatus(_ candidate: AppleContactLeadCandidate) -> (text: String, icon: String, tint: Color) {
+        if updateCandidateIDs.contains(candidate.id) {
+            return ("Update Notes & Price", "arrow.triangle.2.circlepath", Color.statusInterested)
+        }
         if duplicateCandidateIDs.contains(candidate.id) {
             return ("Already in Leads", "checkmark.circle", Color.statusNotHome)
         }
@@ -369,59 +446,67 @@ struct AppleContactLeadImportView: View {
             primaryAccessibilityIdentifier: "importSelectedAppleContactsButton",
             secondaryAccessibilityIdentifier: "rescanAppleContactsButton",
             primaryAction: { importSelectedContacts() },
-            secondaryAction: { Task { await scanContacts() } },
+            secondaryAction: {
+                switch candidateSource {
+                case .device:
+                    Task { await scanContacts() }
+                case .macPackage:
+                    showingMacPackagePicker = true
+                }
+            },
             primaryLabel: {
                 Label("Import \(selectedCandidateIDs.count)", systemImage: "square.and.arrow.down.fill")
             },
             secondaryLabel: {
-                Label("Rescan", systemImage: "arrow.clockwise")
+                switch candidateSource {
+                case .device:
+                    Label("Rescan", systemImage: "arrow.clockwise")
+                case .macPackage:
+                    Label("Choose File", systemImage: "doc.badge.ellipsis")
+                }
             }
         )
     }
 
+    private var noMatchesMessage: String {
+        switch candidateSource {
+        case .device:
+            return "No accessible contact contains Window Cleaning or Gutter Cleaning in its name, company, department, or job title."
+        case .macPackage:
+            return "No contact in this Mac export contains Window Cleaning or Gutter Cleaning in its contact fields or notes."
+        }
+    }
+
     private var readyCandidates: [AppleContactLeadCandidate] {
-        candidates.filter { $0.isReadyForImport && !duplicateCandidateIDs.contains($0.id) }
+        candidates.filter {
+            $0.isReadyForImport
+                && !duplicateCandidateIDs.contains($0.id)
+                && !updateCandidateIDs.contains($0.id)
+        }
+    }
+
+    private var selectableCandidates: [AppleContactLeadCandidate] {
+        candidates.filter {
+            ($0.isReadyForImport || updateCandidateIDs.contains($0.id))
+                && !duplicateCandidateIDs.contains($0.id)
+        }
     }
 
     private var unavailableCandidateCount: Int {
         candidates.filter {
-            !duplicateCandidateIDs.contains($0.id) && !$0.isReadyForImport
+            !duplicateCandidateIDs.contains($0.id)
+                && !updateCandidateIDs.contains($0.id)
+                && !$0.isReadyForImport
         }.count
     }
 
     @MainActor
     private func scanContacts() async {
-        phase = .scanning
-        errorMessage = nil
-        permissionNeedsSettings = false
-        lastImportedCount = nil
-        selectedCandidateIDs.removeAll()
-        duplicateCandidateIDs.removeAll()
+        resetScanState(source: .device)
 
         do {
             let result = try await AppleContactLeadImportService.shared.loadMatchingContacts()
-            hasLimitedAccess = result.hasLimitedAccess
-            candidates = result.candidates
-
-            var duplicateIndex = AppleContactLeadDuplicateIndex(existingLeads: existingLeadSnapshots)
-            duplicateCandidateIDs = Set(
-                candidates.filter { !duplicateIndex.registerIfUnique($0) }.map(\.id)
-            )
-
-            let indicesToGeocode = candidates.indices.filter { index in
-                candidates[index].address != nil && !duplicateCandidateIDs.contains(candidates[index].id)
-            }
-
-            for (offset, index) in indicesToGeocode.enumerated() {
-                phase = .geocoding(current: offset + 1, total: indicesToGeocode.count)
-                candidates[index].didAttemptGeocoding = true
-                if let address = candidates[index].address {
-                    candidates[index].coordinate = await AppleContactAddressGeocoder.shared.coordinate(for: address)
-                }
-            }
-
-            selectedCandidateIDs = Set(readyCandidates.map(\.id))
-            phase = .ready
+            await prepareCandidates(result.candidates, hasLimitedAccess: result.hasLimitedAccess)
         } catch let importError as AppleContactLeadImportError {
             candidates = []
             hasLimitedAccess = false
@@ -436,20 +521,146 @@ struct AppleContactLeadImportView: View {
         }
     }
 
+    private func handleMacPackageSelection(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            Task { await loadMacPackage(from: url) }
+        case .failure(let error):
+            errorMessage = "The Mac Contacts file could not be selected: \(error.localizedDescription)"
+            permissionNeedsSettings = false
+            phase = .ready
+        }
+    }
+
+    @MainActor
+    private func loadMacPackage(from url: URL) async {
+        resetScanState(source: .macPackage)
+
+        do {
+            let packageCandidates = try await Task.detached(priority: .userInitiated) {
+                try MacContactLeadPackageService.loadCandidates(from: url)
+            }.value
+            await prepareCandidates(packageCandidates, hasLimitedAccess: false)
+        } catch {
+            candidates = []
+            hasLimitedAccess = false
+            errorMessage = error.localizedDescription
+            permissionNeedsSettings = false
+            phase = .ready
+        }
+    }
+
+    @MainActor
+    private func resetScanState(source: CandidateSource) {
+        candidateSource = source
+        phase = .scanning
+        errorMessage = nil
+        permissionNeedsSettings = false
+        lastImportOutcome = nil
+        selectedCandidateIDs.removeAll()
+        duplicateCandidateIDs.removeAll()
+        updateCandidateIDs.removeAll()
+        existingLeadIDByCandidateID.removeAll()
+    }
+
+    @MainActor
+    private func prepareCandidates(
+        _ loadedCandidates: [AppleContactLeadCandidate],
+        hasLimitedAccess: Bool
+    ) async {
+        self.hasLimitedAccess = hasLimitedAccess
+        candidates = loadedCandidates
+
+        let leadByID = existingLeadsByID
+        let matchIndex = AppleContactLeadExistingMatchIndex(existingLeads: existingLeadReferences)
+        var duplicateIndex = AppleContactLeadDuplicateIndex(existingLeads: existingLeadSnapshots)
+        var duplicates: Set<String> = []
+        var updates: Set<String> = []
+        var matchedLeadIDs: [String: UUID] = [:]
+        var claimedExistingLeadIDs: Set<UUID> = []
+
+        for candidate in candidates {
+            if let leadID = matchIndex.matchingLeadID(for: candidate),
+               let existingLead = leadByID[leadID] {
+                guard claimedExistingLeadIDs.insert(leadID).inserted else {
+                    duplicates.insert(candidate.id)
+                    continue
+                }
+                matchedLeadIDs[candidate.id] = leadID
+                if candidateSource == .macPackage,
+                   AppleContactLeadImportService.canUpdateLead(existingLead, from: candidate)
+                    || AppleContactLeadImportService.needsGeocodingForUpdate(
+                        existingLead,
+                        from: candidate
+                    ) {
+                    updates.insert(candidate.id)
+                } else {
+                    duplicates.insert(candidate.id)
+                }
+            } else if !duplicateIndex.registerIfUnique(candidate) {
+                duplicates.insert(candidate.id)
+            }
+        }
+
+        duplicateCandidateIDs = duplicates
+        updateCandidateIDs = updates
+        existingLeadIDByCandidateID = matchedLeadIDs
+
+        let indicesToGeocode = candidates.indices.filter { index in
+            let candidate = candidates[index]
+            guard candidate.address != nil,
+                  !duplicateCandidateIDs.contains(candidate.id) else {
+                return false
+            }
+            guard updateCandidateIDs.contains(candidate.id) else { return true }
+            guard let leadID = matchedLeadIDs[candidate.id],
+                  let existingLead = leadByID[leadID] else {
+                return false
+            }
+            return AppleContactLeadImportService.needsGeocodingForUpdate(
+                existingLead,
+                from: candidate
+            )
+        }
+
+        for (offset, index) in indicesToGeocode.enumerated() {
+            phase = .geocoding(current: offset + 1, total: indicesToGeocode.count)
+            candidates[index].didAttemptGeocoding = true
+            if let address = candidates[index].address {
+                candidates[index].coordinate = await AppleContactAddressGeocoder.shared.coordinate(for: address)
+            }
+        }
+
+        for candidate in candidates where updateCandidateIDs.contains(candidate.id) {
+            guard let leadID = matchedLeadIDs[candidate.id],
+                  let existingLead = leadByID[leadID],
+                  AppleContactLeadImportService.canUpdateLead(existingLead, from: candidate) else {
+                updateCandidateIDs.remove(candidate.id)
+                duplicateCandidateIDs.insert(candidate.id)
+                continue
+            }
+        }
+
+        selectedCandidateIDs = Set(selectableCandidates.map(\.id))
+        phase = .ready
+    }
+
     @MainActor
     private func importSelectedContacts() {
         guard PaywallManager.shared.gateAction() else { return }
 
         var currentDuplicateIndex = AppleContactLeadDuplicateIndex(existingLeads: existingLeadSnapshots)
-        var selected: [AppleContactLeadCandidate] = []
+        var selectedNewCandidates: [AppleContactLeadCandidate] = []
         var newlyDuplicateIDs: Set<String> = []
 
         for candidate in candidates where
             selectedCandidateIDs.contains(candidate.id) &&
             candidate.isReadyForImport &&
+            !updateCandidateIDs.contains(candidate.id) &&
             !duplicateCandidateIDs.contains(candidate.id) {
             if currentDuplicateIndex.registerIfUnique(candidate) {
-                selected.append(candidate)
+                selectedNewCandidates.append(candidate)
             } else {
                 newlyDuplicateIDs.insert(candidate.id)
             }
@@ -457,36 +668,45 @@ struct AppleContactLeadImportView: View {
 
         duplicateCandidateIDs.formUnion(newlyDuplicateIDs)
         selectedCandidateIDs.subtract(newlyDuplicateIDs)
-        guard !selected.isEmpty else { return }
+        let selectedUpdateCandidates = candidates.filter {
+            selectedCandidateIDs.contains($0.id) && updateCandidateIDs.contains($0.id)
+        }
+        guard !selectedNewCandidates.isEmpty || !selectedUpdateCandidates.isEmpty else { return }
 
         phase = .importing
         errorMessage = nil
-        let insertedLeads: [Lead] = selected.compactMap { candidate in
-            guard let address = candidate.address, let coordinate = candidate.coordinate else { return nil }
+        let leadByID = existingLeadsByID
+        var updatedCandidateIDs: Set<String> = []
+        var updatedLeadCount = 0
+        for candidate in selectedUpdateCandidates {
+            guard let leadID = existingLeadIDByCandidateID[candidate.id],
+                  let existingLead = leadByID[leadID] else {
+                continue
+            }
+            if AppleContactLeadImportService.updateLead(existingLead, from: candidate) {
+                updatedLeadCount += 1
+            }
+            updatedCandidateIDs.insert(candidate.id)
+        }
 
-            let lead = Lead.create(in: viewContext)
-            lead.name = candidate.displayName
-            lead.phone = candidate.phone
-            lead.email = candidate.email
-            lead.address = address
-            lead.latitude = coordinate.latitude
-            lead.longitude = coordinate.longitude
-            lead.serviceCategory = candidate.service.serviceCategoryID
-            lead.source = "Apple Contacts"
-            lead.applyLeadStatus(.notContacted, autoSave: false)
-            return lead
+        let insertedLeads: [Lead] = selectedNewCandidates.compactMap {
+            AppleContactLeadImportService.createLead(from: $0, in: viewContext)
         }
 
         do {
             try viewContext.save()
-            let importedIDs = Set(selected.map(\.id))
+            let importedIDs = Set(selectedNewCandidates.map(\.id)).union(updatedCandidateIDs)
             duplicateCandidateIDs.formUnion(importedIDs)
+            updateCandidateIDs.subtract(updatedCandidateIDs)
             selectedCandidateIDs.subtract(importedIDs)
-            lastImportedCount = insertedLeads.count
+            lastImportOutcome = ImportOutcome(
+                created: insertedLeads.count,
+                updated: updatedLeadCount
+            )
             phase = .ready
             UserDataSyncManager.shared.syncWithServer()
         } catch {
-            insertedLeads.forEach(viewContext.delete)
+            viewContext.rollback()
             errorMessage = "The selected contacts were not imported: \(error.localizedDescription)"
             phase = .ready
         }
@@ -500,6 +720,26 @@ struct AppleContactLeadImportView: View {
                 email: $0.email,
                 address: $0.address
             )
+        }
+    }
+
+    private var existingLeadReferences: [AppleContactExistingLeadReference] {
+        existingLeads.compactMap { lead in
+            guard let id = lead.id else { return nil }
+            return AppleContactExistingLeadReference(
+                id: id,
+                phone: lead.phone,
+                email: lead.email,
+                address: lead.address
+            )
+        }
+    }
+
+    private var existingLeadsByID: [UUID: Lead] {
+        existingLeads.reduce(into: [:]) { result, lead in
+            if let id = lead.id, result[id] == nil {
+                result[id] = lead
+            }
         }
     }
 }

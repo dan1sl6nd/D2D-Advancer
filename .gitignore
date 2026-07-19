@@ -24,5 +24,8 @@ functions/.env.*
 firestore-backup_*.json
 status_repair_report_*.json
 
+# Mac Contacts exports — contain customer contact fields and notes
+D2D-Contacts-*.json
+
 # Node dependencies (for scripts/)
 node_modules/
