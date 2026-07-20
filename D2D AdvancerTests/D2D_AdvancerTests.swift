@@ -105,6 +105,11 @@ struct D2D_AdvancerTests {
         #expect(MapRuntimeRetentionPolicy.shouldReleaseForThermalState(.serious))
     }
 
+    @Test func mapCompassLayoutTracksTheVisibleControlStack() {
+        #expect(MapOverlayControlLayout.visibleControlCount == 4)
+        #expect(MapOverlayControlLayout.compassTopOffset == 220)
+    }
+
     @Test func mapCacheIgnoresLeadChangesThatCannotAffectPinsOrFilters() {
         #expect(MapLeadCacheInvalidationPolicy.updatedLeadAffectsMap(
             changedKeys: ["status", "latitude"]

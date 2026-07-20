@@ -114,15 +114,16 @@ struct AdvancedMapView: UIViewRepresentable {
         context.coordinator.lastAppliedStartupTargetRegion = region
         context.coordinator.lastAppliedStartupTargetRespectsVisibleControls = false
 
-        // Add custom compass button positioned below the overlay controls
+        // Keep the compass directly below the visible SwiftUI map controls.
         let compassButton = MKCompassButton(mapView: mapView)
         compassButton.compassVisibility = .adaptive
         compassButton.translatesAutoresizingMaskIntoConstraints = false
         mapView.addSubview(compassButton)
         NSLayoutConstraint.activate([
-            // Position below the SwiftUI overlay buttons (5 × 42pt + 4 × 10pt = 250pt, starting at safeArea+4)
-            compassButton.topAnchor.constraint(equalTo: mapView.safeAreaLayoutGuide.topAnchor, constant: 272),
-            // Align with SwiftUI overlay's .padding(.horizontal, 16)
+            compassButton.topAnchor.constraint(
+                equalTo: mapView.safeAreaLayoutGuide.topAnchor,
+                constant: MapOverlayControlLayout.compassTopOffset
+            ),
             compassButton.trailingAnchor.constraint(equalTo: mapView.safeAreaLayoutGuide.trailingAnchor, constant: -16)
         ])
 

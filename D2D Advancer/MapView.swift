@@ -4,6 +4,21 @@ import CoreData
 import UIKit
 import os
 
+enum MapOverlayControlLayout {
+    static let visibleControlCount = 4
+    static let controlSize: CGFloat = 44
+    static let controlSpacing: CGFloat = 10
+    static let topInsetFromSafeArea: CGFloat = 4
+    static let compassGap: CGFloat = 10
+
+    static var compassTopOffset: CGFloat {
+        topInsetFromSafeArea
+            + (CGFloat(visibleControlCount) * controlSize)
+            + (CGFloat(visibleControlCount - 1) * controlSpacing)
+            + compassGap
+    }
+}
+
 enum MapWorkflowMode: String, CaseIterable, Identifiable {
     case all
     case hot
@@ -1056,7 +1071,8 @@ struct MapView: View {
     private func overlayTopPadding(for geometry: GeometryProxy) -> CGFloat {
         // The map root ignores the top safe area, so GeometryProxy can report
         // zero here. Clamp to keep controls out of the status bar and tappable.
-        ObsidianLayout.safeAreaTop(geometry, minimum: 56) + 4
+        ObsidianLayout.safeAreaTop(geometry, minimum: 56)
+            + MapOverlayControlLayout.topInsetFromSafeArea
     }
 
     private var statusIndicator: some View {
@@ -1205,7 +1221,7 @@ struct MapView: View {
     // MARK: - HUD Components
 
     private var mapControlsGroup: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: MapOverlayControlLayout.controlSpacing) {
             mapControlButton(icon: "magnifyingglass", color: .textPrimary) {
                 isSearching = true
             }
@@ -1220,11 +1236,6 @@ struct MapView: View {
             .accessibilityLabel("Change map style")
             .accessibilityValue(mapStyleTitle)
             .accessibilityIdentifier("mapStyleButton")
-            mapControlButton(icon: "cube.fill", color: is3DModeEnabled ? .statusInterested : .textPrimary) {
-                toggle3DMode()
-            }
-            .accessibilityLabel(is3DModeEnabled ? "Turn off 3D map" : "Turn on 3D map")
-            .accessibilityIdentifier("threeDMapButton")
             mapControlButton(icon: "slider.horizontal.3", color: selectedMapMode == .all ? .electricViolet : selectedMapMode.color) {
                 showingMapTools = true
             }
@@ -1288,7 +1299,10 @@ struct MapView: View {
             Image(systemName: icon)
                 .font(.obsidianBody)
                 .foregroundColor(color)
-                .frame(width: 44, height: 44)
+                .frame(
+                    width: MapOverlayControlLayout.controlSize,
+                    height: MapOverlayControlLayout.controlSize
+                )
                 .mapOverlayCircle()
                 .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 2)
         }
@@ -1699,14 +1713,6 @@ struct MapView: View {
         mapType = type
     }
 
-    private func toggle3DMode() {
-        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-        impactFeedback.impactOccurred()
-
-        is3DModeEnabled.toggle()
-        mapPitch = is3DModeEnabled ? max(mapPitch, 45) : 0
-    }
-    
     private func centerOnUserLocationWithAnimation() {
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()

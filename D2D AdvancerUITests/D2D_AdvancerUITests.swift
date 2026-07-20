@@ -2874,6 +2874,22 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testMapControlsOmitRetired3DButton() {
+        let app = makeApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        _ = waitForMapReady(app)
+        for identifier in ["searchButton", "mapStyleButton", "mapToolsButton"] {
+            XCTAssertTrue(
+                app.buttons[identifier].waitForExistence(timeout: 8),
+                "The remaining map control should be available: \(identifier)"
+            )
+        }
+        XCTAssertFalse(app.buttons["threeDMapButton"].exists, "The retired 3D map control should stay removed")
+    }
+
+    @MainActor
     func testPrimaryTabsAndMoreSurfacesSmoke() throws {
         let app = makeApp()
         app.launch()
@@ -2888,7 +2904,6 @@ final class D2D_AdvancerUITests: XCTestCase {
         for identifier in [
             "addLeadButton",
             "mapStyleButton",
-            "threeDMapButton",
             "mapToolsButton",
             "quickAction_away",
             "quickAction_later",
@@ -2900,6 +2915,7 @@ final class D2D_AdvancerUITests: XCTestCase {
                 "Map control should be available: \(identifier)"
             )
         }
+        XCTAssertFalse(app.buttons["threeDMapButton"].exists, "The retired 3D map control should stay removed")
 
         tapButton(app, "tab_Leads", timeout: 12)
         waitForIdentifiedElement(app, "leadsScreen", timeout: 12)
