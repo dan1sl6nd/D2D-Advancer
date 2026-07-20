@@ -1760,11 +1760,39 @@ struct D2D_AdvancerTests {
         #expect(coordinator.isProgrammaticChange)
     }
 
+    @MainActor
     @Test func mainMapSupportsNativePitchWithoutA3DControl() async throws {
+        let standardConfiguration = AdvancedMapView.preferredConfiguration(for: .standard)
+        let satelliteConfiguration = AdvancedMapView.preferredConfiguration(for: .satellite)
+        let hybridConfiguration = AdvancedMapView.preferredConfiguration(for: .hybrid)
+
         #expect(AdvancedMapView.nativePitchGestureEnabled)
+        #expect(standardConfiguration is MKStandardMapConfiguration)
+        #expect(satelliteConfiguration is MKImageryMapConfiguration)
+        #expect(hybridConfiguration is MKHybridMapConfiguration)
+        #expect(standardConfiguration.elevationStyle == .realistic)
+        #expect(satelliteConfiguration.elevationStyle == .realistic)
+        #expect(hybridConfiguration.elevationStyle == .realistic)
         #expect(AdvancedMapView.clampedCameraPitch(80, for: .standard) == 65)
         #expect(AdvancedMapView.clampedCameraPitch(80, for: .hybrid) == 50)
         #expect(AdvancedMapView.clampedCameraPitch(-10, for: .standard) == 0)
+    }
+
+    @MainActor
+    @Test func realisticMapConfigurationsPreserveCameraPitch() async throws {
+        for mapType in [MKMapType.standard, .satellite, .hybrid] {
+            let mapView = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+            mapView.preferredConfiguration = AdvancedMapView.preferredConfiguration(for: mapType)
+            mapView.isPitchEnabled = true
+            mapView.camera = MKMapCamera(
+                lookingAtCenter: CLLocationCoordinate2D(latitude: 43.5597, longitude: -79.7072),
+                fromDistance: 2_000,
+                pitch: 45,
+                heading: 0
+            )
+
+            #expect(mapView.camera.pitch > 40)
+        }
     }
 
     @Test func launchMapAppliesFirstStartupFollowEvenWhenMapIsAlreadyNearTarget() async throws {

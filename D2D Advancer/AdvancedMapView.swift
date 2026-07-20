@@ -81,8 +81,9 @@ struct AdvancedMapView: UIViewRepresentable {
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = showsUserLocation
         mapView.userTrackingMode = .none
-        mapView.mapType = Self.renderedMapType(for: mapType)
-        mapView.showsBuildings = Self.shouldShowBuildings(for: mapType)
+        let effectiveMapType = Self.renderedMapType(for: mapType)
+        mapView.preferredConfiguration = Self.preferredConfiguration(for: effectiveMapType)
+        context.coordinator.lastEffectiveMapType = effectiveMapType
         mapView.showsCompass = false // Hide default compass to avoid overlap with controls
         // MapKit maps a two-finger vertical pan to camera pitch.
         mapView.isRotateEnabled = true
@@ -188,22 +189,16 @@ struct AdvancedMapView: UIViewRepresentable {
 
         let effectiveMapType = Self.renderedMapType(for: mapType)
 
-        coordinator.lastEffectiveMapType = effectiveMapType
-
-        // Update map type if changed
-        if mapView.mapType != effectiveMapType {
-            mapView.mapType = effectiveMapType
+        // Replace the renderer only when the selected style changes.
+        if coordinator.lastEffectiveMapType != effectiveMapType {
+            mapView.preferredConfiguration = Self.preferredConfiguration(for: effectiveMapType)
+            coordinator.lastEffectiveMapType = effectiveMapType
         }
 
         if mapView.isPitchEnabled != Self.nativePitchGestureEnabled {
             mapView.isPitchEnabled = Self.nativePitchGestureEnabled
         }
         mapView.isRotateEnabled = true
-
-        let showsBuildings = Self.shouldShowBuildings(for: effectiveMapType)
-        if mapView.showsBuildings != showsBuildings {
-            mapView.showsBuildings = showsBuildings
-        }
 
         if mapView.showsUserLocation != showsUserLocation {
             mapView.showsUserLocation = showsUserLocation
@@ -650,6 +645,17 @@ struct AdvancedMapView: UIViewRepresentable {
 
     nonisolated static let nativePitchGestureEnabled = true
 
+    static func preferredConfiguration(for mapType: MKMapType) -> MKMapConfiguration {
+        switch renderedMapType(for: mapType) {
+        case .satellite:
+            return MKImageryMapConfiguration(elevationStyle: .realistic)
+        case .hybrid:
+            return MKHybridMapConfiguration(elevationStyle: .realistic)
+        default:
+            return MKStandardMapConfiguration(elevationStyle: .realistic)
+        }
+    }
+
     private nonisolated static func renderedMapType(for mapType: MKMapType) -> MKMapType {
         switch mapType {
         case .satellite, .satelliteFlyover:
@@ -668,10 +674,6 @@ struct AdvancedMapView: UIViewRepresentable {
         default:
             return false
         }
-    }
-
-    private nonisolated static func shouldShowBuildings(for mapType: MKMapType) -> Bool {
-        !isImageryMapType(mapType)
     }
 
     nonisolated static func clampedCameraPitch(_ pitch: Double, for mapType: MKMapType) -> Double {
