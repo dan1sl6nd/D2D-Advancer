@@ -58,7 +58,6 @@ struct AdvancedMapView: UIViewRepresentable {
     @Binding var rotation: Double
     @Binding var pitch: Double
     @Binding var animateNextUpdate: Bool
-    @Binding var is3DModeEnabled: Bool
     @Binding var visibleRegion: MKCoordinateRegion
     let launchCenteringResetToken: Int
     let launchLocationCenterRevision: Int
@@ -82,12 +81,12 @@ struct AdvancedMapView: UIViewRepresentable {
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = showsUserLocation
         mapView.userTrackingMode = .none
-        mapView.mapType = Self.renderedMapType(for: mapType, is3DModeEnabled: is3DModeEnabled)
-        mapView.showsBuildings = Self.shouldShowBuildings(for: mapType, is3DModeEnabled: is3DModeEnabled)
+        mapView.mapType = Self.renderedMapType(for: mapType)
+        mapView.showsBuildings = Self.shouldShowBuildings(for: mapType)
         mapView.showsCompass = false // Hide default compass to avoid overlap with controls
-        // Keep expensive 3D imagery opt-in so Satellite/Hybrid stay responsive.
+        // MapKit maps a two-finger vertical pan to camera pitch.
         mapView.isRotateEnabled = true
-        mapView.isPitchEnabled = Self.allowsPitch(is3DModeEnabled: is3DModeEnabled)
+        mapView.isPitchEnabled = Self.nativePitchGestureEnabled
         mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "SearchPin")
         mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "LeadCluster")
         mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "LeadAnnotation")
@@ -187,9 +186,7 @@ struct AdvancedMapView: UIViewRepresentable {
             coordinator.lastLaunchLocationCenterRevision = launchLocationCenterRevision
         }
 
-        let effectiveMapType = Self.renderedMapType(for: mapType, is3DModeEnabled: is3DModeEnabled)
-        let didToggle3DMode = coordinator.last3DModeEnabled != nil && coordinator.last3DModeEnabled != is3DModeEnabled
-        coordinator.last3DModeEnabled = is3DModeEnabled
+        let effectiveMapType = Self.renderedMapType(for: mapType)
 
         coordinator.lastEffectiveMapType = effectiveMapType
 
@@ -198,13 +195,12 @@ struct AdvancedMapView: UIViewRepresentable {
             mapView.mapType = effectiveMapType
         }
 
-        let pitchEnabled = Self.allowsPitch(is3DModeEnabled: is3DModeEnabled)
-        if mapView.isPitchEnabled != pitchEnabled {
-            mapView.isPitchEnabled = pitchEnabled
+        if mapView.isPitchEnabled != Self.nativePitchGestureEnabled {
+            mapView.isPitchEnabled = Self.nativePitchGestureEnabled
         }
         mapView.isRotateEnabled = true
 
-        let showsBuildings = Self.shouldShowBuildings(for: effectiveMapType, is3DModeEnabled: is3DModeEnabled)
+        let showsBuildings = Self.shouldShowBuildings(for: effectiveMapType)
         if mapView.showsBuildings != showsBuildings {
             mapView.showsBuildings = showsBuildings
         }
@@ -236,34 +232,18 @@ struct AdvancedMapView: UIViewRepresentable {
             && mapView.bounds.width > 1
             && mapView.bounds.height > 1
 
-        if didToggle3DMode {
-            let targetPitch = is3DModeEnabled ? min(max(pitch, 45), Self.maximumPitch(for: effectiveMapType)) : 0
-            let targetDistance = is3DModeEnabled ? min(mapView.camera.altitude, regionToDistance(mapView.region)) : mapView.camera.altitude
+        let maxPitch = Self.maximumPitch(for: effectiveMapType)
+        if mapView.camera.pitch > maxPitch {
             coordinator.isProgrammaticChange = true
             let camera = MKMapCamera(
                 lookingAtCenter: mapView.camera.centerCoordinate,
-                fromDistance: targetDistance,
-                pitch: targetPitch,
+                fromDistance: mapView.camera.altitude,
+                pitch: maxPitch,
                 heading: mapView.camera.heading
             )
             mapView.setCamera(camera, animated: true)
             DispatchQueue.main.async {
-                self.pitch = targetPitch
-            }
-        } else if is3DModeEnabled {
-            let maxPitch = Self.maximumPitch(for: effectiveMapType)
-            if mapView.camera.pitch > maxPitch {
-                coordinator.isProgrammaticChange = true
-                let camera = MKMapCamera(
-                    lookingAtCenter: mapView.camera.centerCoordinate,
-                    fromDistance: mapView.camera.altitude,
-                    pitch: maxPitch,
-                    heading: mapView.camera.heading
-                )
-                mapView.setCamera(camera, animated: true)
-                DispatchQueue.main.async {
-                    self.pitch = maxPitch
-                }
+                self.pitch = maxPitch
             }
         }
         
@@ -274,7 +254,7 @@ struct AdvancedMapView: UIViewRepresentable {
             }
             coordinator.isProgrammaticChange = true
 
-            let cameraPitch = is3DModeEnabled ? min(pitch, Self.maximumPitch(for: effectiveMapType)) : 0
+            let cameraPitch = Self.clampedCameraPitch(mapView.camera.pitch, for: effectiveMapType)
             if rotation != 0 || cameraPitch != 0 {
                 let distance = regionToDistance(region)
                 let camera = MKMapCamera(
@@ -668,18 +648,20 @@ struct AdvancedMapView: UIViewRepresentable {
         userHasInteracted && !changeWasProgrammatic
     }
 
-    private static func renderedMapType(for mapType: MKMapType, is3DModeEnabled: Bool) -> MKMapType {
+    nonisolated static let nativePitchGestureEnabled = true
+
+    private nonisolated static func renderedMapType(for mapType: MKMapType) -> MKMapType {
         switch mapType {
         case .satellite, .satelliteFlyover:
-            return is3DModeEnabled ? .satelliteFlyover : .satellite
+            return .satellite
         case .hybrid, .hybridFlyover:
-            return is3DModeEnabled ? .hybridFlyover : .hybrid
+            return .hybrid
         default:
             return mapType
         }
     }
 
-    private static func isImageryMapType(_ mapType: MKMapType) -> Bool {
+    private nonisolated static func isImageryMapType(_ mapType: MKMapType) -> Bool {
         switch mapType {
         case .satellite, .hybrid, .satelliteFlyover, .hybridFlyover:
             return true
@@ -688,15 +670,15 @@ struct AdvancedMapView: UIViewRepresentable {
         }
     }
 
-    private static func shouldShowBuildings(for mapType: MKMapType, is3DModeEnabled: Bool) -> Bool {
-        is3DModeEnabled && !isImageryMapType(mapType)
+    private nonisolated static func shouldShowBuildings(for mapType: MKMapType) -> Bool {
+        !isImageryMapType(mapType)
     }
 
-    private static func allowsPitch(is3DModeEnabled: Bool) -> Bool {
-        is3DModeEnabled
+    nonisolated static func clampedCameraPitch(_ pitch: Double, for mapType: MKMapType) -> Double {
+        min(max(pitch, 0), maximumPitch(for: mapType))
     }
 
-    private static func maximumPitch(for mapType: MKMapType) -> Double {
+    private nonisolated static func maximumPitch(for mapType: MKMapType) -> Double {
         isImageryMapType(mapType) ? 50 : 65
     }
     
@@ -716,7 +698,6 @@ struct AdvancedMapView: UIViewRepresentable {
         var isProgrammaticChange = false
         var hasSetInitialRegion = false
         var lastEffectiveMapType: MKMapType?
-        var last3DModeEnabled: Bool?
         var lastLaunchCenteringResetToken: Int?
         var lastLaunchLocationCenterRevision: Int?
         var lastAppliedStartupTargetRegion: MKCoordinateRegion?

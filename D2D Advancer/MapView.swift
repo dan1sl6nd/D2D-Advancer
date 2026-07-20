@@ -358,7 +358,6 @@ struct MapView: View {
     @State private var mapType: MKMapType = AppPreferences.shared.mapDefaultViewType
     @State private var mapRotation: Double = 0.0
     @State private var mapPitch: Double = 0.0
-    @State private var is3DModeEnabled = false
     @State private var leadToChangeStatus: Lead?
     @State private var triggerMapAnimation = false
     @State private var toastLead: Lead?
@@ -961,7 +960,6 @@ struct MapView: View {
             rotation: $mapRotation,
             pitch: $mapPitch,
             animateNextUpdate: $triggerMapAnimation,
-            is3DModeEnabled: $is3DModeEnabled,
             visibleRegion: $visibleMapRegion,
             launchCenteringResetToken: launchCenteringResetToken,
             launchLocationCenterRevision: locationManager.initialMapCenterRevision,

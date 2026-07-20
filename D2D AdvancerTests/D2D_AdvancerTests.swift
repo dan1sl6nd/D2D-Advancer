@@ -1760,6 +1760,13 @@ struct D2D_AdvancerTests {
         #expect(coordinator.isProgrammaticChange)
     }
 
+    @Test func mainMapSupportsNativePitchWithoutA3DControl() async throws {
+        #expect(AdvancedMapView.nativePitchGestureEnabled)
+        #expect(AdvancedMapView.clampedCameraPitch(80, for: .standard) == 65)
+        #expect(AdvancedMapView.clampedCameraPitch(80, for: .hybrid) == 50)
+        #expect(AdvancedMapView.clampedCameraPitch(-10, for: .standard) == 0)
+    }
+
     @Test func launchMapAppliesFirstStartupFollowEvenWhenMapIsAlreadyNearTarget() async throws {
         let targetRegion = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 43.559700, longitude: -79.707200),
@@ -4856,7 +4863,6 @@ struct D2D_AdvancerTests {
             rotation: .constant(0),
             pitch: .constant(0),
             animateNextUpdate: .constant(false),
-            is3DModeEnabled: .constant(false),
             visibleRegion: .constant(region),
             launchCenteringResetToken: 0,
             launchLocationCenterRevision: 0,
