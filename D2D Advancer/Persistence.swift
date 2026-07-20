@@ -100,9 +100,18 @@ class PersistenceController {
         
         container.viewContext.automaticallyMergesChangesFromParent = true
         
-        // Check for data recovery on app launch
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.performStartupDataCheck()
+        let lastIntegrityCheck = UserDefaults.standard.object(
+            forKey: StartupMaintenancePolicy.integrityCheckDateKey
+        ) as? Date
+        if StartupMaintenancePolicy.shouldRunIntegrityCheck(lastRunAt: lastIntegrityCheck) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+                guard let self else { return }
+                guard self.performStartupDataCheck() else { return }
+                UserDefaults.standard.set(
+                    Date(),
+                    forKey: StartupMaintenancePolicy.integrityCheckDateKey
+                )
+            }
         }
     }
     
@@ -310,16 +319,17 @@ class PersistenceController {
         }
     }
     
-    private func performStartupDataCheck() {
+    @discardableResult
+    private func performStartupDataCheck() -> Bool {
         guard hasPersistentStore else {
             print("⚠️ Skipping startup data check: persistent store is not loaded")
-            return
+            return false
         }
         
         print("🔍 Performing startup data integrity check...")
         
         let context = container.viewContext
-        normalizeLegacyStatuses(context)
+        guard normalizeLegacyStatuses(context) else { return false }
         
         // Check current follow-up count
         let followUpRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
@@ -353,14 +363,15 @@ class PersistenceController {
                     createDataBackup()
                 }
             }
-            
+            return true
         } catch {
             print("❌ Error during startup data check: \(error)")
+            return false
         }
     }
 
-    private func normalizeLegacyStatuses(_ context: NSManagedObjectContext) {
-        guard hasPersistentStore else { return }
+    private func normalizeLegacyStatuses(_ context: NSManagedObjectContext) -> Bool {
+        guard hasPersistentStore else { return false }
         
         // Map any legacy status strings (e.g., "sold", "closed") to current enum raw values
         let fetch: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
@@ -375,8 +386,10 @@ class PersistenceController {
                 try context.save()
                 print("✅ Normalized \(legacyLeads.count) legacy 'sold/closed' statuses to 'converted'")
             }
+            return true
         } catch {
             print("❌ Failed normalizing legacy statuses: \(error)")
+            return false
         }
     }
 

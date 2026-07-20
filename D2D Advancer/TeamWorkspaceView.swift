@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 import AuthenticationServices
-import CoreLocation
 
 struct TeamWorkspaceView: View {
     @Environment(\.colorScheme) private var colorScheme
@@ -10,7 +9,7 @@ struct TeamWorkspaceView: View {
     @ObservedObject private var appleSignInManager = AppleSignInManager.shared
     @ObservedObject private var teamService = TeamFirebaseService.shared
     @ObservedObject private var paywallManager = PaywallManager.shared
-    @ObservedObject private var locationManager = LocationManager.shared
+    @ObservedObject private var dutyLocationCoordinator = TeamDutyLocationCoordinator.shared
     @State private var teamName = "My Team"
     @State private var inviteCode = ""
     #if DEBUG
@@ -22,9 +21,6 @@ struct TeamWorkspaceView: View {
     @State private var createdInvite: TeamInvite?
     @State private var createdInviteWorkType: TeamMemberWorkType?
     @State private var isWorking = false
-    @State private var isUploadingDutyLocation = false
-    @State private var lastTeamLocationUploadAt: Date?
-    @State private var lastTeamLocationUploadCoordinate: TeamCoordinate?
     @State private var memberPendingRemoval: TeamMember?
     @State private var showingRemoveMemberConfirmation = false
     @State private var showingLeaveTeamConfirmation = false
@@ -134,8 +130,10 @@ struct TeamWorkspaceView: View {
         .onChange(of: firebaseService.isAuthenticated) { _, _ in
             Task { await loadTeam() }
         }
-        .onReceive(locationManager.$location.compactMap { $0 }) { location in
-            publishDutyLocationIfNeeded(location)
+        .onChange(of: dutyLocationCoordinator.lastErrorMessage) { _, message in
+            guard let message else { return }
+            statusMessage = message
+            statusMessageIsError = true
         }
         .alert("Remove Team Member?", isPresented: $showingRemoveMemberConfirmation, presenting: memberPendingRemoval) { member in
             Button("Remove", role: .destructive) {
@@ -1466,17 +1464,12 @@ struct TeamWorkspaceView: View {
         Task {
             do {
                 if teamService.activeDutySession == nil {
-                    locationManager.startLocationUpdates()
-                    locationManager.requestImmediateLocation()
                     try await teamService.startDuty(member: member)
-                    if let location = locationManager.location {
-                        publishDutyLocationIfNeeded(location, force: true)
-                    }
+                    dutyLocationCoordinator.beginActiveSession()
                     statusMessage = member.role == .owner ? "Owner location sharing is on." : "You are on duty."
                 } else {
                     try await teamService.endDuty()
-                    lastTeamLocationUploadAt = nil
-                    lastTeamLocationUploadCoordinate = nil
+                    dutyLocationCoordinator.endActiveSession()
                     statusMessage = member.role == .owner ? "Owner location sharing is off." : "You are off duty."
                 }
                 statusMessageIsError = false
@@ -1521,42 +1514,6 @@ struct TeamWorkspaceView: View {
         if case let .failed(message) = appleSignInManager.authStatus,
            isStaleSetupErrorMessage(message) {
             appleSignInManager.authStatus = .idle
-        }
-    }
-
-    private func publishDutyLocationIfNeeded(_ location: CLLocation, force: Bool = false) {
-        guard let member = teamService.currentMember,
-              teamService.activeDutySession != nil else {
-            return
-        }
-
-        let coordinate = TeamCoordinate(
-            latitude: location.coordinate.latitude,
-            longitude: location.coordinate.longitude
-        )
-        let now = Date()
-        guard force || TeamLocationSharingPolicy.shouldUploadLocation(
-            lastUploadAt: lastTeamLocationUploadAt,
-            lastCoordinate: lastTeamLocationUploadCoordinate,
-            newCoordinate: coordinate,
-            usageLevel: teamService.teamUsageControl.level,
-            now: now
-        ) else {
-            return
-        }
-        guard !isUploadingDutyLocation else { return }
-
-        isUploadingDutyLocation = true
-        Task {
-            do {
-                try await teamService.recordCurrentLocation(location, member: member, now: now)
-                lastTeamLocationUploadAt = now
-                lastTeamLocationUploadCoordinate = coordinate
-            } catch {
-                statusMessage = TeamFirebaseService.userFacingErrorMessage(for: error)
-                statusMessageIsError = true
-            }
-            isUploadingDutyLocation = false
         }
     }
 

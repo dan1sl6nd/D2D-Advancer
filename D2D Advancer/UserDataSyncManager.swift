@@ -50,6 +50,51 @@ struct PersonalCloudMigrationSummary: Equatable {
     let appointmentCount: Int
 }
 
+struct PersonalSyncRequest: Equatable {
+    let provider: CloudSyncProvider
+    let includeAppointments: Bool
+}
+
+struct PersonalSyncExecutionGate {
+    private(set) var activeRequest: PersonalSyncRequest?
+    private(set) var pendingRequest: PersonalSyncRequest?
+
+    var isActive: Bool {
+        activeRequest != nil
+    }
+
+    mutating func request(_ request: PersonalSyncRequest) -> Bool {
+        guard let activeRequest else {
+            self.activeRequest = request
+            return true
+        }
+
+        if activeRequest.provider != request.provider {
+            pendingRequest = request
+        } else {
+            if pendingRequest?.provider != activeRequest.provider {
+                pendingRequest = nil
+            }
+            if request.includeAppointments && !activeRequest.includeAppointments {
+                pendingRequest = PersonalSyncRequest(
+                    provider: request.provider,
+                    includeAppointments: true
+                )
+            }
+        }
+
+        return false
+    }
+
+    mutating func finishActiveRequest() -> PersonalSyncRequest? {
+        activeRequest = nil
+        guard let pendingRequest else { return nil }
+        self.pendingRequest = nil
+        activeRequest = pendingRequest
+        return pendingRequest
+    }
+}
+
 enum PersonalCloudMigrationError: LocalizedError {
     case migrationAlreadyRunning
     case firebaseSignInRequired
@@ -82,6 +127,8 @@ class UserDataSyncManager: ObservableObject {
     private let firebaseService: FirebaseService
     private var syncTimer: Timer?
     private var hasActivatedAutoSyncTimer = false
+    private var activeSyncTask: Task<Void, Never>?
+    private var syncExecutionGate = PersonalSyncExecutionGate()
     
     enum SyncInterval: String, CaseIterable {
         case thirtyMinutes = "30min"
@@ -225,16 +272,7 @@ class UserDataSyncManager: ObservableObject {
             return
         }
 
-        guard provider != .icloud else {
-            AppointmentManager.shared.stopFirebaseListener()
-            print("☁️ Starting iCloud lead sync")
-            Task {
-                await performCloudKitOnlySync(includeAppointments: includeAppointments)
-            }
-            return
-        }
-
-        guard firebaseService.isAuthenticated else {
+        if provider == .firebase && !firebaseService.isAuthenticated {
             DispatchQueue.main.async {
                 // Only show failed status if user was previously syncing or if they had a last sync
                 // This prevents showing "Failed" on app launch when user hasn't signed in yet
@@ -247,7 +285,7 @@ class UserDataSyncManager: ObservableObject {
             return
         }
 
-        guard let currentUser = firebaseService.currentUser else {
+        if provider == .firebase && firebaseService.currentUser == nil {
             DispatchQueue.main.async {
                 // Only show failed if we were actively trying to sync
                 if self.syncStatus == .syncing {
@@ -258,10 +296,50 @@ class UserDataSyncManager: ObservableObject {
             return
         }
 
-        print("🔄 Starting sync for user: \(currentUser.uid)")
-        Task {
-            await performSync(includeAppointments: includeAppointments)
+        let request = PersonalSyncRequest(
+            provider: provider,
+            includeAppointments: includeAppointments
+        )
+        guard syncExecutionGate.request(request) else {
+            print("♻️ Personal cloud sync request coalesced with the active run")
+            return
         }
+
+        launchSync(request)
+    }
+
+    private func launchSync(_ request: PersonalSyncRequest) {
+        switch request.provider {
+        case .icloud:
+            AppointmentManager.shared.stopFirebaseListener()
+            print("☁️ Starting iCloud lead sync")
+        case .firebase:
+            print("🔄 Starting sync for user: \(firebaseService.currentUser?.uid ?? "unknown")")
+        case .off:
+            syncExecutionGate = PersonalSyncExecutionGate()
+            return
+        }
+
+        activeSyncTask = Task { [weak self] in
+            guard let self else { return }
+
+            switch request.provider {
+            case .icloud:
+                await self.performCloudKitOnlySync(includeAppointments: request.includeAppointments)
+            case .firebase:
+                await self.performSync(includeAppointments: request.includeAppointments)
+            case .off:
+                break
+            }
+
+            self.finishSyncExecution()
+        }
+    }
+
+    private func finishSyncExecution() {
+        activeSyncTask = nil
+        guard let pendingRequest = syncExecutionGate.finishActiveRequest() else { return }
+        launchSync(pendingRequest)
     }
     
     func pauseSync() {
@@ -395,7 +473,7 @@ class UserDataSyncManager: ObservableObject {
     }
 
     func migratePersonalDataToICloud() async throws -> PersonalCloudMigrationSummary {
-        guard !syncStatus.isBusy else {
+        guard !syncStatus.isBusy, !syncExecutionGate.isActive else {
             throw PersonalCloudMigrationError.migrationAlreadyRunning
         }
 

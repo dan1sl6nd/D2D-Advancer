@@ -2158,7 +2158,7 @@ private extension TeamFirebaseService {
         if member.role == .owner {
             return collection
                 .order(by: TeamFirebaseSchema.Field.recordedAt, descending: true)
-                .limit(to: 3_000)
+                .limit(to: TeamLocationSharingPolicy.ownerRealtimePointLimit)
         }
         return dutyLocationPointsForUserQuery(team: team, userId: member.userId)
     }
@@ -2176,7 +2176,7 @@ private extension TeamFirebaseService {
             .collection(TeamFirebaseSchema.Collection.dutyLocationPoints)
             .whereField(TeamFirebaseSchema.Field.repUserId, isEqualTo: userId)
             .order(by: TeamFirebaseSchema.Field.recordedAt, descending: true)
-            .limit(to: 1_200)
+            .limit(to: TeamLocationSharingPolicy.memberRealtimePointLimit)
     }
 
     func activityLogQuery(team: TeamWorkspace, member: TeamMember) -> Query {
@@ -3169,6 +3169,18 @@ private extension TeamFirebaseService {
 }
 
 extension TeamFirebaseService {
+    func loadDutyLocationPoints(teamId: String, sessionId: String) async throws -> [TeamDutyLocationPoint] {
+        let snapshot = try await teamRef(teamId)
+            .collection(TeamFirebaseSchema.Collection.dutyLocationPoints)
+            .whereField(TeamFirebaseSchema.Field.sessionId, isEqualTo: sessionId)
+            .limit(to: TeamLocationSharingPolicy.routeHistoryPointLimit)
+            .getDocuments()
+
+        return snapshot.documents
+            .compactMap { decodeDutyLocationPoint(id: $0.documentID, data: $0.data()) }
+            .sorted { $0.recordedAt < $1.recordedAt }
+    }
+
     func clearTeamSessionForSignOut() {
         clearLocalTeam(removeCachedMembership: true)
     }

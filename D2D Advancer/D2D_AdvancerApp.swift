@@ -54,6 +54,7 @@ struct D2D_AdvancerApp: App {
         if launchArguments.contains("-resetUITestAppointments") {
             UserDefaults.standard.removeObject(forKey: "saved_appointments")
             UserDefaults.standard.removeObject(forKey: "deleted_appointment_ids")
+            try? AppointmentLocalFileStore.clearDefaultStore()
             print("🧪 Appointments reset for UI tests")
         }
         if launchArguments.contains("-resetServiceCategoriesForUITests") {
@@ -150,10 +151,15 @@ struct D2D_AdvancerApp: App {
         // Start monitoring connectivity to auto-recover listeners/sync
         if !isRunningUITests {
             NetworkMonitor.shared.start()
+            TeamDutyLocationCoordinator.shared.start()
         }
 
         // Clean up duplicates on a background context once Core Data is ready.
-        if !isRunningUITests {
+        let completedLeadCleanupVersion = UserDefaults.standard.integer(
+            forKey: StartupMaintenancePolicy.leadCleanupVersionKey
+        )
+        if !isRunningUITests,
+           StartupMaintenancePolicy.shouldRunLeadCleanup(completedVersion: completedLeadCleanupVersion) {
             let persistence = persistenceController
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 guard persistence.hasPersistentStore else {
@@ -164,6 +170,7 @@ struct D2D_AdvancerApp: App {
                 let cleanupContext = persistence.container.newBackgroundContext()
                 cleanupContext.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
                 cleanupContext.perform {
+                    var nameCleanupSucceeded = true
                     do {
                         let sanitizedCount = try AppleContactLeadImportService.sanitizeImportedLeadNames(
                             in: cleanupContext
@@ -175,10 +182,17 @@ struct D2D_AdvancerApp: App {
                             print("🧹 Sanitized \(sanitizedCount) Apple Contacts lead name(s)")
                         }
                     } catch {
+                        nameCleanupSucceeded = false
                         print("⚠️ Apple Contacts lead-name cleanup failed: \(error.localizedDescription)")
                     }
 
-                    Utilities.removeDuplicateLeads(from: cleanupContext)
+                    Utilities.removeDuplicateLeads(from: cleanupContext) { duplicateCleanupSucceeded in
+                        guard nameCleanupSucceeded, duplicateCleanupSucceeded else { return }
+                        UserDefaults.standard.set(
+                            StartupMaintenancePolicy.leadCleanupVersion,
+                            forKey: StartupMaintenancePolicy.leadCleanupVersionKey
+                        )
+                    }
                 }
             }
         }
@@ -669,8 +683,7 @@ struct D2D_AdvancerApp: App {
         ]
 
         do {
-            let data = try JSONEncoder().encode(appointments)
-            UserDefaults.standard.set(data, forKey: "saved_appointments")
+            try AppointmentLocalFileStore.replaceDefaultStore(with: appointments)
             UserDefaults.standard.removeObject(forKey: "deleted_appointment_ids")
             print("App Store review fixture ready: \(appointments.count) appointments")
         } catch {

@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import CoreData
+import ImageIO
 import UIKit
 
 // MARK: - Photo section embedded inside a lead detail / edit view
@@ -17,10 +18,14 @@ struct LeadPhotoSection: View {
     @State private var showingLibrary = false
     @State private var showingFullscreen = false
     @State private var libraryItem: PhotosPickerItem?
+    @State private var displayImage: UIImage?
+    @State private var isProcessingPhoto = false
 
-    private var photoImage: UIImage? {
-        guard let data = lead.photo, !data.isEmpty else { return nil }
-        return UIImage(data: data)
+    private var photoRevision: LeadPhotoRevision {
+        LeadPhotoRevision(
+            byteCount: lead.photo?.count ?? 0,
+            capturedAt: lead.photoCapturedDate
+        )
     }
 
     var body: some View {
@@ -34,7 +39,7 @@ struct LeadPhotoSection: View {
             // Inline actions row, only shown when a photo is attached. Replaced
             // the 3-dots Menu/confirmationDialog approach because SwiftUI's
             // dialog presentation was unreliable for the styled trigger buttons.
-            if photoImage != nil {
+            if displayImage != nil {
                 HStack(spacing: 8) {
                     inlineActionButton(title: "Take Photo", icon: "camera.fill", destructive: false) {
                         showingCamera = true
@@ -62,21 +67,33 @@ struct LeadPhotoSection: View {
         .onChange(of: libraryItem) { _, newItem in
             guard let newItem = newItem else { return }
             Task {
+                isProcessingPhoto = true
+                defer {
+                    isProcessingPhoto = false
+                    libraryItem = nil
+                }
                 if let data = try? await newItem.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    await MainActor.run {
-                        saveImage(image)
-                        libraryItem = nil
-                    }
+                   let compressed = await PhotoCompressor.compressAsync(data) {
+                    savePhotoData(compressed)
                 }
             }
         }
         .fullScreenCover(isPresented: $showingFullscreen) {
-            if let img = photoImage {
+            if let img = displayImage {
                 FullscreenPhotoViewer(image: img) {
                     showingFullscreen = false
                 }
             }
+        }
+        .task(id: photoRevision) {
+            let requestedRevision = photoRevision
+            guard let data = lead.photo, !data.isEmpty else {
+                displayImage = nil
+                return
+            }
+            let image = await PhotoCompressor.decodeAsync(data, maxDimension: 1920)
+            guard !Task.isCancelled, requestedRevision == photoRevision else { return }
+            displayImage = image
         }
     }
 
@@ -84,7 +101,16 @@ struct LeadPhotoSection: View {
 
     @ViewBuilder
     private var photoCard: some View {
-        if let img = photoImage {
+        if isProcessingPhoto {
+            ProgressView("Preparing photo...")
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textSecondary)
+                .frame(maxWidth: .infinity, minHeight: 120)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.obsidianSurface)
+                )
+        } else if let img = displayImage {
             existingPhoto(img)
         } else {
             addPhotoButtons
@@ -190,10 +216,18 @@ struct LeadPhotoSection: View {
     // MARK: - Persistence
 
     private func saveImage(_ image: UIImage) {
-        guard let compressed = PhotoCompressor.compress(image) else {
-            print("⚠️ Photo: compression produced nil data")
-            return
+        isProcessingPhoto = true
+        Task {
+            defer { isProcessingPhoto = false }
+            guard let compressed = await PhotoCompressor.compressAsync(image) else {
+                print("⚠️ Photo: compression produced nil data")
+                return
+            }
+            savePhotoData(compressed)
         }
+    }
+
+    private func savePhotoData(_ compressed: Data) {
         lead.photo = compressed
         lead.photoCapturedDate = Date()
         lead.updatedDate = Date()
@@ -202,6 +236,7 @@ struct LeadPhotoSection: View {
     }
 
     private func removePhoto() {
+        displayImage = nil
         lead.photo = nil
         lead.photoCapturedDate = nil
         lead.updatedDate = Date()
@@ -224,6 +259,15 @@ struct LeadPhotoSection: View {
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())
     }
+}
+
+private struct LeadPhotoRevision: Hashable {
+    let byteCount: Int
+    let capturedAt: Date?
+}
+
+private struct SendableUIImage: @unchecked Sendable {
+    let value: UIImage
 }
 
 // MARK: - Camera wrapper (UIImagePickerController)
@@ -379,8 +423,7 @@ enum PhotoCompressor {
         let longestEdge = max(size.width, size.height)
         guard longestEdge > 0 else { return nil }
 
-        let scale = longestEdge > maxDimension ? maxDimension / longestEdge : 1.0
-        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let newSize = scaledSize(for: size, maxDimension: maxDimension)
 
         let renderer = UIGraphicsImageRenderer(size: newSize)
         let resized = renderer.image { _ in
@@ -388,5 +431,65 @@ enum PhotoCompressor {
         }
 
         return resized.jpegData(compressionQuality: quality)
+    }
+
+    static func compressAsync(
+        _ image: UIImage,
+        maxDimension: CGFloat = 1920,
+        quality: CGFloat = 0.6
+    ) async -> Data? {
+        let sendableImage = SendableUIImage(value: image)
+        return await Task.detached(priority: .userInitiated) {
+            autoreleasepool {
+                compress(sendableImage.value, maxDimension: maxDimension, quality: quality)
+            }
+        }.value
+    }
+
+    static func compressAsync(
+        _ data: Data,
+        maxDimension: CGFloat = 1920,
+        quality: CGFloat = 0.6
+    ) async -> Data? {
+        await Task.detached(priority: .userInitiated) {
+            autoreleasepool {
+                guard let image = downsampledImage(from: data, maxDimension: maxDimension) else {
+                    return nil
+                }
+                return image.jpegData(compressionQuality: quality)
+            }
+        }.value
+    }
+
+    static func decodeAsync(_ data: Data, maxDimension: CGFloat) async -> UIImage? {
+        await Task.detached(priority: .utility) {
+            autoreleasepool {
+                downsampledImage(from: data, maxDimension: maxDimension)
+            }
+        }.value
+    }
+
+    static func scaledSize(for size: CGSize, maxDimension: CGFloat) -> CGSize {
+        let longestEdge = max(size.width, size.height)
+        guard longestEdge > 0, longestEdge > maxDimension else { return size }
+        let scale = maxDimension / longestEdge
+        return CGSize(width: size.width * scale, height: size.height * scale)
+    }
+
+    private static func downsampledImage(from data: Data, maxDimension: CGFloat) -> UIImage? {
+        guard !data.isEmpty,
+              let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return nil
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(1, Int(maxDimension.rounded(.up)))
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return UIImage(cgImage: image)
     }
 }

@@ -5,9 +5,11 @@ import UIKit
 struct MainTabView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var router = AppRouter.shared
     private let locationManager = LocationManager.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    @ObservedObject private var teamShortcutStore = TeamShortcutProjectionStore.shared
     private let teamService = TeamFirebaseService.shared
     @State private var didApplyRoleDefaultTab = false
     @State private var shouldKeepMapAlive = false
@@ -17,7 +19,7 @@ struct MainTabView: View {
     @State private var overdueLeadBadgeTask: Task<Void, Never>?
     @State private var teamLeadBadgeCount = 0
     @State private var roleContext: TeamRoleContext = .solo
-    @State private var teamPresentationRefreshTask: Task<Void, Never>?
+    @State private var didRunStartupSideEffects = false
 
     private var isRunningUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
@@ -124,6 +126,9 @@ struct MainTabView: View {
                 return
             }
 
+            guard !didRunStartupSideEffects else { return }
+            didRunStartupSideEffects = true
+
             // Initialize location services immediately when app launches
             print("📱 MainTabView: App launched, initializing location services")
             UserDataSyncManager.shared.activateAutoSyncTimerIfNeeded()
@@ -153,8 +158,8 @@ struct MainTabView: View {
                 applyDefaultTabForRoleIfNeeded(reset: true)
             }
         }
-        .onReceive(teamService.objectWillChange) { _ in
-            scheduleTeamPresentationRefresh()
+        .onChange(of: teamShortcutStore.summary) { _, _ in
+            refreshTeamPresentation()
         }
         .onChange(of: router.selectedTab) { _, newTab in
             if newTab == MainAppTab.map.rawValue {
@@ -170,12 +175,20 @@ struct MainTabView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
-            guard router.selectedTab != MainAppTab.map.rawValue else { return }
-            mapPrewarmTask?.cancel()
-            mapPrewarmTask = nil
-            mapReleaseTask?.cancel()
-            mapReleaseTask = nil
-            shouldKeepMapAlive = false
+            releaseHiddenMapImmediately()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
+            guard MapRuntimeRetentionPolicy.shouldReleaseForThermalState(ProcessInfo.processInfo.thermalState) else {
+                return
+            }
+            releaseHiddenMapImmediately()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                releaseHiddenMapImmediately()
+            } else if router.selectedTab != MainAppTab.map.rawValue {
+                scheduleMapPrewarmIfNeeded()
+            }
         }
         .onDisappear {
             mapPrewarmTask?.cancel()
@@ -184,8 +197,6 @@ struct MainTabView: View {
             mapReleaseTask = nil
             overdueLeadBadgeTask?.cancel()
             overdueLeadBadgeTask = nil
-            teamPresentationRefreshTask?.cancel()
-            teamPresentationRefreshTask = nil
         }
     }
 
@@ -232,28 +243,8 @@ struct MainTabView: View {
         refreshTeamPresentation()
     }
 
-    private func scheduleTeamPresentationRefresh(after delay: TimeInterval = 0.08) {
-        teamPresentationRefreshTask?.cancel()
-        teamPresentationRefreshTask = Task { @MainActor in
-            if delay > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            }
-            guard !Task.isCancelled else { return }
-            refreshTeamPresentation()
-            teamPresentationRefreshTask = nil
-        }
-    }
-
     private func refreshTeamPresentation() {
-        let summary = TeamWorkspaceSurfaceSummary.makeShortcut(
-            team: teamService.activeTeam,
-            currentMember: teamService.currentMember,
-            members: teamService.teamMembers,
-            leads: teamService.teamLeads,
-            bookings: teamService.teamBookings,
-            dutySessions: teamService.dutySessions,
-            ownerNotifications: teamService.ownerNotifications
-        )
+        let summary = teamShortcutStore.summary
         let nextRoleContext = TeamRoleContext(summary: summary)
         let nextBadgeCount = min(summary?.badgeCount ?? 0, 99)
 
@@ -286,21 +277,38 @@ struct MainTabView: View {
     }
 
     private func scheduleMapPrewarmIfNeeded() {
-        guard !isRunningUITests || shouldExerciseMapRuntimeEffects else { return }
+        // Performance UI tests exercise the real map after an explicit tab tap.
+        // Prewarming an invisible MKMapView prevents XCTest from reaching an idle
+        // launch state and turns the cold-open measurement into a warm-open test.
+        guard !isRunningUITests else { return }
         guard !shouldKeepMapAlive else { return }
         guard mapPrewarmTask == nil else { return }
 
         mapPrewarmTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            try? await Task.sleep(
+                nanoseconds: UInt64(MapRuntimeRetentionPolicy.idlePrewarmDelay * 1_000_000_000)
+            )
+            defer { mapPrewarmTask = nil }
             guard !Task.isCancelled,
                   router.selectedTab != MainAppTab.map.rawValue else { return }
+            guard MapRuntimeRetentionPolicy.shouldPrewarm(
+                isMapSelected: router.selectedTab == MainAppTab.map.rawValue,
+                isSyncBusy: UserDataSyncManager.shared.syncStatus.isBusy,
+                isTeamLoading: teamService.isLoading,
+                isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled,
+                thermalState: ProcessInfo.processInfo.thermalState,
+                applicationIsActive: UIApplication.shared.applicationState == .active
+            ) else {
+                return
+            }
             shouldKeepMapAlive = true
-            mapPrewarmTask = nil
             scheduleMapReleaseIfNeeded()
         }
     }
 
-    private func scheduleMapReleaseIfNeeded(after delay: TimeInterval = 45) {
+    private func scheduleMapReleaseIfNeeded(
+        after delay: TimeInterval = MapRuntimeRetentionPolicy.hiddenRetentionInterval
+    ) {
         guard router.selectedTab != MainAppTab.map.rawValue else { return }
         mapReleaseTask?.cancel()
         mapReleaseTask = Task { @MainActor in
@@ -310,6 +318,15 @@ struct MainTabView: View {
             shouldKeepMapAlive = false
             mapReleaseTask = nil
         }
+    }
+
+    private func releaseHiddenMapImmediately() {
+        guard router.selectedTab != MainAppTab.map.rawValue else { return }
+        mapPrewarmTask?.cancel()
+        mapPrewarmTask = nil
+        mapReleaseTask?.cancel()
+        mapReleaseTask = nil
+        shouldKeepMapAlive = false
     }
 
     private func scheduleOverdueLeadBadgeRefresh(after delay: TimeInterval = 0.05) {

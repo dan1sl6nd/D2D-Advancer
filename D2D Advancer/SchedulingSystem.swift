@@ -131,6 +131,134 @@ enum AppointmentLocalStore {
     }
 }
 
+final class AppointmentLocalFileStore {
+    static let migrationCompletedKey = "appointments.fileStoreMigrationCompleted.v1"
+
+    private let userDefaults: UserDefaults
+    private let legacyKey: String
+    private let migrationKey: String
+    private let directoryURL: URL
+    private var persistedAppointments: [UUID: Appointment] = [:]
+
+    init(
+        userDefaults: UserDefaults = .standard,
+        legacyKey: String = "saved_appointments",
+        migrationKey: String = AppointmentLocalFileStore.migrationCompletedKey,
+        directoryURL: URL = AppointmentLocalFileStore.defaultDirectoryURL()
+    ) {
+        self.userDefaults = userDefaults
+        self.legacyKey = legacyKey
+        self.migrationKey = migrationKey
+        self.directoryURL = directoryURL
+    }
+
+    func load() throws -> [Appointment]? {
+        try createDirectoryIfNeeded()
+        let fileURLs = try appointmentFileURLs()
+        var appointmentsById: [UUID: Appointment] = [:]
+        for fileURL in fileURLs {
+            do {
+                let appointment = try JSONDecoder().decode(
+                    Appointment.self,
+                    from: Data(contentsOf: fileURL)
+                )
+                appointmentsById[appointment.id] = appointmentsById[appointment.id] ?? appointment
+            } catch {
+                AppLog.warning(
+                    "Storage",
+                    "Skipped unreadable appointment file \(fileURL.lastPathComponent): \(error.localizedDescription)"
+                )
+            }
+        }
+        persistedAppointments = appointmentsById
+
+        if !userDefaults.bool(forKey: migrationKey),
+           let legacyAppointments = try AppointmentLocalStore.loadAppointments(
+               from: userDefaults,
+               key: legacyKey
+           ) {
+            try saveSnapshot(legacyAppointments)
+            userDefaults.removeObject(forKey: legacyKey)
+            return persistedAppointments.values.sorted { $0.startDate < $1.startDate }
+        }
+
+        guard !fileURLs.isEmpty || userDefaults.bool(forKey: migrationKey) else { return nil }
+        userDefaults.set(true, forKey: migrationKey)
+        return appointmentsById.values.sorted { $0.startDate < $1.startDate }
+    }
+
+    func saveSnapshot(_ appointments: [Appointment]) throws {
+        try createDirectoryIfNeeded()
+        var nextAppointments: [UUID: Appointment] = [:]
+        for appointment in appointments where nextAppointments[appointment.id] == nil {
+            nextAppointments[appointment.id] = appointment
+        }
+
+        for (id, appointment) in nextAppointments where persistedAppointments[id] != appointment {
+            let data = try JSONEncoder().encode(appointment)
+            try data.write(to: fileURL(for: id), options: .atomic)
+        }
+
+        for id in persistedAppointments.keys where nextAppointments[id] == nil {
+            let fileURL = fileURL(for: id)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.removeItem(at: fileURL)
+            }
+        }
+
+        persistedAppointments = nextAppointments
+        userDefaults.set(true, forKey: migrationKey)
+    }
+
+    func clear() throws {
+        if FileManager.default.fileExists(atPath: directoryURL.path) {
+            try FileManager.default.removeItem(at: directoryURL)
+        }
+        try createDirectoryIfNeeded()
+        persistedAppointments = [:]
+        userDefaults.removeObject(forKey: legacyKey)
+        userDefaults.set(true, forKey: migrationKey)
+    }
+
+    static func clearDefaultStore() throws {
+        let store = AppointmentLocalFileStore()
+        try store.clear()
+    }
+
+    static func replaceDefaultStore(with appointments: [Appointment]) throws {
+        let store = AppointmentLocalFileStore()
+        try store.clear()
+        try store.saveSnapshot(appointments)
+    }
+
+    static func defaultDirectoryURL(fileManager: FileManager = .default) -> URL {
+        let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
+        return baseURL
+            .appendingPathComponent("D2DAdvancer", isDirectory: true)
+            .appendingPathComponent("Appointments.v1", isDirectory: true)
+    }
+
+    private func createDirectoryIfNeeded() throws {
+        try FileManager.default.createDirectory(
+            at: directoryURL,
+            withIntermediateDirectories: true
+        )
+    }
+
+    private func appointmentFileURLs() throws -> [URL] {
+        try FileManager.default.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ).filter { $0.pathExtension == "json" }
+    }
+
+    private func fileURL(for id: UUID) -> URL {
+        directoryURL.appendingPathComponent(id.uuidString).appendingPathExtension("json")
+    }
+}
+
 enum AppointmentDeletionTombstoneStore {
     static func loadDeletedIds(from userDefaults: UserDefaults, key: String) -> Set<UUID> {
         let values = userDefaults.stringArray(forKey: key) ?? []
@@ -221,8 +349,8 @@ class AppointmentManager: ObservableObject {
     @Published var errorMessage: String?
     
     private let userDefaults = UserDefaults.standard
-    private let appointmentsKey = "saved_appointments"
     private let deletedAppointmentIdsKey = "deleted_appointment_ids"
+    private let localStore: AppointmentLocalFileStore
     private let db: Firestore
     private var cloudKitBackupService: CloudKitAppointmentBackupService? {
         CloudKitAppointmentBackupService.shared
@@ -233,6 +361,7 @@ class AppointmentManager: ObservableObject {
     private init() {
         FirebaseBootstrap.configureIfNeeded()
         db = Firestore.firestore()
+        localStore = AppointmentLocalFileStore()
         loadAppointments()
         // Firebase listener will be set up only when manually requested
     }
@@ -473,8 +602,7 @@ class AppointmentManager: ObservableObject {
     @discardableResult
     private func saveAppointments() -> Bool {
         do {
-            let encoded = try JSONEncoder().encode(appointments)
-            userDefaults.set(encoded, forKey: appointmentsKey)
+            try localStore.saveSnapshot(appointments)
             return true
         } catch {
             let message = "Failed to save appointments: \(error.localizedDescription)"
@@ -491,8 +619,8 @@ class AppointmentManager: ObservableObject {
         }
 
         do {
-            guard let decoded = try AppointmentLocalStore.loadAppointments(from: userDefaults, key: appointmentsKey) else {
-                print("🗓️ No appointments found in UserDefaults")
+            guard let decoded = try localStore.load() else {
+                print("🗓️ No locally saved appointments found")
                 return
             }
 
@@ -732,8 +860,11 @@ class AppointmentManager: ObservableObject {
         // Clear local data first
         appointments.removeAll()
         
-        // Clear from UserDefaults
-        userDefaults.removeObject(forKey: appointmentsKey)
+        do {
+            try localStore.clear()
+        } catch {
+            errorMessage = "Failed to clear local appointments: \(error.localizedDescription)"
+        }
         
         // Stop listening to Firebase changes
         listener?.remove()
@@ -811,15 +942,12 @@ class AppointmentManager: ObservableObject {
         
         print("🗓️ Appointments array cleared: \(appointments.count) remaining")
         
-        // Clear from UserDefaults
-        userDefaults.removeObject(forKey: appointmentsKey)
-        print("🗓️ UserDefaults cleared for key: \(appointmentsKey)")
-        
-        // Verify UserDefaults was actually cleared
-        if let _ = userDefaults.data(forKey: appointmentsKey) {
-            print("⚠️ UserDefaults still contains data after clearing attempt!")
-        } else {
-            print("✅ UserDefaults successfully cleared")
+        do {
+            try localStore.clear()
+            print("✅ Local appointment store cleared")
+        } catch {
+            errorMessage = "Failed to clear local appointments: \(error.localizedDescription)"
+            print("⚠️ \(errorMessage ?? "Local appointment clear failed")")
         }
         
         print("✅ Appointments cleared locally (Firebase data preserved) - final count: \(appointments.count)")
@@ -833,8 +961,11 @@ class AppointmentManager: ObservableObject {
             markAppointmentsDeleted(Set(appointments.map(\.id)))
             appointments.removeAll()
             
-            // Clear from UserDefaults
-            userDefaults.removeObject(forKey: appointmentsKey)
+            do {
+                try localStore.clear()
+            } catch {
+                errorMessage = "Failed to clear local appointments: \(error.localizedDescription)"
+            }
             
             // Stop listening to Firebase changes
             listener?.remove()

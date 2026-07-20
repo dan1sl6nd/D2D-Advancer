@@ -47,7 +47,9 @@ struct MoreView: View {
     @ObservedObject private var preferences = AppPreferences.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var syncManager = UserDataSyncManager.shared
-    @ObservedObject private var teamService = TeamFirebaseService.shared
+    @ObservedObject private var teamShortcutStore = TeamShortcutProjectionStore.shared
+    private let teamService = TeamFirebaseService.shared
+    @ObservedObject private var leadMetricsStore = LeadOverviewMetricsStore.shared
     @State private var showingSyncSettings = false
     @State private var showingAuthentication = false
     @State private var exportFile: LeadExportFile?
@@ -56,11 +58,6 @@ struct MoreView: View {
     @State private var importFailure: LeadImportFailure?
     @AppStorage("isDarkMode") private var darkModeEnabled = false
     @State private var showingCloudProviderSheet = false
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: false)],
-        animation: .default
-    ) private var allLeads: FetchedResults<Lead>
 
     private var isRunningUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
@@ -71,16 +68,7 @@ struct MoreView: View {
     }
 
     private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
-        TeamWorkspaceSurfaceSummary.make(
-            team: teamService.activeTeam,
-            currentMember: teamService.currentMember,
-            members: teamService.teamMembers,
-            leads: teamService.teamLeads,
-            bookings: teamService.teamBookings,
-            dutySessions: teamService.dutySessions,
-            dutyLocationPoints: teamService.dutyLocationPoints,
-            ownerNotifications: teamService.ownerNotifications
-        )
+        teamShortcutStore.summary
     }
 
     private var roleContext: TeamRoleContext {
@@ -151,6 +139,7 @@ struct MoreView: View {
                     )
                 }
                 .task {
+                    leadMetricsStore.refresh()
                     await loadTeamWorkspaceIfNeeded()
                 }
             }
@@ -188,7 +177,7 @@ struct MoreView: View {
 
                 moreStatusPill(
                     icon: "mappin.and.ellipse",
-                    text: "\(allLeads.count) leads",
+                    text: "\(leadMetricsStore.metrics.totalLeadCount) leads",
                     color: Color.electricViolet
                 )
 
@@ -411,18 +400,20 @@ struct MoreView: View {
             Button(action: exportLeadsToCSV) {
                 MoreCardView(
                     icon: "square.and.arrow.up",
-                    iconColor: allLeads.isEmpty ? Color.textMuted : Color.electricViolet,
+                    iconColor: leadMetricsStore.metrics.totalLeadCount == 0 ? Color.textMuted : Color.electricViolet,
                     title: "Export Leads",
-                    subtitle: allLeads.isEmpty ? "No leads to export" : "\(allLeads.count) leads",
+                    subtitle: leadMetricsStore.metrics.totalLeadCount == 0
+                        ? "No leads to export"
+                        : "\(leadMetricsStore.metrics.totalLeadCount) leads",
                     trailingContent: {
                         Image(systemName: "arrow.up.doc")
                             .font(.obsidianFootnote)
-                            .foregroundColor(allLeads.isEmpty ? Color.textMuted : Color.electricViolet)
+                            .foregroundColor(leadMetricsStore.metrics.totalLeadCount == 0 ? Color.textMuted : Color.electricViolet)
                     }
                 )
             }
             .buttonStyle(PlainButtonStyle())
-            .disabled(allLeads.isEmpty)
+            .disabled(leadMetricsStore.metrics.totalLeadCount == 0)
             .accessibilityIdentifier("moreExportLeadsButton")
 
             moreDivider
@@ -838,18 +829,13 @@ struct MoreView: View {
     // MARK: - Daily Activity
 
     private var todayActivityCard: some View {
-        let startOfDay = Calendar.current.startOfDay(for: Date())
-        let todayLeads = allLeads.filter { ($0.createdDate ?? .distantPast) >= startOfDay }
-        let doorsKnocked = todayLeads.count
-        let interested = todayLeads.filter { $0.status == "interested" }.count
-        let notHome = todayLeads.filter { $0.status == "not_home" }.count
-        let sold = todayLeads.filter { $0.status == "converted" }.count
-        let followUpsDue = allLeads.filter {
-            $0.leadStatus.allowsActiveFollowUp && $0.followUpDate != nil && ($0.followUpDate ?? .distantFuture) <= Date()
-        }.count
-        let followUpsTotal = allLeads.filter {
-            $0.leadStatus.allowsActiveFollowUp && $0.followUpDate != nil
-        }.count
+        let metrics = leadMetricsStore.metrics
+        let doorsKnocked = metrics.todayLeadCount
+        let interested = metrics.todayInterestedCount
+        let notHome = metrics.todayNotHomeCount
+        let sold = metrics.todaySoldCount
+        let followUpsDue = metrics.followUpsDueCount
+        let followUpsTotal = metrics.followUpsTotalCount
         let statColumns = [
             GridItem(.flexible(), spacing: 10),
             GridItem(.flexible(), spacing: 10)
@@ -983,6 +969,7 @@ struct DataSyncHubView: View {
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var importBatchStore = LeadImportBatchStore.shared
     @ObservedObject private var teamService = TeamFirebaseService.shared
+    @ObservedObject private var leadMetricsStore = LeadOverviewMetricsStore.shared
     @State private var showingCloudProviderSheet = false
     @State private var showingSyncSettings = false
     @State private var exportFile: LeadExportFile?
@@ -994,11 +981,6 @@ struct DataSyncHubView: View {
     @State private var undoResult: LeadImportUndoResult?
     @State private var importFailure: LeadImportFailure?
     @State private var supportReportFailure: LeadImportFailure?
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: false)],
-        animation: .default
-    ) private var allLeads: FetchedResults<Lead>
 
     var body: some View {
         ScrollView {
@@ -1079,14 +1061,16 @@ struct DataSyncHubView: View {
                     Button(action: exportLeadsToCSV) {
                         MoreCardView(
                             icon: "square.and.arrow.up",
-                            iconColor: allLeads.isEmpty ? Color.textMuted : Color.electricViolet,
+                            iconColor: leadMetricsStore.metrics.totalLeadCount == 0 ? Color.textMuted : Color.electricViolet,
                             title: "Export Leads",
-                            subtitle: allLeads.isEmpty ? "No leads to export" : "\(allLeads.count) leads",
+                            subtitle: leadMetricsStore.metrics.totalLeadCount == 0
+                                ? "No leads to export"
+                                : "\(leadMetricsStore.metrics.totalLeadCount) leads",
                             showChevron: true
                         )
                     }
                     .buttonStyle(.plain)
-                    .disabled(allLeads.isEmpty)
+                    .disabled(leadMetricsStore.metrics.totalLeadCount == 0)
                     .accessibilityIdentifier("moreExportLeadsButton")
 
                     hubDivider
@@ -1225,6 +1209,9 @@ struct DataSyncHubView: View {
         } message: {
             Text("Only leads that have not changed since the import will be removed or restored.")
         }
+        .task {
+            leadMetricsStore.refresh()
+        }
     }
 
     private var hubDivider: some View {
@@ -1309,7 +1296,7 @@ struct DataSyncHubView: View {
             autoSyncEnabled: syncManager.isAutoSyncEnabled,
             syncInterval: syncManager.syncInterval.rawValue,
             lastSyncAt: syncManager.lastSyncDate,
-            personalLeadCount: allLeads.count,
+            personalLeadCount: leadMetricsStore.metrics.totalLeadCount,
             importBatchCount: importBatchStore.batches.count,
             accountSessionActive: userAccountManager.hasActiveSession,
             teamWorkspaceActive: teamService.activeTeam != nil && teamService.currentMember?.status == .active,
@@ -1786,7 +1773,7 @@ struct OverviewContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var appointmentManager = AppointmentManager.shared
-    @ObservedObject private var teamService = TeamFirebaseService.shared
+    @ObservedObject private var teamOverviewStore = TeamOverviewProjectionStore.shared
     @State private var statistics: LeadStatistics = LeadStatistics()
     @State private var isLoading = true
     @State private var statisticsErrorMessage: String?
@@ -2034,8 +2021,9 @@ struct OverviewContentView: View {
                 && $0.status != .cancelled
         }.count
 
-        guard let member = teamService.currentMember else { return personal }
-        let team = teamService.teamBookings.filter { booking in
+        let teamProjection = teamOverviewStore.projection
+        guard let member = teamProjection.currentMember else { return personal }
+        let team = teamProjection.bookings.filter { booking in
             let isVisible = member.role == .owner || booking.assignedToUserId == member.userId
             return isVisible
                 && booking.startDate >= now

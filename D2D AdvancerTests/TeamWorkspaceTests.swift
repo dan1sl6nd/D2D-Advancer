@@ -879,6 +879,26 @@ struct TeamWorkspaceTests {
         ))
     }
 
+    @Test func locationSharingPolicyRejectsStaleOrInvalidFixes() {
+        let now = Date(timeIntervalSince1970: 30_000)
+
+        #expect(TeamLocationSharingPolicy.canPublishLocation(
+            timestamp: now.addingTimeInterval(-30),
+            horizontalAccuracy: 25,
+            now: now
+        ))
+        #expect(!TeamLocationSharingPolicy.canPublishLocation(
+            timestamp: now.addingTimeInterval(-TeamLocationSharingPolicy.maximumLocationAge - 1),
+            horizontalAccuracy: 25,
+            now: now
+        ))
+        #expect(!TeamLocationSharingPolicy.canPublishLocation(
+            timestamp: now,
+            horizontalAccuracy: -1,
+            now: now
+        ))
+    }
+
     @Test func localWriteLimiterStopsBurstsAndRecoversAfterItsWindow() {
         let now = Date(timeIntervalSince1970: 31_000)
         var limiter = TeamLocalWriteLimiter(window: 60, maximumUnits: 5)

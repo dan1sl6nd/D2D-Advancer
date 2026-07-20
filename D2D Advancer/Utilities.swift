@@ -183,46 +183,54 @@ struct Utilities {
     
     /// Removes duplicate Lead entities from Core Data based on ID
     /// - Parameter context: The managed object context to operate on
-    static func removeDuplicateLeads(from context: NSManagedObjectContext) {
+    static func removeDuplicateLeads(
+        from context: NSManagedObjectContext,
+        completion: ((Bool) -> Void)? = nil
+    ) {
         context.perform {
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
-        fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: true)]
-        
-        do {
-            let allLeads = try context.fetch(fetchRequest)
-            var seenIDs: Set<UUID> = []
-            var duplicatesToDelete: [Lead] = []
-            
-            for lead in allLeads {
-                if let leadID = lead.id {
-                    if seenIDs.contains(leadID) {
-                        duplicatesToDelete.append(lead)
-                        AppLog.debug("Utilities", "Found duplicate lead: \(Utilities.redactedText(lead.displayName)) (ID: \(leadID))")
+            var didSucceed = false
+            defer { completion?(didSucceed) }
+
+            let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+            fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.createdDate, ascending: true)]
+
+            do {
+                let allLeads = try context.fetch(fetchRequest)
+                var seenIDs: Set<UUID> = []
+                var duplicatesToDelete: [Lead] = []
+                var assignedMissingID = false
+
+                for lead in allLeads {
+                    if let leadID = lead.id {
+                        if seenIDs.contains(leadID) {
+                            duplicatesToDelete.append(lead)
+                            AppLog.debug("Utilities", "Found duplicate lead: \(Utilities.redactedText(lead.displayName)) (ID: \(leadID))")
+                        } else {
+                            seenIDs.insert(leadID)
+                        }
                     } else {
-                        seenIDs.insert(leadID)
+                        lead.id = UUID()
+                        assignedMissingID = true
+                        AppLog.debug("Utilities", "Fixed lead without ID: \(Utilities.redactedText(lead.displayName))")
                     }
-                } else {
-                    // Lead without ID - assign new UUID
-                    lead.id = UUID()
-                    AppLog.debug("Utilities", "Fixed lead without ID: \(Utilities.redactedText(lead.displayName))")
                 }
+
+                for duplicate in duplicatesToDelete {
+                    context.delete(duplicate)
+                }
+
+                if !duplicatesToDelete.isEmpty || assignedMissingID {
+                    try context.save()
+                }
+                if !duplicatesToDelete.isEmpty {
+                    AppLog.info("Utilities", "Removed \(duplicatesToDelete.count) duplicate leads from Core Data")
+                } else {
+                    AppLog.debug("Utilities", "No duplicate leads found")
+                }
+                didSucceed = true
+            } catch {
+                AppLog.error("Utilities", "Failed to remove duplicate leads: \(error.localizedDescription)")
             }
-            
-            // Delete duplicates
-            for duplicate in duplicatesToDelete {
-                context.delete(duplicate)
-            }
-            
-            if !duplicatesToDelete.isEmpty {
-                try context.save()
-                AppLog.info("Utilities", "Removed \(duplicatesToDelete.count) duplicate leads from Core Data")
-            } else {
-                AppLog.debug("Utilities", "No duplicate leads found")
-            }
-            
-        } catch {
-            AppLog.error("Utilities", "Failed to remove duplicate leads: \(error.localizedDescription)")
-        }
         }
     }
 

@@ -504,8 +504,13 @@ struct MapView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { notification in
                 guard MapLeadCacheInvalidationPolicy.shouldInvalidate(for: notification) else { return }
-                mapLeadPinCache = .empty
                 cancelMapLeadCachePrewarm()
+                if mapLeadPinCache.isReady,
+                   let mutation = MapLeadCacheMutation(notification: notification) {
+                    mapLeadPinCache = mapLeadPinCache.applying(mutation)
+                } else {
+                    mapLeadPinCache = .empty
+                }
                 if isVisible {
                     scheduleInteractiveMapLeadRenderUpdate(after: 0.12)
                 } else {
@@ -3674,6 +3679,68 @@ private struct MapLeadPinCache {
         }
     }
 
+    func applying(_ mutation: MapLeadCacheMutation) -> MapLeadPinCache {
+        var pinsByObjectID = Dictionary(uniqueKeysWithValues: pins.map { ($0.objectID, $0) })
+        for objectID in mutation.removedObjectIDs {
+            pinsByObjectID.removeValue(forKey: objectID)
+        }
+        for pin in mutation.updatedPins {
+            pinsByObjectID[pin.objectID] = pin
+        }
+
+        return MapLeadPinCache(
+            pins: Array(pinsByObjectID.values),
+            totalLeadCount: max(0, totalLeadCount + mutation.insertedLeadCount - mutation.deletedLeadCount),
+            isReady: true
+        )
+    }
+
+}
+
+private struct MapLeadCacheMutation {
+    let updatedPins: [MapLeadPin]
+    let removedObjectIDs: Set<NSManagedObjectID>
+    let insertedLeadCount: Int
+    let deletedLeadCount: Int
+
+    init?(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              userInfo[NSInvalidatedAllObjectsKey] == nil else {
+            return nil
+        }
+
+        let inserted = Self.leads(in: userInfo[NSInsertedObjectsKey])
+        let deleted = Self.leads(in: userInfo[NSDeletedObjectsKey])
+        let refreshed = Self.leads(in: userInfo[NSRefreshedObjectsKey])
+        let invalidated = Self.leads(in: userInfo[NSInvalidatedObjectsKey])
+        guard invalidated.isEmpty else { return nil }
+        let allUpdated = Self.leads(in: userInfo[NSUpdatedObjectsKey])
+        guard MapLeadCacheInvalidationPolicy.shouldApplyIncrementalMutation(
+            changeCount: inserted.count + deleted.count + refreshed.count + allUpdated.count
+        ) else {
+            return nil
+        }
+        let updated = allUpdated.filter { lead in
+            let changedKeys = Set(lead.changedValuesForCurrentEvent().keys)
+            return changedKeys.isEmpty
+                || MapLeadCacheInvalidationPolicy.updatedLeadAffectsMap(changedKeys: changedKeys)
+        }
+        let changed = inserted + updated + refreshed
+
+        guard !changed.contains(where: { $0.objectID.isTemporaryID }) else {
+            return nil
+        }
+
+        updatedPins = changed.compactMap(MapLeadPin.init)
+        removedObjectIDs = Set((updated + refreshed + deleted).map(\.objectID))
+        insertedLeadCount = inserted.count
+        deletedLeadCount = deleted.count
+    }
+
+    private static func leads(in value: Any?) -> [Lead] {
+        guard let objects = value as? Set<NSManagedObject> else { return [] }
+        return objects.compactMap { $0 as? Lead }
+    }
 }
 
 private struct MapLeadRenderRequestSignature: Equatable {
@@ -4011,21 +4078,48 @@ enum MapLeadHiddenPrewarmPolicy {
 }
 
 enum MapLeadCacheInvalidationPolicy {
-    private static let objectChangeKeys = [
-        NSInsertedObjectsKey,
-        NSUpdatedObjectsKey,
-        NSDeletedObjectsKey,
-        NSRefreshedObjectsKey,
-        NSInvalidatedObjectsKey
+    static let maximumIncrementalChangeCount = 100
+
+    private static let mapRelevantLeadKeys: Set<String> = [
+        "id",
+        "latitude",
+        "longitude",
+        "status",
+        "name",
+        "address",
+        "priority",
+        "followUpDate",
+        "createdDate",
+        "dateCreated",
+        "updatedDate",
+        "dateModified",
+        "price",
+        "estimatedValue"
     ]
+
+    static func updatedLeadAffectsMap(changedKeys: Set<String>) -> Bool {
+        !mapRelevantLeadKeys.isDisjoint(with: changedKeys)
+    }
+
+    static func shouldApplyIncrementalMutation(changeCount: Int) -> Bool {
+        changeCount > 0 && changeCount <= maximumIncrementalChangeCount
+    }
 
     static func shouldInvalidate(for notification: Notification) -> Bool {
         guard let userInfo = notification.userInfo else { return true }
         if userInfo[NSInvalidatedAllObjectsKey] != nil { return true }
 
-        return objectChangeKeys.contains { key in
+        if [NSInsertedObjectsKey, NSDeletedObjectsKey, NSRefreshedObjectsKey, NSInvalidatedObjectsKey].contains(where: { key in
             guard let objects = userInfo[key] as? Set<NSManagedObject> else { return false }
             return objects.contains { $0 is Lead }
+        }) {
+            return true
+        }
+
+        guard let objects = userInfo[NSUpdatedObjectsKey] as? Set<NSManagedObject> else { return false }
+        return objects.compactMap { $0 as? Lead }.contains { lead in
+            let changedKeys = Set(lead.changedValuesForCurrentEvent().keys)
+            return changedKeys.isEmpty || updatedLeadAffectsMap(changedKeys: changedKeys)
         }
     }
 }

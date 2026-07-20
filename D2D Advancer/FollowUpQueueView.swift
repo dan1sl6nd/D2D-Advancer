@@ -218,7 +218,8 @@ struct FollowUpQueueContent: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
-    @ObservedObject private var teamService = TeamFirebaseService.shared
+    @ObservedObject private var teamProjectionStore = TeamFollowUpProjectionStore.shared
+    private let teamService = TeamFirebaseService.shared
     @State private var selectedSegment: FollowUpQueueSegment = .due
     @State private var searchText = ""
     @State private var selectedAssigneeId = "all"
@@ -300,7 +301,7 @@ struct FollowUpQueueContent: View {
 
     private var allActiveItems: [FollowUpQueueItem] {
         let personal = personalLeads.map(FollowUpQueueItem.personal)
-        let team = teamService.teamLeads.compactMap { lead -> FollowUpQueueItem? in
+        let team = teamProjectionStore.projection.leads.compactMap { lead -> FollowUpQueueItem? in
             guard lead.status.allowsFollowUpQueue,
                   lead.followUpDate != nil || lead.status == .followUp else {
                 return nil
@@ -346,7 +347,7 @@ struct FollowUpQueueContent: View {
             results.append(.init(target: target, completedAt: completedAt, summary: summary))
         }
 
-        for lead in teamService.teamLeads {
+        for lead in teamProjectionStore.projection.leads {
             guard let completedAt = lead.lastContactedAt else { continue }
             let target = FollowUpQueueItem.team(lead)
             guard matchesSelectedAssignee(target), target.matches(searchText) else { continue }
@@ -653,8 +654,8 @@ struct FollowUpQueueContent: View {
             AssigneeOption(id: "all", title: "All work", icon: "tray.full.fill"),
             AssigneeOption(id: "personal", title: "Personal", icon: "person.fill")
         ]
-        let userIds = Set(teamService.teamLeads.map(\.assignedToUserId))
-        let members = TeamMemberRoster.normalized(teamService.teamMembers)
+        let userIds = Set(teamProjectionStore.projection.leads.map(\.assignedToUserId))
+        let members = TeamMemberRoster.normalized(teamProjectionStore.projection.members)
             .filter { $0.status == .active && !$0.isPendingInvite && userIds.contains($0.userId) }
         options.append(contentsOf: members.map {
             AssigneeOption(id: "team:\($0.userId)", title: $0.displayName, icon: "person.crop.circle.fill")
@@ -680,7 +681,7 @@ struct FollowUpQueueContent: View {
 
     private func assigneeName(for item: FollowUpQueueItem) -> String? {
         guard let userId = item.assignedUserId else { return nil }
-        return teamService.teamMembers.first { $0.userId == userId }?.displayName ?? "Assigned worker"
+        return teamProjectionStore.projection.members.first { $0.userId == userId }?.displayName ?? "Assigned worker"
     }
 
     private func open(_ item: FollowUpQueueItem) {

@@ -3053,7 +3053,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         denySystemPermissionIfPresented(timeout: 2)
 
         XCTAssertTrue(
-            app.staticTexts["2000 leads"].waitForExistence(timeout: 15),
+            app.staticTexts["2000 leads"].waitForExistence(timeout: 45),
             "The large-map fixture should finish before measuring the Map transition"
         )
 

@@ -11,10 +11,24 @@ struct TeamRepDetailSheet: View {
     @State private var isSaving = false
     @State private var statusMessage: String?
     @State private var statusMessageIsError = false
+    @State private var loadedRoutePoints: [TeamDutyLocationPoint] = []
+    @State private var loadedRouteSessionId: String?
+    @State private var isLoadingRoute = false
 
     private var workspace: TeamRepWorkspace {
         guard let member = teamService.teamMembers.first(where: { $0.userId == initialWorkspace.member.userId }) else {
             return initialWorkspace
+        }
+
+        var locationPoints = teamService.dutyLocationPoints.filter { $0.repUserId == member.userId }
+        if let loadedRouteSessionId {
+            let recentSessionPoints = locationPoints.filter { $0.sessionId == loadedRouteSessionId }
+            locationPoints.removeAll { $0.sessionId == loadedRouteSessionId }
+            var mergedSessionPoints: [String: TeamDutyLocationPoint] = [:]
+            for point in loadedRoutePoints + recentSessionPoints {
+                mergedSessionPoints[point.id] = point
+            }
+            locationPoints.append(contentsOf: mergedSessionPoints.values)
         }
 
         return TeamRepWorkspace.makeMemberWorkspace(
@@ -22,7 +36,7 @@ struct TeamRepDetailSheet: View {
             leads: teamService.teamLeads.filter { $0.assignedToUserId == member.userId },
             bookings: teamService.teamBookings.filter { $0.assignedToUserId == member.userId },
             dutySessions: teamService.dutySessions,
-            dutyLocationPoints: teamService.dutyLocationPoints
+            dutyLocationPoints: locationPoints
         )
     }
 
@@ -69,6 +83,9 @@ struct TeamRepDetailSheet: View {
         .obsidianModalBackground()
         .sheet(item: $selectedLead) { lead in
             TeamLeadDetailSheet(initialLead: lead)
+        }
+        .task(id: workspace.latestSession?.id) {
+            await loadLatestRouteHistory()
         }
     }
 
@@ -290,8 +307,37 @@ struct TeamRepDetailSheet: View {
                     TeamRepDetailStatRow(title: "Ended", value: endedAt.formatted(date: .abbreviated, time: .shortened))
                 }
                 TeamRepDetailStatRow(title: "Distance", value: distanceText(latestSession.distanceMeters))
-                TeamRepDetailStatRow(title: "GPS points", value: "\(workspace.routePoints.count)")
+                TeamRepDetailStatRow(
+                    title: "GPS points",
+                    value: isLoadingRoute ? "Loading..." : "\(workspace.routePoints.count)"
+                )
             }
+        }
+    }
+
+    private func loadLatestRouteHistory() async {
+        guard let team = teamService.activeTeam,
+              let session = workspace.latestSession else {
+            loadedRoutePoints = []
+            loadedRouteSessionId = nil
+            return
+        }
+        guard loadedRouteSessionId != session.id else { return }
+
+        isLoadingRoute = true
+        defer { isLoadingRoute = false }
+
+        do {
+            let points = try await teamService.loadDutyLocationPoints(
+                teamId: team.id,
+                sessionId: session.id
+            )
+            guard workspace.latestSession?.id == session.id else { return }
+            loadedRoutePoints = points
+            loadedRouteSessionId = session.id
+        } catch {
+            statusMessage = TeamFirebaseService.userFacingErrorMessage(for: error)
+            statusMessageIsError = true
         }
     }
 

@@ -18,6 +18,214 @@ import UIKit
 
 struct D2D_AdvancerTests {
 
+    @Test func initialSatisfiedNetworkPathDoesNotTriggerReconnectSync() {
+        #expect(!NetworkReconnectPolicy.shouldRecover(previous: nil, current: .satisfied))
+        #expect(NetworkReconnectPolicy.shouldRecover(previous: .unsatisfied, current: .satisfied))
+        #expect(!NetworkReconnectPolicy.shouldRecover(previous: .satisfied, current: .satisfied))
+    }
+
+    @Test func personalSyncExecutionGateCoalescesDuplicateRequests() {
+        var gate = PersonalSyncExecutionGate()
+        let leadsOnly = PersonalSyncRequest(provider: .icloud, includeAppointments: false)
+
+        let acceptedInitialRequest = gate.request(leadsOnly)
+        let acceptedDuplicateRequest = gate.request(leadsOnly)
+        #expect(acceptedInitialRequest)
+        #expect(!acceptedDuplicateRequest)
+        #expect(gate.pendingRequest == nil)
+        #expect(gate.finishActiveRequest() == nil)
+        #expect(!gate.isActive)
+    }
+
+    @Test func personalSyncExecutionGateSchedulesOneBroaderTrailingRequest() throws {
+        var gate = PersonalSyncExecutionGate()
+        let leadsOnly = PersonalSyncRequest(provider: .icloud, includeAppointments: false)
+        let fullSync = PersonalSyncRequest(provider: .icloud, includeAppointments: true)
+
+        let acceptedInitialRequest = gate.request(leadsOnly)
+        let acceptedFirstTrailingRequest = gate.request(fullSync)
+        let acceptedDuplicateTrailingRequest = gate.request(fullSync)
+        #expect(acceptedInitialRequest)
+        #expect(!acceptedFirstTrailingRequest)
+        #expect(!acceptedDuplicateTrailingRequest)
+        #expect(gate.finishActiveRequest() == fullSync)
+        #expect(gate.activeRequest == fullSync)
+        #expect(gate.finishActiveRequest() == nil)
+    }
+
+    @Test func personalSyncExecutionGateDropsObsoleteProviderSwitchWhenLatestRequestIsAlreadyActive() {
+        var gate = PersonalSyncExecutionGate()
+        let iCloudSync = PersonalSyncRequest(provider: .icloud, includeAppointments: true)
+        let firebaseSync = PersonalSyncRequest(provider: .firebase, includeAppointments: true)
+
+        let acceptedInitialRequest = gate.request(iCloudSync)
+        let acceptedProviderSwitch = gate.request(firebaseSync)
+        let acceptedSwitchBack = gate.request(iCloudSync)
+
+        #expect(acceptedInitialRequest)
+        #expect(!acceptedProviderSwitch)
+        #expect(!acceptedSwitchBack)
+        #expect(gate.pendingRequest == nil)
+        #expect(gate.finishActiveRequest() == nil)
+    }
+
+    @Test func startupMaintenanceRunsVersionedCleanupOnceAndIntegrityChecksWeekly() {
+        #expect(StartupMaintenancePolicy.shouldRunLeadCleanup(completedVersion: 0))
+        #expect(!StartupMaintenancePolicy.shouldRunLeadCleanup(completedVersion: 1))
+
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        #expect(StartupMaintenancePolicy.shouldRunIntegrityCheck(lastRunAt: nil, now: now))
+        #expect(!StartupMaintenancePolicy.shouldRunIntegrityCheck(
+            lastRunAt: now.addingTimeInterval(-StartupMaintenancePolicy.integrityCheckInterval + 1),
+            now: now
+        ))
+        #expect(StartupMaintenancePolicy.shouldRunIntegrityCheck(
+            lastRunAt: now.addingTimeInterval(-StartupMaintenancePolicy.integrityCheckInterval),
+            now: now
+        ))
+    }
+
+    @Test func mapPrewarmRequiresIdleHealthyForegroundConditions() {
+        #expect(MapRuntimeRetentionPolicy.shouldPrewarm(
+            isMapSelected: false,
+            isSyncBusy: false,
+            isTeamLoading: false,
+            isLowPowerModeEnabled: false,
+            thermalState: .nominal,
+            applicationIsActive: true
+        ))
+        #expect(!MapRuntimeRetentionPolicy.shouldPrewarm(
+            isMapSelected: false,
+            isSyncBusy: true,
+            isTeamLoading: false,
+            isLowPowerModeEnabled: false,
+            thermalState: .nominal,
+            applicationIsActive: true
+        ))
+        #expect(MapRuntimeRetentionPolicy.shouldReleaseForThermalState(.serious))
+    }
+
+    @Test func mapCacheIgnoresLeadChangesThatCannotAffectPinsOrFilters() {
+        #expect(MapLeadCacheInvalidationPolicy.updatedLeadAffectsMap(
+            changedKeys: ["status", "latitude"]
+        ))
+        #expect(!MapLeadCacheInvalidationPolicy.updatedLeadAffectsMap(
+            changedKeys: ["notes", "photoData"]
+        ))
+        #expect(MapLeadCacheInvalidationPolicy.shouldApplyIncrementalMutation(changeCount: 1))
+        #expect(MapLeadCacheInvalidationPolicy.shouldApplyIncrementalMutation(
+            changeCount: MapLeadCacheInvalidationPolicy.maximumIncrementalChangeCount
+        ))
+        #expect(!MapLeadCacheInvalidationPolicy.shouldApplyIncrementalMutation(
+            changeCount: MapLeadCacheInvalidationPolicy.maximumIncrementalChangeCount + 1
+        ))
+    }
+
+    @Test func photoCompressionSizingPreservesAspectRatioAndMaximumDimension() {
+        let landscape = PhotoCompressor.scaledSize(
+            for: CGSize(width: 4_000, height: 3_000),
+            maxDimension: 2_000
+        )
+        #expect(landscape == CGSize(width: 2_000, height: 1_500))
+
+        let alreadySmall = PhotoCompressor.scaledSize(
+            for: CGSize(width: 800, height: 600),
+            maxDimension: 2_000
+        )
+        #expect(alreadySmall == CGSize(width: 800, height: 600))
+    }
+
+    @Test func appointmentFileStoreMigratesLegacyDataWithoutResurrectingItAfterClear() throws {
+        let suiteName = "AppointmentLocalFileStoreTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppointmentLocalFileStoreTests-\(UUID().uuidString)")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+
+        let appointment = Appointment(
+            title: "Window Cleaning",
+            notes: "",
+            startDate: Date(timeIntervalSince1970: 1_000),
+            endDate: Date(timeIntervalSince1970: 2_000),
+            location: "100 Main St",
+            appointmentType: .consultation,
+            status: .scheduled
+        )
+        defaults.set(try JSONEncoder().encode([appointment]), forKey: "legacyAppointments")
+
+        let store = AppointmentLocalFileStore(
+            userDefaults: defaults,
+            legacyKey: "legacyAppointments",
+            migrationKey: "migrationComplete",
+            directoryURL: directoryURL
+        )
+        #expect(try store.load() == [appointment])
+        #expect(defaults.bool(forKey: "migrationComplete"))
+        #expect(defaults.data(forKey: "legacyAppointments") == nil)
+
+        try store.clear()
+        let reloadedStore = AppointmentLocalFileStore(
+            userDefaults: defaults,
+            legacyKey: "legacyAppointments",
+            migrationKey: "migrationComplete",
+            directoryURL: directoryURL
+        )
+        #expect(try reloadedStore.load() == [])
+    }
+
+    @Test func appointmentFileStoreCompletesAnInterruptedLegacyMigration() throws {
+        let suiteName = "AppointmentInterruptedMigrationTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppointmentInterruptedMigrationTests-\(UUID().uuidString)")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+
+        let first = Appointment(
+            title: "First Job",
+            notes: "",
+            startDate: Date(timeIntervalSince1970: 1_000),
+            endDate: Date(timeIntervalSince1970: 2_000),
+            location: "100 Main St",
+            appointmentType: .consultation,
+            status: .scheduled
+        )
+        let second = Appointment(
+            title: "Second Job",
+            notes: "",
+            startDate: Date(timeIntervalSince1970: 3_000),
+            endDate: Date(timeIntervalSince1970: 4_000),
+            location: "200 Main St",
+            appointmentType: .consultation,
+            status: .scheduled
+        )
+        defaults.set(try JSONEncoder().encode([first, second]), forKey: "legacyAppointments")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try JSONEncoder().encode(first).write(
+            to: directoryURL.appendingPathComponent(first.id.uuidString).appendingPathExtension("json"),
+            options: .atomic
+        )
+
+        let store = AppointmentLocalFileStore(
+            userDefaults: defaults,
+            legacyKey: "legacyAppointments",
+            migrationKey: "migrationComplete",
+            directoryURL: directoryURL
+        )
+        let loaded = try store.load()
+        let migrated = try #require(loaded)
+
+        #expect(migrated.map(\.id) == [first.id, second.id])
+        #expect(defaults.bool(forKey: "migrationComplete"))
+        #expect(defaults.data(forKey: "legacyAppointments") == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directoryURL.path).count == 2)
+    }
+
     @Test func cloudKitBackupServicesDoNotCrashUnentitledSimulatorLaunches() async throws {
         #if targetEnvironment(simulator)
         #expect(CloudKitLeadBackupService.shared == nil)

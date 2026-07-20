@@ -1246,6 +1246,23 @@ enum TeamLocationSharingPolicy {
     static let maximumUploadInterval: TimeInterval = 2 * 60
     static let minimumDistanceMeters: Double = 50
     static let sessionHeartbeatInterval: TimeInterval = 5 * 60
+    static let ownerRealtimePointLimit = 120
+    static let memberRealtimePointLimit = 40
+    static let routeHistoryPointLimit = 3_000
+    static let maximumLocationAge: TimeInterval = 5 * 60
+    static let maximumHorizontalAccuracy: Double = 5_000
+
+    static func canPublishLocation(
+        timestamp: Date,
+        horizontalAccuracy: Double,
+        now: Date = Date()
+    ) -> Bool {
+        let age = now.timeIntervalSince(timestamp)
+        return age >= -60
+            && age <= maximumLocationAge
+            && horizontalAccuracy >= 0
+            && horizontalAccuracy <= maximumHorizontalAccuracy
+    }
 
     static func shouldUploadLocation(
         lastUploadAt: Date?,
