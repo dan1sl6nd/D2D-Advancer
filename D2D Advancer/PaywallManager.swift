@@ -74,6 +74,8 @@ class PaywallManager: ObservableObject {
     @Published private(set) var hasAttemptedProductLoad: Bool = false
     @Published private(set) var offering: Offering = .solo
     @Published private(set) var hasActiveTeamStoreSubscription = false
+    @Published private(set) var hasVerifiedTeamBillingEntitlement = false
+    @Published private(set) var eligibleTrialDurations: [String: String] = [:]
 
     private let userDefaults = UserDefaults.standard
     private let premiumKey = "isPremiumUser"
@@ -81,6 +83,8 @@ class PaywallManager: ObservableObject {
     private let freeLeadLimit = 0 // Subscription required.
     private var hasStoreEntitlement = false
     private var hasTeamWorkspaceEntitlement = false
+    private var verifiedTeamBillingOwnerUserID: String?
+    private var verifiedTeamOriginalTransactionID: UInt64?
     private var isPremiumUnlockedForUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-unlockPremiumForUITests")
     }
@@ -228,12 +232,59 @@ class PaywallManager: ObservableObject {
             guard let price = product(for: .yearly)?.displayPrice else {
                 return isLoadingProducts || !hasAttemptedProductLoad ? "Loading yearly price" : "Yearly plan unavailable"
             }
+            if let duration = eligibleTrialDuration(for: plan) {
+                return "\(duration.capitalized) free, then \(price)/year"
+            }
             return "\(price)/year - best value"
         case .teamYearly:
             guard let price = product(for: .teamYearly)?.displayPrice else {
                 return isLoadingProducts || !hasAttemptedProductLoad ? "Loading yearly price" : "Yearly Team plan unavailable"
             }
+            if let duration = eligibleTrialDuration(for: plan) {
+                return "\(duration.capitalized) free, then \(price)/year"
+            }
             return "\(price)/year - owner + 2 workers"
+        }
+    }
+
+    func eligibleTrialDuration(for plan: SubscriptionPlan) -> String? {
+        guard let product = product(for: plan) else { return nil }
+        return eligibleTrialDurations[product.id]
+    }
+
+    func trialButtonTitle(for plan: SubscriptionPlan) -> String? {
+        guard let duration = eligibleTrialDuration(for: plan) else { return nil }
+        if duration == "14 days" {
+            return "Start 14-Day Free Trial"
+        }
+        return "Start Free Trial"
+    }
+
+    func renewalDisclosure(for plan: SubscriptionPlan) -> String {
+        guard let product = product(for: plan) else {
+            return "Apple shows the final price and renewal terms before purchase."
+        }
+        let period = plan == .monthly || plan == .teamMonthly ? "month" : "year"
+        if let duration = eligibleTrialDuration(for: plan) {
+            return "No charge for \(duration). Then \(product.displayPrice)/\(period), renewing automatically unless cancelled."
+        }
+        return "\(product.displayPrice)/\(period), renewing automatically unless cancelled."
+    }
+
+    static func trialDurationText(value: Int, unit: Product.SubscriptionPeriod.Unit) -> String {
+        let normalizedValue = max(value, 1)
+        switch unit {
+        case .day:
+            return "\(normalizedValue) day\(normalizedValue == 1 ? "" : "s")"
+        case .week:
+            if normalizedValue == 2 { return "14 days" }
+            return "\(normalizedValue) week\(normalizedValue == 1 ? "" : "s")"
+        case .month:
+            return "\(normalizedValue) month\(normalizedValue == 1 ? "" : "s")"
+        case .year:
+            return "\(normalizedValue) year\(normalizedValue == 1 ? "" : "s")"
+        @unknown default:
+            return "a limited time"
         }
     }
 
@@ -368,6 +419,7 @@ class PaywallManager: ObservableObject {
             products = loadedProducts.sorted { lhs, rhs in
                 productSortOrder(lhs.id) < productSortOrder(rhs.id)
             }
+            eligibleTrialDurations = await eligibleFreeTrialDurations(in: loadedProducts)
 
             let loadedProductIDs = Set(loadedProducts.map(\.id))
             let missingProductIDs = Set(allProductIDs).subtracting(loadedProductIDs)
@@ -382,8 +434,26 @@ class PaywallManager: ObservableObject {
         } catch {
             print("❌ Failed to load products: \(error)")
             products = []
+            eligibleTrialDurations = [:]
             setPurchaseStatus("We couldn't load subscription options. Check your connection and try again.", isError: true)
         }
+    }
+
+    private func eligibleFreeTrialDurations(in products: [Product]) async -> [String: String] {
+        var durations: [String: String] = [:]
+        for product in products {
+            guard let subscription = product.subscription,
+                  let offer = subscription.introductoryOffer,
+                  offer.paymentMode == .freeTrial,
+                  await subscription.isEligibleForIntroOffer else {
+                continue
+            }
+            durations[product.id] = Self.trialDurationText(
+                value: offer.period.value,
+                unit: offer.period.unit
+            )
+        }
+        return durations
     }
 
     private func productSortOrder(_ productID: String) -> Int {
@@ -431,18 +501,38 @@ class PaywallManager: ObservableObject {
             case .success(let verification):
                 let transaction = try checkVerified(verification)
                 if plan.isTeamPlan {
-                    try await TeamBillingService.shared.syncTeamEntitlement(
-                        signedTransaction: verification.jwsRepresentation
-                    )
+                    let linkingError: Error?
+                    do {
+                        let entitlement = try await TeamBillingService.shared.syncTeamEntitlement(
+                            signedTransaction: verification.jwsRepresentation
+                        )
+                        guard entitlement.planStatus == .active else {
+                            throw TeamBillingServiceError.invalidServerResponse
+                        }
+                        markTeamBillingVerified(for: transaction)
+                        linkingError = nil
+                    } catch {
+                        clearVerifiedTeamBilling()
+                        linkingError = error
+                    }
+                    await transaction.finish()
+                    await checkSubscriptionStatus(syncTeamBilling: false)
+
+                    if let linkingError {
+                        setPurchaseStatus(
+                            "Apple completed the Team purchase, but this owner account is not linked yet. Sign in with the purchasing D2D account and tap Restore Purchases. \(linkingError.localizedDescription)",
+                            isError: true
+                        )
+                    } else {
+                        setPurchaseStatus("Team plan verified. You can create the workspace now.")
+                    }
+                    print("✅ Team purchase completed by Apple: \(product.displayName)")
+                    return
                 }
                 await transaction.finish()
 
                 await checkSubscriptionStatus()
-                setPurchaseStatus(
-                    plan.isTeamPlan
-                        ? "Team plan active. You can create the workspace now."
-                        : "Purchase complete. Pro access is active."
-                )
+                setPurchaseStatus("Purchase complete. Pro access is active.")
                 print("✅ Purchase successful: \(product.displayName)")
 
             case .userCancelled:
@@ -499,7 +589,15 @@ class PaywallManager: ObservableObject {
             try await AppStore.sync()
             await checkSubscriptionStatus()
 
-            if hasStoreEntitlement {
+            if offering == .team, hasActiveTeamStoreSubscription, !hasVerifiedTeamBillingEntitlement {
+                setPurchaseStatus(
+                    "Apple found a Team subscription, but it is not linked to this signed-in owner. Use the D2D account that purchased it, then try Restore Purchases again.",
+                    isError: true
+                )
+            } else if offering == .team, hasVerifiedTeamBillingEntitlement {
+                setPurchaseStatus("Team purchase restored and verified for this owner.")
+                print("✅ Team purchase restored")
+            } else if hasStoreEntitlement {
                 setPurchaseStatus("Purchases restored. Pro access is active.")
                 print("✅ Purchases restored")
             } else {
@@ -515,7 +613,7 @@ class PaywallManager: ObservableObject {
     // MARK: - Subscription Status
 
     @MainActor
-    func checkSubscriptionStatus() async {
+    func checkSubscriptionStatus(syncTeamBilling: Bool = true) async {
         guard !isPremiumUnlockedForUITests else {
             setPremiumStatus(true)
             print("🧪 Subscription status check skipped: premium unlocked for UI tests")
@@ -532,6 +630,8 @@ class PaywallManager: ObservableObject {
         var hasActiveSubscription = false
         var hasActiveTeamSubscription = false
         var teamSignedTransaction: String?
+        var teamOriginalTransactionID: UInt64?
+        var teamExpirationDate = Date.distantPast
 
         for await result in Transaction.currentEntitlements {
             do {
@@ -548,7 +648,12 @@ class PaywallManager: ObservableObject {
                 hasActiveSubscription = true
                 if isTeamProductID(transaction.productID) {
                     hasActiveTeamSubscription = true
-                    teamSignedTransaction = result.jwsRepresentation
+                    let expirationDate = transaction.expirationDate ?? .distantFuture
+                    if expirationDate > teamExpirationDate {
+                        teamExpirationDate = expirationDate
+                        teamSignedTransaction = result.jwsRepresentation
+                        teamOriginalTransactionID = transaction.originalID
+                    }
                 }
                 print("✅ Found active subscription: \(transaction.productID)")
             } catch {
@@ -563,11 +668,31 @@ class PaywallManager: ObservableObject {
         hasActiveTeamStoreSubscription = hasActiveTeamSubscription
         setPremiumStatus(hasActiveSubscription)
 
-        if let teamSignedTransaction, Auth.auth().currentUser != nil {
+        guard hasActiveTeamSubscription,
+              let teamSignedTransaction,
+              let teamOriginalTransactionID,
+              let ownerUserID = Auth.auth().currentUser?.uid else {
+            clearVerifiedTeamBilling()
+            return
+        }
+
+        let alreadyVerified = verifiedTeamBillingOwnerUserID == ownerUserID
+            && verifiedTeamOriginalTransactionID == teamOriginalTransactionID
+        if !alreadyVerified {
+            clearVerifiedTeamBilling()
+        }
+
+        if syncTeamBilling {
             do {
-                try await TeamBillingService.shared.syncTeamEntitlement(
+                let entitlement = try await TeamBillingService.shared.syncTeamEntitlement(
                     signedTransaction: teamSignedTransaction
                 )
+                guard entitlement.planStatus == .active else {
+                    throw TeamBillingServiceError.invalidServerResponse
+                }
+                verifiedTeamBillingOwnerUserID = ownerUserID
+                verifiedTeamOriginalTransactionID = teamOriginalTransactionID
+                hasVerifiedTeamBillingEntitlement = true
             } catch {
                 print("⚠️ Team entitlement sync deferred: \(error.localizedDescription)")
             }
@@ -576,6 +701,8 @@ class PaywallManager: ObservableObject {
 
     @MainActor
     func activeTeamTransactionJWS() async -> String? {
+        var selectedJWS: String?
+        var selectedExpirationDate = Date.distantPast
         for await result in Transaction.currentEntitlements {
             do {
                 let transaction = try checkVerified(result)
@@ -584,12 +711,16 @@ class PaywallManager: ObservableObject {
                       transaction.expirationDate.map({ $0 > Date() }) ?? true else {
                     continue
                 }
-                return result.jwsRepresentation
+                let expirationDate = transaction.expirationDate ?? .distantFuture
+                if expirationDate > selectedExpirationDate {
+                    selectedExpirationDate = expirationDate
+                    selectedJWS = result.jwsRepresentation
+                }
             } catch {
                 print("⚠️ Ignoring unverified Team transaction: \(error.localizedDescription)")
             }
         }
-        return nil
+        return selectedJWS
     }
 
     /// Force refresh subscription status - useful for manual checks
@@ -604,12 +735,19 @@ class PaywallManager: ObservableObject {
                 do {
                     let transaction = try self.checkVerified(result)
                     if self.isTeamProductID(transaction.productID) {
-                        try await TeamBillingService.shared.syncTeamEntitlement(
-                            signedTransaction: result.jwsRepresentation
-                        )
+                        do {
+                            let entitlement = try await TeamBillingService.shared.syncTeamEntitlement(
+                                signedTransaction: result.jwsRepresentation
+                            )
+                            if entitlement.planStatus == .active {
+                                await self.markTeamBillingVerified(for: transaction)
+                            }
+                        } catch {
+                            print("⚠️ Team transaction will retry server sync later: \(error.localizedDescription)")
+                        }
                     }
                     await transaction.finish()
-                    await self.checkSubscriptionStatus()
+                    await self.checkSubscriptionStatus(syncTeamBilling: false)
                 } catch {
                     print("❌ Transaction update failed: \(error)")
                 }
@@ -630,6 +768,24 @@ class PaywallManager: ObservableObject {
         case failedVerification
     }
 
+    @MainActor
+    private func markTeamBillingVerified(for transaction: StoreKit.Transaction) {
+        guard let ownerUserID = Auth.auth().currentUser?.uid else {
+            clearVerifiedTeamBilling()
+            return
+        }
+        verifiedTeamBillingOwnerUserID = ownerUserID
+        verifiedTeamOriginalTransactionID = transaction.originalID
+        hasVerifiedTeamBillingEntitlement = true
+    }
+
+    @MainActor
+    private func clearVerifiedTeamBilling() {
+        verifiedTeamBillingOwnerUserID = nil
+        verifiedTeamOriginalTransactionID = nil
+        hasVerifiedTeamBillingEntitlement = false
+    }
+
     // MARK: - Testing & Debug
 
     func resetPremiumStatus() {
@@ -637,9 +793,12 @@ class PaywallManager: ObservableObject {
         print("🔄 Premium status reset")
     }
 
+    @MainActor
     func resetAll() {
         hasTeamWorkspaceEntitlement = false
         hasActiveTeamStoreSubscription = false
+        clearVerifiedTeamBilling()
+        eligibleTrialDurations = [:]
         resetPremiumStatus()
         shouldShowPaywall = false
         print("🔄 All paywall data reset")

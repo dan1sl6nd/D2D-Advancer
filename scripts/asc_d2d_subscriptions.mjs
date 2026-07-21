@@ -25,6 +25,7 @@ const plans = [
     planType: "UPFRONT",
     usaPrice: "99.99",
     groupLevel: 2,
+    introductoryTrial: "TWO_WEEKS",
   },
   {
     key: "soloMonthly",
@@ -47,6 +48,7 @@ const plans = [
     planType: "UPFRONT",
     usaPrice: "299.99",
     groupLevel: 1,
+    introductoryTrial: "TWO_WEEKS",
   },
   {
     key: "teamMonthly",
@@ -364,6 +366,34 @@ function territoryId(resource) {
   return resource.relationships?.territory?.data?.id ?? null;
 }
 
+function subscriptionPricePointId(resource) {
+  return resource.relationships?.subscriptionPricePoint?.data?.id ?? null;
+}
+
+async function activeUsaCustomerPrice(token, prices) {
+  const today = isoDate();
+  const currentPrices = prices
+    .filter(
+      (price) =>
+        territoryId(price) === "USA" &&
+        price.attributes?.planType === "UPFRONT" &&
+        (!price.attributes?.startDate || price.attributes.startDate <= today)
+    )
+    .sort((left, right) =>
+      String(right.attributes?.startDate ?? "").localeCompare(
+        String(left.attributes?.startDate ?? "")
+      )
+    );
+  const pricePointId = subscriptionPricePointId(currentPrices[0]);
+  if (!pricePointId) return null;
+
+  const response = await ascFetch(
+    token,
+    `/subscriptionPricePoints/${encodeURIComponent(pricePointId)}?fields[subscriptionPricePoints]=customerPrice,territory&include=territory`
+  );
+  return response.data?.attributes?.customerPrice ?? null;
+}
+
 async function allTerritories(token) {
   return listAll(token, "/territories?fields[territories]=currency&limit=200");
 }
@@ -426,6 +456,87 @@ async function ensurePlanAvailability(token, subscriptionId, plan, territories) 
     }
   }
   return availability;
+}
+
+function isoDate(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function isCurrentOrFutureOffer(offer, today) {
+  const endDate = offer.attributes?.endDate;
+  return !endDate || endDate >= today;
+}
+
+function isExpectedTrial(offer, plan) {
+  const attributes = offer.attributes ?? {};
+  return (
+    attributes.offerMode === "FREE_TRIAL" &&
+    attributes.duration === plan.introductoryTrial &&
+    attributes.numberOfPeriods === 1 &&
+    (attributes.targetSubscriptionPlanType ?? plan.planType) === plan.planType
+  );
+}
+
+async function ensureIntroductoryTrial(token, subscription, plan, territories) {
+  if (!plan.introductoryTrial) return { skipped: true };
+
+  const today = isoDate();
+  const offers = await listAll(
+    token,
+    `/subscriptions/${subscription.id}/introductoryOffers?fields[subscriptionIntroductoryOffers]=startDate,endDate,duration,offerMode,numberOfPeriods,targetSubscriptionPlanType,territory&include=territory&limit=200`
+  );
+  const currentOffers = offers.filter((offer) => isCurrentOrFutureOffer(offer, today));
+  const conflicts = currentOffers.filter((offer) => !isExpectedTrial(offer, plan));
+  if (conflicts.length > 0) {
+    const conflictTerritories = conflicts.map(territoryId).filter(Boolean);
+    throw new Error(
+      `${plan.productId} has ${conflicts.length} current or future introductory offer(s) that do not match a ${plan.introductoryTrial} free trial. Refusing to overwrite storefronts: ${conflictTerritories.join(", ")}`
+    );
+  }
+
+  const configuredTerritories = new Set(
+    currentOffers.filter((offer) => isExpectedTrial(offer, plan)).map(territoryId).filter(Boolean)
+  );
+  const missingTerritories = territories.filter(
+    (territory) => !configuredTerritories.has(territory.id)
+  );
+
+  let created = 0;
+  for (const territory of missingTerritories) {
+    await ascFetch(token, "/subscriptionIntroductoryOffers", {
+      method: "POST",
+      body: {
+        data: {
+          type: "subscriptionIntroductoryOffers",
+          attributes: {
+            startDate: today,
+            duration: plan.introductoryTrial,
+            offerMode: "FREE_TRIAL",
+            numberOfPeriods: 1,
+            targetSubscriptionPlanType: plan.planType,
+          },
+          relationships: {
+            subscription: {
+              data: { type: "subscriptions", id: subscription.id },
+            },
+            territory: {
+              data: { type: "territories", id: territory.id },
+            },
+          },
+        },
+      },
+    });
+    created += 1;
+    if (created % 25 === 0) {
+      console.error(`${plan.productId}: created ${created}/${missingTerritories.length} trial storefronts`);
+    }
+  }
+
+  return {
+    created,
+    alreadyConfigured: configuredTerritories.size,
+    territoryCount: territories.length,
+  };
 }
 
 async function pricePointsFor(token, subscriptionId, plan) {
@@ -619,6 +730,7 @@ async function audit(token, app, group) {
       token,
       `/subscriptions/${subscription.id}/prices?fields[subscriptionPrices]=startDate,preserved,planType,territory,subscriptionPricePoint&include=territory,subscriptionPricePoint&limit=200`
     );
+    const usaCustomerPrice = await activeUsaCustomerPrice(token, prices);
     const planAvailabilities = await listAll(
       token,
       `/subscriptions/${subscription.id}/planAvailabilities?fields[subscriptionPlanAvailabilities]=availableInNewTerritories,planType`
@@ -651,6 +763,7 @@ async function audit(token, app, group) {
       ...subscription.attributes,
       localizations: localizations.map((item) => ({ id: item.id, ...item.attributes })),
       priceCount: prices.length,
+      usaCustomerPrice,
       availability,
       introductoryOffers: {
         count: introductoryOffers.length,
@@ -678,6 +791,7 @@ loadEnv(path.join(ROOT, ".env.local"));
 const applyCore = process.argv.includes("--apply-core");
 const applyAvailability = process.argv.includes("--apply-availability");
 const applyPricing = process.argv.includes("--apply-pricing");
+const applyTrials = process.argv.includes("--apply-trials");
 const uploadReviewScreenshots = process.argv.includes("--upload-review-screenshots");
 
 function argumentValue(flag) {
@@ -712,7 +826,7 @@ if (applyCore) {
   await adoptLegacySubscriptionLevels(token, group.id);
 }
 
-if (applyAvailability || applyPricing || uploadReviewScreenshots) {
+if (applyAvailability || applyPricing || applyTrials || uploadReviewScreenshots) {
   if (!group) throw new Error("Create the subscription group before configuring commerce");
   const subscriptions = await listAll(
     token,
@@ -721,7 +835,7 @@ if (applyAvailability || applyPricing || uploadReviewScreenshots) {
   const subscriptionsByProductId = new Map(
     subscriptions.map((subscription) => [subscription.attributes?.productId, subscription])
   );
-  const territories = applyAvailability ? await allTerritories(token) : [];
+  const territories = applyAvailability || applyTrials ? await allTerritories(token) : [];
   if (uploadReviewScreenshots) {
     const missingPaths = [
       ["Solo", soloScreenshotPath],
@@ -744,6 +858,19 @@ if (applyAvailability || applyPricing || uploadReviewScreenshots) {
     }
     if (applyPricing) {
       console.error(JSON.stringify({ plan: plan.key, pricing: await ensurePrices(token, subscription.id, plan) }));
+    }
+    if (applyTrials && plan.introductoryTrial) {
+      console.error(
+        JSON.stringify({
+          plan: plan.key,
+          introductoryTrial: await ensureIntroductoryTrial(
+            token,
+            subscription,
+            plan,
+            territories
+          ),
+        })
+      );
     }
     if (uploadReviewScreenshots) {
       const screenshot = await ensureReviewScreenshot(

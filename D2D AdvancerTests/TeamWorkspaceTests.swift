@@ -261,6 +261,8 @@ struct TeamWorkspaceTests {
             "com.d2dadvancer.team3.monthly",
             "com.d2dadvancer.team3.yearly"
         ])
+        #expect(PaywallManager.trialDurationText(value: 2, unit: .week) == "14 days")
+        #expect(PaywallManager.trialDurationText(value: 1, unit: .month) == "1 month")
     }
 
     @Test func ownerAndRepMemberRecordsUseExpectedRolesAndInviteLink() {

@@ -88,7 +88,12 @@
           "familyShareable" : false,
           "groupNumber" : 2,
           "internalID" : "solo_yearly_sub",
-          "introductoryOffer" : null,
+          "introductoryOffer" : {
+            "internalID" : "solo_yearly_trial_14d",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
           "localizations" : [
             {
               "description" : "Annual access for one field professional",
@@ -130,7 +135,12 @@
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "team_yearly_sub",
-          "introductoryOffer" : null,
+          "introductoryOffer" : {
+            "internalID" : "team_yearly_trial_14d",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
           "localizations" : [
             {
               "description" : "Annual Team workspace for one owner and two workers",

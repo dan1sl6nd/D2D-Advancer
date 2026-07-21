@@ -2534,6 +2534,14 @@ final class D2D_AdvancerUITests: XCTestCase {
         waitForIdentifiedElement(app, "paywallPrivacyButton", timeout: 8)
         waitForIdentifiedElement(app, "paywallTermsButton", timeout: 8)
 
+        tapIdentifiedElement(app, "paywallSampleWorkspaceButton", timeout: 8)
+        waitForIdentifiedElement(app, "sampleWorkspaceScreen", timeout: 8)
+        tapIdentifiedElement(app, "sampleWorkspaceCloseButton", timeout: 8)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["sampleWorkspaceScreen"].waitForNonExistence(timeout: 5),
+            "Sample workspace should dismiss back to the paywall"
+        )
+
         tapIdentifiedElement(app, "paywallPurchaseButton", timeout: 8)
         waitForIdentifiedElement(app, "paywallPurchaseStatusBanner", timeout: 8)
         waitForTextContaining(app, "unavailable", timeout: 8)

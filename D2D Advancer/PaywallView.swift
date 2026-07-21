@@ -6,6 +6,7 @@ struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var paywallManager = PaywallManager.shared
     @State private var selectedPlan: PaywallManager.SubscriptionPlan = PaywallManager.shared.defaultPlan
+    @State private var showingSampleWorkspace = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -17,6 +18,7 @@ struct PaywallView: View {
                     headerSection
                     planSection
                     includedSection
+                    sampleWorkspaceButton
 
                     Spacer(minLength: 28)
                 }
@@ -36,6 +38,9 @@ struct PaywallView: View {
         }
         .onChangeCompat(of: paywallManager.offering) { _ in
             selectedPlan = paywallManager.defaultPlan
+        }
+        .fullScreenCover(isPresented: $showingSampleWorkspace) {
+            SubscriptionSampleWorkspaceView(offering: paywallManager.offering)
         }
         .onAppear {
             selectedPlan = paywallManager.defaultPlan
@@ -144,7 +149,6 @@ struct PaywallView: View {
 
     private func planRow(for plan: PaywallManager.SubscriptionPlan) -> some View {
         let isSelected = selectedPlan == plan
-        let isYearly = plan == .yearly || plan == .teamYearly
         let hasLoadedProduct = paywallManager.product(for: plan) != nil
 
         return HStack(spacing: 14) {
@@ -167,7 +171,7 @@ struct PaywallView: View {
                         .font(.obsidianTitle)
                         .foregroundColor(.textPrimary)
 
-                    Text(isYearly ? "Best value" : "Flexible")
+                    Text(planBadge(for: plan))
                         .font(.nano)
                         .foregroundColor(isSelected ? .obsidianBlack : .textSecondary)
                         .padding(.horizontal, 8)
@@ -179,9 +183,7 @@ struct PaywallView: View {
                 }
 
                 Text(
-                    isYearly
-                        ? "Lowest cost for ongoing field work."
-                        : "Pay month to month with the same access."
+                    planDescription(for: plan)
                 )
                     .font(.obsidianCaption)
                     .foregroundColor(.textSecondary)
@@ -214,6 +216,22 @@ struct PaywallView: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
+    }
+
+    private func planBadge(for plan: PaywallManager.SubscriptionPlan) -> String {
+        if let duration = paywallManager.eligibleTrialDuration(for: plan) {
+            return "\(duration.capitalized) free"
+        }
+        return plan == .yearly || plan == .teamYearly ? "Best value" : "Flexible"
+    }
+
+    private func planDescription(for plan: PaywallManager.SubscriptionPlan) -> String {
+        if let duration = paywallManager.eligibleTrialDuration(for: plan) {
+            return "Try it free for \(duration), then keep the lowest annual cost."
+        }
+        return plan == .yearly || plan == .teamYearly
+            ? "Lowest cost for ongoing field work."
+            : "Pay month to month with the same access."
     }
 
     private var includedSection: some View {
@@ -250,6 +268,33 @@ struct PaywallView: View {
             ("bell.badge.fill", "Smart reminders", "Stay on top of callbacks and appointments.", .statusNotHome),
             ("map.fill", "Field tools", "Plan routes, search areas, and work from the map.", .electricViolet)
         ]
+    }
+
+    private var sampleWorkspaceButton: some View {
+        Button {
+            showingSampleWorkspace = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "eye.fill")
+                    .foregroundColor(.electricViolet)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Explore Sample Workspace")
+                        .font(.obsidianTitle)
+                    Text("Sample data • Read only")
+                        .font(.obsidianCaption)
+                        .foregroundColor(.textSecondary)
+                }
+
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.obsidianCaption)
+                    .foregroundColor(.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(ObsidianSecondaryButtonStyle())
+        .accessibilityIdentifier("paywallSampleWorkspaceButton")
     }
 
     private func benefitRow(icon: String, title: String, subtitle: String, color: Color) -> some View {
@@ -372,7 +417,7 @@ struct PaywallView: View {
                     .accessibilityIdentifier("paywallTermsButton")
                 }
 
-                Text("Full access immediately. Cancel anytime from device settings.")
+                Text(paywallManager.renewalDisclosure(for: selectedPlan))
                     .font(.micro)
                     .foregroundColor(.textSecondary)
                     .multilineTextAlignment(.center)
@@ -432,6 +477,9 @@ struct PaywallView: View {
         if paywallManager.product(for: selectedPlan) == nil {
             return "Retry Loading Plans"
         }
+        if let trialTitle = paywallManager.trialButtonTitle(for: selectedPlan) {
+            return trialTitle
+        }
         return paywallManager.offering == .team ? "Continue with Team" : "Continue with Pro"
     }
 
@@ -455,7 +503,7 @@ struct PaywallView: View {
         Task {
             await paywallManager.purchase(plan: selectedPlan)
             let purchaseIsActive = selectedPlan.isTeamPlan
-                ? paywallManager.hasActiveTeamStoreSubscription
+                ? paywallManager.hasVerifiedTeamBillingEntitlement
                 : paywallManager.isPremium
             if purchaseIsActive {
                 dismiss()
@@ -467,7 +515,7 @@ struct PaywallView: View {
         Task {
             await paywallManager.restorePurchases()
             let purchaseIsActive = paywallManager.offering == .team
-                ? paywallManager.hasActiveTeamStoreSubscription
+                ? paywallManager.hasVerifiedTeamBillingEntitlement
                 : paywallManager.isPremium
             if purchaseIsActive {
                 dismiss()

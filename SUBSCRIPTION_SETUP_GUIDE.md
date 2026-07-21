@@ -1,6 +1,6 @@
 # D2D Advancer Subscription Setup
 
-Last updated: July 12, 2026
+Last updated: July 21, 2026
 
 ## Product model
 
@@ -14,6 +14,8 @@ All products belong to one App Store subscription group so a customer cannot acc
 | 2 | `com.d2dadvancer.solo.monthly` | Solo Monthly | 1 month | $9.99 |
 
 Team includes one owner plus two worker seats. A worker can be a sales rep or technician. Workers receive assigned Team work without buying their own Team subscription.
+
+Annual Solo and Team products use a 14-day introductory free trial for eligible customers. Monthly products do not include an introductory trial. Apple limits each customer to one introductory offer across the entire subscription group, so the app only shows trial copy when StoreKit reports both a configured free-trial offer and current eligibility.
 
 ## Legacy products
 
@@ -33,10 +35,25 @@ They stay hidden from the new paywall but remain recognized for any signed legac
 2. Add the four new products to the existing subscription group.
 3. Put both Team periods at the higher subscription level and both Solo periods at the lower level.
 4. Add localization, review screenshots, tax category, territory availability, and pricing for every product.
-5. Keep the current weekly and yearly products available for existing subscribers, but do not present weekly to new customers in the app.
-6. Configure App Store Server Notifications V2 using the deployed `appStoreServerNotifications` Cloud Function URL.
+5. Configure a two-week free introductory offer for `com.d2dadvancer.solo.yearly` and `com.d2dadvancer.team3.yearly` in every supported territory. Do not add a trial to either monthly product.
+6. Keep the current weekly and yearly products available for existing subscribers, but do not present weekly to new customers in the app.
+7. Configure App Store Server Notifications V2 using the deployed `appStoreServerNotifications` Cloud Function URL.
 
 Apple's purchase sheet is the source of truth for localized price, taxes, renewal terms, and trial eligibility. Do not hard-code those claims into the paywall or legal pages.
+
+With `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH` available in `.env.local`, audit live products without changing them:
+
+```bash
+node scripts/asc_d2d_subscriptions.mjs
+```
+
+After reviewing that audit, apply only the missing two-week annual trials with the explicit mutation flag:
+
+```bash
+node scripts/asc_d2d_subscriptions.mjs --apply-trials
+```
+
+The trial command is resumable and refuses to replace a conflicting current or future introductory offer.
 
 ## Backend enforcement
 
@@ -46,6 +63,7 @@ The app sends Apple's signed StoreKit transaction to Firebase callable functions
 - checks the bundle ID and App Store app ID;
 - accepts only Team product IDs for Team creation;
 - binds an original transaction and app-account token to one Firebase owner;
+- ignores out-of-order transactions that are older than the latest verified renewal;
 - creates Team billing fields with Firebase Admin; and
 - applies active, seven-day read-only grace, or paused access.
 
@@ -71,5 +89,6 @@ Firestore rules reject Team creation from iPhone clients. Existing Team document
 - Expiration blocks edits while preserving seven days of reads.
 - Renewal restores Team access without deleting members, leads, jobs, or activity.
 - Restore Purchases works after reinstall with the same Apple and Team identity.
+- Team restore does not unlock workspace creation until Firebase confirms the transaction belongs to the signed-in owner.
 
 See `docs/team-billing-rollout.md` for deployment and compatibility details.

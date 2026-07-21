@@ -20,6 +20,7 @@ export interface AppStoreTeamTransaction {
   originalTransactionId?: string;
   productId?: string;
   revocationDate?: number;
+  signedDate?: number;
   transactionId?: string;
 }
 
@@ -30,6 +31,14 @@ export interface NormalizedTeamTransaction {
   originalTransactionId: string;
   productId: string;
   revocationAtMillis?: number;
+  signedAtMillis: number;
+  transactionId: string;
+}
+
+export interface StoredTeamTransactionVersion {
+  expiresAtMillis: number;
+  revocationAtMillis?: number;
+  signedAtMillis: number;
   transactionId: string;
 }
 
@@ -83,8 +92,33 @@ export function normalizeTeamTransaction(
     revocationAtMillis: Number.isFinite(transaction.revocationDate)
       ? transaction.revocationDate
       : undefined,
+    signedAtMillis: Number.isFinite(transaction.signedDate)
+      ? transaction.signedDate as number
+      : 0,
     transactionId: transaction.transactionId
   };
+}
+
+export function shouldApplyTeamTransaction(
+  existing: StoredTeamTransactionVersion | null,
+  incoming: NormalizedTeamTransaction
+): boolean {
+  if (existing === null) {
+    return true;
+  }
+
+  if (incoming.transactionId === existing.transactionId) {
+    if (existing.revocationAtMillis !== undefined && incoming.revocationAtMillis === undefined) {
+      return false;
+    }
+    return incoming.signedAtMillis >= existing.signedAtMillis;
+  }
+
+  if (incoming.expiresAtMillis !== existing.expiresAtMillis) {
+    return incoming.expiresAtMillis > existing.expiresAtMillis;
+  }
+
+  return incoming.signedAtMillis >= existing.signedAtMillis;
 }
 
 export function deriveTeamEntitlementState(

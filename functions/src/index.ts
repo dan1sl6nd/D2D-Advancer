@@ -41,6 +41,8 @@ import {
   deriveTeamEntitlementState,
   normalizeTeamTransaction,
   NormalizedTeamTransaction,
+  shouldApplyTeamTransaction,
+  StoredTeamTransactionVersion,
   teamAppAccountTokenForUser,
   TEAM_MEMBER_LIMIT
 } from "./teamEntitlement";
@@ -182,6 +184,7 @@ function emulatorTeamTransaction(ownerUserId: string, value: unknown): Normalize
     expiresAtMillis,
     originalTransactionId: `emulator-original-${safeOwnerId}`,
     productId: "com.d2dadvancer.team3.yearly",
+    signedAtMillis: Date.now(),
     transactionId: `emulator-transaction-${safeOwnerId}`
   };
 }
@@ -217,11 +220,36 @@ function entitlementData(
     ownerUserId,
     planStatus: state.planStatus,
     productId: transaction.productId,
+    revocationAt: transaction.revocationAtMillis === undefined
+      ? null
+      : Timestamp.fromMillis(transaction.revocationAtMillis),
     schemaVersion: TEAM_SCHEMA_VERSION,
+    signedAt: Timestamp.fromMillis(transaction.signedAtMillis),
     source: "app_store",
     transactionId: transaction.transactionId,
     updatedAt: Timestamp.fromDate(now),
     verifiedAt: Timestamp.fromDate(now)
+  };
+}
+
+function storedTeamTransactionVersion(
+  data: Record<string, unknown> | undefined
+): StoredTeamTransactionVersion | null {
+  if (
+    !data
+    || !(data.expiresAt instanceof Timestamp)
+    || typeof data.transactionId !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    expiresAtMillis: data.expiresAt.toMillis(),
+    revocationAtMillis: data.revocationAt instanceof Timestamp
+      ? data.revocationAt.toMillis()
+      : undefined,
+    signedAtMillis: data.signedAt instanceof Timestamp ? data.signedAt.toMillis() : 0,
+    transactionId: data.transactionId
   };
 }
 
@@ -429,6 +457,7 @@ async function syncEntitlementForOwner(
   return db.runTransaction(async (firestoreTransaction) => {
     const bindingSnapshot = await firestoreTransaction.get(bindingRef);
     const accountSnapshot = await firestoreTransaction.get(accountRef);
+    const entitlementSnapshot = await firestoreTransaction.get(entitlementRef);
     const profileSnapshot = await firestoreTransaction.get(profileRef);
 
     validatePurchaseBinding(
@@ -448,26 +477,38 @@ async function syncEntitlementForOwner(
       ? await firestoreTransaction.get(ownerMemberRef)
       : null;
 
-    firestoreTransaction.set(bindingRef, {
+    const shouldApply = shouldApplyTeamTransaction(
+      storedTeamTransactionVersion(entitlementSnapshot.data()),
+      transaction
+    );
+    const bindingData: Record<string, unknown> = {
       appAccountToken: transaction.appAccountToken,
-      environment: transaction.environment,
-      latestTransactionId: transaction.transactionId,
       ownerUserId,
-      productId: transaction.productId,
       updatedAt: Timestamp.fromDate(now)
-    }, { merge: true });
+    };
+    if (shouldApply || !bindingSnapshot.exists) {
+      bindingData.environment = transaction.environment;
+      bindingData.latestSignedAt = Timestamp.fromMillis(transaction.signedAtMillis);
+      bindingData.latestTransactionId = transaction.transactionId;
+      bindingData.productId = transaction.productId;
+    }
+    firestoreTransaction.set(bindingRef, bindingData, { merge: true });
     firestoreTransaction.set(accountRef, {
       originalTransactionId: transaction.originalTransactionId,
       ownerUserId,
       updatedAt: Timestamp.fromDate(now)
     }, { merge: true });
-    firestoreTransaction.set(
-      entitlementRef,
-      entitlementData(ownerUserId, transaction, now),
-      { merge: true }
-    );
+    if (shouldApply) {
+      firestoreTransaction.set(
+        entitlementRef,
+        entitlementData(ownerUserId, transaction, now),
+        { merge: true }
+      );
+    }
 
     if (
+      shouldApply
+      &&
       teamRef
       && teamSnapshot?.exists
       && teamSnapshot.data()?.ownerUserId === ownerUserId
@@ -476,7 +517,13 @@ async function syncEntitlementForOwner(
       firestoreTransaction.update(teamRef, teamPlanData(transaction, now));
     }
 
-    return { planStatus: state.planStatus, teamId };
+    const existingPlanStatus = entitlementSnapshot.data()?.planStatus;
+    return {
+      planStatus: shouldApply || typeof existingPlanStatus !== "string"
+        ? state.planStatus
+        : existingPlanStatus,
+      teamId
+    };
   });
 }
 
@@ -486,7 +533,6 @@ export const syncTeamEntitlement = onCall(TEAM_CALLABLE_OPTIONS, async (request)
     throw new HttpsError("unauthenticated", "Sign in with Apple before checking Team access.");
   }
 
-  await assertTeamOperationsAllowWrite();
   await enforceUserRateLimit(ownerUserId, "sync-entitlement", SYNC_ENTITLEMENT_RATE_LIMIT);
 
   const transaction = emulatorTeamTransaction(ownerUserId, request.data?.signedTransaction)
@@ -535,6 +581,7 @@ export const createTeamWorkspace = onCall(TEAM_CALLABLE_OPTIONS, async (request)
     const profileSnapshot = await firestoreTransaction.get(profileRef);
     const bindingSnapshot = await firestoreTransaction.get(bindingRef);
     const accountSnapshot = await firestoreTransaction.get(accountRef);
+    const entitlementSnapshot = await firestoreTransaction.get(entitlementRef);
 
     assertTeamOperationsDataAllowsWrite(operationsSnapshot.data());
 
@@ -546,6 +593,15 @@ export const createTeamWorkspace = onCall(TEAM_CALLABLE_OPTIONS, async (request)
       bindingSnapshot.data()?.ownerUserId,
       accountSnapshot.data()?.ownerUserId
     );
+    if (!shouldApplyTeamTransaction(
+      storedTeamTransactionVersion(entitlementSnapshot.data()),
+      verifiedTransaction
+    )) {
+      throw new HttpsError(
+        "failed-precondition",
+        "A newer Team renewal is already linked. Restore purchases and try again."
+      );
+    }
 
     const timestamp = Timestamp.fromDate(now);
     const initialUsage = initialTeamUsageDecision(now.getTime());
@@ -553,6 +609,7 @@ export const createTeamWorkspace = onCall(TEAM_CALLABLE_OPTIONS, async (request)
       appAccountToken: verifiedTransaction.appAccountToken,
       environment: verifiedTransaction.environment,
       latestTransactionId: verifiedTransaction.transactionId,
+      latestSignedAt: Timestamp.fromMillis(verifiedTransaction.signedAtMillis),
       ownerUserId,
       productId: verifiedTransaction.productId,
       updatedAt: timestamp
