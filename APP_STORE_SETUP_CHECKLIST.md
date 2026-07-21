@@ -171,7 +171,8 @@ Suggested review path:
 
 - [ ] Production Firestore rules match the tested repository rules.
 - [ ] Firebase Cloud Functions are deployed and `createTeamWorkspace` rejects missing, invalid, replayed, or expired Team transactions.
-- [ ] App Store Server Notifications V2 points to the deployed notification function and passes Sandbox testing.
+- [x] Production and Sandbox App Store Server Notifications V2 URLs point to the deployed notification function.
+- [ ] An Apple-signed Sandbox notification reaches the function and updates the matching Team entitlement.
 - [ ] Firebase Authentication has Sign in with Apple enabled and configured for the production bundle.
 - [ ] CloudKit production schema is deployed and query/index requirements are verified.
 - [ ] App Store Connect version metadata, age-rating questionnaire, content-rights answers, export compliance, privacy answers, and review contact are complete.
