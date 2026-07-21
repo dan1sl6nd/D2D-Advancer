@@ -2887,6 +2887,14 @@ final class D2D_AdvancerUITests: XCTestCase {
             )
         }
         XCTAssertFalse(app.buttons["threeDMapButton"].exists, "The retired 3D map control should stay removed")
+
+        let legalLink = app.links["Legal"]
+        XCTAssertTrue(legalLink.waitForExistence(timeout: 8), "Maps Legal attribution should be visible")
+        XCTAssertLessThanOrEqual(
+            legalLink.frame.minX,
+            84,
+            "Maps Legal attribution should stay close to the leading screen edge"
+        )
     }
 
     @MainActor

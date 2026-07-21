@@ -394,8 +394,9 @@ struct AdvancedMapView: UIViewRepresentable {
         isLaunchCenteringActive _: Bool
     ) -> UIEdgeInsets {
         // MapKit positions its attribution and built-in controls inside these
-        // margins. Keep attribution in the strip below the floating action bar.
-        UIEdgeInsets(top: 20, left: 20, bottom: 0, right: 20)
+        // margins. Keep attribution near the leading edge in the strip below
+        // the floating action bar.
+        UIEdgeInsets(top: 20, left: 8, bottom: 0, right: 20)
     }
 
     nonisolated static func shouldRespectVisibleControlsForStartupCentering(
