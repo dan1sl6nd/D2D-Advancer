@@ -5,167 +5,308 @@ struct NotificationSettingsView: View {
     @StateObject private var notificationService = NotificationService.shared
     @State private var authorizationStatus: UNAuthorizationStatus = .notDetermined
     @State private var showingPermissionAlert = false
+    @State private var saveErrorMessage: String?
 
     var body: some View {
-        NavigationView {
-            List {
-                // Permission Status Section
-                Section {
-                    HStack {
-                        Image(systemName: permissionIcon)
-                            .foregroundColor(permissionColor)
-                            .font(.title2)
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                permissionSection
+                reminderSection
+                dailySummarySection
+                managementSection
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 28)
+        }
+        .obsidianScreenBackground()
+        .obsidianPushedNavigation(
+            "Notifications",
+            titleAccessibilityIdentifier: "notificationSettingsScreen",
+            backButtonAccessibilityIdentifier: "notificationSettingsBackButton"
+        )
+        .onAppear {
+            checkPermissionStatus()
+        }
+        .alert("Notification Permission", isPresented: $showingPermissionAlert) {
+            Button("Go to Settings") {
+                openSettings()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Notifications are disabled in Settings. Enable them to receive reminders about appointments and follow-ups.")
+        }
+        .alert("Notification settings not saved", isPresented: Binding(
+            get: { saveErrorMessage != nil },
+            set: { if !$0 { saveErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { saveErrorMessage = nil }
+        } message: {
+            Text(saveErrorMessage ?? "Notification settings were not saved.")
+        }
+    }
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Notification Permission")
-                                .font(.headline)
-
-                            Text(permissionStatusText)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+    private var permissionSection: some View {
+        MoreSectionGroup(
+            title: "Permission",
+            icon: permissionIcon,
+            subtitle: "Required for appointment and follow-up reminders.",
+            accentColor: permissionColor
+        ) {
+            MoreCardView(
+                icon: permissionIcon,
+                iconColor: permissionColor,
+                title: "Notification Permission",
+                subtitle: permissionStatusText,
+                trailingContent: {
+                    if authorizationStatus == .denied || authorizationStatus == .notDetermined {
+                        Button("Enable") {
+                            requestPermissionOrOpenSettings()
                         }
-
-                        Spacer()
-
-                        if authorizationStatus == .denied || authorizationStatus == .notDetermined {
-                            Button("Enable") {
-                                requestPermissionOrOpenSettings()
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
+                        .buttonStyle(ObsidianSecondaryButtonStyle())
                     }
-                    .padding(.vertical, 4)
-                } header: {
-                    Text("Permission")
-                } footer: {
-                    Text("Notifications are required to remind you about appointments and follow-ups.")
                 }
+            )
+        }
+    }
 
-                // Global Sound Setting
-                Section {
+    private var reminderSection: some View {
+        MoreSectionGroup(
+            title: "Reminders",
+            icon: "clock.badge.checkmark",
+            subtitle: "Tune the alerts that matter in the field.",
+            accentColor: Color.electricViolet
+        ) {
+            MoreCardView(
+                icon: "speaker.wave.2.fill",
+                iconColor: Color.statusInterested,
+                title: "Play Sound",
+                subtitle: "Turn off for silent notifications",
+                trailingContent: {
                     Toggle("Play Sound", isOn: $notificationService.notificationSettings.playSound)
+                        .labelsHidden()
                         .onChange(of: notificationService.notificationSettings.playSound) {
                             saveSettings()
                         }
-                } header: {
-                    Text("Sound")
-                } footer: {
-                    Text("Turn off to receive silent notifications.")
+                        .accessibilityIdentifier("notificationPlaySoundToggle")
                 }
+            )
 
-                // Follow-up Reminders Section
-                Section {
+            notificationDivider
+
+            MoreCardView(
+                icon: "person.crop.circle.badge.clock",
+                iconColor: Color.statusNotHome,
+                title: "Follow-up Reminders",
+                subtitle: "Get notified when leads are due",
+                trailingContent: {
                     Toggle("Follow-up Reminders", isOn: $notificationService.notificationSettings.followUpReminders.isEnabled)
+                        .labelsHidden()
                         .onChange(of: notificationService.notificationSettings.followUpReminders.isEnabled) {
                             saveSettings()
                         }
-
-                    if notificationService.notificationSettings.followUpReminders.isEnabled {
-                        Picker("Reminder Time", selection: $notificationService.notificationSettings.followUpReminders.reminderTime) {
-                            ForEach(FollowUpReminderTime.allCases, id: \.self) { time in
-                                Text(time.displayName).tag(time)
-                            }
-                        }
-                        .onChange(of: notificationService.notificationSettings.followUpReminders.reminderTime) {
-                            saveSettings()
-                        }
-                    }
-                } header: {
-                    Text("Follow-up Reminders")
-                } footer: {
-                    Text("Get notified when it's time to follow up with leads.")
+                        .accessibilityIdentifier("notificationFollowUpRemindersToggle")
                 }
+            )
 
-                // Appointment Reminders Section
-                Section {
+            if notificationService.notificationSettings.followUpReminders.isEnabled {
+                notificationDivider
+
+                MoreCardView(
+                    icon: "clock.arrow.circlepath",
+                    iconColor: Color.statusNotHome,
+                    title: "Follow-up Timing",
+                    subtitle: "When follow-up alerts fire",
+                    trailingContent: {
+                        followUpReminderTimeMenu
+                    }
+                )
+            }
+
+            notificationDivider
+
+            MoreCardView(
+                icon: "calendar.badge.clock",
+                iconColor: Color.electricViolet,
+                title: "Appointment Reminders",
+                subtitle: "Alert before scheduled work",
+                trailingContent: {
                     Toggle("Appointment Reminders", isOn: $notificationService.notificationSettings.appointmentReminders.isEnabled)
+                        .labelsHidden()
                         .onChange(of: notificationService.notificationSettings.appointmentReminders.isEnabled) {
                             saveSettings()
                         }
-
-                    if notificationService.notificationSettings.appointmentReminders.isEnabled {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Reminder Times")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.secondary)
-
-                            ForEach(AppointmentReminderTime.allCases, id: \.self) { reminderTime in
-                                HStack {
-                                    Button(action: {
-                                        toggleReminderTime(reminderTime)
-                                    }) {
-                                        HStack {
-                                            Image(systemName: isReminderTimeSelected(reminderTime) ? "checkmark.circle.fill" : "circle")
-                                                .foregroundColor(isReminderTimeSelected(reminderTime) ? .blue : .gray)
-                                            Text(reminderTime.displayName + " before")
-                                                .foregroundColor(.primary)
-                                            Spacer()
-                                        }
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                }
-                            }
-                        }
-                        .padding(.vertical, 8)
-                    }
-                } header: {
-                    Text("Appointment Reminders")
-                } footer: {
-                    Text("Choose when to be reminded about upcoming appointments.")
+                        .accessibilityIdentifier("notificationAppointmentRemindersToggle")
                 }
+            )
 
-                // Daily Summary Section
-                Section {
+            if notificationService.notificationSettings.appointmentReminders.isEnabled {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Reminder Times")
+                        .microLabel()
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
+
+                    ForEach(AppointmentReminderTime.allCases, id: \.self) { reminderTime in
+                        reminderTimeButton(reminderTime)
+                    }
+                }
+                .padding(.bottom, 8)
+            }
+        }
+    }
+
+    private var dailySummarySection: some View {
+        MoreSectionGroup(
+            title: "Daily Summary",
+            icon: "sunrise.fill",
+            subtitle: "Start the day with a compact workload overview.",
+            accentColor: Color.statusInterested
+        ) {
+            MoreCardView(
+                icon: "doc.text.magnifyingglass",
+                iconColor: Color.statusInterested,
+                title: "Daily Summary",
+                subtitle: "Appointments and follow-ups overview",
+                trailingContent: {
                     Toggle("Daily Summary", isOn: $notificationService.notificationSettings.dailySummary.isEnabled)
+                        .labelsHidden()
                         .onChange(of: notificationService.notificationSettings.dailySummary.isEnabled) {
                             saveSettings()
                         }
-
-                    if notificationService.notificationSettings.dailySummary.isEnabled {
-                        DatePicker("Summary Time", selection: $notificationService.notificationSettings.dailySummary.time, displayedComponents: .hourAndMinute)
-                            .onChange(of: notificationService.notificationSettings.dailySummary.time) {
-                                saveSettings()
-                            }
-                    }
-                } header: {
-                    Text("Daily Summary")
-                } footer: {
-                    Text("Get a daily overview of your appointments and follow-ups.")
+                        .accessibilityIdentifier("notificationDailySummaryToggle")
                 }
+            )
 
-                // Reset Section
-                Section {
-                    Button("Reset to Defaults") {
-                        resetToDefaults()
-                    }
-                    .foregroundColor(.red)
+            if notificationService.notificationSettings.dailySummary.isEnabled {
+                notificationDivider
 
-                    Button("Refresh All Notifications") {
-                        notificationService.refreshAllNotifications()
+                MoreCardView(
+                    icon: "clock.fill",
+                    iconColor: Color.statusInterested,
+                    title: "Summary Time",
+                    subtitle: "When the daily overview arrives",
+                    trailingContent: {
+                        DatePicker(
+                            "Summary Time",
+                            selection: $notificationService.notificationSettings.dailySummary.time,
+                            displayedComponents: .hourAndMinute
+                        )
+                        .labelsHidden()
+                        .onChange(of: notificationService.notificationSettings.dailySummary.time) {
+                            saveSettings()
+                        }
                     }
-                    .foregroundColor(.blue)
-                } header: {
-                    Text("Management")
-                } footer: {
-                    Text("Reset all notification settings or refresh pending notifications.")
-                }
-            }
-            .navigationTitle("Notifications")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                checkPermissionStatus()
-            }
-            .alert("Notification Permission", isPresented: $showingPermissionAlert) {
-                Button("Go to Settings") {
-                    openSettings()
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("Notifications are disabled in Settings. Enable them to receive reminders about appointments and follow-ups.")
+                )
             }
         }
+    }
+
+    private var managementSection: some View {
+        MoreSectionGroup(
+            title: "Management",
+            icon: "wrench.and.screwdriver.fill",
+            subtitle: "Reset settings or rebuild scheduled notifications.",
+            accentColor: Color.statusNotInterested
+        ) {
+            VStack(spacing: 12) {
+                Button {
+                    resetToDefaults()
+                } label: {
+                    Label("Reset to Defaults", systemImage: "arrow.counterclockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("notificationResetDefaultsButton")
+
+                Button {
+                    notificationService.refreshAllNotifications()
+                } label: {
+                    Label("Refresh All Notifications", systemImage: "arrow.triangle.2.circlepath")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+                .accessibilityIdentifier("notificationRefreshAllButton")
+            }
+            .padding(16)
+        }
+    }
+
+    private var notificationDivider: some View {
+        Rectangle()
+            .fill(Color.obsidianBorder.opacity(0.45))
+            .frame(height: 0.5)
+            .padding(.leading, 74)
+    }
+
+    private var followUpReminderTimeMenu: some View {
+        Menu {
+            ForEach(FollowUpReminderTime.allCases, id: \.self) { time in
+                Button {
+                    notificationService.notificationSettings.followUpReminders.reminderTime = time
+                    saveSettings()
+                } label: {
+                    if notificationService.notificationSettings.followUpReminders.reminderTime == time {
+                        Label(time.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(time.displayName)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(compactFollowUpReminderTimeLabel(notificationService.notificationSettings.followUpReminders.reminderTime))
+                    .font(.obsidianFootnote)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+
+                Image(systemName: "chevron.down")
+                    .font(.micro)
+            }
+            .foregroundColor(Color.electricViolet)
+            .padding(.horizontal, 10)
+            .frame(minWidth: 118, minHeight: 44)
+            .background(Color.electricViolet.opacity(0.12))
+            .clipShape(Capsule())
+            .contentShape(Capsule())
+        }
+        .accessibilityIdentifier("notificationFollowUpReminderTimeMenu")
+    }
+
+    private func compactFollowUpReminderTimeLabel(_ time: FollowUpReminderTime) -> String {
+        switch time {
+        case .atTime:
+            return "At time"
+        case .fifteenMinutesBefore:
+            return "15 min before"
+        case .thirtyMinutesBefore:
+            return "30 min before"
+        case .oneHourBefore:
+            return "1 hr before"
+        }
+    }
+
+    private func reminderTimeButton(_ reminderTime: AppointmentReminderTime) -> some View {
+        Button {
+            toggleReminderTime(reminderTime)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isReminderTimeSelected(reminderTime) ? "checkmark.circle.fill" : "circle")
+                    .font(.obsidianCallout)
+                    .foregroundColor(isReminderTimeSelected(reminderTime) ? .electricViolet : .textMuted)
+
+                Text(reminderTime.displayName + " before")
+                    .font(.obsidianBody)
+                    .foregroundColor(.textPrimary)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 
     private var permissionIcon: String {
@@ -251,14 +392,20 @@ struct NotificationSettingsView: View {
     }
 
     private func saveSettings() {
-        notificationService.updateSettings(notificationService.notificationSettings)
+        guard notificationService.updateSettings(notificationService.notificationSettings) else {
+            saveErrorMessage = notificationService.lastErrorMessage ?? "Notification settings were not saved."
+            return
+        }
 
         // Refresh notifications with new settings
         notificationService.refreshAllNotifications()
     }
 
     private func resetToDefaults() {
-        notificationService.updateSettings(NotificationSettings())
+        guard notificationService.updateSettings(NotificationSettings()) else {
+            saveErrorMessage = notificationService.lastErrorMessage ?? "Notification settings were not saved."
+            return
+        }
         notificationService.refreshAllNotifications()
     }
 }

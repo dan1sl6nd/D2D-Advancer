@@ -1,84 +1,958 @@
 import SwiftUI
 import MapKit
 import CoreData
+import UIKit
+import os
+
+enum MapOverlayControlLayout {
+    static let visibleControlCount = 4
+    static let controlSize: CGFloat = 44
+    static let controlSpacing: CGFloat = 10
+    static let topInsetFromSafeArea: CGFloat = 4
+    static let compassGap: CGFloat = 10
+
+    static var compassTopOffset: CGFloat {
+        topInsetFromSafeArea
+            + (CGFloat(visibleControlCount) * controlSize)
+            + (CGFloat(visibleControlCount - 1) * controlSpacing)
+            + compassGap
+    }
+}
+
+enum MapWorkflowMode: String, CaseIterable, Identifiable {
+    case all
+    case hot
+    case due
+    case today
+    case sold
+    case next
+
+    static let primaryModes: [MapWorkflowMode] = [.all, .hot, .due, .sold]
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .hot: return "Interested"
+        case .due: return "Due"
+        case .today: return "Today"
+        case .sold: return "Sold"
+        case .next: return "Next"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .all: return "map"
+        case .hot: return "flame.fill"
+        case .due: return "calendar.badge.clock"
+        case .today: return "sun.max.fill"
+        case .sold: return "checkmark.seal.fill"
+        case .next: return "sparkles"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .all: return Color.electricViolet
+        case .hot: return Color.statusInterested
+        case .due: return Color.statusNotHome
+        case .today: return Color.electricViolet
+        case .sold: return Color.statusConverted
+        case .next: return Color.statusInterested
+        }
+    }
+
+    func includes(_ lead: Lead, now: Date = Date()) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .hot:
+            return LeadMapWorkflowPolicy.isHotLead(lead, now: now)
+        case .due:
+            return LeadWorkflowScorer.isFollowUpDue(lead, now: now)
+        case .today:
+            return Calendar.current.isDate(lead.createdDate ?? .distantPast, inSameDayAs: now)
+        case .sold:
+            return lead.leadStatus == .converted
+        case .next:
+            return lead.leadStatus != .notInterested && lead.leadStatus != .converted
+        }
+    }
+
+    func includes(_ pin: MapLeadPin, now: Date = Date()) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .hot:
+            return LeadMapWorkflowPolicy.isHotLead(pin, now: now)
+        case .due:
+            return LeadMapWorkflowPolicy.isFollowUpDue(pin, now: now)
+        case .today:
+            return Calendar.current.isDate(pin.createdDate ?? .distantPast, inSameDayAs: now)
+        case .sold:
+            return pin.status == .converted
+        case .next:
+            return pin.status != .notInterested && pin.status != .converted
+        }
+    }
+}
+
+enum MapAddressSource {
+    case mapSearchAddress
+    case streetAddress
+    case preferredAddress
+    case coordinateFallback
+
+    var debugLabel: String {
+        switch self {
+        case .mapSearchAddress:
+            return "map search address"
+        case .streetAddress:
+            return "street address"
+        case .preferredAddress:
+            return "preferred address"
+        case .coordinateFallback:
+            return "coordinate fallback"
+        }
+    }
+}
+
+enum MapQuickLeadAddressPolicy {
+    static func acceptedAddress(_ address: String, source: MapAddressSource) -> String? {
+        guard source != .coordinateFallback else { return nil }
+        return AddLeadAddressPolicy.cleanedAddress(address)
+    }
+}
+
+enum MapAddressResolutionPolicy {
+    static func resolvedCoordinate(
+        pressedCoordinate: CLLocationCoordinate2D,
+        candidateCoordinate: CLLocationCoordinate2D?,
+        source: MapAddressSource
+    ) -> CLLocationCoordinate2D {
+        switch source {
+        case .mapSearchAddress, .streetAddress:
+            return candidateCoordinate ?? pressedCoordinate
+        case .preferredAddress, .coordinateFallback:
+            return pressedCoordinate
+        }
+    }
+}
+
+enum MapQuickActionLeadPolicy {
+    static func usableAddress(_ address: String) -> String? {
+        AddLeadAddressPolicy.cleanedAddress(address)
+    }
+
+    static func canCreateLead(address: String) -> Bool {
+        usableAddress(address) != nil
+    }
+}
+
+struct MapQuickActionLeadSeed {
+    let coordinate: CLLocationCoordinate2D
+    let address: String?
+}
+
+enum MapQuickActionLeadSeedPolicy {
+    static func seed(
+        resolvedCoordinate: CLLocationCoordinate2D,
+        resolvedAddress: String,
+        source: MapAddressSource
+    ) -> MapQuickActionLeadSeed {
+        MapQuickActionLeadSeed(
+            coordinate: resolvedCoordinate,
+            address: MapQuickLeadAddressPolicy.acceptedAddress(resolvedAddress, source: source)
+        )
+    }
+}
+
+enum MapLongPressLeadSeedPolicy {
+    static func seed(
+        pressedCoordinate: CLLocationCoordinate2D,
+        confirmedAddress: String
+    ) -> AddLeadLocationSeed {
+        AddLeadLocationSeed(
+            coordinate: pressedCoordinate,
+            address: confirmedAddress
+        )
+    }
+}
+
+struct MapQuickLeadUndoDeletionPlan: Equatable {
+    let localDeletedId: UUID?
+    let cloudLeadId: String?
+}
+
+enum MapQuickLeadUndoPolicy {
+    static func deletionPlan(
+        leadId: UUID?,
+        provider: CloudSyncProvider,
+        isAuthenticated: Bool
+    ) -> MapQuickLeadUndoDeletionPlan {
+        let cloudLeadId: String?
+        if let leadId,
+           UserDataSyncManager.shouldDeleteLeadFromCloud(
+            provider: provider,
+            isAuthenticated: isAuthenticated
+           ) {
+            cloudLeadId = leadId.uuidString
+        } else {
+            cloudLeadId = nil
+        }
+
+        return MapQuickLeadUndoDeletionPlan(
+            localDeletedId: leadId,
+            cloudLeadId: cloudLeadId
+        )
+    }
+}
+
+private struct MapAddressResolution {
+    let coordinate: CLLocationCoordinate2D
+    let address: String
+    let source: MapAddressSource
+}
+
+private struct MapAddressCandidate {
+    let address: String
+    let coordinate: CLLocationCoordinate2D
+    let hasStreetNumber: Bool
+    let distanceFromPress: CLLocationDistance
+    let score: Double
+    let source: MapAddressSource
+    let confidenceRadius: CLLocationDistance
+
+    var isConfident: Bool {
+        hasStreetNumber && distanceFromPress <= confidenceRadius
+    }
+}
+
+private enum MapStyleChoice: String, CaseIterable, Identifiable {
+    case standard
+    case satellite
+    case hybrid
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .standard: return "Standard"
+        case .satellite: return "Satellite"
+        case .hybrid: return "Hybrid"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .standard: return "map"
+        case .satellite: return "globe.americas.fill"
+        case .hybrid: return "map.fill"
+        }
+    }
+
+    var mapType: MKMapType {
+        switch self {
+        case .standard: return .standard
+        case .satellite: return .satellite
+        case .hybrid: return .hybrid
+        }
+    }
+
+    static func choice(for mapType: MKMapType) -> MapStyleChoice {
+        switch mapType {
+        case .satellite, .satelliteFlyover:
+            return .satellite
+        case .hybrid, .hybridFlyover:
+            return .hybrid
+        default:
+            return .standard
+        }
+    }
+}
+
+enum MapLaunchCenteringPolicy {
+    private static let foregroundRecenteringDistance: CLLocationDistance = 150
+
+    static func isMapCenteredOnUser(
+        region: MKCoordinateRegion,
+        location: CLLocation?,
+        distanceThreshold: CLLocationDistance = foregroundRecenteringDistance
+    ) -> Bool {
+        guard let location,
+              LocationManager.isUsableForInitialMapCenter(location) else {
+            return false
+        }
+
+        let mapCenter = CLLocation(
+            latitude: region.center.latitude,
+            longitude: region.center.longitude
+        )
+        let allowedDistance = max(distanceThreshold, location.horizontalAccuracy * 1.5)
+        return mapCenter.distance(from: location) <= allowedDistance
+    }
+
+    static func hasUsableLaunchLocationTarget(
+        region: MKCoordinateRegion,
+        location: CLLocation?
+    ) -> Bool {
+        isMapCenteredOnUser(region: region, location: location)
+    }
+
+    static func shouldPrepareOnForeground(
+        isAuthorized: Bool,
+        didCenterMapOnLaunch: Bool,
+        isLaunchCenteringActive _: Bool,
+        hasUsableLocation: Bool,
+        mapIsCenteredOnUser: Bool
+    ) -> Bool {
+        guard isAuthorized else { return false }
+        return !didCenterMapOnLaunch
+            || !hasUsableLocation
+            || !mapIsCenteredOnUser
+    }
+
+    static func shouldApplyLaunchCenteringRequest(
+        visibleMapCenteredConfirmed: Bool,
+        isLaunchCenteringActive _: Bool
+    ) -> Bool {
+        !visibleMapCenteredConfirmed
+    }
+}
+
+enum MapLeadFocusPolicy {
+    private static let focusedSpan = MKCoordinateSpan(latitudeDelta: 0.0045, longitudeDelta: 0.0045)
+
+    static func region(for coordinate: CLLocationCoordinate2D) -> MKCoordinateRegion? {
+        guard CLLocationCoordinate2DIsValid(coordinate),
+              (-90...90).contains(coordinate.latitude),
+              (-180...180).contains(coordinate.longitude),
+              coordinate.latitude != 0 || coordinate.longitude != 0 else {
+            return nil
+        }
+
+        return MKCoordinateRegion(center: coordinate, span: focusedSpan)
+    }
+}
 
 struct MapView: View {
+    let isVisible: Bool
+
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var locationManager = LocationManager.shared
-    @ObservedObject private var preferences = AppPreferences.shared
+    @ObservedObject private var onboardingManager = OnboardingManager.shared
+    @ObservedObject private var router = AppRouter.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
+    private let firebaseService = FirebaseService.shared
+    private let userAccountManager = FirebaseUserAccountManager.shared
+    private let paywallManager = PaywallManager.shared
     @State private var selectedLead: Lead?
     @State private var showingAddLead = false
     @State private var addLeadCoordinate: CLLocationCoordinate2D?
+    @State private var addLeadInitialAddress: String?
+    @State private var addLeadPresentationID = UUID()
+    @State private var isPreparingCurrentLocationLead = false
     @State private var mapType: MKMapType = AppPreferences.shared.mapDefaultViewType
     @State private var mapRotation: Double = 0.0
     @State private var mapPitch: Double = 0.0
-    @State private var leadToChangeStatus: Lead? // New state variable
+    @State private var leadToChangeStatus: Lead?
     @State private var triggerMapAnimation = false
-    
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)],
-        animation: .default
-    )
-    private var leads: FetchedResults<Lead>
-    
+    @State private var toastLead: Lead?
+    @State private var toastMessage: String = ""
+    @State private var toastToken = UUID()
+    @State private var showToast = false
+    @State private var showingLookAround = false
+    @State private var showingRoutePlanner = false
+    @State private var showingMapTools = false
+    @State private var mapToolsDetent: PresentationDetent = .large
+    @State private var lookAroundCoordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0)
+    @State private var longPressCoordinate: CLLocationCoordinate2D?
+    @State private var longPressAddress: String?
+    @State private var activeDialog: MapDialog?
+    @State private var isSearching = false
+    @State private var searchPin: SearchPin?
+    @State private var pendingSearchPinActions: SearchPin?
+    @State private var showingSearchPinActions = false
+    @State private var matchingLeadsForPin: [Lead] = []
+    @State private var selectedLeadCluster: LeadClusterSelection?
+    @State private var showingInterestedForm = false
+    @State private var interestedFormCoordinate: CLLocationCoordinate2D?
+    @State private var showingComeBackPicker = false
+    @State private var comeBackCoordinate: CLLocationCoordinate2D?
+    @State private var didCenterMapOnLaunch = false
+    @State private var didRequestLaunchLocationCenter = false
+    @State private var didConfirmVisibleMapCenteredOnLaunch = false
+    @State private var launchCenteringResetToken = 0
+    @State private var teamFieldMapSummary: TeamWorkspaceSurfaceSummary?
+    @State private var selectedTeamRepUserId: String?
+    @State private var selectedMapMode: MapWorkflowMode = .all
+    @State private var visibleMapRegion: MKCoordinateRegion = LocationManager.shared.region
+    @State private var mapLeadRenderSnapshot = MapLeadRenderSnapshot.empty
+    @State private var mapLeadPinCache = MapLeadPinCache.empty
+    @State private var mapLeadRenderTask: Task<Void, Never>?
+    @State private var mapLeadExpansionTask: Task<Void, Never>?
+    @State private var mapLeadCachePrewarmTask: Task<Void, Never>?
+    @State private var mapLeadOpeningGuardUntil = Date.distantPast
+    @State private var pendingMapLeadRenderSignature: MapLeadRenderRequestSignature?
+
+    private var isRunningUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
+    }
+
+    private var shouldExerciseMapRuntimeEffects: Bool {
+        ProcessInfo.processInfo.arguments.contains("-exerciseMapRuntimeEffectsForUITests")
+    }
+
+    private var shouldLoadTeamWorkspace: Bool {
+        !isRunningUITests || FirebaseEmulatorConfiguration.isEnabled
+    }
+
+    private var shouldRunVisibleMapEffects: Bool {
+        isVisible && (!isRunningUITests || shouldExerciseMapRuntimeEffects)
+    }
+
+    enum MapDialog: Identifiable {
+        case statusChange
+        case longPressMenu
+        var id: Int { hashValue }
+    }
+
+    init(isVisible: Bool = true) {
+        self.isVisible = isVisible
+    }
+
+    private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.make(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            dutyLocationPoints: teamService.dutyLocationPoints,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
+
+    private var roleContext: TeamRoleContext {
+        TeamRoleContext(summary: teamSurfaceSummary)
+    }
+
     var body: some View {
         ZStack {
-                mapView
-                overlayControls
+            mapView
 
+            if isVisible {
+                overlayControls
+                toastOverlay
+            }
+
+            if isVisible {
                 // Show location permission status
-                if locationManager.authorizationStatus == .notDetermined ||
-                   locationManager.authorizationStatus == .denied ||
-                   locationManager.authorizationStatus == .restricted {
+                if !isRunningUITests && LocationManager.shouldShowPermissionPrompt(
+                    for: locationManager.authorizationStatus,
+                    hasKnownLocation: locationManager.location != nil,
+                    isOnboardingPresented: onboardingManager.showOnboarding
+                ) {
                     VStack {
                         Spacer()
                         statusIndicator
                     }
                 }
             }
-            .navigationBarHidden(true)
-            .ignoresSafeArea(.all, edges: .top)
-            .onAppear {
-                // Clean up any leads without addresses on app start
-                cleanupLeadsWithoutAddresses()
+        }
+        .navigationBarHidden(true)
+        .ignoresSafeArea(.all, edges: .top)
+        .onAppear {
+            guard isVisible else {
+                prepareHiddenMapLeadState()
+                return
+            }
+            let focusedPendingLead = consumePendingMapLeadFocusIfNeeded()
+            if !focusedPendingLead && (!isRunningUITests || shouldExerciseMapRuntimeEffects) {
+                prepareLaunchMapCentering()
+            }
+            scheduleOpeningMapLeadRenderUpdate()
+        }
+        .onDisappear {
+            cancelMapLeadRenderTasks()
+            cancelMapLeadCachePrewarm()
+        }
+        .onChange(of: isVisible) { _, isVisible in
+            if isVisible {
+                let focusedPendingLead = consumePendingMapLeadFocusIfNeeded()
+                if !focusedPendingLead && (!isRunningUITests || shouldExerciseMapRuntimeEffects) {
+                    prepareLaunchMapCentering()
+                }
+                scheduleOpeningMapLeadRenderUpdate()
+            } else {
+                prepareHiddenMapLeadState()
+            }
+        }
+            .onChange(of: router.targetMapLeadID) { _, targetLeadID in
+                guard targetLeadID != nil else { return }
+                _ = consumePendingMapLeadFocusIfNeeded()
+            }
+            .onChange(of: selectedMapMode) { _, _ in
+                guard isVisible else { return }
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.03)
+            }
+            .onChange(of: visibleMapRegion.center.latitude) { _, _ in
+                guard isVisible else { return }
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
+            }
+            .onChange(of: visibleMapRegion.center.longitude) { _, _ in
+                guard isVisible else { return }
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
+            }
+            .onChange(of: visibleMapRegion.span.latitudeDelta) { _, _ in
+                guard isVisible else { return }
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
+            }
+            .onChange(of: visibleMapRegion.span.longitudeDelta) { _, _ in
+                guard isVisible else { return }
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { notification in
+                guard MapLeadCacheInvalidationPolicy.shouldInvalidate(for: notification) else { return }
+                cancelMapLeadCachePrewarm()
+                if mapLeadPinCache.isReady,
+                   let mutation = MapLeadCacheMutation(notification: notification) {
+                    mapLeadPinCache = mapLeadPinCache.applying(mutation)
+                } else {
+                    mapLeadPinCache = .empty
+                }
+                if isVisible {
+                    scheduleInteractiveMapLeadRenderUpdate(after: 0.12)
+                } else {
+                    scheduleHiddenMapLeadCachePrewarm(after: 0.45)
+                }
             }
             .sheet(item: $selectedLead) { lead in
                 LeadDetailView(lead: lead)
             }
-            .sheet(isPresented: $showingAddLead) {
-                AddLeadView(coordinate: addLeadCoordinate ?? locationManager.region.center)
+            .sheet(item: $selectedLeadCluster) { selection in
+                LeadClusterSheet(
+                    selection: selection,
+                    onViewLead: { lead in
+                        selectedLead = lead
+                    },
+                    onFocusLead: { lead in
+                        focusLead(lead, openDetail: false)
+                    }
+                )
+                .presentationDetents([.medium, .large])
             }
-            .confirmationDialog(
-                "Change Status for \(leadToChangeStatus?.displayName ?? "Lead")",
-                isPresented: .constant(leadToChangeStatus != nil),
-                titleVisibility: .visible
+            .fullScreenCover(
+                isPresented: $showingAddLead,
+                onDismiss: {
+                    addLeadCoordinate = nil
+                    addLeadInitialAddress = nil
+                }
             ) {
-                ForEach(Lead.Status.allCases, id: \.self) { status in
-                    Button(status.displayName) {
-                        if let lead = leadToChangeStatus {
-                            lead.leadStatus = status
-                            do {
-                                try viewContext.save()
-                                
-                                // Individual sync removed - will sync manually, hourly, or before sign-out
-                                print("📝 Lead status updated locally - will sync on next manual/hourly/sign-out sync")
-                                
-                            } catch {
-                                let nsError = error as NSError
-                                print("Save error: \(nsError), \(nsError.userInfo)")
-                            }
+                AddLeadView(
+                    coordinate: addLeadCoordinate ?? locationManager.region.center,
+                    initialAddress: addLeadInitialAddress
+                )
+                .id(addLeadPresentationID)
+            }
+            .sheet(item: $activeDialog) { dialog in
+                switch dialog {
+                case .statusChange:
+	                    StatusChangeSheet(
+	                        lead: leadToChangeStatus,
+	                        onSelect: { status in
+	                            if let lead = leadToChangeStatus {
+	                                updateLeadStatusFromMap(lead, status: status)
+	                            }
+	                            activeDialog = nil
+	                            leadToChangeStatus = nil
+	                        },
+                        onCancel: {
+                            activeDialog = nil
+                            leadToChangeStatus = nil
                         }
-                        leadToChangeStatus = nil // Dismiss the dialog
+                    )
+                    .presentationDetents([.medium])
+                case .longPressMenu:
+                    LongPressMenuSheet(
+                        coordinate: longPressCoordinate,
+                        address: $longPressAddress,
+                        onAddLead: { resolvedAddress in
+                            guard paywallManager.gateAction() else { return }
+                            let coordinate = longPressCoordinate
+                            activeDialog = nil
+                            longPressAddress = resolvedAddress
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                guard let coordinate else { return }
+                                let seed = MapLongPressLeadSeedPolicy.seed(
+                                    pressedCoordinate: coordinate,
+                                    confirmedAddress: resolvedAddress
+                                )
+                                presentAddLead(
+                                    coordinate: seed.coordinate,
+                                    initialAddress: seed.address
+                                )
+                            }
+                        },
+                        onStreetView: {
+                            if let coordinate = longPressCoordinate {
+                                lookAroundCoordinate = coordinate
+                            }
+                            activeDialog = nil
+                            // Delay Look Around sheet until long press sheet finishes dismissing
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                showingLookAround = true
+                            }
+                        },
+                        onNavigate: {
+                            let coordinate = longPressCoordinate
+                            let name = longPressAddress
+                            activeDialog = nil
+                            // Delay the launch until the sheet finishes dismissing to
+                            // prevent Maps from opening behind a still-animating modal.
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                guard let coordinate = coordinate else { return }
+                                let placemark = MKPlacemark(coordinate: coordinate)
+                                let mapItem = MKMapItem(placemark: placemark)
+                                mapItem.name = name ?? "Dropped Pin"
+                                mapItem.openInMaps(launchOptions: [
+                                    MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                                ])
+                            }
+                        },
+                        onCancel: { activeDialog = nil }
+                    )
+                    .presentationDetents([.large])
+                }
+            }
+            .sheet(isPresented: $showingLookAround) {
+                LookAroundSheet(
+                    coordinate: $lookAroundCoordinate,
+                    title: "Street View"
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showingRoutePlanner) {
+                RoutePlannerSheet(region: locationManager.region)
+            }
+            .sheet(isPresented: $showingMapTools) {
+                MapToolsSheetHost(
+                    selectedMode: selectedMapMode,
+                    isLeadSnapshotReady: mapLeadRenderSnapshot.isReady,
+                    matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount,
+                    onSelectMode: setMapMode,
+                    onOpenRoutePlanner: {
+                        showingRoutePlanner = true
+                    },
+                    onOpenTeamMap: openTeamFieldMap
+                )
+                .presentationDetents([.medium, .large], selection: $mapToolsDetent)
+                .presentationDragIndicator(.visible)
+            }
+            .onChange(of: showingMapTools) { _, isShowing in
+                if isShowing {
+                    mapToolsDetent = .large
+                }
+            }
+            .sheet(
+                isPresented: $isSearching,
+                onDismiss: {
+                    guard let pin = pendingSearchPinActions else { return }
+                    pendingSearchPinActions = nil
+                    DispatchQueue.main.async {
+                        presentSearchPinActions(for: pin, haptic: false)
                     }
                 }
-                Button("Cancel", role: .cancel) {
-                    leadToChangeStatus = nil
+            ) {
+                MapSearchSheet { coordinate, title in
+                    let pin = SearchPin(coordinate: coordinate, title: title)
+                    searchPin = pin
+                    pendingSearchPinActions = pin
+                    let newRegion = MKCoordinateRegion(
+                        center: coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                    )
+                    triggerMapAnimation = true
+                    locationManager.region = newRegion
                 }
-            } message: {
-                Text("Select a new status for this lead.")
+            }
+            .sheet(isPresented: $showingSearchPinActions) {
+                SearchPinActionsSheet(
+                    pin: searchPin ?? SearchPin(coordinate: CLLocationCoordinate2D(), title: ""),
+                    matchingLeads: matchingLeadsForPin,
+                    onViewLead: { lead in
+                        showingSearchPinActions = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            selectedLead = lead
+                        }
+                    },
+                    onAddLead: {
+                        guard let pin = searchPin else { return }
+                        showingSearchPinActions = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            presentAddLeadFromSelectedPin(
+                                coordinate: pin.coordinate,
+                                preferredAddress: pin.title
+                            )
+                        }
+                    }
+                )
+                .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showingInterestedForm) {
+                InterestedQuickForm(
+                    coordinate: interestedFormCoordinate ?? locationManager.region.center,
+                    resolveLeadSeed: resolveQuickActionLeadSeed
+                ) {
+                    showingInterestedForm = false
+                }
+                .presentationDetents([.large])
+            }
+            .sheet(isPresented: $showingComeBackPicker) {
+                ComeBackLaterSheet(
+                    coordinate: comeBackCoordinate ?? locationManager.region.center,
+                    resolveLeadSeed: resolveQuickActionLeadSeed,
+                    onDone: { showingComeBackPicker = false }
+                )
+                .presentationDetents([.large])
+            }
+            .sheet(item: $teamFieldMapSummary) { summary in
+                TeamFieldMapSheet(
+                    summary: summary,
+                    selectedRepUserId: $selectedTeamRepUserId
+                )
             }
     }
-    
+
+    private func scheduleOpeningMapLeadRenderUpdate() {
+        cancelMapLeadCachePrewarm()
+
+        guard MapLeadOpeningRenderPolicy.shouldScheduleRenderOnOpen(
+            cacheIsReady: mapLeadPinCache.isReady,
+            snapshotIsReady: mapLeadRenderSnapshot.isReady,
+            renderedPinCount: mapLeadRenderSnapshot.renderedPins.count,
+            matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount
+        ) else {
+            // The retained map already has useful pins. Keep that exact set
+            // through the tab transition; MapKit publishes a normalized region
+            // as it becomes visible, and reacting immediately would churn the
+            // annotations while the user is trying to interact.
+            mapLeadOpeningGuardUntil = Date().addingTimeInterval(
+                MapLeadOpeningRenderPolicy.warmOpenInteractionGuard
+            )
+            scheduleMapLeadExpansionIfNeeded(
+                after: MapLeadOpeningRenderPolicy.warmOpenInteractionGuard + 0.08
+            )
+            return
+        }
+
+        mapLeadOpeningGuardUntil = Date().addingTimeInterval(2.0)
+        scheduleMapLeadRenderUpdate(
+            after: MapLeadOpeningRenderPolicy.coldOpenRenderDelay,
+            maxRenderedLeads: MapLeadOpeningRenderPolicy.previewRenderedLeadBudget
+        )
+        scheduleMapLeadExpansionIfNeeded(after: MapLeadOpeningRenderPolicy.previewExpansionDelay)
+    }
+
+    private func prepareHiddenMapLeadState() {
+        cancelMapLeadRenderTasks()
+        // Preserve the exact warm annotation set while the retained MKMapView
+        // is hidden. Shrinking it here forces MapKit to remove and later rebuild
+        // most markers during every tab round trip.
+        scheduleHiddenMapLeadCachePrewarm()
+    }
+
+    private func scheduleHiddenMapLeadCachePrewarm(
+        after delay: TimeInterval = MapLeadHiddenPrewarmPolicy.prewarmDelay
+    ) {
+        guard !isVisible else { return }
+        guard MapLeadHiddenPrewarmPolicy.shouldPrewarm(
+            cacheIsReady: mapLeadPinCache.isReady,
+            snapshotIsReady: mapLeadRenderSnapshot.isReady
+        ) else { return }
+        guard mapLeadCachePrewarmTask == nil else { return }
+        let persistentStoreCoordinator = viewContext.persistentStoreCoordinator
+        guard mapLeadPinCache.isReady || persistentStoreCoordinator != nil else { return }
+
+        mapLeadCachePrewarmTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled else {
+                mapLeadCachePrewarmTask = nil
+                return
+            }
+
+            let cache: MapLeadPinCache
+            if mapLeadPinCache.isReady {
+                cache = mapLeadPinCache
+            } else if let persistentStoreCoordinator {
+                cache = await MapLeadPinCache.load(from: persistentStoreCoordinator)
+            } else {
+                cache = .empty
+            }
+            guard !Task.isCancelled else {
+                mapLeadCachePrewarmTask = nil
+                return
+            }
+
+            if cache.isReady {
+                let snapshot = await MapLeadRenderSnapshot.makeAsync(
+                    from: cache,
+                    mode: selectedMapMode,
+                    region: visibleMapRegion,
+                    fallbackCenter: locationManager.region.center,
+                    maxRenderedLeads: MapLeadOpeningRenderPolicy.previewRenderedLeadBudget
+                )
+                guard !Task.isCancelled else {
+                    mapLeadCachePrewarmTask = nil
+                    return
+                }
+
+                mapLeadPinCache = cache
+                mapLeadRenderSnapshot = snapshot
+            }
+
+            mapLeadCachePrewarmTask = nil
+        }
+    }
+
+    private func scheduleMapLeadExpansionIfNeeded(after delay: TimeInterval) {
+        mapLeadExpansionTask?.cancel()
+        mapLeadExpansionTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled, isVisible else {
+                mapLeadExpansionTask = nil
+                return
+            }
+            guard MapLeadOpeningRenderPolicy.shouldExpandPreview(
+                renderedPinCount: mapLeadRenderSnapshot.renderedPins.count,
+                matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount,
+                fullRenderedLeadBudget: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+            ) else {
+                mapLeadExpansionTask = nil
+                return
+            }
+
+            mapLeadExpansionTask = nil
+            scheduleMapLeadRenderUpdate(
+                after: 0,
+                maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+            )
+        }
+    }
+
+    private func scheduleInteractiveMapLeadRenderUpdate(after delay: TimeInterval) {
+        if !mapLeadRenderSnapshot.isReady && Date() < mapLeadOpeningGuardUntil {
+            return
+        }
+
+        let guardedDelay: TimeInterval
+        let remainingOpeningGuard = mapLeadOpeningGuardUntil.timeIntervalSinceNow
+        if remainingOpeningGuard > 0 {
+            guardedDelay = max(delay, remainingOpeningGuard + 0.08)
+        } else {
+            guardedDelay = delay
+        }
+
+        scheduleMapLeadRenderUpdate(
+            after: guardedDelay,
+            maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+        )
+    }
+
+    private func scheduleMapLeadRenderUpdate(
+        after delay: TimeInterval,
+        maxRenderedLeads: Int
+    ) {
+        guard isVisible else { return }
+
+        guard let persistentStoreCoordinator = viewContext.persistentStoreCoordinator else { return }
+
+        let mode = selectedMapMode
+        let region = visibleMapRegion
+        let fallbackCenter = locationManager.region.center
+        let requestSignature = MapLeadRenderRequestSignature(
+            mode: mode,
+            region: region,
+            fallbackCenter: fallbackCenter,
+            maxRenderedLeads: maxRenderedLeads,
+            cacheIsReady: mapLeadPinCache.isReady
+        )
+
+        guard pendingMapLeadRenderSignature != requestSignature else { return }
+
+        mapLeadRenderTask?.cancel()
+        pendingMapLeadRenderSignature = requestSignature
+
+        mapLeadRenderTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled else {
+                if pendingMapLeadRenderSignature == requestSignature {
+                    pendingMapLeadRenderSignature = nil
+                }
+                return
+            }
+
+            let snapshot = await loadMapLeadSnapshotIfNeeded(
+                persistentStoreCoordinator: persistentStoreCoordinator,
+                cachedPins: mapLeadPinCache,
+                mode: mode,
+                region: region,
+                fallbackCenter: fallbackCenter,
+                maxRenderedLeads: maxRenderedLeads
+            )
+            guard !Task.isCancelled else {
+                if pendingMapLeadRenderSignature == requestSignature {
+                    pendingMapLeadRenderSignature = nil
+                }
+                return
+            }
+
+            if snapshot.cache.isReady {
+                mapLeadPinCache = snapshot.cache
+            }
+            mapLeadRenderSnapshot = snapshot
+            mapLeadOpeningGuardUntil = .distantPast
+            if pendingMapLeadRenderSignature == requestSignature {
+                pendingMapLeadRenderSignature = nil
+            }
+        }
+    }
+
+    private func loadMapLeadSnapshotIfNeeded(
+        persistentStoreCoordinator: NSPersistentStoreCoordinator,
+        cachedPins: MapLeadPinCache,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int
+    ) async -> MapLeadRenderSnapshot {
+        let cache: MapLeadPinCache
+        if cachedPins.isReady {
+            cache = cachedPins
+        } else {
+            cache = await MapLeadPinCache.load(from: persistentStoreCoordinator)
+        }
+
+        return await MapLeadRenderSnapshot.makeAsync(
+            from: cache,
+            mode: mode,
+            region: region,
+            fallbackCenter: fallbackCenter,
+            maxRenderedLeads: maxRenderedLeads
+        )
+    }
+
     private var mapView: some View {
         AdvancedMapView(
             region: $locationManager.region,
@@ -86,191 +960,119 @@ struct MapView: View {
             rotation: $mapRotation,
             pitch: $mapPitch,
             animateNextUpdate: $triggerMapAnimation,
-            leads: Array(leads),
-            onLeadTap: { lead in
-                selectedLead = lead
+            visibleRegion: $visibleMapRegion,
+            launchCenteringResetToken: launchCenteringResetToken,
+            launchLocationCenterRevision: locationManager.initialMapCenterRevision,
+            leads: mapLeadRenderSnapshot.renderedPins,
+            leadAnnotationRevision: mapLeadRenderSnapshot.annotationRevision,
+            isVisible: isVisible,
+            searchPin: $searchPin,
+            // Keep the authorized user-location layer warm on the retained map.
+            // Launch-following behavior remains visibility-gated below.
+            showsUserLocation: (!isRunningUITests || shouldExerciseMapRuntimeEffects)
+                && LocationManager.isAuthorized(locationManager.authorizationStatus),
+            shouldFollowUserLocationOnLaunch: shouldRunVisibleMapEffects
+                && locationManager.shouldUseUserLocation
+                && !didConfirmVisibleMapCenteredOnLaunch,
+            needsLaunchLocationCenteringConfirmation: shouldRunVisibleMapEffects
+                && LocationManager.isAuthorized(locationManager.authorizationStatus)
+                && !didConfirmVisibleMapCenteredOnLaunch,
+            hasLaunchLocationCandidate: shouldRunVisibleMapEffects && MapLaunchCenteringPolicy.hasUsableLaunchLocationTarget(
+                region: locationManager.region,
+                location: locationManager.location
+            ),
+            onLaunchCenteringConfirmed: {
+                didCenterMapOnLaunch = true
+                didRequestLaunchLocationCenter = true
+                didConfirmVisibleMapCenteredOnLaunch = true
             },
-            onLongPress: { coordinate, lead in // Updated closure signature
-                handleLongPress(coordinate: coordinate, lead: lead)
+            onLeadTap: { pin in
+                selectedLead = lead(for: pin)
+            },
+            onLeadClusterTap: { pins, coordinate in
+                let leads = leads(for: pins)
+                if !leads.isEmpty {
+                    selectedLeadCluster = LeadClusterSelection(leads: leads, coordinate: coordinate)
+                }
+            },
+            onSearchPinTap: { pin in
+                handleSearchPinTap(pin)
+            },
+            onLongPress: { coordinate, pin in
+                handleLongPress(coordinate: coordinate, lead: pin.flatMap(lead(for:)))
             }
         )
-        .onAppear {
-            print("🗺️ MapView: onAppear - AGGRESSIVE location setup and centering")
-            setupLocationServices()
-
-            // IMMEDIATE location actions
-            handleImmediateLocationCentering()
-        }
-        .onChange(of: locationManager.region) { _, newRegion in
-            print("MapView: Region changed to \(newRegion.center)")
-        }
-        .onChange(of: locationManager.location) { _, newLocation in
-            // When we get a new location, center the map immediately for the first update
-            if let location = newLocation {
-                print("🎯 MapView: NEW LOCATION RECEIVED - centering map: \(location.coordinate)")
-                print("🎯 MapView: hasInitialLocation: \(locationManager.hasInitialLocation), shouldUseUserLocation: \(locationManager.shouldUseUserLocation)")
-
-                // Always center on the first location received during app launch
-                if !locationManager.hasInitialLocation || locationManager.shouldUseUserLocation {
-                    DispatchQueue.main.async {
-                        print("🎯 MapView: CENTERING ON NEW LOCATION")
-                        self.centerOnUserLocationWithAnimation()
-
-                        // Mark that we've handled the initial location
-                        self.locationManager.shouldUseUserLocation = false
-                    }
-                }
+        .onChangeCompat(of: onboardingManager.showOnboarding) { isPresented in
+            if isVisible && !isPresented && (!isRunningUITests || shouldExerciseMapRuntimeEffects) {
+                prepareLaunchMapCentering()
             }
         }
         .onChange(of: locationManager.authorizationStatus) { _, newStatus in
-            // When permission is granted, immediately try to center on user location
+            guard isVisible, !isRunningUITests || shouldExerciseMapRuntimeEffects else { return }
             if newStatus == .authorizedWhenInUse || newStatus == .authorizedAlways {
-                print("🎉 MapView: LOCATION PERMISSION GRANTED - immediate centering attempt")
-
-                // Set flag to ensure we center on next location update
-                locationManager.shouldUseUserLocation = true
-
-                // Reset rate limiting and request location immediately
-                locationManager.resetLocationRequestRetries()
-                locationManager.startLocationUpdates()
-                locationManager.requestImmediateLocation()
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    if self.locationManager.location != nil {
-                        print("🎉 MapView: Permission granted and location available, centering now")
-                        self.centerOnUserLocationWithAnimation()
-                        self.locationManager.shouldUseUserLocation = false
-                    } else {
-                        print("🎉 MapView: Permission granted but no location yet, making multiple requests")
-                        self.locationManager.requestImmediateLocation()
-
-                        // Try again after a short delay
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            if self.locationManager.location == nil {
-                                self.locationManager.requestImmediateLocation()
-                            }
-                        }
-                    }
-                }
+                prepareLaunchMapCentering()
             }
         }
+        .onReceive(locationManager.$location) { location in
+            guard isVisible,
+                  !isRunningUITests || shouldExerciseMapRuntimeEffects,
+                  location != nil else { return }
+            centerMapOnLaunchIfPossible()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard isVisible,
+                  !isRunningUITests || shouldExerciseMapRuntimeEffects,
+                  newPhase == .active else { return }
+            refreshLaunchMapCenteringAfterForeground()
+        }
     }
-    
-    
-    
+
+    private func cancelMapLeadRenderTasks() {
+        mapLeadRenderTask?.cancel()
+        mapLeadRenderTask = nil
+        mapLeadExpansionTask?.cancel()
+        mapLeadExpansionTask = nil
+        pendingMapLeadRenderSignature = nil
+    }
+
+    private func cancelMapLeadCachePrewarm() {
+        mapLeadCachePrewarmTask?.cancel()
+        mapLeadCachePrewarmTask = nil
+    }
     private var overlayControls: some View {
-        VStack {
-            HStack {
-                // Left Side Controls
-                VStack(spacing: 8) {
-                    // Center Location Button
-                    Button(action: {
-                        centerOnUserLocationWithAnimation()
-                    }) {
-                        Circle()
-                            .fill(Color.blue)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: "location.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            )
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        statSummaryPill
+                        urgentTeamMapShortcut
                     }
 
-                    // Add Lead Button
-                    Button(action: {
-                        showingAddLead = true
-                        addLeadCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
-                    }) {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: "plus")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            )
-                    }
+                    Spacer()
 
-                    // Map Type Button
-                    Button(action: {
-                        cycleMapType()
-                    }) {
-                        Circle()
-                            .fill(Color.purple)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: mapTypeIcon)
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            )
-                    }
-
-                    // Not Home Button
-                    Button(action: {
-                        createQuickLead(status: .notHome)
-                    }) {
-                        Circle()
-                            .fill(Color.brown)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: "house.slash.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-
-                    // Not Interested Button
-                    Button(action: {
-                        createQuickLead(status: .notInterested)
-                    }) {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: "hand.raised.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            )
-                    }
-                    .buttonStyle(PlainButtonStyle())
+                    mapControlsGroup
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(.systemBackground).opacity(0.95))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-                )
-                .padding(.leading, 16)
-                .padding(.top, 60) // Extra padding for Dynamic Island area
+                .padding(.horizontal, 16)
+                .padding(.top, overlayTopPadding(for: geometry))
 
                 Spacer()
+
+                // Bottom: floating action bar
+                floatingActionBar
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
             }
-            Spacer()
+            .ignoresSafeArea()
         }
     }
-    
-    
-    private var mapTypeLabel: String {
-        switch mapType {
-        case .standard:
-            return "Standard"
-        case .satellite:
-            return "Satellite"
-        case .hybrid:
-            return "Hybrid"
-        case .satelliteFlyover:
-            return "Flyover"
-        case .hybridFlyover:
-            return "Hybrid 3D"
-        case .mutedStandard:
-            return "Muted"
-        @unknown default:
-            return "Unknown"
-        }
+
+    private func overlayTopPadding(for geometry: GeometryProxy) -> CGFloat {
+        // The map root ignores the top safe area, so GeometryProxy can report
+        // zero here. Clamp to keep controls out of the status bar and tappable.
+        ObsidianLayout.safeAreaTop(geometry, minimum: 56)
+            + MapOverlayControlLayout.topInsetFromSafeArea
     }
-    
+
     private var statusIndicator: some View {
         VStack(spacing: 8) {
             if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
@@ -284,261 +1086,84 @@ struct MapView: View {
     }
     
     private var deniedLocationView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "location.slash")
-                    .foregroundColor(.red)
-                    .font(.title2)
-                
-                Text("Location Access")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Spacer()
+        VStack(spacing: 16) {
+            Image(systemName: "location.slash")
+                .font(.displayMedium)
+                .foregroundColor(Color.statusNotInterested)
+
+            VStack(spacing: 6) {
+                Text("Location Access Denied")
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
+
+                Text("Enable location in Settings to use map features.")
+                    .font(.obsidianBody)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(Color.textSecondary)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            
-            VStack(spacing: 20) {
-                // Status Display
-                VStack(spacing: 16) {
-                    Circle()
-                        .fill(Color.red.opacity(0.1))
-                        .frame(width: 80, height: 80)
-                        .overlay(
-                            Image(systemName: "location.slash")
-                                .font(.system(size: 32))
-                                .foregroundColor(.red)
-                        )
-                    
-                    VStack(spacing: 8) {
-                        Text("Location Access Denied")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        
-                        Text("To use map features and navigate to leads, please enable location access in Settings.")
-                            .font(.body)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
-                    }
+
+            Button("Open Settings") {
+                if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settingsUrl)
                 }
-                
-                // Action Button
-                Button("Open Settings") {
-                    if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(settingsUrl)
-                    }
-                }
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Color.red)
-                .cornerRadius(12)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
+            .buttonStyle(ObsidianPrimaryButtonStyle())
         }
-        .background(Color(UIColor.tertiarySystemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-        .padding()
+        .padding(24)
+        .mapOverlayCard(cornerRadius: 20)
+        .padding(24)
     }
-    
+
     private var requestingLocationView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "location.badge.questionmark")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Location Permission")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Spacer()
+        VStack(spacing: 16) {
+            Image(systemName: "location.badge.questionmark")
+                .font(.displayMedium)
+                .foregroundColor(Color.electricViolet)
+
+            VStack(spacing: 6) {
+                Text("Location Permission Required")
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
+
+                Text("D2D Advancer needs location access to show your position on the map.")
+                    .font(.obsidianBody)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(Color.textSecondary)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            
-            VStack(spacing: 20) {
-                // Status Display
-                VStack(spacing: 16) {
-                    Circle()
-                        .fill(Color.blue.opacity(0.1))
-                        .frame(width: 80, height: 80)
-                        .overlay(
-                            Image(systemName: "location.badge.questionmark")
-                                .font(.system(size: 32))
-                                .foregroundColor(.blue)
-                        )
-                    
-                    VStack(spacing: 8) {
-                        Text("Location Permission Required")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        
-                        Text("D2D Advancer needs location access to show your position on the map and help navigate to leads.")
-                            .font(.body)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
+
+            Button("Grant Location Access") {
+                locationManager.requestLocationPermission()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    locationManager.refreshAuthorizationStatusFromSystem()
+                    if locationManager.authorizationStatus == .notDetermined {
+                        locationManager.requestLocationPermission()
                     }
                 }
-                
-                // Action Button
-                Button("Grant Location Access") {
-                    print("Location permission button tapped")
-                    locationManager.requestLocationPermission()
-                    
-                    // Force immediate request if still not determined
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if locationManager.authorizationStatus == .notDetermined {
-                            locationManager.requestLocationPermission()
-                        }
-                    }
-                }
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Color.blue)
-                .cornerRadius(12)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
+            .buttonStyle(ObsidianPrimaryButtonStyle())
         }
-        .background(Color(UIColor.tertiarySystemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-        .padding()
+        .padding(24)
+        .mapOverlayCard(cornerRadius: 20)
+        .padding(24)
     }
-    
+
     private var activeLocationView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "location.fill")
-                    .foregroundColor(.green)
-                    .font(.title2)
-                
-                Text("Location Active")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            
-            VStack(spacing: 20) {
-                // Status Display
-                VStack(spacing: 16) {
-                    Circle()
-                        .fill(Color.green.opacity(0.1))
-                        .frame(width: 80, height: 80)
-                        .overlay(
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(.green)
-                        )
-                    
-                    VStack(spacing: 8) {
-                        Text("Location Tracking Active")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.green)
-                        
-                        VStack(spacing: 4) {
-                            Text("Long press map to add lead at specific location")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                            
-                            Text("Use controls above for map view and navigation")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
-        }
-        .background(Color(UIColor.tertiarySystemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-        .padding()
+        EmptyView()
     }
     
-    private func handleImmediateLocationCentering() {
-        print("🎯 MapView: IMMEDIATE location centering attempt")
-
-        // First, check if we already have a location
-        if let location = locationManager.location {
-            print("🎯 MapView: Using cached location immediately: \(location.coordinate)")
-            centerOnUserLocationWithAnimation()
-            return
-        }
-
-        // If authorized, bypass rate limiting for initial app load
-        if locationManager.authorizationStatus == .authorizedWhenInUse || locationManager.authorizationStatus == .authorizedAlways {
-            print("🎯 MapView: Authorized - forcing immediate location request")
-            locationManager.resetLocationRequestRetries() // Reset any rate limiting
-            locationManager.requestImmediateLocation()
-
-            // Also try a direct CLLocationManager request for faster response
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                if self.locationManager.location == nil {
-                    print("🎯 MapView: Still no location, requesting again")
-                    self.locationManager.requestImmediateLocation()
-                }
-            }
-        }
-    }
-
     private func setupLocationServices() {
-        print("MapView: Setting up location services")
-        print("  - Current status: \(locationManager.authorizationStatus)")
-        print("  - Has location: \(locationManager.location != nil)")
-        print("  - Has initial location: \(locationManager.hasInitialLocation)")
+        locationManager.refreshAuthorizationStatusFromSystem(startIfAuthorized: false)
 
-        // Check if onboarding is completed before requesting permissions
-        let onboardingCompleted = UserDefaults.standard.bool(forKey: "onboarding_completed")
+        let canRequestLocationOutsideOnboarding = OnboardingManager.shared.isCompleted && !OnboardingManager.shared.showOnboarding
 
         switch locationManager.authorizationStatus {
         case .notDetermined:
-            if onboardingCompleted {
-                print("MapView: Onboarding completed - requesting location permission")
+            if canRequestLocationOutsideOnboarding {
                 locationManager.requestLocationPermission()
-            } else {
-                print("MapView: Onboarding not completed - skipping location permission request (will be handled in onboarding)")
             }
         case .authorizedWhenInUse, .authorizedAlways:
-            print("MapView: Permission already granted, starting updates")
-            locationManager.startLocationUpdates()
-
-            // If we already have location, center immediately
-            if let location = locationManager.location {
-                print("MapView: Already have location, centering on \(location.coordinate)")
-                DispatchQueue.main.async {
-                    self.locationManager.region = MKCoordinateRegion(
-                        center: location.coordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                    )
-                }
-            } else {
-                print("MapView: No location yet, requesting immediate update")
-                locationManager.requestImmediateLocation()
-            }
+            locationManager.startLaunchLocationCentering()
         case .denied, .restricted:
-            print("MapView: Location permission denied/restricted")
             break
         @unknown default:
             break
@@ -546,47 +1171,546 @@ struct MapView: View {
     }
     
     private func handleLongPress(coordinate: CLLocationCoordinate2D?, lead: Lead?) {
-        // Show haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
-        
+
         if let lead = lead {
+            guard paywallManager.gateAction() else { return }
             leadToChangeStatus = lead
+            activeDialog = .statusChange
         } else if let coordinate = coordinate {
+            longPressCoordinate = coordinate
+            longPressAddress = nil
+            activeDialog = .longPressMenu
+
+            resolveLeadAddress(from: coordinate) { resolution in
+                DispatchQueue.main.async {
+                    guard longPressCoordinate?.isEqual(to: coordinate, tolerance: 0.000001) == true else { return }
+                    longPressAddress = resolution.source == .coordinateFallback ? nil : resolution.address
+                    AppLog.debug("Map", "Long press resolved \(resolution.source.debugLabel): \(Utilities.redactedText(resolution.address))")
+                }
+            }
+        }
+    }
+
+    private func handleSearchPinTap(_ pin: SearchPin) {
+        presentSearchPinActions(for: pin, haptic: true)
+    }
+
+    private func presentSearchPinActions(for pin: SearchPin, haptic: Bool) {
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        if haptic {
+            impactFeedback.impactOccurred()
+        }
+
+        // Find leads near this coordinate or matching the address. Keep this out
+        // of the map render path so the first map frame stays lightweight.
+        let threshold = 0.0005 // ~50 meters
+        matchingLeadsForPin = fetchMatchingLeads(
+            near: pin.coordinate,
+            title: pin.title,
+            threshold: threshold
+        )
+
+        guard searchPin == pin else { return }
+        showingSearchPinActions = true
+    }
+
+    // MARK: - HUD Components
+
+    private var mapControlsGroup: some View {
+        VStack(spacing: MapOverlayControlLayout.controlSpacing) {
+            mapControlButton(icon: "magnifyingglass", color: .textPrimary) {
+                isSearching = true
+            }
+            .accessibilityIdentifier("searchButton")
+            mapControlButton(icon: "location.fill", color: .textPrimary) {
+                centerOnUserLocationWithAnimation()
+            }
+            .accessibilityIdentifier("centerOnUserButton")
+            mapControlButton(icon: mapStyleIcon, color: .electricViolet) {
+                cycleMapType()
+            }
+            .accessibilityLabel("Change map style")
+            .accessibilityValue(mapStyleTitle)
+            .accessibilityIdentifier("mapStyleButton")
+            mapControlButton(icon: "slider.horizontal.3", color: selectedMapMode == .all ? .electricViolet : selectedMapMode.color) {
+                showingMapTools = true
+            }
+            .accessibilityLabel("Open map tools")
+            .accessibilityIdentifier("mapToolsButton")
+        }
+    }
+
+    private var mapStyleIcon: String {
+        MapStyleChoice.choice(for: mapType).icon
+    }
+
+    private var mapStyleTitle: String {
+        MapStyleChoice.choice(for: mapType).title
+    }
+
+    @ViewBuilder
+    private var urgentTeamMapShortcut: some View {
+        TeamMapShortcutHost {
+            openTeamFieldMap()
+        }
+    }
+
+    private func openTeamFieldMap() {
+        Task {
+            await loadTeamWorkspaceUntilAvailable()
+            if let summary = teamSurfaceSummary {
+                teamFieldMapSummary = summary
+            }
+        }
+    }
+
+    private func loadTeamWorkspaceIfNeeded() async {
+        guard shouldLoadTeamWorkspace else { return }
+        guard firebaseService.currentUser != nil else { return }
+        await teamService.loadCurrentTeam(
+            displayName: userAccountManager.currentUserDisplayName,
+            email: userAccountManager.currentUserEmail
+        )
+    }
+
+    private func loadTeamWorkspaceUntilAvailable() async {
+        guard shouldLoadTeamWorkspace else { return }
+
+        for attempt in 0..<8 {
+            await loadTeamWorkspaceIfNeeded()
+
+            let hasAuthenticatedIdentity = firebaseService.currentUser != nil
+            if hasAuthenticatedIdentity && teamService.activeTeam != nil && teamService.currentMember != nil {
+                return
+            }
+
+            let delay: UInt64 = attempt < 2 ? 300_000_000 : 800_000_000
+            try? await Task.sleep(nanoseconds: delay)
+        }
+    }
+
+    @ViewBuilder
+    private func mapControlButton(icon: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.obsidianBody)
+                .foregroundColor(color)
+                .frame(
+                    width: MapOverlayControlLayout.controlSize,
+                    height: MapOverlayControlLayout.controlSize
+                )
+                .mapOverlayCircle()
+                .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 2)
+        }
+    }
+
+    private var floatingActionBar: some View {
+        Group {
+            if roleContext == .technician {
+                technicianMapActionBar
+            } else {
+                prospectingMapActionBar
+            }
+        }
+    }
+
+    private var prospectingMapActionBar: some View {
+        HStack(spacing: 8) {
+            // Quick status buttons
+            quickActionButton(
+                icon: "house.slash",
+                label: "Not Home",
+                color: .statusNotHome,
+                accessibilityIdentifier: "quickAction_away"
+            ) {
+                guard paywallManager.gateAction() else { return }
+                createQuickLead(status: .notHome)
+            }
+            quickActionButton(icon: "clock.arrow.circlepath", label: "Later", color: .statusNotHome) {
+                guard paywallManager.gateAction() else { return }
+                comeBackCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
+                showingComeBackPicker = true
+            }
+            quickActionButton(icon: "hand.raised", label: "Pass", color: .statusNotInterested) {
+                guard paywallManager.gateAction() else { return }
+                createQuickLead(status: .notInterested)
+            }
+            quickActionButton(
+                icon: "star",
+                label: "Interested",
+                color: .statusInterested,
+                accessibilityIdentifier: "quickAction_interest"
+            ) {
+                guard paywallManager.gateAction() else { return }
+                interestedFormCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
+                showingInterestedForm = true
+            }
+
+            // Primary add button — stands out
+            Button {
+                guard paywallManager.gateAction() else { return }
+                prepareCurrentLocationLead()
+            } label: {
+                ZStack {
+                    if isPreparingCurrentLocationLead {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "plus")
+                            .font(.obsidianAction)
+                            .foregroundColor(.white)
+                    }
+                }
+                .frame(width: 50, height: 50)
+                .background(
+                    LinearGradient(
+                        colors: [.electricViolet, .electricVioletDeep],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(Circle())
+                .shadow(color: .electricViolet.opacity(0.3), radius: 8, x: 0, y: 3)
+            }
+            .disabled(isPreparingCurrentLocationLead)
+            .accessibilityLabel("Add lead")
+            .accessibilityIdentifier("addLeadButton")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .mapOverlayCapsule()
+        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+    }
+
+    private var technicianMapActionBar: some View {
+        HStack(spacing: 8) {
+            mapRoleActionButton(title: "My Jobs", icon: "briefcase.fill", color: Color.statusConverted) {
+                router.openAppointments()
+            }
+
+            mapRoleActionButton(title: "Team Map", icon: "person.3.fill", color: Color.electricViolet) {
+                openTeamFieldMap()
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .mapOverlayCapsule()
+        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+    }
+
+    private func mapRoleActionButton(
+        title: String,
+        icon: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.obsidianFootnote)
+                .fontWeight(.semibold)
+                .foregroundColor(color)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .padding(.horizontal, 14)
+                .background(color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func quickActionButton(
+        icon: String,
+        label: String,
+        color: Color,
+        accessibilityIdentifier: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Image(systemName: icon)
+                    .font(.obsidianFootnote)
+                Text(label)
+                    .font(.nano)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
+            }
+            .foregroundColor(color)
+            .frame(width: 48, height: 44)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(accessibilityIdentifier ?? "quickAction_\(label.lowercased())")
+    }
+
+    static func currentLocationAddLeadSeed(
+        coordinate: CLLocationCoordinate2D,
+        resolvedAddress: String?
+    ) -> AddLeadLocationSeed {
+        AddLeadLocationSeed(coordinate: coordinate, address: resolvedAddress)
+    }
+
+    private func presentAddLead(
+        coordinate: CLLocationCoordinate2D,
+        initialAddress: String?,
+        after delay: TimeInterval = 0
+    ) {
+        let show = {
             addLeadCoordinate = coordinate
+            addLeadInitialAddress = initialAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
+            addLeadPresentationID = UUID()
             showingAddLead = true
         }
-    }
-    
-    private var mapTypeIcon: String {
-        switch mapType {
-        case .standard:
-            return "map"
-        case .satellite:
-            return "globe.americas.fill"
-        case .hybrid:
-            return "map.fill"
-        default:
-            return "map"
+
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: show)
+        } else {
+            show()
         }
     }
-    
+
+    private func presentAddLeadFromSelectedPin(
+        coordinate: CLLocationCoordinate2D,
+        preferredAddress: String?
+    ) {
+        resolveLeadAddress(from: coordinate, preferredAddress: preferredAddress) { resolution in
+            DispatchQueue.main.async {
+                AppLog.debug("Map", "Search pin resolved \(resolution.source.debugLabel): \(Utilities.redactedText(resolution.address))")
+
+                presentAddLead(
+                    coordinate: resolution.coordinate,
+                    initialAddress: resolution.address
+                )
+            }
+        }
+    }
+
+    private func resolveQuickActionLeadSeed(
+        from coordinate: CLLocationCoordinate2D,
+        completion: @escaping (MapQuickActionLeadSeed) -> Void
+    ) {
+        resolveLeadAddress(from: coordinate) { resolution in
+            let seed = MapQuickActionLeadSeedPolicy.seed(
+                resolvedCoordinate: resolution.coordinate,
+                resolvedAddress: resolution.address,
+                source: resolution.source
+            )
+
+            DispatchQueue.main.async {
+                completion(seed)
+            }
+        }
+    }
+
+    private func normalizedAddress(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func coordinateFallbackAddress(for coordinate: CLLocationCoordinate2D) -> String {
+        String(format: "Dropped pin at %.5f, %.5f", coordinate.latitude, coordinate.longitude)
+    }
+
+    private func prepareCurrentLocationLead() {
+        guard !isPreparingCurrentLocationLead else { return }
+
+        if locationManager.location == nil {
+            locationManager.requestImmediateLocation()
+        }
+
+        let coordinate = locationManager.location?.coordinate ?? locationManager.region.center
+        isPreparingCurrentLocationLead = true
+        addLeadCoordinate = coordinate
+        addLeadInitialAddress = nil
+
+        if isRunningUITests {
+            isPreparingCurrentLocationLead = false
+            presentAddLead(
+                coordinate: coordinate,
+                initialAddress: nil
+            )
+            return
+        }
+
+        locationManager.reverseGeocode(coordinate: coordinate) { address in
+            DispatchQueue.main.async {
+                let seed = Self.currentLocationAddLeadSeed(
+                    coordinate: coordinate,
+                    resolvedAddress: address
+                )
+
+                addLeadCoordinate = seed.coordinate
+                addLeadInitialAddress = seed.address
+                isPreparingCurrentLocationLead = false
+                presentAddLead(
+                    coordinate: seed.coordinate,
+                    initialAddress: seed.address
+                )
+            }
+        }
+    }
+
+    private var statSummaryPill: some View {
+        HStack(spacing: 7) {
+            Image(systemName: selectedMapMode == .all ? "chart.bar.fill" : selectedMapMode.icon)
+                .font(.obsidianSmall)
+                .foregroundColor(selectedMapMode == .all ? .electricViolet : selectedMapMode.color)
+
+            Text(mapSummaryText)
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .mapOverlayCapsule()
+        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
+        .accessibilityLabel(mapSummaryText)
+        .accessibilityValue("\(mapLeadRenderSnapshot.renderedPins.count) rendered pins")
+        .accessibilityIdentifier("mapLeadSummary")
+    }
+
+    private var mapSummaryText: String {
+        guard mapLeadRenderSnapshot.isReady else {
+            return "Loading leads"
+        }
+
+        if selectedMapMode == .all {
+            return "\(NumberFormatter.localizedString(from: NSNumber(value: mapLeadRenderSnapshot.totalLeadCount), number: .decimal)) leads"
+        }
+        return "\(NumberFormatter.localizedString(from: NSNumber(value: mapLeadRenderSnapshot.matchingLeadCount), number: .decimal)) \(selectedMapMode.title.lowercased())"
+    }
+
+    private var toastOverlay: some View {
+        VStack {
+            if showToast {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.obsidianCallout)
+                        .foregroundColor(.statusInterested)
+
+                    Text(toastMessage)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("quickLeadToastMessage")
+
+                    Spacer()
+
+                    Button {
+                        undoQuickLead()
+                    } label: {
+                        Text("Undo")
+                            .font(.obsidianFootnote)
+                            .fontWeight(.semibold)
+                            .foregroundColor(Color.electricViolet)
+                            .frame(minWidth: 64, minHeight: 44)
+                            .padding(.horizontal, 2)
+                    }
+                    .buttonStyle(.plain)
+                    .background(Color.electricViolet.opacity(0.12))
+                    .clipShape(Capsule())
+                    .contentShape(Capsule())
+                    .accessibilityLabel("Undo quick lead")
+                    .accessibilityHint("Deletes the quick lead you just created.")
+                    .accessibilityIdentifier("quickLeadUndoButton")
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .mapOverlayCapsule()
+                .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 3)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(.horizontal, 20)
+                .padding(.top, 60)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("quickLeadToast")
+
+                Spacer()
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showToast)
+    }
+
+    private func showQuickLeadToast(status: Lead.Status, address: String, lead: Lead) {
+        let token = UUID()
+        toastToken = token
+        toastLead = lead
+        toastMessage = "\(status.displayName) — \(address)"
+        withAnimation {
+            showToast = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+            guard toastToken == token else { return }
+            withAnimation {
+                showToast = false
+            }
+            toastLead = nil
+        }
+    }
+
+    private func undoQuickLead() {
+        if let lead = toastLead {
+            let deletionPlan = MapQuickLeadUndoPolicy.deletionPlan(
+                leadId: lead.id,
+                provider: CloudSyncProvider.current,
+                isAuthenticated: FirebaseService.shared.isAuthenticated
+            )
+
+            if let localDeletedId = deletionPlan.localDeletedId {
+                NotificationService.shared.cancelFollowUpNotification(for: localDeletedId)
+            }
+
+            viewContext.delete(lead)
+            do {
+                try viewContext.save()
+                if let localDeletedId = deletionPlan.localDeletedId {
+                    UserDataSyncManager.markLeadDeletedLocally(localDeletedId)
+                }
+
+                if let cloudLeadId = deletionPlan.cloudLeadId {
+                    Task {
+                        do {
+                            try await UserDataSyncManager.shared.deleteLeadFromCloud(leadId: cloudLeadId)
+                        } catch {
+                            AppLog.warning("Map", "Quick lead undo removed the local lead, but cloud cleanup will retry later for \(cloudLeadId): \(error.localizedDescription)")
+                        }
+                    }
+                }
+            } catch {
+                viewContext.rollback()
+                ErrorHandler.shared.handle(error, context: "Undo Quick Lead")
+            }
+        }
+        withAnimation {
+            showToast = false
+        }
+        toastToken = UUID()
+        toastLead = nil
+    }
+
     private func cycleMapType() {
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
-        
-        switch mapType {
+
+        switch MapStyleChoice.choice(for: mapType) {
         case .standard:
             mapType = .satellite
         case .satellite:
             mapType = .hybrid
         case .hybrid:
             mapType = .standard
-        default:
-            mapType = .standard
         }
     }
-    
+
+    private func setMapType(_ type: MKMapType) {
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+        mapType = type
+    }
+
     private func centerOnUserLocationWithAnimation() {
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
@@ -599,7 +1723,7 @@ struct MapView: View {
         
         let newRegion = MKCoordinateRegion(
             center: userLocation.coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            span: LocationManager.initialMapCenterSpan(for: userLocation)
         )
         
         // First set the animation trigger to true
@@ -608,125 +1732,3465 @@ struct MapView: View {
         // Then update the region - the AdvancedMapView will animate to it
         locationManager.region = newRegion
     }
-    
+
+    private func centerMapOnLaunchIfPossible() {
+        guard LocationManager.isAuthorized(locationManager.authorizationStatus) else { return }
+
+        guard let userLocation = locationManager.location,
+              LocationManager.isUsableForInitialMapCenter(userLocation) else {
+            if !didRequestLaunchLocationCenter {
+                didRequestLaunchLocationCenter = true
+                locationManager.resetLocationRequestRetries()
+                locationManager.startLaunchLocationCentering()
+            }
+            return
+        }
+
+        guard MapLaunchCenteringPolicy.shouldApplyLaunchCenteringRequest(
+            visibleMapCenteredConfirmed: didConfirmVisibleMapCenteredOnLaunch,
+            isLaunchCenteringActive: locationManager.shouldUseUserLocation
+        ) else { return }
+
+        didRequestLaunchLocationCenter = true
+        triggerMapAnimation = false
+
+        if locationManager.hasInitialLocation,
+           locationManager.region.center.isEqual(to: userLocation.coordinate, tolerance: 0.0001) {
+            return
+        }
+
+        locationManager.applyLaunchMapCenter(userLocation)
+    }
+
+    private func prepareLaunchMapCentering() {
+        if LocationManager.isAuthorized(locationManager.authorizationStatus) {
+            let currentLocation = locationManager.location
+            let hasUsableLocation = currentLocation.map {
+                LocationManager.isUsableForInitialMapCenter($0)
+            } ?? false
+            let mapIsCenteredOnUser = MapLaunchCenteringPolicy.isMapCenteredOnUser(
+                region: locationManager.region,
+                location: currentLocation
+            )
+
+            guard MapLaunchCenteringPolicy.shouldPrepareOnForeground(
+                isAuthorized: true,
+                didCenterMapOnLaunch: didConfirmVisibleMapCenteredOnLaunch,
+                isLaunchCenteringActive: locationManager.shouldUseUserLocation,
+                hasUsableLocation: hasUsableLocation,
+                mapIsCenteredOnUser: mapIsCenteredOnUser
+            ) else {
+                locationManager.startLocationUpdates()
+                return
+            }
+        }
+
+        didCenterMapOnLaunch = false
+        didRequestLaunchLocationCenter = false
+        didConfirmVisibleMapCenteredOnLaunch = false
+        launchCenteringResetToken += 1
+        setupLocationServices()
+        centerMapOnLaunchIfPossible()
+    }
+
+    private func refreshLaunchMapCenteringAfterForeground() {
+        locationManager.refreshAuthorizationStatusFromSystem(startIfAuthorized: false)
+
+        let currentLocation = locationManager.location
+        let hasUsableLocation = currentLocation.map {
+            LocationManager.isUsableForInitialMapCenter($0)
+        } ?? false
+        let mapIsCenteredOnUser = MapLaunchCenteringPolicy.isMapCenteredOnUser(
+            region: locationManager.region,
+            location: currentLocation
+        )
+
+        guard MapLaunchCenteringPolicy.shouldPrepareOnForeground(
+            isAuthorized: LocationManager.isAuthorized(locationManager.authorizationStatus),
+            didCenterMapOnLaunch: didCenterMapOnLaunch,
+            isLaunchCenteringActive: locationManager.shouldUseUserLocation,
+            hasUsableLocation: hasUsableLocation,
+            mapIsCenteredOnUser: mapIsCenteredOnUser
+        ) else {
+            locationManager.startLocationUpdates()
+            return
+        }
+
+        prepareLaunchMapCentering()
+    }
+
+    private func setMapMode(_ mode: MapWorkflowMode) {
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+        selectedMapMode = mode
+
+        if mode == .next {
+            focusNextBestLead(openDetail: false)
+        }
+    }
+
+    private func focusNextBestLead(openDetail: Bool) {
+        let sourceLeads = fetchLeadsForMapAction()
+        let targetCoordinate = locationManager.location?.coordinate ?? locationManager.region.center
+        guard let lead = LeadWorkflowScorer.nextBestLead(from: sourceLeads, near: targetCoordinate) else {
+            toastMessage = "No open leads need attention"
+            withAnimation {
+                showToast = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                withAnimation {
+                    showToast = false
+                }
+            }
+            return
+        }
+        focusLead(lead, openDetail: openDetail)
+    }
+
+    private func lead(for pin: MapLeadPin) -> Lead? {
+        do {
+            return try viewContext.existingObject(with: pin.objectID) as? Lead
+        } catch {
+            AppLog.warning("Map", "Could not load tapped lead: \(error.localizedDescription)")
+            scheduleInteractiveMapLeadRenderUpdate(after: 0.05)
+            return nil
+        }
+    }
+
+    private func leads(for pins: [MapLeadPin]) -> [Lead] {
+        pins.compactMap(lead(for:))
+    }
+
+    private func fetchLeadsForMapAction() -> [Lead] {
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+        request.sortDescriptors = []
+        request.fetchBatchSize = 200
+        request.relationshipKeyPathsForPrefetching = []
+
+        do {
+            return try viewContext.fetch(request)
+        } catch {
+            AppLog.warning("Map", "Could not fetch leads for map action: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private func fetchMatchingLeads(
+        near coordinate: CLLocationCoordinate2D,
+        title: String,
+        threshold: Double
+    ) -> [Lead] {
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let latitudeMin = coordinate.latitude - threshold
+        let latitudeMax = coordinate.latitude + threshold
+        let longitudeMin = coordinate.longitude - threshold
+        let longitudeMax = coordinate.longitude + threshold
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let coordinatePredicate = NSPredicate(
+            format: "latitude >= %lf AND latitude <= %lf AND longitude >= %lf AND longitude <= %lf",
+            latitudeMin,
+            latitudeMax,
+            longitudeMin,
+            longitudeMax
+        )
+
+        if trimmedTitle.isEmpty {
+            request.predicate = coordinatePredicate
+        } else {
+            request.predicate = NSCompoundPredicate(
+                orPredicateWithSubpredicates: [
+                    coordinatePredicate,
+                    NSPredicate(format: "address CONTAINS[cd] %@", trimmedTitle)
+                ]
+            )
+        }
+
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \Lead.updatedDate, ascending: false)]
+        request.fetchLimit = 25
+        request.fetchBatchSize = 25
+        request.relationshipKeyPathsForPrefetching = []
+
+        do {
+            return try viewContext.fetch(request)
+        } catch {
+            AppLog.warning("Map", "Could not fetch nearby leads: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private func focusLead(_ lead: Lead, openDetail: Bool) {
+        guard let newRegion = MapLeadFocusPolicy.region(for: lead.coordinate) else { return }
+        triggerMapAnimation = true
+        locationManager.region = newRegion
+
+        if openDetail {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                selectedLead = lead
+            }
+        }
+    }
+
+    @discardableResult
+    private func consumePendingMapLeadFocusIfNeeded() -> Bool {
+        guard isVisible, let leadID = router.targetMapLeadID else { return false }
+        router.targetMapLeadID = nil
+
+        guard let lead = fetchLeadForMapFocus(leadID),
+              let focusRegion = MapLeadFocusPolicy.region(for: lead.coordinate) else {
+            showMapFocusError("That lead cannot be shown on the map")
+            return true
+        }
+
+        didCenterMapOnLaunch = true
+        didRequestLaunchLocationCenter = true
+        didConfirmVisibleMapCenteredOnLaunch = true
+        locationManager.shouldUseUserLocation = false
+        selectedMapMode = .all
+        visibleMapRegion = focusRegion
+        focusLead(lead, openDetail: false)
+        scheduleInteractiveMapLeadRenderUpdate(after: 0)
+        return true
+    }
+
+    private func fetchLeadForMapFocus(_ id: UUID) -> Lead? {
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: viewContext)
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.fetchLimit = 1
+
+        do {
+            return try viewContext.fetch(request).first
+        } catch {
+            AppLog.warning("Map", "Could not load requested map lead: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func showMapFocusError(_ message: String) {
+        toastMessage = message
+        withAnimation {
+            showToast = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation {
+                showToast = false
+            }
+        }
+    }
+
     private func createQuickLead(status: Lead.Status) {
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
-        
+
         let coordinate = locationManager.location?.coordinate ?? locationManager.region.center
         createQuickLeadAt(coordinate: coordinate, status: status)
     }
-    
+
     private func createQuickLeadAt(coordinate: CLLocationCoordinate2D, status: Lead.Status) {
-        // Ensure context is in a clean state
+        // Save any pending changes from other views before creating a new lead
         if viewContext.hasChanges {
-            viewContext.rollback()
+            do {
+                try viewContext.save()
+            } catch {
+                viewContext.rollback()
+                ErrorHandler.shared.handle(error, context: "Prepare Quick Lead")
+                return
+            }
         }
-        
-        // Find the nearest building/house using geocoding with precise location
-        findNearestBuilding(from: coordinate) { (buildingCoordinate, addressString) in
+
+        // Quick leads should only use a confident address. Coordinate fallback
+        // text is useful for display, but it is not a real lead address.
+        resolveLeadAddress(from: coordinate) { resolution in
             DispatchQueue.main.async {
-                guard let addressString = addressString, !addressString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                let seed = MapQuickActionLeadSeedPolicy.seed(
+                    resolvedCoordinate: resolution.coordinate,
+                    resolvedAddress: resolution.address,
+                    source: resolution.source
+                )
+
+                guard let addressString = seed.address else {
                     // Show user feedback that address couldn't be resolved
                     let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)
                     impactFeedback.impactOccurred()
-                    print("❌ Failed to create quick lead: No address found")
+                    AppLog.error("Map", "Failed to create quick lead: No address found")
                     return
                 }
-                
-                // Use the building coordinate if found, otherwise use original
-                let finalCoordinate = buildingCoordinate ?? coordinate
-                
-                // Create the lead with the resolved address and building coordinate
-                let newLead = Lead(context: viewContext)
-                newLead.id = UUID()
-                newLead.createdDate = Date()
-                newLead.updatedDate = Date()
-                newLead.leadStatus = status
-                newLead.latitude = finalCoordinate.latitude
-                newLead.longitude = finalCoordinate.longitude
-                newLead.name = ""
-                newLead.address = addressString.trimmingCharacters(in: .whitespacesAndNewlines)
-                
+
+                // Create the lead at the pressed coordinate with the resolved address.
+                let newLead = Lead.create(in: viewContext)
+                newLead.applyLeadStatus(status, autoSave: false)
+                newLead.setServiceCategory(AppPreferences.shared.defaultServiceCategory)
+                newLead.latitude = seed.coordinate.latitude
+                newLead.longitude = seed.coordinate.longitude
+                newLead.name = nil
+                newLead.address = addressString
+
+                // Auto-set follow-up for Not Home leads to tomorrow at 9 AM
+                if status == .notHome {
+                    let calendar = Calendar.current
+                    if let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()),
+                       let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) {
+                        newLead.setFollowUpDate(morning, autoSave: false)
+                    }
+                }
+
                 do {
                     try viewContext.save()
-                    print("✅ Quick lead created: \(status.displayName) at \(addressString)")
-                    
+                    AppLog.info("Map", "Quick lead created: \(status.displayName) at \(Utilities.redactedText(addressString))")
+                    UserDataSyncManager.shared.syncWithServer()
+                    // Schedule notification for Not Home follow-ups
+                    if status == .notHome {
+                        NotificationService.shared.scheduleFollowUpNotification(for: newLead)
+                    }
+                    showQuickLeadToast(status: status, address: addressString, lead: newLead)
                 } catch {
-                    print("❌ Error creating quick lead: \(error.localizedDescription)")
+                    AppLog.error("Map", "Error creating quick lead: \(error.localizedDescription)")
                     ErrorHandler.shared.handle(error, context: "Create Quick Lead")
                 }
             }
         }
     }
     
-    private func findNearestBuilding(from coordinate: CLLocationCoordinate2D, completion: @escaping (CLLocationCoordinate2D?, String?) -> Void) {
-        let geocoder = CLGeocoder()
-        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        
-        // Use high precision reverse geocoding to find the nearest address
-        geocoder.reverseGeocodeLocation(location, preferredLocale: Locale.current) { placemarks, error in
-            guard let placemark = placemarks?.first, error == nil else {
-                completion(nil, nil)
+    private func resolveLeadAddress(
+        from coordinate: CLLocationCoordinate2D,
+        preferredAddress: String? = nil,
+        completion: @escaping (MapAddressResolution) -> Void
+    ) {
+        let preferred = normalizedAddress(preferredAddress)
+        let originalLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+
+        func finish(with candidate: MapAddressCandidate?) {
+            if let candidate, candidate.isConfident {
+                completion(
+                    MapAddressResolution(
+                        coordinate: MapAddressResolutionPolicy.resolvedCoordinate(
+                            pressedCoordinate: coordinate,
+                            candidateCoordinate: candidate.coordinate,
+                            source: candidate.source
+                        ),
+                        address: candidate.address,
+                        source: candidate.source
+                    )
+                )
                 return
             }
-            
-            // Get the precise building coordinate from placemark if available
-            let buildingCoordinate = placemark.location?.coordinate ?? coordinate
-            
-            // Create a detailed address string
-            var addressComponents: [String] = []
-            
-            if let streetNumber = placemark.subThoroughfare {
-                addressComponents.append(streetNumber)
+
+            if let preferred {
+                completion(
+                    MapAddressResolution(
+                        coordinate: coordinate,
+                        address: preferred,
+                        source: .preferredAddress
+                    )
+                )
+                return
             }
-            if let streetName = placemark.thoroughfare {
-                addressComponents.append(streetName)
+
+            completion(
+                MapAddressResolution(
+                    coordinate: coordinate,
+                    address: Self.coordinateFallbackAddress(for: coordinate),
+                    source: .coordinateFallback
+                )
+            )
+        }
+
+        findMapSearchAddressCandidate(from: coordinate, originalLocation: originalLocation) { mapSearchCandidate in
+            if let mapSearchCandidate, mapSearchCandidate.isConfident {
+                finish(with: mapSearchCandidate)
+                return
             }
-            if let city = placemark.locality {
-                addressComponents.append(city)
+
+            reverseGeocodeExactAddress(from: coordinate, originalLocation: originalLocation) { exactCandidate in
+                if let exactCandidate, exactCandidate.isConfident {
+                    finish(with: exactCandidate)
+                    return
+                }
+
+                finish(with: mapSearchCandidate ?? exactCandidate)
             }
-            if let state = placemark.administrativeArea {
-                addressComponents.append(state)
-            }
-            if let postalCode = placemark.postalCode {
-                addressComponents.append(postalCode)
-            }
-            
-            let fullAddress = addressComponents.joined(separator: ", ")
-            completion(buildingCoordinate, fullAddress.isEmpty ? nil : fullAddress)
         }
     }
-    
-    private func distanceBetween(_ coord1: CLLocationCoordinate2D, _ coord2: CLLocationCoordinate2D) -> Double {
-        let location1 = CLLocation(latitude: coord1.latitude, longitude: coord1.longitude)
-        let location2 = CLLocation(latitude: coord2.latitude, longitude: coord2.longitude)
-        return location1.distance(from: location2)
-    }
-    
-    private func cleanupLeadsWithoutAddresses() {
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "address == nil OR address == ''")
-        
-        do {
-            let leadsToDelete = try viewContext.fetch(fetchRequest)
-            print("🧹 Found \(leadsToDelete.count) leads without addresses to delete")
-            
-            for lead in leadsToDelete {
-                print("🗑️ Deleting lead: \(lead.displayName) (no address)")
-                viewContext.delete(lead)
+
+    private func findMapSearchAddressCandidate(
+        from coordinate: CLLocationCoordinate2D,
+        originalLocation: CLLocation,
+        completion: @escaping (MapAddressCandidate?) -> Void
+    ) {
+        let coordinateQuery = String(format: "%.6f, %.6f", coordinate.latitude, coordinate.longitude)
+        let queries = [coordinateQuery, "address"]
+        var bestCandidate: MapAddressCandidate?
+
+        func runSearch(at index: Int) {
+            guard index < queries.count else {
+                completion(bestCandidate)
+                return
             }
-            
-            if !leadsToDelete.isEmpty {
+
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = queries[index]
+            request.region = MKCoordinateRegion(
+                center: coordinate,
+                latitudinalMeters: 90,
+                longitudinalMeters: 90
+            )
+            request.resultTypes = [.address]
+
+            MKLocalSearch(request: request).start { response, _ in
+                let candidates = (response?.mapItems ?? []).compactMap {
+                    Self.mapAddressCandidate(
+                        from: $0.placemark,
+                        originalLocation: originalLocation,
+                        source: .mapSearchAddress,
+                        confidenceRadius: 35
+                    )
+                }
+
+                if let strongest = candidates.max(by: { $0.score < $1.score }),
+                   strongest.score > (bestCandidate?.score ?? .leastNormalMagnitude) {
+                    bestCandidate = strongest
+                }
+
+                if bestCandidate?.isConfident == true {
+                    completion(bestCandidate)
+                } else {
+                    runSearch(at: index + 1)
+                }
+            }
+        }
+
+        runSearch(at: 0)
+    }
+
+    private func reverseGeocodeExactAddress(
+        from coordinate: CLLocationCoordinate2D,
+        originalLocation: CLLocation,
+        completion: @escaping (MapAddressCandidate?) -> Void
+    ) {
+        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+
+        CLGeocoder().reverseGeocodeLocation(location, preferredLocale: Locale.current) { placemarks, _ in
+            let candidates = (placemarks ?? []).compactMap {
+                Self.mapAddressCandidate(
+                    from: $0,
+                    originalLocation: originalLocation,
+                    source: .streetAddress,
+                    confidenceRadius: 25
+                )
+            }
+            completion(candidates.max(by: { $0.score < $1.score }))
+        }
+    }
+
+    private static func mapAddressCandidate(
+        from placemark: CLPlacemark,
+        originalLocation: CLLocation,
+        source: MapAddressSource,
+        confidenceRadius: CLLocationDistance
+    ) -> MapAddressCandidate? {
+        let streetNumber = placemark.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let streetName = placemark.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let streetName, !streetName.isEmpty else { return nil }
+
+        var addressComponents: [String] = []
+        let hasStreetNumber = streetNumber?.isEmpty == false
+        if let streetNumber, !streetNumber.isEmpty {
+            addressComponents.append("\(streetNumber) \(streetName)")
+        } else {
+            addressComponents.append(streetName)
+        }
+
+        if let city = placemark.locality, !city.isEmpty {
+            addressComponents.append(city)
+        }
+        if let state = placemark.administrativeArea, !state.isEmpty {
+            addressComponents.append(state)
+        }
+        if let postalCode = placemark.postalCode, !postalCode.isEmpty {
+            addressComponents.append(postalCode)
+        }
+
+        let coordinate = placemark.location?.coordinate ?? originalLocation.coordinate
+        let placemarkLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let distanceFromPress = originalLocation.distance(from: placemarkLocation)
+
+        var score: Double = 0
+        score += source == .mapSearchAddress ? 160 : 0
+        score += hasStreetNumber ? 1_000 : 120
+        score += placemark.postalCode?.isEmpty == false ? 160 : 0
+        score += placemark.locality?.isEmpty == false ? 80 : 0
+        score -= min(distanceFromPress, 100) * 4
+
+	        return MapAddressCandidate(
+	            address: addressComponents.joined(separator: ", "),
+	            coordinate: coordinate,
+	            hasStreetNumber: hasStreetNumber,
+	            distanceFromPress: distanceFromPress,
+	            score: score,
+	            source: source,
+	            confidenceRadius: confidenceRadius
+	        )
+	    }
+
+    private func updateLeadStatusFromMap(_ lead: Lead, status: Lead.Status) {
+        lead.applyLeadStatus(status, autoSave: false)
+
+	        do {
+            try viewContext.save()
+                scheduleInteractiveMapLeadRenderUpdate(after: 0.03)
+            UserDataSyncManager.shared.syncWithServer()
+	        } catch {
+	            viewContext.rollback()
+	            ErrorHandler.shared.handle(error, context: "Update Map Lead Status")
+	        }
+	    }
+
+	}
+
+// MARK: - Interested Quick Form
+
+struct InterestedQuickForm: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.managedObjectContext) private var viewContext
+
+    let coordinate: CLLocationCoordinate2D
+    let resolveLeadSeed: (CLLocationCoordinate2D, @escaping (MapQuickActionLeadSeed) -> Void) -> Void
+    let onDismiss: () -> Void
+
+    @State private var name = ""
+    @State private var phone = ""
+    @State private var note = ""
+    @State private var address = ""
+    @State private var resolvedCoordinate: CLLocationCoordinate2D
+    @State private var isSaving = false
+    @State private var showingMessageConfirmation = false
+    @State private var createdLead: Lead?
+
+    init(
+        coordinate: CLLocationCoordinate2D,
+        resolveLeadSeed: @escaping (CLLocationCoordinate2D, @escaping (MapQuickActionLeadSeed) -> Void) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.coordinate = coordinate
+        self.resolveLeadSeed = resolveLeadSeed
+        self.onDismiss = onDismiss
+        _resolvedCoordinate = State(initialValue: coordinate)
+    }
+
+    private var usableAddress: String? {
+        MapQuickActionLeadPolicy.usableAddress(address)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 14) {
+                    locationCard
+                    customerSection
+                    noteSection
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+            }
+
+            saveButton
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
+        .sheet(isPresented: $showingMessageConfirmation) {
+            if let lead = createdLead {
+                FirstMessageConfirmationView(lead: lead) {
+                    onDismiss()
+                }
+            }
+        }
+        .onAppear {
+            resolveLocation()
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: "star.fill", tint: Color.statusInterested, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Interested Lead")
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("interestedQuickFormSheet")
+
+                Text("Capture the customer while the conversation is fresh.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            ObsidianCompactIconButton(
+                icon: "xmark",
+                accessibilityLabel: "Close interested lead form",
+                accentColor: Color.textSecondary
+            ) {
+                onDismiss()
+            }
+            .accessibilityIdentifier("interestedQuickFormCloseButton")
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 14)
+    }
+
+    private var locationCard: some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: "mappin.circle.fill", tint: Color.electricViolet, size: 38)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Lead location")
+                    .font(.obsidianCaption)
+                    .foregroundColor(Color.textSecondary)
+
+                Text(usableAddress ?? "Finding nearest address...")
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.7), lineWidth: 0.7)
+        )
+    }
+
+    private var customerSection: some View {
+        quickCaptureSection(title: "Customer", icon: "person.crop.circle") {
+            inputRow(
+                title: "Name",
+                icon: "person.fill",
+                placeholder: "Customer name",
+                text: $name
+            )
+
+            inputRow(
+                title: "Phone",
+                icon: "phone.fill",
+                placeholder: "Phone number",
+                text: $phone,
+                keyboard: .phonePad
+            )
+            .onChange(of: phone) { _, newValue in
+                phone = Utilities.formatPhoneNumber(newValue)
+            }
+        }
+    }
+
+    private var noteSection: some View {
+        quickCaptureSection(title: "Conversation", icon: "text.bubble.fill") {
+            inputRow(
+                title: "Note",
+                icon: "note.text",
+                placeholder: "What did they ask for?",
+                text: $note
+            )
+        }
+    }
+
+    private var saveButton: some View {
+        Button(action: saveInterestedLead) {
+            HStack {
+                if isSaving {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Save Interested Lead")
+                        .fontWeight(.semibold)
+                }
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(
+                LinearGradient(
+                    colors: [Color.electricViolet, Color.electricVioletDeep],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: Color.electricViolet.opacity(0.25), radius: 10, x: 0, y: 4)
+            .accessibilityIdentifier("saveInterestedLeadButton")
+        }
+        .disabled(isSaving || usableAddress == nil)
+        .opacity(usableAddress == nil ? 0.55 : 1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Save Interested Lead")
+        .accessibilityHint(usableAddress == nil ? "Wait for the address to finish loading before saving." : "Saves this interested lead.")
+        .accessibilityIdentifier("saveInterestedLeadButton")
+    }
+
+    @ViewBuilder
+    private func quickCaptureSection<Content: View>(
+        title: String,
+        icon: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
+                    .frame(width: 28, height: 28)
+
+                Text(title)
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
+
+                Spacer()
+            }
+
+            VStack(spacing: 10) {
+                content()
+            }
+        }
+        .padding(16)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.7), lineWidth: 0.7)
+        )
+    }
+
+    private func inputRow(
+        title: String,
+        icon: String,
+        placeholder: String,
+        text: Binding<String>,
+        keyboard: UIKeyboardType = .default
+    ) -> some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: icon, tint: Color.electricViolet, size: 34)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.obsidianCaption)
+                    .foregroundColor(Color.textSecondary)
+
+                TextField(placeholder, text: text)
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
+                    .keyboardType(keyboard)
+                    .textInputAutocapitalization(title == "Name" ? .words : .sentences)
+                    .accessibilityIdentifier("interestedQuickForm\(title.replacingOccurrences(of: " ", with: ""))Field")
+            }
+        }
+        .padding(12)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.7)
+        )
+    }
+
+    private func resolveLocation() {
+        resolveLeadSeed(coordinate) { seed in
+            resolvedCoordinate = seed.coordinate
+            address = seed.address ?? ""
+        }
+    }
+
+    private func saveInterestedLead() {
+        guard let effectiveAddress = usableAddress else { return }
+
+        isSaving = true
+
+        // Save pending changes first
+        if viewContext.hasChanges {
+            do {
                 try viewContext.save()
-                print("✅ Deleted \(leadsToDelete.count) leads without addresses")
+            } catch {
+                isSaving = false
+                viewContext.rollback()
+                ErrorHandler.shared.handle(error, context: "Prepare Interested Lead")
+                return
             }
-            
+        }
+
+        let newLead = Lead.create(in: viewContext)
+        newLead.applyLeadStatus(.interested, autoSave: false)
+        newLead.setServiceCategory(AppPreferences.shared.defaultServiceCategory)
+        newLead.latitude = resolvedCoordinate.latitude
+        newLead.longitude = resolvedCoordinate.longitude
+        newLead.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : name.trimmingCharacters(in: .whitespacesAndNewlines)
+        newLead.phone = phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        newLead.notes = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note.trimmingCharacters(in: .whitespacesAndNewlines)
+        newLead.address = effectiveAddress
+
+        do {
+            try viewContext.save()
+            UserDataSyncManager.shared.syncWithServer()
+            isSaving = false
+
+            // Show message confirmation if phone was provided
+            if !phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                createdLead = newLead
+                showingMessageConfirmation = true
+            } else {
+                onDismiss()
+            }
         } catch {
-            print("❌ Error cleaning up leads without addresses: \(error)")
+            isSaving = false
+            AppLog.error("Map", "Error saving interested lead: \(error.localizedDescription)")
+            ErrorHandler.shared.handle(error, context: "Save Interested Lead")
         }
     }
-    
+
+}
+
+// MARK: - Map Search Completer
+
+class MapSearchCompleter: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
+    @Published var results: [MKLocalSearchCompletion] = []
+    private let completer = MKLocalSearchCompleter()
+
+    override init() {
+        super.init()
+        completer.delegate = self
+        completer.resultTypes = [.address, .pointOfInterest]
+    }
+
+    func search(query: String) {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            results = []
+            return
+        }
+        completer.queryFragment = query
+    }
+
+    func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        DispatchQueue.main.async {
+            self.results = completer.results
+        }
+    }
+
+    func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
+        AppLog.warning("Map", "Search completer error: \(error.localizedDescription)")
+    }
+}
+
+// MARK: - Map Search Sheet
+
+struct SearchPin: Equatable {
+    let coordinate: CLLocationCoordinate2D
+    let title: String
+
+    static func == (lhs: SearchPin, rhs: SearchPin) -> Bool {
+        lhs.title == rhs.title &&
+        lhs.coordinate.latitude == rhs.coordinate.latitude &&
+        lhs.coordinate.longitude == rhs.coordinate.longitude
+    }
+}
+
+struct MapSearchSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var completer = MapSearchCompleter()
+    @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
+    let onSelect: (CLLocationCoordinate2D, String) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Search Address")
+                    .font(.obsidianSubheadline)
+                    .foregroundColor(.textPrimary)
+                    .accessibilityIdentifier("mapSearchSheet")
+                Spacer()
+                ObsidianCompactIconButton(
+                    icon: "xmark",
+                    accessibilityLabel: "Close search",
+                    accentColor: Color.textSecondary
+                ) {
+                    dismiss()
+                }
+                .accessibilityIdentifier("mapSearchCloseButton")
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 12)
+
+            // Search field
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.textMuted)
+                    .font(.obsidianBody)
+                TextField("Type an address...", text: $searchText)
+                    .font(.obsidianCallout)
+                    .foregroundColor(.textPrimary)
+                    .focused($isSearchFocused)
+                    .accessibilityIdentifier("mapSearchField")
+                    .onChange(of: searchText) { _, newValue in
+                        completer.search(query: newValue)
+                    }
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                        completer.results = []
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.textMuted)
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.obsidianSurface)
+            .cornerRadius(14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(isSearchFocused ? Color.electricViolet.opacity(0.5) : Color.obsidianBorder, lineWidth: 1)
+            )
+            .padding(.horizontal, 20)
+
+            // Results
+            if completer.results.isEmpty && !searchText.isEmpty {
+                VStack(spacing: 12) {
+                    Spacer()
+                    Image(systemName: "mappin.slash")
+                        .font(.displayLarge)
+                        .foregroundColor(.textMuted)
+                    Text("No results found")
+                        .font(.obsidianBody)
+                        .foregroundColor(.textSecondary)
+                    Spacer()
+                }
+            } else if completer.results.isEmpty {
+                VStack(spacing: 12) {
+                    Spacer()
+                    Image(systemName: "map")
+                        .font(.displayLarge)
+                        .foregroundColor(.textMuted)
+                    Text("Search for a street address, city, or place")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.textMuted)
+                    Spacer()
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(completer.results.prefix(8).enumerated()), id: \.offset) { index, result in
+                            Button { resolveAndSelect(result) } label: {
+                                HStack(spacing: 14) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.electricViolet.opacity(0.12))
+                                            .frame(width: 38, height: 38)
+                                        Image(systemName: "mappin")
+                                            .font(.obsidianFootnote)
+                                            .foregroundColor(.electricViolet)
+                                    }
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(result.title)
+                                            .font(.obsidianBody)
+                                            .foregroundColor(.textPrimary)
+                                            .lineLimit(1)
+                                        if !result.subtitle.isEmpty {
+                                            Text(result.subtitle)
+                                                .font(.obsidianCaption)
+                                                .foregroundColor(.textMuted)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.up.left")
+                                        .font(.obsidianSmall)
+                                        .foregroundColor(.textMuted)
+                                }
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 12)
+                            }
+                            .accessibilityIdentifier("mapSearchResult_\(index)")
+                            if index < min(completer.results.count, 8) - 1 {
+                                Divider()
+                                    .padding(.leading, 72)
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+            }
+        }
+        .background(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
+        .onAppear { isSearchFocused = true }
+    }
+
+    private func resolveAndSelect(_ result: MKLocalSearchCompletion) {
+        let request = MKLocalSearch.Request(completion: result)
+        let search = MKLocalSearch(request: request)
+        search.start { response, _ in
+            guard let item = response?.mapItems.first else { return }
+            let title = [result.title, result.subtitle].filter { !$0.isEmpty }.joined(separator: ", ")
+            dismiss()
+            onSelect(item.placemark.coordinate, title)
+        }
+    }
+}
+
+// MARK: - Long Press Menu Sheet
+
+// MARK: - Come Back Later Sheet
+
+struct ComeBackLaterSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.managedObjectContext) private var viewContext
+    let coordinate: CLLocationCoordinate2D
+    let resolveLeadSeed: (CLLocationCoordinate2D, @escaping (MapQuickActionLeadSeed) -> Void) -> Void
+    let onDone: () -> Void
+    @State private var selectedTime = Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date()
+    @State private var address = ""
+    @State private var resolvedCoordinate: CLLocationCoordinate2D
+
+    init(
+        coordinate: CLLocationCoordinate2D,
+        resolveLeadSeed: @escaping (CLLocationCoordinate2D, @escaping (MapQuickActionLeadSeed) -> Void) -> Void,
+        onDone: @escaping () -> Void
+    ) {
+        self.coordinate = coordinate
+        self.resolveLeadSeed = resolveLeadSeed
+        self.onDone = onDone
+        _resolvedCoordinate = State(initialValue: coordinate)
+    }
+
+    private var usableAddress: String? {
+        MapQuickActionLeadPolicy.usableAddress(address)
+    }
+
+    private let quickTimes: [(title: String, subtitle: String, hours: Int, icon: String)] = [
+        ("1 Hour", "Soon", 1, "clock.fill"),
+        ("2 Hours", "Same day", 2, "clock.badge.checkmark.fill"),
+        ("4 Hours", "Later today", 4, "sun.max.fill"),
+        ("Tomorrow", "9:00 AM", 24, "calendar.badge.clock")
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 14) {
+                    locationCard
+                    quickTimeSection
+                    customTimeSection
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+        }
+        .background(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
+        .onAppear {
+            resolveLocation()
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: "clock.arrow.circlepath", tint: Color.statusNotHome, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Come Back Later")
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("comeBackLaterSheet")
+
+                Text("Create a follow-up lead at this location.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            ObsidianCompactIconButton(
+                icon: "xmark",
+                accessibilityLabel: "Close come back later",
+                accentColor: Color.textSecondary
+            ) {
+                onDone()
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 14)
+    }
+
+    private var locationCard: some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: "mappin.circle.fill", tint: Color.electricViolet, size: 38)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Location")
+                    .font(.obsidianCaption)
+                    .foregroundColor(Color.textSecondary)
+
+                Text(usableAddress ?? "Finding nearest address...")
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.7), lineWidth: 0.7)
+        )
+    }
+
+    private var quickTimeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "bolt.fill")
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.statusNotHome)
+                    .frame(width: 28, height: 28)
+
+                Text("Quick follow-up")
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
+
+                Spacer()
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10)
+                ],
+                spacing: 10
+            ) {
+                ForEach(quickTimes, id: \.hours) { option in
+                    quickTimeButton(option)
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.7), lineWidth: 0.7)
+        )
+    }
+
+    private var customTimeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.electricViolet)
+                    .frame(width: 28, height: 28)
+
+                Text("Pick exact time")
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
+
+                Spacer()
+            }
+
+            HStack(spacing: 12) {
+                ObsidianIconTile(icon: "clock.fill", tint: Color.electricViolet, size: 34)
+
+                DatePicker(
+                    "Come back at",
+                    selection: $selectedTime,
+                    in: Date()...,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .font(.obsidianCallout)
+                .foregroundColor(Color.textPrimary)
+                .labelsHidden()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(12)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.7)
+            )
+
+            Button {
+                createComeBackLead(followUpDate: selectedTime)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Save Follow-Up")
+                        .fontWeight(.semibold)
+                }
+                .font(.obsidianCallout)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    LinearGradient(
+                        colors: [Color.electricViolet, Color.electricVioletDeep],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+            .buttonStyle(PlainButtonStyle())
+            .disabled(usableAddress == nil)
+            .opacity(usableAddress == nil ? 0.55 : 1)
+            .accessibilityIdentifier("saveCustomComeBackLeadButton")
+        }
+        .padding(16)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.7), lineWidth: 0.7)
+        )
+    }
+
+    private func quickTimeButton(_ option: (title: String, subtitle: String, hours: Int, icon: String)) -> some View {
+        Button {
+            createComeBackLead(hoursFromNow: option.hours)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    ObsidianIconTile(icon: option.icon, tint: Color.statusNotHome, size: 34)
+                    Spacer()
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.title)
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+
+                    Text(option.subtitle)
+                        .font(.obsidianCaption)
+                        .foregroundColor(Color.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 94, alignment: .leading)
+            .padding(12)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.7)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(usableAddress == nil)
+        .opacity(usableAddress == nil ? 0.55 : 1)
+        .accessibilityIdentifier("comeBackQuickTime_\(option.hours)")
+    }
+
+    private func createComeBackLead(hoursFromNow: Int) {
+        let calendar = Calendar.current
+        let followUpDate: Date
+        if hoursFromNow >= 24 {
+            // Tomorrow at 9 AM
+            if let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()),
+               let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) {
+                followUpDate = morning
+            } else { return }
+        } else {
+            guard let date = calendar.date(byAdding: .hour, value: hoursFromNow, to: Date()) else { return }
+            followUpDate = date
+        }
+
+        createComeBackLead(followUpDate: followUpDate)
+    }
+
+    private func createComeBackLead(followUpDate: Date) {
+        guard let effectiveAddress = usableAddress else { return }
+
+        let newLead = Lead.create(in: viewContext)
+        newLead.applyLeadStatus(.notHome, followUpDate: followUpDate, shouldReplaceFollowUpDate: true, autoSave: false)
+        newLead.setServiceCategory(AppPreferences.shared.defaultServiceCategory)
+        newLead.latitude = resolvedCoordinate.latitude
+        newLead.longitude = resolvedCoordinate.longitude
+        newLead.address = effectiveAddress
+        newLead.name = nil
+
+        do {
+            try viewContext.save()
+            UserDataSyncManager.shared.syncWithServer()
+            NotificationService.shared.scheduleFollowUpNotification(for: newLead)
+            NotificationService.shared.requestPermissionAfterSchedulingIfNeeded()
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+        } catch {
+            AppLog.error("Map", "Error creating come-back lead: \(error.localizedDescription)")
+        }
+        onDone()
+    }
+
+    private func resolveLocation() {
+        resolveLeadSeed(coordinate) { seed in
+            resolvedCoordinate = seed.coordinate
+            address = seed.address ?? ""
+        }
+    }
+}
+
+struct LongPressMenuSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+    let coordinate: CLLocationCoordinate2D?
+    @Binding var address: String?
+    let onAddLead: (String) -> Void
+    let onStreetView: () -> Void
+    let onNavigate: () -> Void
+    let onCancel: () -> Void
+    @State private var confirmedAddress = ""
+    @State private var didEditConfirmedAddress = false
+    @State private var isApplyingResolvedAddress = false
+
+    private var trimmedConfirmedAddress: String {
+        confirmedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canAddLead: Bool {
+        !trimmedConfirmedAddress.isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 14) {
+                    selectedLocationCard
+                    actionSection
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+        }
+        .background(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
+        .presentationDragIndicator(.visible)
+        .onAppear {
+            if confirmedAddress.isEmpty {
+                applyResolvedAddress(address)
+            }
+        }
+        .onChange(of: address) { _, newValue in
+            guard !didEditConfirmedAddress else { return }
+            applyResolvedAddress(newValue)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: "mappin.and.ellipse", tint: Color.electricViolet, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Dropped Pin")
+                    .font(.obsidianTitle)
+                    .foregroundColor(Color.textPrimary)
+                    .accessibilityIdentifier("longPressMenuSheet")
+
+                Text(address == nil ? "Finding the nearest address..." : "Using the closest address to this pin.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            ObsidianCompactIconButton(
+                icon: "xmark",
+                accessibilityLabel: "Close pin actions",
+                accentColor: Color.textSecondary
+            ) {
+                dismiss()
+                onCancel()
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 14)
+    }
+
+    private var selectedLocationCard: some View {
+        ObsidianSectionCard(
+            title: "Selected Location",
+            icon: "mappin.circle.fill",
+            subtitle: coordinateText,
+            accentColor: Color.statusConverted
+        ) {
+            HStack(alignment: .top, spacing: 12) {
+                ObsidianIconTile(
+                    icon: address == nil ? "arrow.triangle.2.circlepath" : "checkmark.seal.fill",
+                    tint: address == nil ? Color.statusNotHome : Color.statusInterested,
+                    size: 36
+                )
+
+                VStack(alignment: .leading, spacing: 3) {
+                    if let address = address {
+                        Text(address)
+                            .font(.obsidianCallout)
+                            .foregroundColor(Color.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                            .contextMenu {
+                                Button {
+                                    copyAddress(address)
+                                } label: {
+                                    Label("Copy Address", systemImage: "doc.on.doc")
+                                }
+                            }
+                            .accessibilityHint("Long press to copy address")
+                    } else {
+                        Text("Finding nearest address...")
+                            .font(.obsidianCallout)
+                            .foregroundColor(Color.textSecondary)
+
+                        Text("Lead creation unlocks when a real address is found.")
+                            .font(.micro)
+                            .foregroundColor(Color.textMuted)
+                    }
+
+                    if let coordinate {
+                        Text(String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude))
+                            .font(.micro)
+                            .foregroundColor(Color.textMuted)
+                            .padding(.top, 2)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Label("Lead address", systemImage: "house.fill")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+
+                TextField("Nearest address", text: $confirmedAddress)
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled(false)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(
+                                trimmedConfirmedAddress.isEmpty ? Color.statusNotHome.opacity(0.65) : Color.obsidianBorder.opacity(0.45),
+                                lineWidth: 0.7
+                            )
+                    )
+                    .onChange(of: confirmedAddress) { _, _ in
+                        guard !isApplyingResolvedAddress else { return }
+                        didEditConfirmedAddress = true
+                    }
+                    .accessibilityIdentifier("longPressConfirmedAddressField")
+
+                Text("The closest resolved address is used automatically. Edit it only if the map result is wrong.")
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var actionSection: some View {
+        ObsidianSectionCard(
+            title: "Actions",
+            icon: "bolt.fill",
+            subtitle: "Use this pin for your next field step."
+        ) {
+            VStack(spacing: 10) {
+                pinActionButton(
+                    title: "Add Lead Here",
+                    subtitle: canAddLead ? "Open lead creation with this address" : "Waiting for nearest address",
+                    icon: "plus.circle.fill",
+                    tint: Color.electricViolet,
+                    isDisabled: !canAddLead,
+                    accessibilityIdentifier: "longPressAddLeadButton"
+                ) {
+                    guard canAddLead else { return }
+                    dismiss()
+                    onAddLead(trimmedConfirmedAddress)
+                }
+
+                pinActionButton(
+                    title: "Street View",
+                    subtitle: "Preview the house or street before you walk up",
+                    icon: "binoculars.fill",
+                    tint: Color.statusInterested,
+                    accessibilityIdentifier: "longPressStreetViewButton"
+                ) {
+                    dismiss()
+                    onStreetView()
+                }
+
+                pinActionButton(
+                    title: "Navigate",
+                    subtitle: "Open driving directions in Maps",
+                    icon: "location.north.line.fill",
+                    tint: Color.statusNotHome,
+                    accessibilityIdentifier: "longPressNavigateButton"
+                ) {
+                    dismiss()
+                    onNavigate()
+                }
+            }
+        }
+    }
+
+    private func copyAddress(_ address: String) {
+        UIPasteboard.general.string = address
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        UIAccessibility.post(notification: .announcement, argument: "Address copied")
+    }
+
+    private var coordinateText: String? {
+        guard let coordinate else { return nil }
+        return String(format: "Pin %.5f, %.5f", coordinate.latitude, coordinate.longitude)
+    }
+
+    private func applyResolvedAddress(_ value: String?) {
+        let cleaned = Self.cleanSuggestedAddress(value) ?? ""
+        isApplyingResolvedAddress = true
+        confirmedAddress = cleaned
+        DispatchQueue.main.async {
+            isApplyingResolvedAddress = false
+        }
+    }
+
+    private static func cleanSuggestedAddress(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.localizedCaseInsensitiveContains("Dropped pin at") else { return nil }
+        return trimmed
+    }
+
+    private func pinActionButton(
+        title: String,
+        subtitle: String,
+        icon: String,
+        tint: Color,
+        isDisabled: Bool = false,
+        accessibilityIdentifier: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                ObsidianIconTile(icon: icon, tint: isDisabled ? Color.textMuted : tint, size: 40)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.obsidianCallout)
+                        .foregroundColor(isDisabled ? Color.textMuted : Color.textPrimary)
+
+                    Text(subtitle)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
+            }
+            .padding(12)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.55 : 1)
+        .accessibilityIdentifier(accessibilityIdentifier ?? title)
+    }
+}
+
+// MARK: - Search Pin Actions Sheet
+
+struct SearchPinActionsSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+    let pin: SearchPin
+    let matchingLeads: [Lead]
+    let onViewLead: (Lead) -> Void
+    let onAddLead: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Search Result")
+                    .font(.obsidianSubheadline)
+                    .foregroundColor(.textPrimary)
+                    .accessibilityIdentifier("searchPinActionsTitle")
+                Spacer()
+                ObsidianCompactIconButton(
+                    icon: "xmark",
+                    accessibilityLabel: "Close pin actions",
+                    accentColor: Color.textSecondary
+                ) {
+                    dismiss()
+                }
+                .accessibilityIdentifier("searchPinActionsCloseButton")
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
+
+            // Address card
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(Color.statusConverted.opacity(0.12))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.obsidianSubheadline)
+                        .foregroundColor(.statusConverted)
+                }
+                Text(pin.title)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(.textPrimary)
+                    .lineLimit(2)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(Color.obsidianSurface)
+            .cornerRadius(14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.obsidianBorder, lineWidth: 0.5)
+            )
+            .padding(.horizontal, 20)
+
+            // Matching leads section
+            if !matchingLeads.isEmpty {
+                HStack {
+                    Text("LEADS AT THIS ADDRESS")
+                        .font(.micro)
+                        .foregroundColor(.textMuted)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 8)
+
+                VStack(spacing: 0) {
+                    ForEach(matchingLeads, id: \.id) { lead in
+                        Button { onViewLead(lead) } label: {
+                            HStack(spacing: 12) {
+                                Circle()
+                                    .fill(lead.leadStatus.swiftUIColor)
+                                    .frame(width: 10, height: 10)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(lead.displayName)
+                                        .font(.obsidianBody)
+                                        .foregroundColor(.textPrimary)
+                                    Text(lead.leadStatus.displayName)
+                                        .font(.obsidianSmall)
+                                        .foregroundColor(.textSecondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.obsidianSmall)
+                                    .foregroundColor(.textMuted)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                        }
+                        if lead.id != matchingLeads.last?.id {
+                            Divider().padding(.leading, 42)
+                        }
+                    }
+                }
+                .background(Color.obsidianSurface)
+                .cornerRadius(14)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color.obsidianBorder, lineWidth: 0.5)
+                )
+                .padding(.horizontal, 20)
+            } else {
+                HStack(spacing: 10) {
+                    Image(systemName: "person.slash")
+                        .foregroundColor(.textMuted)
+                    Text("No leads found at this address")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.textSecondary)
+                }
+                .padding(.top, 20)
+            }
+
+            Spacer()
+
+            // Add lead button
+            Button { onAddLead() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus")
+                        .font(.obsidianFootnote)
+                    Text("Add New Lead Here")
+                        .font(.obsidianCallout)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        colors: [.electricViolet, .electricVioletDeep],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .cornerRadius(14)
+                .shadow(color: .electricViolet.opacity(0.3), radius: 8, x: 0, y: 3)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            .accessibilityIdentifier("searchPinAddLeadButton")
+        }
+        .background(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
+    }
+}
+
+struct LeadClusterSelection: Identifiable {
+    let id = UUID()
+    let leads: [Lead]
+    let coordinate: CLLocationCoordinate2D
+
+    var summary: LeadClusterSummary {
+        LeadClusterSummary(leads: leads)
+    }
+
+    var sortedLeads: [Lead] {
+        summary.sortedLeads
+    }
+}
+
+enum LeadMapWorkflowPolicy {
+    static func isHotLead(_ lead: Lead, now: Date = Date()) -> Bool {
+        guard lead.leadStatus.allowsActiveFollowUp else { return false }
+        return lead.priority > 0
+            || lead.leadStatus == .interested
+            || isFollowUpDue(lead, now: now)
+            || max(lead.price, lead.estimatedValue) > 0
+    }
+
+    static func isFollowUpDue(_ lead: Lead, now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        guard lead.leadStatus.allowsActiveFollowUp else { return false }
+        guard let followUpDate = lead.followUpDate else { return false }
+        let dueCutoff = calendar.date(byAdding: .hour, value: 12, to: now) ?? now
+        return followUpDate <= dueCutoff
+    }
+
+    static func isHotLead(_ pin: MapLeadPin, now: Date = Date()) -> Bool {
+        guard pin.status.allowsActiveFollowUp else { return false }
+        return pin.priority > 0
+            || pin.status == .interested
+            || isFollowUpDue(pin, now: now)
+            || max(pin.price, pin.estimatedValue) > 0
+    }
+
+    static func isFollowUpDue(_ pin: MapLeadPin, now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        guard pin.status.allowsActiveFollowUp else { return false }
+        guard let followUpDate = pin.followUpDate else { return false }
+        let dueCutoff = calendar.date(byAdding: .hour, value: 12, to: now) ?? now
+        return followUpDate <= dueCutoff
+    }
+}
+
+private enum LeadWorkflowScorer {
+    static func nextBestLead(from leads: [Lead], near coordinate: CLLocationCoordinate2D) -> Lead? {
+        leads
+            .filter { $0.leadStatus != .converted && $0.leadStatus != .notInterested }
+            .sorted { lhs, rhs in
+                score(lhs, near: coordinate) > score(rhs, near: coordinate)
+            }
+            .first
+    }
+
+    static func isFollowUpDue(_ lead: Lead, now: Date = Date()) -> Bool {
+        LeadMapWorkflowPolicy.isFollowUpDue(lead, now: now)
+    }
+
+    static func score(_ lead: Lead, near coordinate: CLLocationCoordinate2D, now: Date = Date()) -> Double {
+        var score = 0.0
+        if lead.priority > 0 { score += 700 }
+        if isFollowUpDue(lead, now: now) { score += 520 }
+
+        switch lead.leadStatus {
+        case .interested:
+            score += 430
+        case .notHome:
+            score += 210
+        case .notContacted:
+            score += 160
+        case .converted:
+            score += 80
+        case .notInterested:
+            score -= 500
+        }
+
+        score += min(180, max(lead.price, lead.estimatedValue) / 10)
+
+        if let updatedDate = lead.updatedDate {
+            let hours = max(0, now.timeIntervalSince(updatedDate) / 3600)
+            score += max(0, 90 - hours)
+        }
+
+        let distance = CLLocation(latitude: lead.latitude, longitude: lead.longitude)
+            .distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
+        score -= min(220, distance / 35)
+        return score
+    }
+}
+
+struct MapLeadPin: Identifiable, Hashable {
+    let objectID: NSManagedObjectID
+    let idValue: UUID?
+    let latitude: Double
+    let longitude: Double
+    let status: Lead.Status
+    let name: String
+    let address: String
+    let priority: Int16
+    let followUpDate: Date?
+    let createdDate: Date?
+    let updatedDate: Date?
+    let price: Double
+    let estimatedValue: Double
+
+    var id: NSManagedObjectID { objectID }
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    var title: String {
+        if !name.isEmpty { return name }
+        if !address.isEmpty { return address }
+        if let idValue { return idValue.uuidString }
+        return "Lead"
+    }
+
+    var subtitle: String {
+        status.displayName
+    }
+
+    init?(lead: Lead) {
+        let coordinate = lead.coordinate
+        guard CLLocationCoordinate2DIsValid(coordinate),
+              (-90...90).contains(lead.latitude),
+              (-180...180).contains(lead.longitude),
+              (lead.latitude != 0 || lead.longitude != 0) else {
+            return nil
+        }
+
+        self.objectID = lead.objectID
+        self.idValue = lead.id
+        self.latitude = lead.latitude
+        self.longitude = lead.longitude
+        self.status = lead.leadStatus
+        self.name = lead.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.address = lead.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.priority = lead.priority
+        self.followUpDate = lead.followUpDate
+        self.createdDate = lead.createdDate
+        self.updatedDate = lead.updatedDate
+        self.price = lead.price
+        self.estimatedValue = lead.estimatedValue
+    }
+}
+
+private struct MapLeadPinCache {
+    let pins: [MapLeadPin]
+    let totalLeadCount: Int
+    let isReady: Bool
+
+    static let empty = MapLeadPinCache(pins: [], totalLeadCount: 0, isReady: false)
+    static let readyEmpty = MapLeadPinCache(pins: [], totalLeadCount: 0, isReady: true)
+
+    static func load(from persistentStoreCoordinator: NSPersistentStoreCoordinator) async -> MapLeadPinCache {
+        await withCheckedContinuation { continuation in
+            let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+            context.persistentStoreCoordinator = persistentStoreCoordinator
+            context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+            context.undoManager = nil
+
+            context.perform {
+                let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+                request.sortDescriptors = []
+                request.fetchBatchSize = 500
+                request.includesPendingChanges = false
+                request.includesSubentities = false
+                request.relationshipKeyPathsForPrefetching = []
+
+                do {
+                    let leads = try context.fetch(request)
+                    let pins = leads.compactMap(MapLeadPin.init)
+                    continuation.resume(returning: MapLeadPinCache(
+                        pins: pins,
+                        totalLeadCount: leads.count,
+                        isReady: true
+                    ))
+                } catch {
+                    AppLog.warning("Map", "Could not load lightweight map pins: \(error.localizedDescription)")
+                    continuation.resume(returning: MapLeadPinCache.readyEmpty)
+                }
+            }
+        }
+    }
+
+    func applying(_ mutation: MapLeadCacheMutation) -> MapLeadPinCache {
+        var pinsByObjectID = Dictionary(uniqueKeysWithValues: pins.map { ($0.objectID, $0) })
+        for objectID in mutation.removedObjectIDs {
+            pinsByObjectID.removeValue(forKey: objectID)
+        }
+        for pin in mutation.updatedPins {
+            pinsByObjectID[pin.objectID] = pin
+        }
+
+        return MapLeadPinCache(
+            pins: Array(pinsByObjectID.values),
+            totalLeadCount: max(0, totalLeadCount + mutation.insertedLeadCount - mutation.deletedLeadCount),
+            isReady: true
+        )
+    }
+
+}
+
+private struct MapLeadCacheMutation {
+    let updatedPins: [MapLeadPin]
+    let removedObjectIDs: Set<NSManagedObjectID>
+    let insertedLeadCount: Int
+    let deletedLeadCount: Int
+
+    init?(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              userInfo[NSInvalidatedAllObjectsKey] == nil else {
+            return nil
+        }
+
+        let inserted = Self.leads(in: userInfo[NSInsertedObjectsKey])
+        let deleted = Self.leads(in: userInfo[NSDeletedObjectsKey])
+        let refreshed = Self.leads(in: userInfo[NSRefreshedObjectsKey])
+        let invalidated = Self.leads(in: userInfo[NSInvalidatedObjectsKey])
+        guard invalidated.isEmpty else { return nil }
+        let allUpdated = Self.leads(in: userInfo[NSUpdatedObjectsKey])
+        guard MapLeadCacheInvalidationPolicy.shouldApplyIncrementalMutation(
+            changeCount: inserted.count + deleted.count + refreshed.count + allUpdated.count
+        ) else {
+            return nil
+        }
+        let updated = allUpdated.filter { lead in
+            let changedKeys = Set(lead.changedValuesForCurrentEvent().keys)
+            return changedKeys.isEmpty
+                || MapLeadCacheInvalidationPolicy.updatedLeadAffectsMap(changedKeys: changedKeys)
+        }
+        let changed = inserted + updated + refreshed
+
+        guard !changed.contains(where: { $0.objectID.isTemporaryID }) else {
+            return nil
+        }
+
+        updatedPins = changed.compactMap(MapLeadPin.init)
+        removedObjectIDs = Set((updated + refreshed + deleted).map(\.objectID))
+        insertedLeadCount = inserted.count
+        deletedLeadCount = deleted.count
+    }
+
+    private static func leads(in value: Any?) -> [Lead] {
+        guard let objects = value as? Set<NSManagedObject> else { return [] }
+        return objects.compactMap { $0 as? Lead }
+    }
+}
+
+private struct MapLeadRenderRequestSignature: Equatable {
+    let mode: MapWorkflowMode
+    let centerLatitudeBucket: Int
+    let centerLongitudeBucket: Int
+    let latitudeSpanBucket: Int
+    let longitudeSpanBucket: Int
+    let maxRenderedLeads: Int
+    let cacheIsReady: Bool
+
+    init(
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int,
+        cacheIsReady: Bool
+    ) {
+        let center = CLLocationCoordinate2DIsValid(region.center) ? region.center : fallbackCenter
+        self.mode = mode
+        self.centerLatitudeBucket = Self.coordinateBucket(center.latitude)
+        self.centerLongitudeBucket = Self.coordinateBucket(center.longitude)
+        self.latitudeSpanBucket = Self.spanBucket(region.span.latitudeDelta)
+        self.longitudeSpanBucket = Self.spanBucket(region.span.longitudeDelta)
+        self.maxRenderedLeads = maxRenderedLeads
+        self.cacheIsReady = cacheIsReady
+    }
+
+    private static func coordinateBucket(_ value: CLLocationDegrees) -> Int {
+        guard value.isFinite else { return 0 }
+        return Int((value * 10_000).rounded())
+    }
+
+    private static func spanBucket(_ value: CLLocationDegrees) -> Int {
+        guard value.isFinite, value > 0 else { return 0 }
+        return Int((value * 10_000).rounded())
+    }
+}
+
+private struct MapLeadRenderSnapshot {
+    let renderedPins: [MapLeadPin]
+    let annotationRevision: MapLeadAnnotationRevision
+    let totalLeadCount: Int
+    let matchingLeadCount: Int
+    let isReady: Bool
+    let cache: MapLeadPinCache
+
+    static let empty = MapLeadRenderSnapshot(
+        renderedPins: [],
+        annotationRevision: MapLeadAnnotationRevision(pins: []),
+        totalLeadCount: 0,
+        matchingLeadCount: 0,
+        isReady: false,
+        cache: .empty
+    )
+
+    func limited(to maxRenderedLeads: Int) -> MapLeadRenderSnapshot {
+        guard maxRenderedLeads >= 0 else { return self }
+        guard renderedPins.count > maxRenderedLeads else { return self }
+        let limitedPins = Array(renderedPins.prefix(maxRenderedLeads))
+
+        return MapLeadRenderSnapshot(
+            renderedPins: limitedPins,
+            annotationRevision: MapLeadAnnotationRevision(pins: limitedPins),
+            totalLeadCount: totalLeadCount,
+            matchingLeadCount: matchingLeadCount,
+            isReady: isReady,
+            cache: cache
+        )
+    }
+
+    static func make(
+        from cache: MapLeadPinCache,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
+        now: Date = Date()
+    ) -> MapLeadRenderSnapshot {
+        let renderResult = MapLeadPinVisibilityPolicy.renderedPinSelection(
+            from: cache.pins,
+            mode: mode,
+            region: region,
+            fallbackCenter: fallbackCenter,
+            maxRenderedLeads: maxRenderedLeads,
+            now: now
+        )
+
+        return MapLeadRenderSnapshot(
+            renderedPins: renderResult.renderedPins,
+            annotationRevision: MapLeadAnnotationRevision(pins: renderResult.renderedPins),
+            totalLeadCount: cache.totalLeadCount,
+            matchingLeadCount: renderResult.matchingLeadCount,
+            isReady: cache.isReady,
+            cache: cache
+        )
+    }
+
+    static func makeAsync(
+        from cache: MapLeadPinCache,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
+        now: Date = Date()
+    ) async -> MapLeadRenderSnapshot {
+        await withCheckedContinuation { continuation in
+            let signpostID = OSSignpostID(log: MapPerformanceTrace.log)
+            os_signpost(
+                .begin,
+                log: MapPerformanceTrace.log,
+                name: "BuildLeadRenderSnapshot",
+                signpostID: signpostID,
+                "cached=%{public}d budget=%{public}d",
+                cache.pins.count,
+                maxRenderedLeads
+            )
+            DispatchQueue.global(qos: .userInitiated).async {
+                let snapshot = make(
+                    from: cache,
+                    mode: mode,
+                    region: region,
+                    fallbackCenter: fallbackCenter,
+                    maxRenderedLeads: maxRenderedLeads,
+                    now: now
+                )
+                os_signpost(
+                    .end,
+                    log: MapPerformanceTrace.log,
+                    name: "BuildLeadRenderSnapshot",
+                    signpostID: signpostID,
+                    "rendered=%{public}d",
+                    snapshot.renderedPins.count
+                )
+                continuation.resume(returning: snapshot)
+            }
+        }
+    }
+}
+
+private enum MapLeadPinVisibilityPolicy {
+    private static let viewportPaddingMultiplier = 1.8
+
+    static func renderedPinSelection<Pins: Collection>(
+        from pins: Pins,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
+        now: Date = Date()
+    ) -> MapLeadPinSelection where Pins.Element == MapLeadPin {
+        var matchingLeadCount = 0
+        var matchingCoordinateCount = 0
+        var allCandidates: [MapLeadPinRenderCandidate] = []
+        var viewportCandidates: [MapLeadPinRenderCandidate] = []
+        var priorityOutsideViewportCandidates: [MapLeadPinRenderCandidate] = []
+        let renderRegion = normalizedRegion(region, fallbackCenter: fallbackCenter)
+
+        for pin in pins {
+            guard mode.includes(pin, now: now) else { continue }
+            matchingLeadCount += 1
+            matchingCoordinateCount += 1
+
+            let candidate = MapLeadPinRenderCandidate(
+                pin: pin,
+                sortKey: MapLeadPinClusterSummary.prioritySortKey(for: pin, now: now)
+            )
+
+            if allCandidates.count < maxRenderedLeads {
+                allCandidates.append(candidate)
+            }
+
+            if contains(pin, in: renderRegion) {
+                viewportCandidates.append(candidate)
+            } else if isMapPriorityLead(pin, now: now) {
+                priorityOutsideViewportCandidates.append(candidate)
+            }
+        }
+
+        guard maxRenderedLeads > 0 else {
+            return MapLeadPinSelection(renderedPins: [], matchingLeadCount: matchingLeadCount)
+        }
+
+        if matchingCoordinateCount <= maxRenderedLeads {
+            return MapLeadPinSelection(
+                renderedPins: sortedPins(from: allCandidates),
+                matchingLeadCount: matchingLeadCount
+            )
+        }
+
+        let viewportPins = sortedPins(from: viewportCandidates)
+        if viewportPins.count >= maxRenderedLeads {
+            return MapLeadPinSelection(
+                renderedPins: Array(viewportPins.prefix(maxRenderedLeads)),
+                matchingLeadCount: matchingLeadCount
+            )
+        }
+
+        var selectedPins = viewportPins
+        var selectedObjectIDs = Set(selectedPins.map(\.objectID))
+        let remainingBudget = maxRenderedLeads - selectedPins.count
+        if remainingBudget > 0 {
+            let priorityOutsideViewport = sortedPins(from: priorityOutsideViewportCandidates).lazy.filter { pin in
+                !selectedObjectIDs.contains(pin.objectID) && isMapPriorityLead(pin, now: now)
+            }
+            for pin in priorityOutsideViewport.prefix(remainingBudget) {
+                selectedPins.append(pin)
+                selectedObjectIDs.insert(pin.objectID)
+            }
+        }
+
+        return MapLeadPinSelection(
+            renderedPins: selectedPins,
+            matchingLeadCount: matchingLeadCount
+        )
+    }
+
+    private static func isMapPriorityLead(_ pin: MapLeadPin, now: Date) -> Bool {
+        pin.status == .converted
+            || pin.status == .interested
+            || LeadMapWorkflowPolicy.isFollowUpDue(pin, now: now)
+            || pin.priority > 0
+    }
+
+    private static func normalizedRegion(
+        _ region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D
+    ) -> MKCoordinateRegion {
+        let center = CLLocationCoordinate2DIsValid(region.center) ? region.center : fallbackCenter
+        let latitudeDelta = normalizedDelta(region.span.latitudeDelta)
+        let longitudeDelta = normalizedDelta(region.span.longitudeDelta)
+        return MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(
+                latitudeDelta: latitudeDelta * viewportPaddingMultiplier,
+                longitudeDelta: longitudeDelta * viewportPaddingMultiplier
+            )
+        )
+    }
+
+    private static func normalizedDelta(_ delta: CLLocationDegrees) -> CLLocationDegrees {
+        guard delta.isFinite, delta > 0 else { return 0.03 }
+        return min(max(delta, 0.003), 180)
+    }
+
+    private static func contains(_ pin: MapLeadPin, in region: MKCoordinateRegion) -> Bool {
+        let latitudeHalfSpan = region.span.latitudeDelta / 2
+        let longitudeHalfSpan = region.span.longitudeDelta / 2
+        return abs(pin.latitude - region.center.latitude) <= latitudeHalfSpan
+            && abs(longitudeDistance(pin.longitude, region.center.longitude)) <= longitudeHalfSpan
+    }
+
+    private static func longitudeDistance(_ lhs: CLLocationDegrees, _ rhs: CLLocationDegrees) -> CLLocationDegrees {
+        let raw = lhs - rhs
+        if raw > 180 { return raw - 360 }
+        if raw < -180 { return raw + 360 }
+        return raw
+    }
+
+    private static func sortedPins(from candidates: [MapLeadPinRenderCandidate]) -> [MapLeadPin] {
+        candidates
+            .sorted { $0.sortKey > $1.sortKey }
+            .map(\.pin)
+    }
+}
+
+private struct MapLeadPinSelection {
+    let renderedPins: [MapLeadPin]
+    let matchingLeadCount: Int
+}
+
+private struct MapLeadPinRenderCandidate {
+    let pin: MapLeadPin
+    let sortKey: LeadClusterSortKey
+}
+
+enum MapLeadOpeningRenderPolicy {
+    // Let the tab transition and controls commit before asking MapKit to build
+    // the first large annotation set. Warm snapshots bypass this delay.
+    static let coldOpenRenderDelay: TimeInterval = 0.18
+    static let warmOpenInteractionGuard: TimeInterval = 0.75
+    static let previewExpansionDelay: TimeInterval = 0.95
+    static let previewRenderedLeadBudget = 72
+
+    static func shouldExpandPreview(
+        renderedPinCount: Int,
+        matchingLeadCount: Int,
+        fullRenderedLeadBudget: Int
+    ) -> Bool {
+        guard matchingLeadCount > 0, fullRenderedLeadBudget > 0 else { return false }
+        return renderedPinCount < min(matchingLeadCount, fullRenderedLeadBudget)
+    }
+
+    static func shouldPreserveSnapshotOnOpen(
+        cacheIsReady: Bool,
+        snapshotIsReady: Bool,
+        renderedPinCount: Int,
+        matchingLeadCount: Int
+    ) -> Bool {
+        guard cacheIsReady, snapshotIsReady else { return false }
+
+        // A warm, richer snapshot already has annotations on the retained
+        // MKMapView. Replacing it with the tiny opening preview causes the tab
+        // open to remove/re-add markers, which is exactly the lag users feel.
+        if renderedPinCount > 0 {
+            return true
+        }
+
+        return matchingLeadCount <= renderedPinCount
+    }
+
+    static func shouldScheduleRenderOnOpen(
+        cacheIsReady: Bool,
+        snapshotIsReady: Bool,
+        renderedPinCount: Int,
+        matchingLeadCount: Int
+    ) -> Bool {
+        !shouldPreserveSnapshotOnOpen(
+            cacheIsReady: cacheIsReady,
+            snapshotIsReady: snapshotIsReady,
+            renderedPinCount: renderedPinCount,
+            matchingLeadCount: matchingLeadCount
+        )
+    }
+}
+
+enum MapLeadHiddenPrewarmPolicy {
+    // Start preparing shortly after the non-map tab settles so the first Map
+    // visit normally uses an already-retained annotation snapshot.
+    static let prewarmDelay: TimeInterval = 0.22
+
+    static func shouldPrewarm(cacheIsReady: Bool, snapshotIsReady: Bool) -> Bool {
+        !cacheIsReady || !snapshotIsReady
+    }
+}
+
+enum MapLeadCacheInvalidationPolicy {
+    static let maximumIncrementalChangeCount = 100
+
+    private static let mapRelevantLeadKeys: Set<String> = [
+        "id",
+        "latitude",
+        "longitude",
+        "status",
+        "name",
+        "address",
+        "priority",
+        "followUpDate",
+        "createdDate",
+        "dateCreated",
+        "updatedDate",
+        "dateModified",
+        "price",
+        "estimatedValue"
+    ]
+
+    static func updatedLeadAffectsMap(changedKeys: Set<String>) -> Bool {
+        !mapRelevantLeadKeys.isDisjoint(with: changedKeys)
+    }
+
+    static func shouldApplyIncrementalMutation(changeCount: Int) -> Bool {
+        changeCount > 0 && changeCount <= maximumIncrementalChangeCount
+    }
+
+    static func shouldInvalidate(for notification: Notification) -> Bool {
+        guard let userInfo = notification.userInfo else { return true }
+        if userInfo[NSInvalidatedAllObjectsKey] != nil { return true }
+
+        if [NSInsertedObjectsKey, NSDeletedObjectsKey, NSRefreshedObjectsKey, NSInvalidatedObjectsKey].contains(where: { key in
+            guard let objects = userInfo[key] as? Set<NSManagedObject> else { return false }
+            return objects.contains { $0 is Lead }
+        }) {
+            return true
+        }
+
+        guard let objects = userInfo[NSUpdatedObjectsKey] as? Set<NSManagedObject> else { return false }
+        return objects.compactMap { $0 as? Lead }.contains { lead in
+            let changedKeys = Set(lead.changedValuesForCurrentEvent().keys)
+            return changedKeys.isEmpty || updatedLeadAffectsMap(changedKeys: changedKeys)
+        }
+    }
+}
+
+enum MapLeadVisibilityPolicy {
+    static let defaultRenderedLeadBudget = 180
+    private static let viewportPaddingMultiplier = 1.8
+
+    static func visibleLeads<Leads: Collection>(
+        from leads: Leads,
+        mode: MapWorkflowMode,
+        now: Date = Date()
+    ) -> [Lead] where Leads.Element == Lead {
+        LeadClusterSummary.sortedLeads(
+            leads.filter { mode.includes($0, now: now) },
+            now: now
+        )
+    }
+
+    static func visibleLeads<Leads: Collection>(
+        from leads: Leads,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int = defaultRenderedLeadBudget,
+        now: Date = Date()
+    ) -> [Lead] where Leads.Element == Lead {
+        renderedLeadSelection(
+            from: leads,
+            mode: mode,
+            region: region,
+            fallbackCenter: fallbackCenter,
+            maxRenderedLeads: maxRenderedLeads,
+            now: now
+        ).renderedLeads
+    }
+
+    static func renderedLeadSelection<Leads: Collection>(
+        from leads: Leads,
+        mode: MapWorkflowMode,
+        region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D,
+        maxRenderedLeads: Int = defaultRenderedLeadBudget,
+        now: Date = Date()
+    ) -> MapLeadSelection where Leads.Element == Lead {
+        var matchingLeadCount = 0
+        var matchingCoordinateCount = 0
+        var allCandidates: [LeadRenderCandidate] = []
+        var viewportCandidates: [LeadRenderCandidate] = []
+        var priorityOutsideViewportCandidates: [LeadRenderCandidate] = []
+        let renderRegion = normalizedRegion(region, fallbackCenter: fallbackCenter)
+
+        for lead in leads {
+            guard mode.includes(lead, now: now) else { continue }
+            matchingLeadCount += 1
+            guard hasUsableCoordinate(lead) else { continue }
+            matchingCoordinateCount += 1
+
+            let candidate = LeadRenderCandidate(
+                lead: lead,
+                sortKey: LeadClusterSummary.prioritySortKey(for: lead, now: now)
+            )
+
+            if allCandidates.count < maxRenderedLeads {
+                allCandidates.append(candidate)
+            }
+
+            if contains(lead, in: renderRegion) {
+                viewportCandidates.append(candidate)
+            } else if isMapPriorityLead(lead, now: now) {
+                priorityOutsideViewportCandidates.append(candidate)
+            }
+        }
+
+        guard maxRenderedLeads > 0 else {
+            return MapLeadSelection(renderedLeads: [], matchingLeadCount: matchingLeadCount)
+        }
+
+        if matchingCoordinateCount <= maxRenderedLeads {
+            return MapLeadSelection(
+                renderedLeads: sortedLeads(from: allCandidates),
+                matchingLeadCount: matchingLeadCount
+            )
+        }
+
+        let viewportLeads = sortedLeads(from: viewportCandidates)
+        if viewportLeads.count >= maxRenderedLeads {
+            return MapLeadSelection(
+                renderedLeads: Array(viewportLeads.prefix(maxRenderedLeads)),
+                matchingLeadCount: matchingLeadCount
+            )
+        }
+
+        var selectedLeads = viewportLeads
+        var selectedObjectIDs = Set(selectedLeads.map(\.objectID))
+        let remainingBudget = maxRenderedLeads - selectedLeads.count
+        if remainingBudget > 0 {
+            let priorityOutsideViewport = sortedLeads(from: priorityOutsideViewportCandidates).lazy.filter { lead in
+                !selectedObjectIDs.contains(lead.objectID) && isMapPriorityLead(lead, now: now)
+            }
+            for lead in priorityOutsideViewport.prefix(remainingBudget) {
+                selectedLeads.append(lead)
+                selectedObjectIDs.insert(lead.objectID)
+            }
+        }
+
+        return MapLeadSelection(
+            renderedLeads: selectedLeads,
+            matchingLeadCount: matchingLeadCount
+        )
+    }
+
+    static func matchingLeadCount<Leads: Collection>(
+        from leads: Leads,
+        mode: MapWorkflowMode,
+        now: Date = Date()
+    ) -> Int where Leads.Element == Lead {
+        if mode == .all {
+            return leads.count
+        }
+
+        return leads.reduce(into: 0) { count, lead in
+            if mode.includes(lead, now: now) {
+                count += 1
+            }
+        }
+    }
+
+    private static func isMapPriorityLead(_ lead: Lead, now: Date) -> Bool {
+        lead.leadStatus == .converted
+            || lead.leadStatus == .interested
+            || LeadClusterSummary.isFollowUpDue(lead, now: now)
+            || lead.priority > 0
+    }
+
+    private static func hasUsableCoordinate(_ lead: Lead) -> Bool {
+        CLLocationCoordinate2DIsValid(lead.coordinate)
+            && (-90...90).contains(lead.latitude)
+            && (-180...180).contains(lead.longitude)
+            && (lead.latitude != 0 || lead.longitude != 0)
+    }
+
+    private static func normalizedRegion(
+        _ region: MKCoordinateRegion,
+        fallbackCenter: CLLocationCoordinate2D
+    ) -> MKCoordinateRegion {
+        let center = CLLocationCoordinate2DIsValid(region.center) ? region.center : fallbackCenter
+        let latitudeDelta = normalizedDelta(region.span.latitudeDelta)
+        let longitudeDelta = normalizedDelta(region.span.longitudeDelta)
+        return MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(
+                latitudeDelta: latitudeDelta * viewportPaddingMultiplier,
+                longitudeDelta: longitudeDelta * viewportPaddingMultiplier
+            )
+        )
+    }
+
+    private static func normalizedDelta(_ delta: CLLocationDegrees) -> CLLocationDegrees {
+        guard delta.isFinite, delta > 0 else { return 0.03 }
+        return min(max(delta, 0.003), 180)
+    }
+
+    private static func contains(_ lead: Lead, in region: MKCoordinateRegion) -> Bool {
+        let latitudeHalfSpan = region.span.latitudeDelta / 2
+        let longitudeHalfSpan = region.span.longitudeDelta / 2
+        return abs(lead.latitude - region.center.latitude) <= latitudeHalfSpan
+            && abs(longitudeDistance(lead.longitude, region.center.longitude)) <= longitudeHalfSpan
+    }
+
+    private static func longitudeDistance(_ lhs: CLLocationDegrees, _ rhs: CLLocationDegrees) -> CLLocationDegrees {
+        let raw = lhs - rhs
+        if raw > 180 { return raw - 360 }
+        if raw < -180 { return raw + 360 }
+        return raw
+    }
+
+    private static func sortedLeads(from candidates: [LeadRenderCandidate]) -> [Lead] {
+        candidates
+            .sorted { $0.sortKey > $1.sortKey }
+            .map(\.lead)
+    }
+}
+
+struct MapLeadSelection {
+    let renderedLeads: [Lead]
+    let matchingLeadCount: Int
+}
+
+private struct LeadRenderCandidate {
+    let lead: Lead
+    let sortKey: LeadClusterSortKey
+}
+
+private struct TeamMapShortcutHost: View {
+    @ObservedObject private var teamService = TeamFirebaseService.shared
+    let onOpen: () -> Void
+
+    private var summary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.makeShortcut(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if let summary {
+            TeamMapShortcutPill(summary: summary, action: onOpen)
+        }
+    }
+}
+
+private struct MapToolsSheetHost: View {
+    @ObservedObject private var teamService = TeamFirebaseService.shared
+    @ObservedObject private var syncManager = UserDataSyncManager.shared
+
+    let selectedMode: MapWorkflowMode
+    let isLeadSnapshotReady: Bool
+    let matchingLeadCount: Int
+    let onSelectMode: (MapWorkflowMode) -> Void
+    let onOpenRoutePlanner: () -> Void
+    let onOpenTeamMap: () -> Void
+
+    private var workflowStatusText: String? {
+        switch teamService.syncWriteState {
+        case .pending, .failed:
+            return teamService.syncWriteState.displayText
+        case .idle:
+            break
+        }
+
+        if syncManager.syncStatus.isBusy {
+            return syncManager.syncStatus.displayText
+        }
+
+        if selectedMode != .all {
+            if !isLeadSnapshotReady {
+                return "Loading \(selectedMode.title.lowercased()) leads"
+            }
+            return "\(matchingLeadCount) \(selectedMode.title.lowercased()) leads"
+        }
+
+        return nil
+    }
+
+    private var teamSummary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.make(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            dutyLocationPoints: teamService.dutyLocationPoints,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
+
+    var body: some View {
+        MapToolsSheet(
+            selectedMode: selectedMode,
+            workflowStatusText: workflowStatusText,
+            teamSummary: teamSummary,
+            onSelectMode: onSelectMode,
+            onOpenRoutePlanner: onOpenRoutePlanner,
+            onOpenTeamMap: onOpenTeamMap
+        )
+    }
+}
+
+private struct MapToolsSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+
+    let selectedMode: MapWorkflowMode
+    let workflowStatusText: String?
+    let teamSummary: TeamWorkspaceSurfaceSummary?
+    let onSelectMode: (MapWorkflowMode) -> Void
+    let onOpenRoutePlanner: () -> Void
+    let onOpenTeamMap: () -> Void
+
+    private var optionColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 96), spacing: 10)]
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let workflowStatusText {
+                        statusCard(workflowStatusText)
+                    }
+
+                    MapToolSection(title: "View") {
+                        LazyVGrid(columns: optionColumns, spacing: 10) {
+                            ForEach(MapWorkflowMode.primaryModes) { mode in
+                                MapToolOptionButton(
+                                    title: mode.title,
+                                    icon: mode.icon,
+                                    color: mode.color,
+                                    isSelected: selectedMode == mode,
+                                    accessibilityIdentifier: "mapWorkflowMode_\(mode.rawValue)"
+                                ) {
+                                    dismissThen {
+                                        onSelectMode(mode)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    MapToolSection(title: "Actions") {
+                        VStack(spacing: 10) {
+                            MapToolActionRow(
+                                title: "Next best lead",
+                                subtitle: "Jump to the highest-value nearby follow-up.",
+                                icon: "sparkles",
+                                color: Color.statusInterested,
+                                accessibilityIdentifier: "nextBestLeadButton"
+                            ) {
+                                dismissThen {
+                                    onSelectMode(.next)
+                                }
+                            }
+
+                            MapToolActionRow(
+                                title: "Route planner",
+                                subtitle: "Build a route from the current map area.",
+                                icon: "point.topleft.down.to.point.bottomright.curvepath",
+                                color: Color.electricViolet,
+                                accessibilityIdentifier: "routePlannerButton"
+                            ) {
+                                dismissThen(onOpenRoutePlanner)
+                            }
+
+                            if let teamSummary {
+                                MapToolActionRow(
+                                    title: teamSummary.role == .owner ? "Team field map" : "My team map",
+                                    subtitle: teamSummary.detailLine,
+                                    icon: "person.3.fill",
+                                    color: Color.electricViolet,
+                                    accessibilityIdentifier: "teamMapShortcut"
+                                ) {
+                                    dismissThen(onOpenTeamMap)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
+            }
+        }
+        .background(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: "slider.horizontal.3", tint: Color.electricViolet, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Map Tools")
+                    .font(.obsidianSubheadline)
+                    .foregroundColor(Color.textPrimary)
+                    .accessibilityIdentifier("mapToolsSheet")
+
+                Text("Change views without crowding the map.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            ObsidianCompactIconButton(
+                icon: "xmark",
+                accessibilityLabel: "Close map tools"
+            ) {
+                dismiss()
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 14)
+    }
+
+    private func statusCard(_ text: String) -> some View {
+        HStack(spacing: 10) {
+            ObsidianIconTile(icon: "speedometer", tint: Color.textSecondary, size: 34)
+
+            Text(text)
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textSecondary)
+                .lineLimit(2)
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+        .accessibilityIdentifier("mapWorkflowStatusCard")
+    }
+
+    private func dismissThen(_ action: @escaping () -> Void) {
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            action()
+        }
+    }
+}
+
+private struct MapToolSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.micro)
+                .foregroundColor(Color.textMuted)
+
+            content()
+        }
+    }
+}
+
+private struct MapToolOptionButton: View {
+    let title: String
+    let icon: String
+    let color: Color
+    let isSelected: Bool
+    let accessibilityIdentifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.obsidianFootnote)
+                Text(title)
+                    .font(.micro)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundColor(isSelected ? .white : color)
+            .frame(maxWidth: .infinity)
+            .frame(height: 70)
+            .background(isSelected ? color : Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isSelected ? color.opacity(0.45) : Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+private struct MapToolActionRow: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+    let accessibilityIdentifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ObsidianIconTile(icon: icon, tint: color, size: 38)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+
+                    Text(subtitle)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textMuted)
+            }
+            .padding(14)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+struct LeadClusterSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var viewContext
+    let selection: LeadClusterSelection
+    let onViewLead: (Lead) -> Void
+    let onFocusLead: (Lead) -> Void
+    @State private var statusMessage: String?
+
+    private var summary: LeadClusterSummary {
+        selection.summary
+    }
+
+    private var bestLead: Lead? {
+        selection.sortedLeads.first
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    summaryCard
+                    quickActions
+                    statusBreakdown
+
+                    if let bestLead {
+                        bestLeadCard(bestLead)
+                    }
+
+                    leadsList
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
+            }
+        }
+        .background(Color.obsidianBackground(for: colorScheme))
+        .obsidianModalBackground()
+    }
+
+    private var quickActions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                clusterActionButton(title: "Route", icon: "location.north.line.fill", color: Color.electricViolet) {
+                    openDirectionsToCluster()
+                }
+                clusterActionButton(title: "Focus", icon: "scope", color: Color.statusInterested) {
+                    if let bestLead {
+                        dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            onFocusLead(bestLead)
+                        }
+                    }
+                }
+                clusterActionButton(title: "Schedule", icon: "calendar.badge.plus", color: Color.statusConverted) {
+                    if let bestLead {
+                        openLead(bestLead)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                clusterActionButton(title: "Priority", icon: "star.fill", color: Color.statusInterested) {
+                    updateClusterLeads("Marked cluster priority") { lead in
+                        lead.priority = max(lead.priority, 1)
+                    }
+                }
+                clusterActionButton(title: "Follow-up", icon: "calendar.badge.clock", color: Color.statusNotHome) {
+                    let followUpDate = tomorrowMorning()
+                    updateClusterLeads("Follow-ups set for tomorrow") { lead in
+                        lead.setFollowUpDate(followUpDate, autoSave: false)
+                    }
+                }
+                clusterActionButton(title: "Interested", icon: "heart.fill", color: Color.statusInterested) {
+                    updateClusterLeads("Cluster marked interested") { lead in
+                        if lead.leadStatus.allowsActiveFollowUp {
+                            lead.applyLeadStatus(.interested, autoSave: false)
+                        }
+                    }
+                }
+            }
+
+            if let statusMessage {
+                Text(statusMessage)
+                    .font(.micro)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+    }
+
+    private func clusterActionButton(title: String, icon: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.obsidianFootnote)
+                Text(title)
+                    .font(.micro)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .foregroundColor(color)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(color.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: "circle.grid.2x2.fill", tint: summary.color, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(summary.headline)
+                    .font(.obsidianSubheadline)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(1)
+
+                Text(summary.detailLine)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            ObsidianCompactIconButton(
+                icon: "xmark",
+                accessibilityLabel: "Close cluster"
+            ) {
+                dismiss()
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 14)
+    }
+
+    private var summaryCard: some View {
+        HStack(spacing: 10) {
+            clusterMetric(value: "\(summary.count)", label: "Leads", color: summary.color)
+            clusterMetric(value: "\(summary.hotLeadCount)", label: "Hot", color: Color.statusInterested)
+            clusterMetric(value: "\(summary.dueFollowUpCount)", label: "Due", color: Color.statusNotHome)
+            clusterMetric(value: "\(summary.soldCount)", label: "Sold", color: Color.statusConverted)
+        }
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+    }
+
+    private var statusBreakdown: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(summary.statusCounts, id: \.status) { item in
+                    HStack(spacing: 6) {
+                        Image(systemName: item.status.icon)
+                            .font(.micro)
+                        Text("\(item.count)")
+                            .font(.micro)
+                        Text(item.status.displayName)
+                            .font(.micro)
+                    }
+                    .foregroundColor(item.status.swiftUIColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(item.status.swiftUIColor.opacity(0.12))
+                    .clipShape(Capsule())
+                }
+            }
+        }
+    }
+
+    private func bestLeadCard(_ lead: Lead) -> some View {
+        Button {
+            openLead(lead)
+        } label: {
+            HStack(spacing: 12) {
+                ObsidianIconTile(icon: "star.fill", tint: Color.statusNotHome, size: 38)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Best next lead")
+                        .font(.micro)
+                        .foregroundColor(Color.textMuted)
+                    Text(lead.displayName)
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+                    Text(lead.address ?? lead.leadStatus.displayName)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textMuted)
+            }
+            .padding(14)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.statusNotHome.opacity(0.35), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    private var leadsList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Leads in this area")
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
+
+                Spacer()
+
+                Button {
+                    openDirectionsToCluster()
+                } label: {
+                    Label("Route", systemImage: "location.north.line.fill")
+                        .font(.micro)
+                        .foregroundColor(Color.electricViolet)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color.electricViolet.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+
+            VStack(spacing: 0) {
+                ForEach(selection.sortedLeads, id: \.objectID) { lead in
+                    Button {
+                        openLead(lead)
+                    } label: {
+                        LeadClusterRow(lead: lead)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
+                    if lead.objectID != selection.sortedLeads.last?.objectID {
+                        Divider()
+                            .padding(.leading, 58)
+                    }
+                }
+            }
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+            )
+        }
+    }
+
+    private func clusterMetric(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.obsidianCallout)
+                .foregroundColor(color)
+                .lineLimit(1)
+
+            Text(label)
+                .font(.micro)
+                .foregroundColor(Color.textMuted)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func updateClusterLeads(_ message: String, update: (Lead) -> Void) {
+        selection.sortedLeads.forEach { lead in
+            update(lead)
+            lead.updatedDate = Date()
+        }
+
+        do {
+            try viewContext.save()
+            UserDataSyncManager.shared.syncWithServer()
+            statusMessage = "\(message) for \(selection.sortedLeads.count) leads."
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        } catch {
+            statusMessage = "Could not update cluster: \(error.localizedDescription)"
+        }
+    }
+
+    private func tomorrowMorning() -> Date {
+        let calendar = Calendar.current
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date().addingTimeInterval(24 * 60 * 60)
+        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
+    }
+
+    private func openLead(_ lead: Lead) {
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            onViewLead(lead)
+        }
+    }
+
+    private func openDirectionsToCluster() {
+        let placemark = MKPlacemark(coordinate: selection.coordinate)
+        let mapItem = MKMapItem(placemark: placemark)
+        mapItem.name = "Lead cluster"
+        mapItem.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+        ])
+    }
+}
+
+private struct LeadClusterRow: View {
+    let lead: Lead
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(lead.leadStatus.swiftUIColor.opacity(0.14))
+                    .frame(width: 38, height: 38)
+                Image(systemName: lead.leadStatus.icon)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(lead.leadStatus.swiftUIColor)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(lead.displayName)
+                    .font(.obsidianCallout)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(1)
+
+                Text(lead.address ?? lead.leadStatus.displayName)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    statusChip(title: lead.leadStatus.displayName, color: lead.leadStatus.swiftUIColor)
+                    if lead.priority > 0 {
+                        statusChip(title: "Priority", color: Color.statusNotHome)
+                    }
+                    if LeadClusterSummary.isFollowUpDue(lead, now: Date()) {
+                        statusChip(title: "Due", color: Color.statusNotHome)
+                    }
+                    if max(lead.price, lead.estimatedValue) > 0 {
+                        statusChip(
+                            title: max(lead.price, lead.estimatedValue).formatted(
+                                .currency(code: Locale.current.currency?.identifier ?? "USD")
+                                    .precision(.fractionLength(0))
+                            ),
+                            color: Color.statusConverted
+                        )
+                    }
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textMuted)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private func statusChip(title: String, color: Color) -> some View {
+        Text(title)
+            .font(.micro)
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+}
+
+private extension View {
+    func quickFormFieldStyle() -> some View {
+        self
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .foregroundColor(Color.textPrimary)
+    }
+
+    func mapOverlayCard(cornerRadius: CGFloat) -> some View {
+        background(Color.obsidianSurface.opacity(0.94))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.62), lineWidth: 0.7)
+            )
+    }
+
+    func mapOverlayCapsule() -> some View {
+        background(Color.obsidianSurface.opacity(0.94))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.obsidianBorder.opacity(0.62), lineWidth: 0.7)
+            )
+    }
+
+    func mapOverlayCircle() -> some View {
+        background(Color.obsidianSurface.opacity(0.94))
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(Color.obsidianBorder.opacity(0.62), lineWidth: 0.7)
+            )
+    }
+}
+
+// MARK: - Status Change Sheet
+
+struct StatusChangeSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+    let lead: Lead?
+    let onSelect: (Lead.Status) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    Text(leadSubtitle)
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 4)
+
+                    ObsidianSectionCard(
+                        title: "Lead Status",
+                        icon: "slider.horizontal.3",
+                        subtitle: "Choose the next outcome for this lead."
+                    ) {
+                        VStack(spacing: 10) {
+                            ForEach(Lead.Status.allCases, id: \.self) { status in
+                                statusOption(status)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .background(screenBackground.ignoresSafeArea())
+            .obsidianPushedNavigation(
+                "Change Status",
+                backButtonAccessibilityIdentifier: "statusChangeBackButton",
+                onBack: {
+                    dismiss()
+                    onCancel()
+                }
+            )
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    dismiss()
+                    onCancel()
+                } label: {
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("statusChangeCancelButton")
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(screenBackground.ignoresSafeArea(edges: .bottom))
+            }
+        }
+        .obsidianModalBackground()
+    }
+
+    private var leadSubtitle: String {
+        guard let lead else { return "Update the selected lead from the map." }
+        let address = lead.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if address.isEmpty {
+            return lead.displayName
+        }
+        return "\(lead.displayName) at \(address)"
+    }
+
+    private func statusOption(_ status: Lead.Status) -> some View {
+        let isSelected = lead?.leadStatus == status
+
+        return Button {
+            dismiss()
+            onSelect(status)
+        } label: {
+            HStack(spacing: 12) {
+                ObsidianIconTile(
+                    icon: status.iconName,
+                    tint: status.uiColor,
+                    size: 38,
+                    filled: isSelected
+                )
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(status.displayName)
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textPrimary)
+
+                    Text(isSelected ? "Current status" : "Tap to apply this status")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                }
+
+                Spacer(minLength: 8)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.obsidianCallout)
+                        .foregroundColor(status.uiColor)
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.micro)
+                        .foregroundColor(Color.textMuted)
+                }
+            }
+            .padding(12)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? status.uiColor.opacity(0.7) : Color.obsidianBorder.opacity(0.45), lineWidth: isSelected ? 1 : 0.5)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
 }
 
 // MARK: - Extensions

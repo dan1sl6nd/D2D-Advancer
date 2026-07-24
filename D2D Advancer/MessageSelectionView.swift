@@ -3,6 +3,7 @@ import MessageUI
 
 struct MessageSelectionView: View {
     let lead: Lead
+    var onContactCompleted: ((FollowUpContactMethod) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var templateManager = FollowUpMessageTemplates.shared
     @State private var selectedTemplate: MessageTemplate?
@@ -14,6 +15,7 @@ struct MessageSelectionView: View {
     @State private var showingCustomTemplateCreator = false
     @State private var showingTemplateOptions = false
     @State private var templateToEdit: MessageTemplate?
+    @State private var deleteErrorMessage: String?
     
     enum MessageType: String, CaseIterable {
         case sms = "SMS"
@@ -33,63 +35,47 @@ struct MessageSelectionView: View {
     }
     
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Lead Info Header Card
-                        leadInfoHeader
-                        
-                        // Message Type Selector Card
-                        messageTypeSelector
-                        
-                        // Category Selector Card
-                        categorySelector
-                        
-                        // Templates List Card
-                        templatesList
-                        
-                        // Custom Message Section Card
-                        customMessageSection
-                        
-                        // Send Button
-                        sendButton
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    leadInfoHeader
+                    messageTypeSelector
+                    categorySelector
+                    templatesList
+                    customMessageSection
+
+                    if let sendWarning {
+                        ObsidianStatusBanner(
+                            icon: "exclamationmark.triangle.fill",
+                            title: sendWarning.title,
+                            message: sendWarning.message,
+                            tint: Color.statusNotInterested
+                        )
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
-                }
-                .background(Color(UIColor.systemGroupedBackground))
-            }
-            .navigationTitle("Send Follow-up")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .safeAreaInset(edge: .bottom) {
-                // Card-based cancel button design
-                Button(action: {
-                    dismiss()
-                }) {
-                    HStack {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                        Text("Cancel")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(UIColor.secondarySystemBackground))
-                            .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                    )
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .accessibilityIdentifier("messageSelectionScreen")
+            .obsidianScreenBackground()
+            .obsidianPushedNavigation(
+                "Send Follow-up",
+                backButtonAccessibilityIdentifier: "messageSelectionBackButton"
+            )
+            .safeAreaInset(edge: .bottom) {
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: !canSendMessage,
+                    primaryAccessibilityIdentifier: "messageSelectionSendButton",
+                    secondaryAccessibilityIdentifier: "messageSelectionCancelButton",
+                    primaryAction: sendMessage,
+                    secondaryAction: { dismiss() },
+                    primaryLabel: {
+                        Label("Send \(messageType.rawValue)", systemImage: messageType.icon)
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
+                    }
                 )
             }
         }
@@ -98,7 +84,12 @@ struct MessageSelectionView: View {
                 MessageComposeView(
                     recipients: [lead.phone ?? ""],
                     messageBody: getMessageText()
-                )
+                ) { result in
+                    guard result == .sent else { return }
+                    showingMessageComposer = false
+                    onContactCompleted?(.sms)
+                    dismiss()
+                }
             } else {
                 Text("SMS not available on this device")
             }
@@ -109,7 +100,12 @@ struct MessageSelectionView: View {
                     recipients: [lead.email ?? ""],
                     subject: "Follow-up: \(lead.displayName)",
                     messageBody: getMessageText()
-                )
+                ) { result in
+                    guard result == .sent else { return }
+                    showingEmailComposer = false
+                    onContactCompleted?(.email)
+                    dismiss()
+                }
             } else {
                 Text("Email not configured on this device")
             }
@@ -120,42 +116,55 @@ struct MessageSelectionView: View {
         .onDisappear {
             templateToEdit = nil
         }
+        .alert(
+            "Template not deleted",
+            isPresented: Binding(
+                get: { deleteErrorMessage != nil },
+                set: { if !$0 { deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteErrorMessage ?? "Please try again.")
+        }
+        .obsidianModalBackground()
+    }
+
+    private var sendWarning: (title: String, message: String)? {
+        if messageType == .sms && (lead.phone?.isEmpty ?? true) {
+            return ("No phone number", "Add a phone number to this lead before sending SMS.")
+        }
+        if messageType == .email && (lead.email?.isEmpty ?? true) {
+            return ("No email address", "Add an email address to this lead before sending email.")
+        }
+        if customMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ("Message is empty", "Choose a template or write a message before sending.")
+        }
+        return nil
     }
     
     private var leadInfoHeader: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "person.circle.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Customer Information")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Customer", icon: "person.circle.fill") {
             VStack(spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Image(systemName: "person.fill")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.textSecondary)
                                 .frame(width: 16)
                             Text(lead.displayName)
-                                .font(.headline)
-                                .foregroundColor(.primary)
+                                .font(.obsidianTitle)
+                                .foregroundColor(Color.textPrimary)
                         }
                         
                         if let address = lead.address {
                             HStack {
                                 Image(systemName: "location.fill")
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color.textSecondary)
                                     .frame(width: 16)
                                 Text(address)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .font(.obsidianFootnote)
+                                    .foregroundColor(Color.textSecondary)
                                     .lineLimit(2)
                             }
                         }
@@ -164,22 +173,22 @@ struct MessageSelectionView: View {
                             if let phone = lead.phone {
                                 HStack {
                                     Image(systemName: "phone.fill")
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(Color.textSecondary)
                                         .frame(width: 16)
                                     Text(phone)
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
+                                        .font(.obsidianFootnote)
+                                        .foregroundColor(Color.textSecondary)
                                 }
                             }
                             
                             if let email = lead.email {
                                 HStack {
                                     Image(systemName: "envelope.fill")
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(Color.textSecondary)
                                         .frame(width: 16)
                                     Text(email)
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
+                                        .font(.obsidianFootnote)
+                                        .foregroundColor(Color.textSecondary)
                                         .lineLimit(1)
                                 }
                             }
@@ -188,30 +197,14 @@ struct MessageSelectionView: View {
                     
                     Spacer()
                     
-                    StatusBadge(status: LeadStatus.from(leadStatus: lead.leadStatus))
+                    StatusBadge(status: lead.leadStatus)
                 }
             }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
     private var messageTypeSelector: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "message.circle.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Message Type")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Message Type", icon: "message.circle.fill") {
             HStack(spacing: 12) {
                 ForEach(MessageType.allCases, id: \.self) { type in
                     Button(action: {
@@ -221,49 +214,31 @@ struct MessageSelectionView: View {
                     }) {
                         HStack {
                             Image(systemName: type.icon)
-                                .foregroundColor(messageType == type ? .white : .blue)
+                                .foregroundColor(messageType == type ? .white : Color.electricViolet)
                                 .font(.system(size: 16, weight: .medium))
                             
                             Text(type.rawValue)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(messageType == type ? .white : .primary)
+                                .font(.obsidianCallout)
+                                .foregroundColor(messageType == type ? .white : Color.textPrimary)
                         }
                         .padding(.vertical, 12)
                         .padding(.horizontal, 20)
                         .frame(maxWidth: .infinity)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(messageType == type ? Color.blue : Color(UIColor.tertiarySystemBackground))
-                        )
+                        .background(messageType == type ? Color.electricViolet : Color.obsidianElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(messageType == type ? Color.blue : Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(messageType == type ? Color.electricViolet : Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
             }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
     private var categorySelector: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "tag.circle.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Message Category")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Message Category", icon: "tag.circle.fill") {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(MessageTemplate.MessageCategory.allCases, id: \.self) { category in
@@ -279,54 +254,42 @@ struct MessageSelectionView: View {
                 .padding(.horizontal, 4)
             }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
     private var templatesList: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        LeadFormSectionCard(title: "Message Templates", icon: "doc.text.fill") {
             HStack {
-                Image(systemName: "doc.text.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Message Templates")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
                 if !availableTemplates.isEmpty {
                     Text("\(availableTemplates.count) templates")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.micro)
+                        .foregroundColor(Color.textSecondary)
                 }
-                
-                Button {
+
+                Spacer()
+
+                ObsidianCompactIconButton(
+                    icon: "plus",
+                    accessibilityLabel: "Add new template",
+                    accessibilityIdentifier: "messageSelectionAddTemplateButton",
+                    size: 36
+                ) {
                     showingCustomTemplateCreator = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.blue)
                 }
-                .accessibilityLabel("Add new template")
             }
             
             if availableTemplates.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "doc.text")
                         .font(.system(size: 48))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                     
                     Text("No templates available")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
+                        .font(.obsidianTitle)
+                        .foregroundColor(Color.textSecondary)
                     
                     Text("Switch to a different category or create a custom template.")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
@@ -349,10 +312,12 @@ struct MessageSelectionView: View {
                         } : nil,
                         onDelete: template.isCustom ? {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                templateManager.deleteCustomTemplate(template)
-                                if selectedTemplate?.id == template.id {
+                                let didDelete = templateManager.deleteCustomTemplate(template)
+                                if didDelete, selectedTemplate?.id == template.id {
                                     selectedTemplate = nil
                                     customMessage = ""
+                                } else if !didDelete {
+                                    deleteErrorMessage = templateManager.lastErrorMessage ?? "Could not delete this template. Please try again."
                                 }
                             }
                         } : nil
@@ -360,47 +325,25 @@ struct MessageSelectionView: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
     private var customMessageSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "pencil.circle.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Custom Message")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Custom Message", icon: "pencil.circle.fill") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Edit or write your own message")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
                 
                 TextEditor(text: $customMessage)
                     .frame(minHeight: 100)
-                    .padding(12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                    )
+                    .obsidianEditorSurface(cornerRadius: 14)
                     .overlay(
                         Group {
                             if customMessage.isEmpty {
                                 VStack {
                                     HStack {
                                         Text("Type your message here...")
-                                            .foregroundColor(.secondary)
+                                            .foregroundColor(Color.textSecondary)
                                             .padding(.horizontal, 16)
                                             .padding(.top, 20)
                                         Spacer()
@@ -411,58 +354,6 @@ struct MessageSelectionView: View {
                         }
                     )
             }
-        }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-    }
-    
-    private var sendButton: some View {
-        VStack(spacing: 16) {
-            if messageType == .sms && (lead.phone?.isEmpty ?? true) {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.red)
-                    Text("No phone number available for SMS")
-                        .font(.subheadline)
-                        .foregroundColor(.red)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.red.opacity(0.1))
-                .cornerRadius(8)
-            } else if messageType == .email && (lead.email?.isEmpty ?? true) {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.red)
-                    Text("No email address available")
-                        .font(.subheadline)
-                        .foregroundColor(.red)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.red.opacity(0.1))
-                .cornerRadius(8)
-            }
-            
-            Button(action: sendMessage) {
-                HStack(spacing: 12) {
-                    Image(systemName: messageType.icon)
-                        .font(.system(size: 18, weight: .semibold))
-                    Text("Send \(messageType.rawValue)")
-                        .font(.system(size: 18, weight: .semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(canSendMessage ? Color.blue : Color.gray)
-                        .shadow(color: canSendMessage ? .blue.opacity(0.3) : .clear, radius: 4, x: 0, y: 2)
-                )
-                .foregroundColor(.white)
-            }
-            .disabled(!canSendMessage)
         }
     }
     
@@ -494,16 +385,18 @@ struct CategoryButton: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: category.icon)
-                    .font(.caption)
+                    .font(.micro)
                 Text(category.rawValue)
-                    .font(.caption)
+                    .font(.obsidianSmall)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(isSelected ? Color.blue : Color(UIColor.tertiarySystemBackground))
-            .foregroundColor(isSelected ? .white : .primary)
-            .cornerRadius(16)
+            .frame(minHeight: 44)
+            .background(isSelected ? Color.electricViolet : Color.obsidianElevated)
+            .foregroundColor(isSelected ? .white : Color.textPrimary)
+            .clipShape(Capsule())
+            .contentShape(Capsule())
         }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
@@ -516,7 +409,6 @@ struct TemplateCardView: View {
     let onDelete: (() -> Void)?
     
     @State private var offset: CGFloat = 0
-    @State private var showingActions = false
     
     init(template: MessageTemplate, isSelected: Bool, personalizedMessage: String, action: @escaping () -> Void, onEdit: (() -> Void)? = nil, onDelete: (() -> Void)? = nil) {
         self.template = template
@@ -540,14 +432,14 @@ struct TemplateCardView: View {
                     }) {
                         VStack {
                             Image(systemName: "pencil")
-                                .font(.title2)
+                                .font(.obsidianAction)
                             Text("Edit")
-                                .font(.caption)
+                                .font(.micro)
                         }
                         .foregroundColor(.white)
                         .frame(width: 80)
                         .frame(maxHeight: .infinity)
-                        .background(Color.blue)
+                        .background(Color.electricViolet)
                     }
                     
                     Button(action: {
@@ -558,14 +450,14 @@ struct TemplateCardView: View {
                     }) {
                         VStack {
                             Image(systemName: "trash")
-                                .font(.title2)
+                                .font(.obsidianAction)
                             Text("Delete")
-                                .font(.caption)
+                                .font(.micro)
                         }
                         .foregroundColor(.white)
                         .frame(width: 80)
                         .frame(maxHeight: .infinity)
-                        .background(Color.red)
+                        .background(Color.statusNotInterested)
                     }
                 }
                 .cornerRadius(12, corners: [.topRight, .bottomRight])
@@ -576,50 +468,49 @@ struct TemplateCardView: View {
                 HStack {
                     HStack(spacing: 8) {
                         Image(systemName: template.category.icon)
-                            .foregroundColor(template.category == .urgent ? .red : .blue)
-                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(template.category == .urgent ? Color.statusNotInterested : Color.electricViolet)
+                            .font(.obsidianCallout)
                         
                         Text(template.title)
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
+                            .font(.obsidianTitle)
+                            .foregroundColor(Color.textPrimary)
                     }
                     
                     Spacer()
                     
                     if template.isCustom {
                         Text("CUSTOM")
-                            .font(.caption2)
+                            .font(.micro)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.purple)
+                            .background(Color.electricViolet)
                             .cornerRadius(6)
                     }
                     
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.blue)
-                            .font(.title3)
+                            .foregroundColor(Color.electricViolet)
+                            .font(.obsidianCallout)
                     }
                 }
                 
                 Text(personalizedMessage)
-                    .font(.body)
-                    .foregroundColor(.secondary)
+                    .font(.obsidianBody)
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.blue.opacity(0.1) : Color(UIColor.tertiarySystemBackground))
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? Color.electricViolet.opacity(0.14) : Color.obsidianElevated)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? Color.electricViolet : Color.obsidianBorder.opacity(0.45), lineWidth: isSelected ? 1.5 : 0.5)
             )
             .offset(x: offset, y: 0)
             .onTapGesture {
@@ -694,6 +585,7 @@ struct TemplateRowView: View {
 struct MessageComposeView: UIViewControllerRepresentable {
     let recipients: [String]
     let messageBody: String
+    var onFinished: (MessageComposeResult) -> Void = { _ in }
     
     func makeUIViewController(context: Context) -> MFMessageComposeViewController {
         let composer = MFMessageComposeViewController()
@@ -706,13 +598,20 @@ struct MessageComposeView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: MFMessageComposeViewController, context: Context) {}
     
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(onFinished: onFinished)
     }
     
     class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
+        let onFinished: (MessageComposeResult) -> Void
+
+        init(onFinished: @escaping (MessageComposeResult) -> Void) {
+            self.onFinished = onFinished
+        }
+
         func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
             DispatchQueue.main.async {
                 controller.dismiss(animated: true)
+                self.onFinished(result)
             }
         }
     }
@@ -722,6 +621,7 @@ struct EmailComposeView: UIViewControllerRepresentable {
     let recipients: [String]
     let subject: String
     let messageBody: String
+    var onFinished: (MFMailComposeResult) -> Void = { _ in }
     
     func makeUIViewController(context: Context) -> MFMailComposeViewController {
         let composer = MFMailComposeViewController()
@@ -735,13 +635,20 @@ struct EmailComposeView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: MFMailComposeViewController, context: Context) {}
     
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(onFinished: onFinished)
     }
     
     class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
+        let onFinished: (MFMailComposeResult) -> Void
+
+        init(onFinished: @escaping (MFMailComposeResult) -> Void) {
+            self.onFinished = onFinished
+        }
+
         func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
             DispatchQueue.main.async {
                 controller.dismiss(animated: true)
+                self.onFinished(result)
             }
         }
     }
@@ -749,7 +656,7 @@ struct EmailComposeView: UIViewControllerRepresentable {
 
 #Preview {
     let context = PersistenceController.preview.container.viewContext
-    let lead = Lead(context: context)
+    let lead = Lead.create(in: context)
     lead.name = "John Doe"
     lead.phone = "(555) 123-4567"
     lead.email = "john@example.com"

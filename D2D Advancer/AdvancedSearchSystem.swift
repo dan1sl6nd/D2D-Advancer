@@ -4,7 +4,7 @@ import CoreLocation
 
 struct SearchFilter: Equatable {
     var text: String = ""
-    var selectedStatuses: Set<LeadStatus> = []
+    var selectedStatuses: Set<Lead.Status> = []
     var dateRange: DateRange?
     var hasFollowUp: Bool? = nil
     var visitCountRange: ClosedRange<Int>?
@@ -74,11 +74,15 @@ class SearchFilterManager: ObservableObject {
     @Published var currentFilter = SearchFilter()
     @Published var savedPresets: [SearchPreset] = []
     @Published var showingAdvancedFilters = false
+    @Published var lastErrorMessage: String?
     
-    private let userDefaults = UserDefaults.standard
-    private let presetsKey = "saved_search_presets"
+    private let userDefaults: UserDefaults
+    private let presetsKey: String
+    private var hasCorruptStoredPresets = false
     
-    init() {
+    init(userDefaults: UserDefaults = .standard, presetsKey: String = "saved_search_presets") {
+        self.userDefaults = userDefaults
+        self.presetsKey = presetsKey
         loadSavedPresets()
     }
     
@@ -93,18 +97,18 @@ class SearchFilterManager: ObservableObject {
             predicates.append(searchPredicate)
         }
 
-        // Status filter (map UI LeadStatus -> Core Data Lead.Status)
+        // Status filter uses the same canonical values stored by Core Data.
         if !currentFilter.selectedStatuses.isEmpty {
-            let legacyStatuses = currentFilter.selectedStatuses.map { $0.leadStatus.rawValue }
-            predicates.append(NSPredicate(format: "status IN %@", legacyStatuses))
+            let statuses = currentFilter.selectedStatuses.map(\.rawValue)
+            predicates.append(NSPredicate(format: "status IN %@", statuses))
         }
 
         // Has follow-up filter
         if let hasFollowUp = currentFilter.hasFollowUp {
             if hasFollowUp {
-                predicates.append(NSPredicate(format: "followUpDate != nil"))
+                predicates.append(Lead.Status.activeFollowUpPredicate)
             } else {
-                predicates.append(NSPredicate(format: "followUpDate == nil"))
+                predicates.append(NSCompoundPredicate(notPredicateWithSubpredicate: Lead.Status.activeFollowUpPredicate))
             }
         }
 
@@ -168,37 +172,89 @@ class SearchFilterManager: ObservableObject {
         currentFilter = SearchFilter()
     }
     
-    func savePreset(name: String) {
+    @discardableResult
+    func savePreset(name: String) -> Bool {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            lastErrorMessage = "Preset name cannot be empty."
+            return false
+        }
+
+        let previousPresets = savedPresets
         let preset = SearchPreset(
             id: UUID(),
-            name: name,
+            name: trimmedName,
             filter: currentFilter,
             dateCreated: Date()
         )
         savedPresets.append(preset)
-        savePresetsToUserDefaults()
+        guard savePresetsToUserDefaults() else {
+            savedPresets = previousPresets
+            return false
+        }
+        return true
     }
     
     func loadPreset(_ preset: SearchPreset) {
         currentFilter = preset.filter
     }
     
-    func deletePreset(_ preset: SearchPreset) {
+    @discardableResult
+    func deletePreset(_ preset: SearchPreset) -> Bool {
+        guard savedPresets.contains(where: { $0.id == preset.id }) else {
+            lastErrorMessage = "Could not delete preset because it no longer exists."
+            return false
+        }
+
+        let previousPresets = savedPresets
         savedPresets.removeAll { $0.id == preset.id }
-        savePresetsToUserDefaults()
+        guard savePresetsToUserDefaults() else {
+            savedPresets = previousPresets
+            return false
+        }
+        return true
     }
     
     
-    private func savePresetsToUserDefaults() {
-        if let encoded = try? JSONEncoder().encode(savedPresets) {
+    @discardableResult
+    private func savePresetsToUserDefaults() -> Bool {
+        guard !hasCorruptStoredPresets else {
+            let message = "Could not save search presets because the saved presets could not be loaded. Your existing saved data was left untouched."
+            lastErrorMessage = message
+            print("❌ \(message)")
+            return false
+        }
+
+        do {
+            let encoded = try JSONEncoder().encode(savedPresets)
             userDefaults.set(encoded, forKey: presetsKey)
+            lastErrorMessage = nil
+            hasCorruptStoredPresets = false
+            return true
+        } catch {
+            let message = "Could not save search presets: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("❌ \(message)")
+            return false
         }
     }
     
     private func loadSavedPresets() {
-        if let data = userDefaults.data(forKey: presetsKey),
-           let decoded = try? JSONDecoder().decode([SearchPreset].self, from: data) {
+        guard let data = userDefaults.data(forKey: presetsKey) else {
+            hasCorruptStoredPresets = false
+            return
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode([SearchPreset].self, from: data)
             savedPresets = decoded
+            lastErrorMessage = nil
+            hasCorruptStoredPresets = false
+        } catch {
+            let message = "Could not load saved search presets: \(error.localizedDescription)"
+            lastErrorMessage = message
+            hasCorruptStoredPresets = true
+            print("❌ \(message)")
         }
     }
 }
@@ -220,7 +276,7 @@ extension SearchFilter: Codable {
         text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
         
         let statusStrings = try container.decodeIfPresent([String].self, forKey: .selectedStatuses) ?? []
-        selectedStatuses = Set(statusStrings.compactMap(LeadStatus.init))
+        selectedStatuses = Set(statusStrings.compactMap(Lead.Status.filterStatus(from:)))
         
         dateRange = try container.decodeIfPresent(DateRange.self, forKey: .dateRange)
         hasFollowUp = try container.decodeIfPresent(Bool.self, forKey: .hasFollowUp)
@@ -228,21 +284,10 @@ extension SearchFilter: Codable {
         hasCheckIns = try container.decodeIfPresent(Bool.self, forKey: .hasCheckIns)
         
         // Decode ranges
-        if let rangeData = try container.decodeIfPresent([Int].self, forKey: .visitCountRange), rangeData.count == 2 {
-            visitCountRange = rangeData[0]...rangeData[1]
-        }
-        
-        if let rangeData = try container.decodeIfPresent([Int].self, forKey: .priorityRange), rangeData.count == 2 {
-            priorityRange = rangeData[0]...rangeData[1]
-        }
-        
-        if let rangeData = try container.decodeIfPresent([Double].self, forKey: .priceRange), rangeData.count == 2 {
-            priceRange = rangeData[0]...rangeData[1]
-        }
-        
-        if let rangeData = try container.decodeIfPresent([Double].self, forKey: .estimatedValueRange), rangeData.count == 2 {
-            estimatedValueRange = rangeData[0]...rangeData[1]
-        }
+        visitCountRange = try Self.decodeClosedRange(from: container, forKey: .visitCountRange, as: Int.self)
+        priorityRange = try Self.decodeClosedRange(from: container, forKey: .priorityRange, as: Int.self)
+        priceRange = try Self.decodeClosedRange(from: container, forKey: .priceRange, as: Double.self)
+        estimatedValueRange = try Self.decodeClosedRange(from: container, forKey: .estimatedValueRange, as: Double.self)
         
         // Decode sets
         selectedSources = Set(try container.decodeIfPresent([String].self, forKey: .selectedSources) ?? [])
@@ -251,6 +296,23 @@ extension SearchFilter: Codable {
         let sortString = try container.decodeIfPresent(String.self, forKey: .sortOption) ?? "dateCreated"
         sortOption = SortOption(rawValue: sortString) ?? .dateCreated
         sortAscending = try container.decodeIfPresent(Bool.self, forKey: .sortAscending) ?? false
+    }
+
+    private static func decodeClosedRange<T: Decodable & Comparable>(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys,
+        as _: T.Type
+    ) throws -> ClosedRange<T>? {
+        guard let bounds = try container.decodeIfPresent([T].self, forKey: key) else { return nil }
+        guard bounds.count == 2 else { return nil }
+        guard bounds[0] <= bounds[1] else {
+            throw DecodingError.dataCorruptedError(
+                forKey: key,
+                in: container,
+                debugDescription: "Range lower bound must not exceed upper bound."
+            )
+        }
+        return bounds[0]...bounds[1]
     }
     
     func encode(to encoder: Encoder) throws {
@@ -289,4 +351,3 @@ extension SearchFilter: Codable {
 }
 
 extension DateRange: Codable {}
-

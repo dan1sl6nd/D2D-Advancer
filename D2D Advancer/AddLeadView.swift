@@ -1,20 +1,93 @@
 import SwiftUI
 import CoreData
 import CoreLocation
-import UserNotifications
 import Contacts
 import ContactsUI
 
+struct AddLeadLocationSeed {
+    let coordinate: CLLocationCoordinate2D
+    let address: String?
+
+    init(coordinate: CLLocationCoordinate2D, address: String? = nil) {
+        self.coordinate = coordinate
+        self.address = AddLeadAddressPolicy.cleanedAddress(address)
+    }
+}
+
+enum AddLeadAddressPolicy {
+    static func cleanedAddress(_ address: String?) -> String? {
+        let trimmed = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        guard !isCoordinateFallback(trimmed) else { return nil }
+        return trimmed
+    }
+
+    static func shouldApplySystemAddress(
+        _ address: String?,
+        currentAddress: String,
+        hasManuallyEditedAddress: Bool,
+        force: Bool = false
+    ) -> Bool {
+        guard cleanedAddress(address) != nil else { return false }
+        guard !hasManuallyEditedAddress else { return false }
+        guard !force else { return true }
+        return cleanedAddress(currentAddress) == nil
+    }
+
+    private static func isCoordinateFallback(_ address: String) -> Bool {
+        let lowercased = address.lowercased()
+        if lowercased.contains("dropped pin at") {
+            return true
+        }
+        if lowercased.hasPrefix("near "),
+           lowercased.contains("(lat:"),
+           lowercased.contains("lon:") {
+            return true
+        }
+        if lowercased.hasPrefix("lat:") || lowercased.hasPrefix("lon:") {
+            return true
+        }
+        return false
+    }
+}
+
+enum AddLeadDraftAddressPolicy {
+    static let coordinateTolerance = 0.00001
+
+    static func canRestoreAddress(
+        draftLatitude: String?,
+        draftLongitude: String?,
+        currentCoordinate: CLLocationCoordinate2D
+    ) -> Bool {
+        guard let draftLatitude,
+              let draftLongitude,
+              let latitude = Double(draftLatitude),
+              let longitude = Double(draftLongitude) else {
+            return false
+        }
+
+        return abs(latitude - currentCoordinate.latitude) <= coordinateTolerance &&
+            abs(longitude - currentCoordinate.longitude) <= coordinateTolerance
+    }
+}
+
 struct AddLeadView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var locationManager = LocationManager.shared
     @ObservedObject private var preferences = AppPreferences.shared
     @ObservedObject private var categoryManager = ServiceCategoryManager.shared
     @ObservedObject private var paywallManager = PaywallManager.shared
-    
-    let coordinate: CLLocationCoordinate2D
-    
+    @ObservedObject private var firebaseService = FirebaseService.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
+
+    private static let draftKey = "addLeadDraft"
+
+    let locationSeed: AddLeadLocationSeed
+    private var coordinate: CLLocationCoordinate2D { locationSeed.coordinate }
+    private var usableAddress: String? { AddLeadAddressPolicy.cleanedAddress(address) }
+
     @State private var name = ""
     @State private var phone = ""
     @State private var email = ""
@@ -23,6 +96,8 @@ struct AddLeadView: View {
     @State private var price: Double = 0.0
     @State private var priceText: String = ""
     @State private var status = AppPreferences.shared.defaultLeadStatusEnum
+    @State private var hasDraft = false
+    @State private var didSaveSuccessfully = false
     @State private var followUpDate: Date?
     @State private var showingDatePicker = false
     @State private var isGeocodingAddress = false
@@ -35,313 +110,89 @@ struct AddLeadView: View {
     @State private var showingServiceCategoryCreator = false
     @State private var categoryToEdit: ServiceCategory?
     @State private var isUpdatingAddress = false
+    @State private var selectedTechnicianUserId = ""
+    @State private var technicianArrivalDate = Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date()
+    @State private var technicianJobDurationHours = 2
+    @State private var hasManuallyEditedAddress = false
+    @State private var isApplyingSystemAddress = false
+
+    init(coordinate: CLLocationCoordinate2D, initialAddress: String? = nil) {
+        let locationSeed = AddLeadLocationSeed(coordinate: coordinate, address: initialAddress)
+        self.locationSeed = locationSeed
+        _address = State(initialValue: locationSeed.address ?? "")
+        _selectedServiceCategory = State(initialValue: AppPreferences.shared.defaultServiceCategory)
+    }
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Header Section
+                // Draft restored banner
+                if hasDraft {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.uturn.backward.circle.fill")
+                            .foregroundColor(.electricViolet)
+                        Text("Previous draft restored")
+                            .font(.obsidianCaption)
+                            .foregroundColor(Color.textSecondary)
+                        Spacer()
+                        Button("Clear") {
+                            name = ""; phone = ""; email = ""; notes = ""; priceText = ""; price = 0
+                            status = AppPreferences.shared.defaultLeadStatusEnum
+                            selectedServiceCategory = AppPreferences.shared.defaultServiceCategory
+                            clearDraft()
+                            // Re-geocode for the current location
+                            reverseGeocodeCoordinate()
+                        }
+                        .font(.obsidianCaption)
+                        .foregroundColor(.electricViolet)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.electricViolet.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+
                 headerSection
-                
-                // Contact Information Section
-                modernSectionCard(title: "Contact Information", icon: "person.crop.circle.fill") {
-                    VStack(spacing: 16) {
-                        modernTextField(title: "Name", text: $name, icon: "person.fill")
-                        
-                        modernTextField(title: "Phone", text: $phone, icon: "phone.fill")
-                            .keyboardType(.phonePad)
-                            .onChange(of: phone) { oldValue, newValue in
-                                DispatchQueue.main.async {
-                                    phone = Utilities.formatPhoneNumber(newValue)
-                                }
-                            }
-                        
-                        modernTextField(title: "Email", text: $email, icon: "envelope.fill")
-                            .keyboardType(.emailAddress)
-                            .autocapitalization(.none)
-                    }
-                }
-                
-                // Location & Deal Section
-                modernSectionCard(title: "Location & Deal", icon: "map.circle.fill") {
-                    VStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "location.fill")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 20)
 
-                                Text("Address")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
+                addLeadCustomerSection
+                addLeadWorkSection
+                addLeadNextStepSection
 
-                                Spacer()
-
-                                // Update Address Button
-                                Button(action: {
-                                    updateAddressFromCurrentLocation()
-                                }) {
-                                    HStack(spacing: 4) {
-                                        if isUpdatingAddress {
-                                            ProgressView()
-                                                .scaleEffect(0.7)
-                                        } else {
-                                            Image(systemName: "arrow.clockwise")
-                                                .font(.system(size: 12, weight: .semibold))
-                                        }
-                                        Text("Update")
-                                            .font(.caption)
-                                            .fontWeight(.medium)
-                                    }
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(Color.blue)
-                                    )
-                                }
-                                .disabled(isUpdatingAddress)
-                            }
-
-                            TextField("Address", text: $address)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(Color(UIColor.tertiarySystemBackground))
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
-                                )
-                                .onChange(of: address) { oldValue, newValue in
-                                    if !newValue.isEmpty && newValue != oldValue {
-                                        DispatchQueue.main.async {
-                                            geocodeAddressWithDelay()
-                                        }
-                                    }
-                                }
-
-                            // Geocoding status indicator
-                            if locationManager.isForwardGeocoding {
-                                HStack(spacing: 8) {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                    Text("Finding location...")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.leading, 8)
-                            } else if let error = locationManager.lastGeocodingError {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.orange)
-                                    Text(error)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.leading, 8)
-                            }
-
-                            // Update status indicator
-                            if isUpdatingAddress {
-                                HStack(spacing: 8) {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                    Text("Updating address from current location...")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.leading, 8)
-                            }
-                        }
-                        
-                        modernTextField(title: "Price", text: $priceText, icon: "dollarsign.circle.fill")
-                            .keyboardType(.decimalPad)
-                            .onChange(of: priceText) { oldValue, newValue in
-                                DispatchQueue.main.async {
-                                    price = Double(newValue) ?? 0.0
-                                }
-                            }
-                    }
-                }
-                
-                // Lead Details Section
-                modernSectionCard(title: "Lead Details", icon: "flag.circle.fill") {
-                    VStack(spacing: 16) {
-                        // Service Category Field
-                        serviceCategoryField
-                        
-                        // Status Field
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "flag.fill")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 20)
-                                
-                                Text("Status")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                            }
-                            
-                            Menu {
-                                Picker("Status", selection: $status) {
-                                    ForEach(Lead.Status.allCases, id: \.self) { status in
-                                        Text(status.displayName).tag(status)
-                                    }
-                                }
-                            } label: {
-                                HStack {
-                                    Text(status.displayName)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .foregroundColor(.secondary)
-                                        .font(.caption)
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(Color(UIColor.tertiarySystemBackground))
-                                .cornerRadius(8)
-                            }
-                        }
-                        
-                        // Follow Up Date Field
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "calendar.badge.clock")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 20)
-                                
-                                Text("Follow Up Date")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                            }
-                            
-                            Button(action: {
-                                showingDatePicker = true
-                            }) {
-                                HStack {
-                                    if let selectedDate = followUpDate {
-                                        Text(selectedDate.formatted(.dateTime.day().month().year().hour().minute()))
-                                            .foregroundColor(.primary)
-                                        
-                                        Spacer()
-                                        
-                                        Button(action: {
-                                            followUpDate = nil
-                                        }) {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .foregroundColor(.secondary)
-                                        }
-                                    } else {
-                                        Text("Set follow-up date")
-                                            .foregroundColor(.secondary)
-                                        
-                                        Spacer()
-                                        
-                                        Image(systemName: "calendar")
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(Color(UIColor.tertiarySystemBackground))
-                                .cornerRadius(8)
-                            }
-                        }
-                        
-                        // Notes Field
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "note.text")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 20)
-                                
-                                Text("Notes")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                            }
-                            
-                            TextEditor(text: $notes)
-                                .frame(minHeight: 100)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(Color(UIColor.tertiarySystemBackground))
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
-                                )
-                        }
-                    }
+                if shouldShowTechnicianDispatch {
+                    technicianJobSection
                 }
             }
             .padding()
+            .padding(.bottom, 28)
         }
-        .navigationTitle("Add Lead")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
+        .obsidianScreenBackground()
+        .obsidianPushedNavigation(
+            "Add Lead",
+            backButtonAccessibilityIdentifier: "addLeadBackButton",
+            onBack: { dismiss() }
+        )
         .safeAreaInset(edge: .bottom) {
-            // Card-based button design
-            HStack(spacing: 16) {
-                Button(action: {
-                    dismiss()
-                }) {
-                    HStack {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                        Text("Cancel")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(UIColor.secondarySystemBackground))
-                            .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+            ObsidianBottomActionBar(
+                isPrimaryDisabled: usableAddress == nil,
+                primaryAccessibilityIdentifier: "addLeadSaveButton",
+                secondaryAccessibilityIdentifier: "addLeadCancelButton",
+                primaryAction: saveLead,
+                secondaryAction: { dismiss() },
+                primaryLabel: {
+                    Label(
+                        selectedTechnicianForJob == nil ? "Add Lead" : "Add & Send Job",
+                        systemImage: paywallManager.isPremium ? "checkmark.circle.fill" : "lock.fill"
                     )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                },
+                secondaryLabel: {
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                        .lineLimit(1)
                 }
-                
-                Button(action: {
-                    saveLead()
-                }) {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title3)
-                        Text("Add Lead")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.gray : Color.blue,
-                                        address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.gray.opacity(0.8) : Color.blue.opacity(0.8)
-                                    ]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .shadow(color: address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .clear : .blue.opacity(0.3), radius: 4, x: 0, y: 2)
-                    )
-                }
-                .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(
-                Rectangle()
-                    .fill(Color(UIColor.systemBackground))
-                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
             )
         }
+        .obsidianModalBackground()
         .sheet(isPresented: $showingDatePicker) {
             SeasonalDatePickerView(selectedDate: $followUpDate)
         }
@@ -354,234 +205,362 @@ struct AddLeadView: View {
             }
         }
         .sheet(isPresented: $showingServiceCategoryCreator) {
-            ServiceCategoryCreatorView(editingCategory: categoryToEdit)
-        }
-        .sheet(isPresented: $showingPaywall) {
-            PaywallView()
-                .onDisappear {
-                    // After paywall is dismissed, handle the message confirmation or dismiss
-                    if !phone.isEmpty {
-                        showingMessageConfirmation = true
-                    } else {
-                        dismiss()
-                    }
-                }
+            ServiceCategoryCreatorView(editingCategory: categoryToEdit) { category in
+                selectedServiceCategory = category
+            }
         }
         .onAppear {
+            if let seedAddress = locationSeed.address {
+                applySystemAddress(seedAddress)
+            }
+
+            // Geocode first (async), then restore draft — draft fields overwrite
+            // except address, which only restores if the current pin has not
+            // already supplied an address.
             reverseGeocodeCoordinate()
+            restoreDraft()
+            loadTeamForTechnicianDispatchIfNeeded()
+        }
+        .onDisappear {
+            // Only save draft if the lead wasn't already saved successfully
+            if !didSaveSuccessfully {
+                saveDraft()
+            }
         }
     }
     
     // MARK: - View Components
     
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    // Status Badge and Save Button
-                    HStack {
-                        Circle()
-                            .fill(statusColor(for: status))
-                            .frame(width: 8, height: 8)
-                        Text(status.displayName)
-                            .font(.subheadline)
-                            .foregroundColor(statusColor(for: status))
-                            .fontWeight(.medium)
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "mappin.and.ellipse")
+                .font(.obsidianAction)
+                .foregroundColor(.white)
+                .frame(width: 46, height: 46)
+                .background(statusColor(for: status))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-                        Spacer()
-
-                        // Premium indicator
-                        if !paywallManager.isPremium {
-                            HStack(spacing: 6) {
-                                Image(systemName: "crown.fill")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundColor(paywallManager.remainingFreeLeads() <= 3 ? .orange : .gray)
-
-                                Text("\(paywallManager.remainingFreeLeads()) left")
-                                    .font(.caption)
-                                    .foregroundColor(paywallManager.remainingFreeLeads() <= 3 ? .orange : .secondary)
-                                    .fontWeight(.semibold)
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(paywallManager.remainingFreeLeads() <= 3 ? Color.orange.opacity(0.15) : Color.gray.opacity(0.1))
-                            )
-                        }
-                    }
-                    
-                    // Lead Name
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
                     Text(name.isEmpty ? "New Lead" : name)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    
-                    // Created Date
-                    Text("Created: \(Date().formatted(.dateTime.day().month().year()))")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .font(.themeTitle)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 6)
+
+                    if !paywallManager.isPremium {
+                        Label("Premium", systemImage: "crown.fill")
+                            .font(.nano)
+                            .foregroundColor(Color.electricViolet)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.electricViolet.opacity(0.12)))
+                    }
                 }
+
+                Text(address.isEmpty ? status.displayName : address)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
             }
         }
         .padding()
-        .background(Color(UIColor.systemBackground))
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.obsidianElevated)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.6), lineWidth: 0.5)
+        )
     }
-    
-    private func modernSectionCard<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text(title)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            
-            content()
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
-        }
-        .background(Color(UIColor.tertiarySystemBackground))
-        .cornerRadius(16)
-    }
-    
-    private func modernTextField(title: String, text: Binding<String>, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(.blue)
-                    .frame(width: 20)
-                
-                Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-            }
-            
-            TextField(title, text: text)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color(UIColor.tertiarySystemBackground))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+
+    private var addLeadCustomerSection: some View {
+        LeadFormSectionCard(title: "Customer", icon: "person.crop.circle.fill") {
+            VStack(spacing: 12) {
+                LeadFormTextField(
+                    title: "Name",
+                    placeholder: "Customer name",
+                    text: $name,
+                    icon: "person.fill",
+                    accessibilityIdentifier: "addLeadNameField"
                 )
+
+                LeadFormTextField(
+                    title: "Phone",
+                    placeholder: "Phone number",
+                    text: $phone,
+                    icon: "phone.fill",
+                    accessibilityIdentifier: "addLeadPhoneField"
+                )
+                    .keyboardType(.phonePad)
+                    .onChange(of: phone) { _, newValue in
+                        DispatchQueue.main.async {
+                            phone = Utilities.formatPhoneNumber(newValue)
+                        }
+                    }
+
+                LeadFormTextField(
+                    title: "Email",
+                    placeholder: "Email address",
+                    text: $email,
+                    icon: "envelope.fill",
+                    accessibilityIdentifier: "addLeadEmailField"
+                )
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
         }
     }
-    
-    private var serviceCategoryField: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "tag.fill")
-                    .foregroundColor(.blue)
-                    .frame(width: 20)
-                
-                Text("Service Type")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                Button {
-                    showingServiceCategoryCreator = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.blue)
-                }
-                .accessibilityLabel("Add new service category")
-            }
-            
-            if categoryManager.allCategories.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "tag")
-                        .font(.system(size: 24))
-                        .foregroundColor(.secondary)
-                    
-                    Text("No service categories available")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        
-                    Button("Add Service Category") {
-                        showingServiceCategoryCreator = true
-                    }
-                    .font(.caption)
-                    .foregroundColor(.blue)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .background(Color(UIColor.tertiarySystemBackground))
-                .cornerRadius(8)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        // None option
-                        ServiceCategoryChip(
-                            category: nil,
-                            isSelected: selectedServiceCategory == nil
-                        ) {
-                            selectedServiceCategory = nil
-                        }
-                        
-                        // Available categories
-                        ForEach(categoryManager.allCategories, id: \.id) { category in
-                            ServiceCategoryChip(
-                                category: category,
-                                isSelected: selectedServiceCategory?.id == category.id
-                            ) {
-                                selectedServiceCategory = category
+
+    private var addLeadWorkSection: some View {
+        LeadFormSectionCard(title: "Work", icon: "map.circle.fill") {
+            VStack(spacing: 14) {
+                LeadAddressEditor(
+                    address: $address,
+                    isUpdatingAddress: isUpdatingAddress,
+                    isGeocodingAddress: locationManager.isForwardGeocoding,
+                    geocodingError: locationManager.lastGeocodingError,
+                    accessibilityIdentifier: "addLeadAddressField",
+                    updateAddressAction: updateAddressFromCurrentLocation,
+                    onAddressChange: { oldValue, newValue in
+                        guard !isApplyingSystemAddress else { return }
+                        if !newValue.isEmpty && newValue != oldValue {
+                            hasManuallyEditedAddress = true
+                            DispatchQueue.main.async {
+                                geocodeAddressWithDelay()
                             }
                         }
                     }
-                    .padding(.horizontal, 4)
+                )
+
+                LeadServiceCategoryPicker(
+                    categories: categoryManager.allCategories,
+                    selectedCategory: $selectedServiceCategory,
+                    onAddCategory: {
+                        categoryToEdit = nil
+                        showingServiceCategoryCreator = true
+                    }
+                )
+
+                LeadFormTextField(
+                    title: "Price",
+                    placeholder: "0.00",
+                    text: $priceText,
+                    icon: "dollarsign.circle.fill",
+                    accessibilityIdentifier: "addLeadPriceField"
+                )
+                    .keyboardType(.decimalPad)
+                    .onChange(of: priceText) { _, newValue in
+                        DispatchQueue.main.async {
+                            price = Double(newValue) ?? 0.0
+                        }
+                    }
+
+                LeadStatusChipRow(selection: $status)
+                    .accessibilityIdentifier("addLeadStatusMenu")
+            }
+        }
+    }
+
+    private var addLeadNextStepSection: some View {
+        LeadFormSectionCard(title: "Next Step", icon: "calendar.badge.clock") {
+            VStack(spacing: 14) {
+                LeadFollowUpControls(selectedDate: $followUpDate) {
+                    showingDatePicker = true
                 }
+
+                LeadNotesEditor(title: "Notes", text: $notes, minHeight: 108)
+                    .accessibilityIdentifier("addLeadNotesField")
             }
         }
     }
     
+    private var shouldShowTechnicianDispatch: Bool {
+        guard let team = teamService.activeTeam,
+              team.effectivePlanStatus().allowsTeamWrite,
+              teamService.currentMember?.role == .owner else {
+            return false
+        }
+        return true
+    }
+
+    private var activeTechnicians: [TeamMember] {
+        TeamMemberRoster.normalized(teamService.teamMembers)
+            .filter { $0.isTechnician && $0.status == .active && !$0.isPendingInvite }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private var selectedTechnicianForJob: TeamMember? {
+        activeTechnicians.first { $0.userId == selectedTechnicianUserId }
+    }
+
+    private var technicianJobEndDate: Date {
+        technicianArrivalDate.addingTimeInterval(TimeInterval(technicianJobDurationHours) * 60 * 60)
+    }
+
+    private var technicianJobSection: some View {
+        LeadFormSectionCard(title: "Technician Job", icon: "wrench.and.screwdriver.fill") {
+            VStack(alignment: .leading, spacing: 16) {
+                if activeTechnicians.isEmpty {
+                    Text("No active technicians available.")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 6)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        fieldLabel(title: "Assign Technician", icon: "person.crop.circle.badge.checkmark")
+
+                        Menu {
+                            Button {
+                                selectedTechnicianUserId = ""
+                            } label: {
+                                Label("Do not send job", systemImage: "minus.circle")
+                            }
+
+                            ForEach(activeTechnicians) { technician in
+                                Button {
+                                    selectedTechnicianUserId = technician.userId
+                                } label: {
+                                    Label(technician.displayName, systemImage: technician.userId == selectedTechnicianUserId ? "checkmark.circle.fill" : "person.fill")
+                                }
+                            }
+                        } label: {
+                            technicianInputSurface {
+                                HStack {
+                                    Text(selectedTechnicianForJob?.displayName ?? "Select technician")
+                                        .foregroundColor(selectedTechnicianForJob == nil ? Color.textSecondary : Color.textPrimary)
+                                        .lineLimit(2)
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
+                                        .foregroundColor(Color.textSecondary)
+                                        .font(.caption)
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("addLeadTechnicianMenu")
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        fieldLabel(title: "Approx. Arrival", icon: "calendar.badge.clock")
+
+                        technicianInputSurface(verticalPadding: 10) {
+                            DatePicker("Approx. Arrival", selection: $technicianArrivalDate, displayedComponents: [.date, .hourAndMinute])
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(Color.electricViolet)
+                        }
+                        .accessibilityIdentifier("addLeadTechnicianArrivalDatePicker")
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        fieldLabel(title: "Job Window", icon: "timer")
+
+                        technicianInputSurface {
+                            Stepper(value: $technicianJobDurationHours, in: 1...12) {
+                                HStack {
+                                    Text("\(technicianJobDurationHours) hr window")
+                                        .font(.obsidianFootnote)
+                                        .foregroundColor(Color.textPrimary)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Text(technicianJobEndDate.formatted(date: .omitted, time: .shortened))
+                                        .font(.micro)
+                                        .foregroundColor(Color.textSecondary)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("addLeadTechnicianDurationStepper")
+                    }
+                }
+            }
+        }
+    }
+
+    private func fieldLabel(title: String, icon: String) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(Color.electricViolet)
+                .frame(width: 20)
+
+            Text(title)
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(Color.textPrimary)
+        }
+    }
+
+    private func technicianInputSurface<Content: View>(
+        verticalPadding: CGFloat = 12,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, verticalPadding)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
     private func statusColor(for status: Lead.Status) -> Color {
         switch status {
         case .notContacted:
-            return .gray
+            return Color.statusNotContacted
         case .notHome:
-            return .brown
+            return Color.statusNotHome
         case .interested:
-            return .green
+            return Color.statusInterested
         case .converted:
-            return .blue
+            return Color.statusConverted
         case .notInterested:
-            return .red
+            return Color.statusNotInterested
         }
     }
     
     private func saveLead() {
-        // Check if user can add more leads
-        if !paywallManager.canAddLead() {
-            // Show paywall immediately if at limit
-            showingPaywall = true
-            return
-        }
+        // Check if user has premium access
+        guard paywallManager.gateAction() else { return }
+        guard let effectiveAddress = usableAddress else { return }
 
-        let newLead = Lead(context: viewContext)
-        newLead.id = UUID()
-        newLead.createdDate = Date()
-        newLead.updatedDate = Date()
+        let technicianForJob = selectedTechnicianForJob
+        let effectiveStatus: Lead.Status = technicianForJob == nil ? status : .converted
+        let jobStartDate = technicianArrivalDate
+        let jobEndDate = technicianJobEndDate
+
+        let newLead = Lead.create(in: viewContext)
         newLead.name = name.isEmpty ? nil : name
         newLead.phone = phone.isEmpty ? nil : phone
         newLead.email = email.isEmpty ? nil : email
-        newLead.address = address.isEmpty ? nil : address
+        newLead.address = effectiveAddress
         newLead.notes = notes.isEmpty ? nil : notes
         newLead.price = price
-        newLead.leadStatus = status
         newLead.setServiceCategory(selectedServiceCategory)
-        newLead.setFollowUpDate(followUpDate, autoSave: false)
+
+        // Auto-set follow-up for Not Home leads to tomorrow at 9 AM if no date was manually set
+        var effectiveFollowUpDate = followUpDate
+        if effectiveStatus == .notHome && followUpDate == nil {
+            let calendar = Calendar.current
+            if let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()),
+               let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) {
+                effectiveFollowUpDate = morning
+            }
+        }
+
+        newLead.applyLeadStatus(
+            effectiveStatus,
+            followUpDate: effectiveFollowUpDate,
+            shouldReplaceFollowUpDate: true,
+            autoSave: false
+        )
         let finalCoordinate = actualCoordinate ?? coordinate
         newLead.latitude = finalCoordinate.latitude
         newLead.longitude = finalCoordinate.longitude
@@ -589,15 +568,26 @@ struct AddLeadView: View {
         do {
             try viewContext.save()
 
-            // Increment lead count for paywall tracking
-            paywallManager.incrementLeadCount()
+            syncLeadToTeamIfNeeded(
+                name: newLead.displayName,
+                address: effectiveAddress,
+                phone: newLead.phone,
+                email: newLead.email,
+                coordinate: finalCoordinate,
+                status: effectiveStatus,
+                notes: newLead.notes ?? "",
+                serviceCategory: newLead.serviceCategory,
+                price: newLead.price,
+                assignedTechnician: technicianForJob,
+                technicianStartDate: jobStartDate,
+                technicianEndDate: jobEndDate
+            )
 
-            // Individual lead sync removed - data will sync manually, hourly, or before sign-out
-            print("📝 New lead saved locally - will sync on next manual/hourly/sign-out sync")
+            // Sync to the selected cloud provider after save
+            UserDataSyncManager.shared.syncWithServer()
 
-            // Schedule notification if follow-up date is set
-            if let followUpDate = followUpDate {
-                scheduleNotification(for: newLead, on: followUpDate)
+            if effectiveFollowUpDate != nil {
+                NotificationService.shared.requestPermissionAfterSchedulingIfNeeded()
             }
 
             // Sync to iOS Contacts if lead has name or phone
@@ -605,33 +595,211 @@ struct AddLeadView: View {
                 syncToContacts(lead: newLead)
             }
 
-            // Check if we should show paywall
-            if paywallManager.shouldShowPaywall {
-                showingPaywall = true
+            // Mark as saved so onDisappear doesn't re-create the draft
+            didSaveSuccessfully = true
+            clearDraft()
+
+            // Check if lead has phone number and show message confirmation
+            if !phone.isEmpty {
+                createdLead = newLead
+                showingMessageConfirmation = true
             } else {
-                // Check if lead has phone number and show message confirmation
-                if !phone.isEmpty {
-                    createdLead = newLead
-                    showingMessageConfirmation = true
-                } else {
-                    dismiss()
-                }
+                dismiss()
             }
 
         } catch {
             ErrorHandler.shared.handle(error, context: "Add Lead")
         }
     }
-    
-    private func reverseGeocodeCoordinate() {
-        if address.isEmpty {
-            locationManager.reverseGeocode(coordinate: coordinate) { addressString in
-                if let addressString = addressString {
-                    DispatchQueue.main.async {
-                        self.address = addressString
-                    }
+
+    private func syncLeadToTeamIfNeeded(
+        name: String,
+        address: String,
+        phone: String?,
+        email: String?,
+        coordinate: CLLocationCoordinate2D,
+        status: Lead.Status,
+        notes: String,
+        serviceCategory: String?,
+        price: Double,
+        assignedTechnician: TeamMember?,
+        technicianStartDate: Date,
+        technicianEndDate: Date
+    ) {
+        let teamService = TeamFirebaseService.shared
+        let teamStatus = teamLeadStatus(for: status)
+
+        Task {
+            do {
+                if teamService.activeTeam == nil || teamService.currentMember == nil {
+                    await teamService.loadCurrentTeam()
                 }
+                if let assignedTechnician,
+                   teamService.activeTeam != nil,
+                   teamService.currentMember?.role == .owner {
+                    try await teamService.createOwnerTechnicianJobLead(
+                        name: name,
+                        address: address,
+                        phone: phone,
+                        email: email,
+                        coordinate: TeamCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                        notes: notes,
+                        serviceCategory: serviceCategory,
+                        price: price,
+                        technician: assignedTechnician,
+                        startDate: technicianStartDate,
+                        endDate: technicianEndDate
+                    )
+                    return
+                }
+
+                guard teamService.activeTeam != nil,
+                      teamService.currentMember?.role == .member else {
+                    return
+                }
+
+                try await teamService.createRepLead(
+                    name: name,
+                    address: address,
+                    phone: phone,
+                    email: email,
+                    coordinate: TeamCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                    status: teamStatus,
+                    notes: notes,
+                    serviceCategory: serviceCategory,
+                    price: price,
+                    estimatedValue: price
+                )
+            } catch {
+                print("⚠️ Team lead sync failed: \(error.localizedDescription)")
             }
+        }
+    }
+
+    private func loadTeamForTechnicianDispatchIfNeeded() {
+        guard firebaseService.isAuthenticated else { return }
+        guard teamService.activeTeam == nil || teamService.currentMember == nil else { return }
+
+        Task {
+            await teamService.loadCurrentTeam()
+        }
+    }
+
+    private func teamLeadStatus(for status: Lead.Status) -> TeamLeadStatus {
+        switch status {
+        case .notContacted:
+            return .notContacted
+        case .notHome:
+            return .notHome
+        case .interested:
+            return .interested
+        case .converted:
+            return .converted
+        case .notInterested:
+            return .notInterested
+        }
+    }
+    
+    // MARK: - Draft Save/Restore
+
+    private func saveDraft() {
+        // Only save if user entered something meaningful
+        let hasContent = !name.isEmpty || !phone.isEmpty || !email.isEmpty || !notes.isEmpty || price > 0
+        guard hasContent else { return }
+
+        let draft: [String: String] = [
+            "name": name,
+            "phone": phone,
+            "email": email,
+            "address": usableAddress ?? "",
+            "latitude": String(format: "%.8f", coordinate.latitude),
+            "longitude": String(format: "%.8f", coordinate.longitude),
+            "notes": notes,
+            "price": priceText,
+            "status": status.rawValue,
+            "serviceCategory": selectedServiceCategory?.id ?? ""
+        ]
+        UserDefaults.standard.set(draft, forKey: Self.draftKey)
+        print("📝 Lead draft saved")
+    }
+
+    private func restoreDraft() {
+        guard let draft = UserDefaults.standard.dictionary(forKey: Self.draftKey) as? [String: String] else { return }
+
+        let draftName = draft["name"] ?? ""
+        let draftPhone = draft["phone"] ?? ""
+        let draftEmail = draft["email"] ?? ""
+        let draftNotes = draft["notes"] ?? ""
+        let draftPrice = draft["price"] ?? ""
+
+        let hasContent = !draftName.isEmpty || !draftPhone.isEmpty || !draftEmail.isEmpty || !draftNotes.isEmpty
+        guard hasContent else { return }
+
+        name = draftName
+        phone = draftPhone
+        email = draftEmail
+        notes = draftNotes
+        priceText = draftPrice
+        price = Double(draftPrice) ?? 0.0
+
+        if address.isEmpty,
+           let draftAddress = draft["address"],
+           let restoredAddress = AddLeadAddressPolicy.cleanedAddress(draftAddress),
+           AddLeadDraftAddressPolicy.canRestoreAddress(
+                draftLatitude: draft["latitude"],
+                draftLongitude: draft["longitude"],
+                currentCoordinate: coordinate
+           ) {
+            address = restoredAddress
+        }
+        if let statusRaw = draft["status"], let savedStatus = Lead.Status(rawValue: statusRaw) {
+            status = savedStatus
+        }
+        if let serviceCategoryID = draft["serviceCategory"] {
+            selectedServiceCategory = DefaultServicePreferencePolicy.resolvedCategory(
+                storedID: serviceCategoryID,
+                availableCategories: categoryManager.allCategories
+            )
+        }
+        hasDraft = true
+        print("📝 Lead draft restored")
+    }
+
+    private func clearDraft() {
+        UserDefaults.standard.removeObject(forKey: Self.draftKey)
+        hasDraft = false
+    }
+
+    private func reverseGeocodeCoordinate(force: Bool = false) {
+        guard force || address.isEmpty else { return }
+
+        locationManager.reverseGeocode(coordinate: coordinate) { addressString in
+            guard let addressString = addressString?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !addressString.isEmpty else {
+                return
+            }
+
+            DispatchQueue.main.async {
+                guard AddLeadAddressPolicy.shouldApplySystemAddress(
+                    addressString,
+                    currentAddress: address,
+                    hasManuallyEditedAddress: hasManuallyEditedAddress,
+                    force: force
+                ) else {
+                    return
+                }
+                applySystemAddress(addressString)
+            }
+        }
+    }
+
+    private func applySystemAddress(_ value: String) {
+        guard let cleanedAddress = AddLeadAddressPolicy.cleanedAddress(value) else { return }
+
+        isApplyingSystemAddress = true
+        address = cleanedAddress
+        DispatchQueue.main.async {
+            isApplyingSystemAddress = false
         }
     }
     
@@ -671,10 +839,10 @@ struct AddLeadView: View {
             DispatchQueue.main.async {
                 self.isUpdatingAddress = false
 
-                if let addressString = addressString, !addressString.isEmpty {
-                    self.address = addressString
+                if let cleanedAddress = AddLeadAddressPolicy.cleanedAddress(addressString) {
+                    self.address = cleanedAddress
                     self.actualCoordinate = userLocation.coordinate
-                    print("✅ Address updated from current location: \(addressString)")
+                    print("✅ Address updated from current location: \(Utilities.redactedText(cleanedAddress))")
 
                     // Success haptic feedback
                     let successFeedback = UINotificationFeedbackGenerator()
@@ -690,165 +858,15 @@ struct AddLeadView: View {
         }
     }
     
-    private func scheduleNotification(for lead: Lead, on date: Date) {
-        let content = UNMutableNotificationContent()
-        content.title = "Follow up with \(lead.displayName)"
-        
-        // Create comprehensive notification body with key information
-        var bodyParts: [String] = []
-        
-        // Add address if available
-        if let address = lead.address, !address.isEmpty {
-            bodyParts.append("📍 \(address)")
-        }
-        
-        // Add phone if available
-        if let phone = lead.phone, !phone.isEmpty {
-            bodyParts.append("📞 \(phone)")
-        }
-        
-        // Add status
-        bodyParts.append("🏷️ Status: \(lead.leadStatus.displayName)")
-        
-        // Add price if greater than 0
-        if lead.price > 0 {
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .currency
-            if let priceString = formatter.string(from: NSNumber(value: lead.price)) {
-                bodyParts.append("💰 \(priceString)")
-            }
-        }
-        
-        // Add notes if available
-        if let notes = lead.notes, !notes.isEmpty {
-            bodyParts.append("📝 \(notes)")
-        } else {
-            bodyParts.append("📝 Time for a follow-up visit!")
-        }
-        
-        content.body = bodyParts.joined(separator: "\n")
-        content.sound = .default
-        
-        // Add user info for potential actions
-        content.userInfo = [
-            "leadId": lead.id?.uuidString ?? "",
-            "leadName": lead.displayName,
-            "leadPhone": lead.phone ?? "",
-            "leadAddress": lead.address ?? ""
-        ]
-        
-        // Add notification categories for quick actions (iOS 10+)
-        content.categoryIdentifier = "LEAD_FOLLOWUP"
-
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-
-        let request = UNNotificationRequest(identifier: lead.id!.uuidString, content: content, trigger: trigger)
-
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                ErrorHandler.shared.handle(error, context: "Schedule Notification")
-            } else {
-                print("Notification scheduled for \(date) for lead: \(lead.displayName)")
-            }
-        }
-    }
-    
     private func syncToContacts(lead: Lead) {
-        // Request contact permission first
-        let store = CNContactStore()
-        
-        store.requestAccess(for: .contacts) { granted, error in
-            if let error = error {
-                print("❌ Contact permission error: \(error)")
-                return
-            }
-            
-            guard granted else {
+        LeadContactService.createContact(for: lead) { result in
+            switch result {
+            case .saved:
+                print("✅ Contact saved successfully for lead: \(lead.displayName)")
+            case .permissionDenied:
                 print("❌ Contact permission denied")
-                return
-            }
-            
-            // Create new contact
-            let contact = CNMutableContact()
-            
-            // Set name with service category as last name
-            if let name = lead.name, !name.isEmpty {
-                let nameComponents = name.components(separatedBy: " ")
-                contact.givenName = nameComponents.first ?? ""
-                
-                // Use service category as last name if available, otherwise use original name parts
-                if let serviceCategory = lead.serviceCategoryObject {
-                    contact.familyName = serviceCategory.name
-                } else if nameComponents.count > 1 {
-                    contact.familyName = nameComponents.dropFirst().joined(separator: " ")
-                }
-            } else if let serviceCategory = lead.serviceCategoryObject {
-                // If no name but has service category, use "Lead" as first name
-                contact.givenName = "Lead"
-                contact.familyName = serviceCategory.name
-            }
-            
-            // Set phone number
-            if let phone = lead.phone, !phone.isEmpty {
-                let phoneNumber = CNPhoneNumber(stringValue: phone)
-                let phoneNumberValue = CNLabeledValue(label: CNLabelWork, value: phoneNumber)
-                contact.phoneNumbers = [phoneNumberValue]
-            }
-            
-            // Set email
-            if let email = lead.email, !email.isEmpty {
-                let emailValue = CNLabeledValue(label: CNLabelWork, value: email as NSString)
-                contact.emailAddresses = [emailValue]
-            }
-            
-            // Set address
-            if let address = lead.address, !address.isEmpty {
-                let postalAddress = CNMutablePostalAddress()
-                postalAddress.street = address
-                let addressValue = CNLabeledValue(label: CNLabelWork, value: postalAddress as CNPostalAddress)
-                contact.postalAddresses = [addressValue]
-            }
-            
-            // Add notes
-            var notesArray: [String] = []
-            notesArray.append("D2D Lead - \(Date().formatted(.dateTime.day().month().year()))")
-            
-            if let notes = lead.notes, !notes.isEmpty {
-                notesArray.append("Notes: \(notes)")
-            }
-            
-            if lead.price > 0 {
-                let formatter = NumberFormatter()
-                formatter.numberStyle = .currency
-                if let priceString = formatter.string(from: NSNumber(value: lead.price)) {
-                    notesArray.append("Quote: \(priceString)")
-                }
-            }
-            
-            notesArray.append("Status: \(lead.leadStatus.displayName)")
-            
-            if let serviceCategory = lead.serviceCategoryObject {
-                notesArray.append("Service: \(serviceCategory.name)")
-            }
-            
-            contact.note = notesArray.joined(separator: "\n")
-            
-            // Set organization name
-            contact.organizationName = "D2D Lead"
-            
-            // Save to contacts
-            let saveRequest = CNSaveRequest()
-            saveRequest.add(contact, toContainerWithIdentifier: nil)
-            
-            do {
-                try store.execute(saveRequest)
-                DispatchQueue.main.async {
-                    print("✅ Contact saved successfully for lead: \(lead.displayName)")
-                }
-            } catch {
-                print("❌ Failed to save contact: \(error)")
+            case .failed(let reason):
+                print("❌ Failed to save contact: \(reason)")
             }
         }
     }
@@ -861,8 +879,414 @@ extension View {
         @ViewBuilder placeholder: () -> Content) -> some View {
 
         ZStack(alignment: alignment) {
-            placeholder().opacity(shouldShow ? 1 : 0)
             self
+            placeholder()
+                .opacity(shouldShow ? 1 : 0)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
+struct LeadFormSectionCard<Content: View>: View {
+    let title: String
+    let icon: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label(title, systemImage: icon)
+                .font(.themeTitle)
+                .foregroundColor(Color.textPrimary)
+                .labelStyle(.titleAndIcon)
+
+            content
+        }
+        .padding(16)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 3)
+    }
+}
+
+struct LeadFormTextField: View {
+    let title: String
+    let placeholder: String
+    @Binding var text: String
+    let icon: String
+    var accessibilityIdentifier: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label(title, systemImage: icon)
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textSecondary)
+
+            TextField(placeholder, text: $text)
+                .font(.obsidianCallout)
+                .foregroundColor(Color.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color.obsidianElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                )
+                .accessibilityIdentifier(accessibilityIdentifier ?? "leadForm\(title.replacingOccurrences(of: " ", with: ""))Field")
+        }
+    }
+}
+
+struct LeadAddressEditor: View {
+    @Binding var address: String
+    let isUpdatingAddress: Bool
+    var isGeocodingAddress: Bool = false
+    var geocodingError: String? = nil
+    var accessibilityIdentifier: String? = nil
+    let updateAddressAction: () -> Void
+    var onAddressChange: (_ oldValue: String, _ newValue: String) -> Void = { _, _ in }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Label("Address", systemImage: "location.fill")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+
+                Spacer()
+
+                Button(action: updateAddressAction) {
+                    HStack(spacing: 5) {
+                        if isUpdatingAddress {
+                            ProgressView()
+                                .scaleEffect(0.72)
+                        } else {
+                            Image(systemName: "location.viewfinder")
+                                .font(.micro)
+                        }
+                        Text("Use Current")
+                            .font(.micro)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(Color.electricViolet)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.electricViolet.opacity(0.12)))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(isUpdatingAddress)
+            }
+
+            TextField("Street address", text: $address)
+                .font(.obsidianCallout)
+                .foregroundColor(Color.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color.obsidianElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                )
+                .onChange(of: address) { oldValue, newValue in
+                    onAddressChange(oldValue, newValue)
+                }
+                .accessibilityIdentifier(accessibilityIdentifier ?? "leadAddressField")
+
+            if isGeocodingAddress || isUpdatingAddress {
+                Label(isUpdatingAddress ? "Updating address..." : "Finding location...", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.micro)
+                    .foregroundColor(Color.textSecondary)
+            } else if let geocodingError, !geocodingError.isEmpty {
+                Label(geocodingError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.micro)
+                    .foregroundColor(Color.statusNotHome)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+struct LeadServiceCategoryPicker: View {
+    let categories: [ServiceCategory]
+    @Binding var selectedCategory: ServiceCategory?
+    let onAddCategory: () -> Void
+
+    private var displayedCategories: [ServiceCategory] {
+        guard let selectedCategory,
+              categories.contains(where: { $0.id == selectedCategory.id }) else {
+            return categories
+        }
+
+        return [selectedCategory] + categories.filter { $0.id != selectedCategory.id }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Service", systemImage: "tag.fill")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+
+                Spacer()
+
+                ObsidianCompactIconButton(
+                    icon: "plus",
+                    accessibilityLabel: "Add service category",
+                    accentColor: Color.electricViolet,
+                    accessibilityIdentifier: "addLeadServiceCategoryAddButton",
+                    size: 44,
+                    action: onAddCategory
+                )
+            }
+
+            if categories.isEmpty {
+                Button(action: onAddCategory) {
+                    Label("Add service", systemImage: "plus")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.electricViolet)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.obsidianElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("addLeadServiceCategoryEmptyAddButton")
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ServiceCategoryChip(category: nil, isSelected: selectedCategory == nil) {
+                            selectedCategory = nil
+                        }
+
+                        ForEach(displayedCategories, id: \.id) { category in
+                            ServiceCategoryChip(category: category, isSelected: selectedCategory?.id == category.id) {
+                                selectedCategory = category
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                }
+            }
+        }
+    }
+}
+
+struct LeadStatusChipRow: View {
+    @Binding var selection: Lead.Status
+    var selectedAccessibilityIdentifier: String = "addLeadStatusMenu"
+    var optionAccessibilityPrefix: String = "addLeadStatusOption"
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 132), spacing: 8, alignment: .leading)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Status", systemImage: "flag.fill")
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textSecondary)
+
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                ForEach(Lead.Status.allCases, id: \.self) { status in
+                    Button {
+                        selection = status
+                    } label: {
+                        Label(status.displayName, systemImage: status.iconName)
+                            .font(.obsidianFootnote)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                            .foregroundColor(selection == status ? .white : status.uiColor)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .padding(.horizontal, 11)
+                            .background(
+                                Capsule()
+                                    .fill(selection == status ? status.uiColor : status.uiColor.opacity(0.12))
+                            )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .accessibilityIdentifier(selection == status ? selectedAccessibilityIdentifier : "\(optionAccessibilityPrefix)_\(status.rawValue)")
+                    .accessibilityLabel(status.displayName)
+                }
+            }
+        }
+    }
+}
+
+struct LeadFollowUpControls: View {
+    @Binding var selectedDate: Date?
+    let onCustomDate: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Follow Up", systemImage: "calendar.badge.clock")
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textSecondary)
+
+            HStack(spacing: 8) {
+                quickButton("Tomorrow", days: 1)
+                    .accessibilityIdentifier("leadFollowUpQuick_1")
+                quickButton("3 days", days: 3)
+                    .accessibilityIdentifier("leadFollowUpQuick_3")
+                quickButton("1 week", days: 7)
+                    .accessibilityIdentifier("leadFollowUpQuick_7")
+            }
+
+            HStack(spacing: 8) {
+                Button(action: onCustomDate) {
+                    HStack {
+                        Text(selectedDate?.formatted(.dateTime.day().month().year().hour().minute()) ?? "Set date and time")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(selectedDate == nil ? Color.textSecondary : Color.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "calendar")
+                            .foregroundColor(Color.textSecondary)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("leadFollowUpCustomDateButton")
+
+                if selectedDate != nil {
+                    Button {
+                        selectedDate = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.obsidianSmall)
+                            .fontWeight(.semibold)
+                            .foregroundColor(Color.textSecondary)
+                            .frame(width: 44, height: 44)
+                            .background(Color.obsidianElevated)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .accessibilityLabel("Clear follow up date")
+                    .accessibilityIdentifier("leadFollowUpClearDateButton")
+                }
+            }
+        }
+    }
+
+    private func quickButton(_ title: String, days: Int) -> some View {
+        let date = Self.targetDate(days: days)
+        let selected = date.map { target in
+            guard let selectedDate else { return false }
+            return Calendar.current.isDate(selectedDate, inSameDayAs: target)
+        } ?? false
+
+        return Button {
+            selectedDate = date
+        } label: {
+            Text(title)
+                .font(.micro)
+                .fontWeight(.semibold)
+                .foregroundColor(selected ? .white : Color.electricViolet)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(
+                    Capsule()
+                        .fill(selected ? Color.electricViolet : Color.electricViolet.opacity(0.12))
+                )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    private static func targetDate(days: Int) -> Date? {
+        let calendar = Calendar.current
+        guard let date = calendar.date(byAdding: .day, value: days, to: Date()) else { return nil }
+        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: date)
+    }
+}
+
+struct LeadFollowUpCadencePicker: View {
+    @Binding var cadence: Lead.FollowUpCadence
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Repeat", systemImage: "repeat")
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textSecondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Lead.FollowUpCadence.allCases, id: \.self) { option in
+                        Button {
+                            cadence = option
+                        } label: {
+                            Text(option.displayName)
+                                .font(.micro)
+                                .fontWeight(.semibold)
+                                .lineLimit(1)
+                                .foregroundColor(cadence == option ? .white : Color.textSecondary)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule()
+                                        .fill(cadence == option ? Color.electricViolet : Color.obsidianElevated)
+                                )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+        }
+    }
+}
+
+struct LeadNotesEditor: View {
+    let title: String
+    @Binding var text: String
+    var minHeight: CGFloat = 110
+    var accessibilityIdentifier: String? = nil
+    var keyboardDoneAccessibilityIdentifier: String = "leadNotesEditorDoneButton"
+
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(title, systemImage: "note.text")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+
+                Spacer()
+
+                Button("Done") {
+                    isFocused = false
+                }
+                .font(.obsidianFootnote.weight(.semibold))
+                .foregroundColor(Color.electricViolet)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.electricViolet.opacity(0.1))
+                .clipShape(Capsule())
+                .accessibilityIdentifier(keyboardDoneAccessibilityIdentifier)
+            }
+
+            if let accessibilityIdentifier {
+                TextEditor(text: $text)
+                    .focused($isFocused)
+                    .frame(minHeight: minHeight)
+                    .obsidianEditorSurface(cornerRadius: 14)
+                    .accessibilityIdentifier(accessibilityIdentifier)
+            } else {
+                TextEditor(text: $text)
+                    .focused($isFocused)
+                    .frame(minHeight: minHeight)
+                    .obsidianEditorSurface(cornerRadius: 14)
+            }
         }
     }
 }
@@ -882,15 +1306,15 @@ struct ServiceCategoryChip: View {
                     Text(category.name)
                         .font(.caption)
                         .fontWeight(.medium)
-                        .foregroundColor(isSelected ? .white : .primary)
+                        .foregroundColor(isSelected ? .white : Color.textPrimary)
                 } else {
                     Image(systemName: "minus.circle")
                         .font(.caption)
-                        .foregroundColor(isSelected ? .white : .secondary)
+                        .foregroundColor(isSelected ? .white : Color.textSecondary)
                     Text("None")
                         .font(.caption)
                         .fontWeight(.medium)
-                        .foregroundColor(isSelected ? .white : .primary)
+                        .foregroundColor(isSelected ? .white : Color.textPrimary)
                 }
             }
             .padding(.horizontal, 12)
@@ -898,22 +1322,24 @@ struct ServiceCategoryChip: View {
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
-                        isSelected ? 
-                        (category?.displayColor ?? Color.gray) : 
-                        Color(UIColor.tertiarySystemBackground)
+                        isSelected ?
+                        (category?.displayColor ?? Color.textSecondary) :
+                        Color.obsidianSurface
                     )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(
-                        isSelected ? 
-                        (category?.displayColor ?? Color.gray) : 
-                        Color(UIColor.separator).opacity(0.3), 
+                        isSelected ?
+                        (category?.displayColor ?? Color.textSecondary) :
+                        Color.obsidianBorder.opacity(0.3),
                         lineWidth: 1
                     )
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityIdentifier("addLeadServiceCategoryChip_\(category?.id ?? "none")")
     }
 }
 

@@ -11,7 +11,13 @@ import CoreData
 struct ContentView: View {
     @StateObject private var onboardingManager = OnboardingManager.shared
     @StateObject private var paywallManager = PaywallManager.shared
-    @State private var isOnboardingPresented = false
+
+    private var onboardingBinding: Binding<Bool> {
+        Binding(
+            get: { onboardingManager.showOnboarding },
+            set: { onboardingManager.showOnboarding = $0 }
+        )
+    }
     
     private var paywallBinding: Binding<Bool> {
         Binding(
@@ -21,26 +27,32 @@ struct ContentView: View {
     }
 
     var body: some View {
-        MainTabView()
-            .fullScreenCover(isPresented: $isOnboardingPresented) {
-                OnboardingView(isPresented: $isOnboardingPresented)
-                    .interactiveDismissDisabled()
-            }
-            .sheet(isPresented: paywallBinding) {
-                PaywallView()
-                    .interactiveDismissDisabled(paywallManager.remainingFreeLeads() == 0 && !paywallManager.isPremium)
-            }
-            .onAppear {
-                isOnboardingPresented = onboardingManager.showOnboarding
+        ZStack {
+            Color.obsidianBlack
+                .ignoresSafeArea()
 
-                // Check subscription status when app launches
-                Task {
-                    await paywallManager.checkSubscriptionStatus()
-                }
+            MainTabView()
+        }
+        .fullScreenCover(isPresented: onboardingBinding) {
+            OnboardingView(isPresented: onboardingBinding)
+                .interactiveDismissDisabled()
+        }
+        .sheet(isPresented: paywallBinding) {
+            PaywallView()
+        }
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-showTeamPaywallForUITests") {
+                paywallManager.setPremiumStatus(false)
+                paywallManager.showTeamPaywall()
+            } else if ProcessInfo.processInfo.arguments.contains("-showPaywallForUITests") {
+                paywallManager.setPremiumStatus(false)
+                paywallManager.showSoloPaywall()
             }
-            .onChangeCompat(of: onboardingManager.showOnboarding) { shouldShow in
-                isOnboardingPresented = shouldShow
-            }
+        }
+        .task {
+            await paywallManager.loadProducts()
+            await paywallManager.checkSubscriptionStatus()
+        }
     }
 }
 

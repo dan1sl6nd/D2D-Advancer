@@ -1,105 +1,371 @@
 import SwiftUI
+import CoreData
+import UIKit
 
 struct MainTabView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var router = AppRouter.shared
-    @ObservedObject private var locationManager = LocationManager.shared
+    private let locationManager = LocationManager.shared
+    @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    @ObservedObject private var teamShortcutStore = TeamShortcutProjectionStore.shared
+    private let teamService = TeamFirebaseService.shared
+    @State private var didApplyRoleDefaultTab = false
+    @State private var shouldKeepMapAlive = false
+    @State private var mapPrewarmTask: Task<Void, Never>?
+    @State private var mapReleaseTask: Task<Void, Never>?
+    @State private var overdueLeadBadgeCount = 0
+    @State private var overdueLeadBadgeTask: Task<Void, Never>?
+    @State private var teamLeadBadgeCount = 0
+    @State private var roleContext: TeamRoleContext = .solo
+    @State private var didRunStartupSideEffects = false
+
+    private var isRunningUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
+    }
+
+    private var shouldExerciseMapRuntimeEffects: Bool {
+        ProcessInfo.processInfo.arguments.contains("-exerciseMapRuntimeEffectsForUITests")
+    }
+
+    private var shouldLoadTeamWorkspace: Bool {
+        !isRunningUITests || FirebaseEmulatorConfiguration.isEnabled
+    }
+
+    private var shouldOpenTeamWorkspaceForUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-openTeamWorkspaceForUITests")
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Content area
-            Group {
-                switch router.selectedTab {
-                case 0:
-                    MapView()
-                case 1:
-                    LeadsListView()
-                case 2:
-                    FollowUpView()
-                case 3:
-                    AppointmentsView()
-                case 4:
-                    MoreView()
-                default:
-                    MapView()
+        Group {
+            if shouldOpenTeamWorkspaceForUITests {
+                TeamWorkspaceView()
+            } else {
+                VStack(spacing: 0) {
+                    // Content area
+                    tabContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Obsidian tab bar
+                    HStack(spacing: 0) {
+                        TabBarButton(
+                            title: roleContext.mapTabTitle,
+                            icon: "map",
+                            selectedIcon: "map.fill",
+                            isSelected: router.selectedTab == MainAppTab.map.rawValue,
+                            accessibilityID: "tab_Map",
+                            action: { router.selectedTab = MainAppTab.map.rawValue }
+                        )
+
+                        TabBarButton(
+                            title: roleContext.leadsTabTitle,
+                            icon: "person.2",
+                            selectedIcon: "person.2.fill",
+                            isSelected: router.selectedTab == MainAppTab.leads.rawValue,
+                            badgeCount: teamLeadBadgeCount,
+                            accessibilityID: "tab_Leads",
+                            action: { router.selectedTab = MainAppTab.leads.rawValue }
+                        )
+
+                        TabBarButton(
+                            title: roleContext.workTabTitle,
+                            icon: "briefcase",
+                            selectedIcon: "briefcase.fill",
+                            isSelected: router.selectedTab == MainAppTab.work.rawValue,
+                            badgeCount: overdueLeadBadgeCount,
+                            accessibilityID: "tab_Work",
+                            action: { router.selectedTab = MainAppTab.work.rawValue }
+                        )
+
+                        TabBarButton(
+                            title: roleContext.moreTabTitle,
+                            icon: "ellipsis.circle",
+                            selectedIcon: "ellipsis.circle.fill",
+                            isSelected: router.selectedTab == MainAppTab.more.rawValue,
+                            accessibilityID: "tab_More",
+                            action: { router.selectedTab = MainAppTab.more.rawValue }
+                        )
+                    }
+                    .padding(.top, 8)
+                    .background(Color.obsidianBackground(for: colorScheme))
+                    .overlay(
+                        Rectangle()
+                            .fill(Color.obsidianBorder)
+                            .frame(height: 1),
+                        alignment: .top
+                    )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            // Custom tab bar at the bottom
-            HStack(spacing: 0) {
-                TabBarButton(
-                    title: "Map",
-                    icon: "map.fill",
-                    isSelected: router.selectedTab == 0,
-                    action: { router.selectedTab = 0 }
-                )
-                
-                TabBarButton(
-                    title: "Leads",
-                    icon: "person.3.fill",
-                    isSelected: router.selectedTab == 1,
-                    action: { router.selectedTab = 1 }
-                )
-                
-                TabBarButton(
-                    title: "Follow Up",
-                    icon: "calendar.badge.clock",
-                    isSelected: router.selectedTab == 2,
-                    action: { router.selectedTab = 2 }
-                )
-                
-                TabBarButton(
-                    title: "Appts",
-                    icon: "calendar",
-                    isSelected: router.selectedTab == 3,
-                    action: { router.selectedTab = 3 }
-                )
-                
-                TabBarButton(
-                    title: "More",
-                    icon: "gearshape.fill",
-                    isSelected: router.selectedTab == 4,
-                    action: { router.selectedTab = 4 }
-                )
-            }
-            .background(Color(UIColor.systemBackground))
-            .overlay(
-                Rectangle()
-                    .frame(height: 0.5)
-                    .foregroundColor(Color(UIColor.separator)),
-                alignment: .top
-            )
         }
-        .navigationViewStyle(StackNavigationViewStyle())
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
         .customThemed()
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("mainTabView")
         .onAppear {
+            scheduleOverdueLeadBadgeRefresh(after: 0)
+            refreshTeamPresentation()
+
+            if router.selectedTab == MainAppTab.map.rawValue {
+                shouldKeepMapAlive = true
+            } else {
+                scheduleMapPrewarmIfNeeded()
+            }
+
+            if isRunningUITests {
+                print("🧪 MainTabView: Skipping startup side effects for UI tests")
+                if shouldExerciseMapRuntimeEffects {
+                    initializeLocationServices()
+                }
+                if shouldLoadTeamWorkspace {
+                    Task {
+                        await loadTeamWorkspaceIfNeeded()
+                    }
+                }
+                return
+            }
+
+            guard !didRunStartupSideEffects else { return }
+            didRunStartupSideEffects = true
+
             // Initialize location services immediately when app launches
             print("📱 MainTabView: App launched, initializing location services")
+            UserDataSyncManager.shared.activateAutoSyncTimerIfNeeded()
             initializeLocationServices()
+
+            // Refresh daily notifications with fresh stats
+            NotificationService.shared.scheduleDailySummaryNotification()
 
             // Clean up any duplicate appointments first
             AppointmentManager.shared.removeDuplicateAppointments()
 
-            // Fix any cancelled appointments so they appear in the UI
-            AppointmentManager.shared.fixCancelledAppointments()
-
             // Start Firebase appointment listener when main app loads
             AppointmentManager.shared.restartFirebaseSync()
-            print("🗓️ MainTabView: Started Firebase listener for appointments on app launch")
+            print("🗓️ MainTabView: Appointment sync startup check completed")
+
+            Task {
+                await loadTeamWorkspaceIfNeeded()
+                applyDefaultTabForRoleIfNeeded()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
+            scheduleOverdueLeadBadgeRefresh(after: 0.2)
+        }
+        .onChange(of: userAccountManager.isLoggedIn) { _, _ in
+            Task {
+                await loadTeamWorkspaceIfNeeded()
+                applyDefaultTabForRoleIfNeeded(reset: true)
+            }
+        }
+        .onChange(of: teamShortcutStore.summary) { _, _ in
+            refreshTeamPresentation()
+        }
+        .onChange(of: router.selectedTab) { _, newTab in
+            if newTab == MainAppTab.map.rawValue {
+                mapPrewarmTask?.cancel()
+                mapPrewarmTask = nil
+                mapReleaseTask?.cancel()
+                mapReleaseTask = nil
+                shouldKeepMapAlive = true
+            } else if shouldKeepMapAlive {
+                scheduleMapReleaseIfNeeded()
+            } else {
+                scheduleMapPrewarmIfNeeded()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            releaseHiddenMapImmediately()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
+            guard MapRuntimeRetentionPolicy.shouldReleaseForThermalState(ProcessInfo.processInfo.thermalState) else {
+                return
+            }
+            releaseHiddenMapImmediately()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                releaseHiddenMapImmediately()
+            } else if router.selectedTab != MainAppTab.map.rawValue {
+                scheduleMapPrewarmIfNeeded()
+            }
+        }
+        .onDisappear {
+            mapPrewarmTask?.cancel()
+            mapPrewarmTask = nil
+            mapReleaseTask?.cancel()
+            mapReleaseTask = nil
+            overdueLeadBadgeTask?.cancel()
+            overdueLeadBadgeTask = nil
+        }
+    }
+
+    @ViewBuilder
+    private var tabContent: some View {
+        ZStack {
+            if shouldKeepMapAlive || router.selectedTab == MainAppTab.map.rawValue {
+                MapView(isVisible: router.selectedTab == MainAppTab.map.rawValue)
+                    .opacity(router.selectedTab == MainAppTab.map.rawValue ? 1 : 0)
+                    .allowsHitTesting(router.selectedTab == MainAppTab.map.rawValue)
+                    .accessibilityHidden(router.selectedTab != MainAppTab.map.rawValue)
+                    .zIndex(router.selectedTab == MainAppTab.map.rawValue ? 1 : 0)
+            }
+
+            if router.selectedTab != MainAppTab.map.rawValue {
+                nonMapTabContent
+                    .zIndex(2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var nonMapTabContent: some View {
+        switch router.selectedTab {
+        case MainAppTab.leads.rawValue:
+            LeadsListView()
+        case MainAppTab.work.rawValue:
+            WorkView(roleContext: roleContext)
+        case MainAppTab.more.rawValue:
+            MoreView()
+        default:
+            EmptyView()
         }
     }
 
     // MARK: - Location Services Initialization
+    private func loadTeamWorkspaceIfNeeded() async {
+        guard shouldLoadTeamWorkspace else { return }
+        guard userAccountManager.isLoggedIn else { return }
+        await teamService.loadCurrentTeam(
+            displayName: userAccountManager.currentUserDisplayName,
+            email: userAccountManager.currentUserEmail
+        )
+        refreshTeamPresentation()
+    }
+
+    private func refreshTeamPresentation() {
+        let summary = teamShortcutStore.summary
+        let nextRoleContext = TeamRoleContext(summary: summary)
+        let nextBadgeCount = min(summary?.badgeCount ?? 0, 99)
+
+        if roleContext != nextRoleContext {
+            roleContext = nextRoleContext
+            applyDefaultTabForRoleIfNeeded()
+        }
+        if teamLeadBadgeCount != nextBadgeCount {
+            teamLeadBadgeCount = nextBadgeCount
+        }
+    }
+
+    private func applyDefaultTabForRoleIfNeeded(reset: Bool = false) {
+        guard !isRunningUITests else { return }
+        if reset {
+            didApplyRoleDefaultTab = false
+        }
+        guard !didApplyRoleDefaultTab else { return }
+        guard router.selectedTab == MainAppTab.map.rawValue else {
+            didApplyRoleDefaultTab = true
+            return
+        }
+
+        let defaultTab = roleContext.defaultTabIndex
+        router.selectedWorkSection = roleContext.defaultWorkSection
+        if defaultTab != router.selectedTab {
+            router.selectedTab = defaultTab
+        }
+        didApplyRoleDefaultTab = true
+    }
+
+    private func scheduleMapPrewarmIfNeeded() {
+        // Performance UI tests exercise the real map after an explicit tab tap.
+        // Prewarming an invisible MKMapView prevents XCTest from reaching an idle
+        // launch state and turns the cold-open measurement into a warm-open test.
+        guard !isRunningUITests else { return }
+        guard !shouldKeepMapAlive else { return }
+        guard mapPrewarmTask == nil else { return }
+
+        mapPrewarmTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(MapRuntimeRetentionPolicy.idlePrewarmDelay * 1_000_000_000)
+            )
+            defer { mapPrewarmTask = nil }
+            guard !Task.isCancelled,
+                  router.selectedTab != MainAppTab.map.rawValue else { return }
+            guard MapRuntimeRetentionPolicy.shouldPrewarm(
+                isMapSelected: router.selectedTab == MainAppTab.map.rawValue,
+                isSyncBusy: UserDataSyncManager.shared.syncStatus.isBusy,
+                isTeamLoading: teamService.isLoading,
+                isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled,
+                thermalState: ProcessInfo.processInfo.thermalState,
+                applicationIsActive: UIApplication.shared.applicationState == .active
+            ) else {
+                return
+            }
+            shouldKeepMapAlive = true
+            scheduleMapReleaseIfNeeded()
+        }
+    }
+
+    private func scheduleMapReleaseIfNeeded(
+        after delay: TimeInterval = MapRuntimeRetentionPolicy.hiddenRetentionInterval
+    ) {
+        guard router.selectedTab != MainAppTab.map.rawValue else { return }
+        mapReleaseTask?.cancel()
+        mapReleaseTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled,
+                  router.selectedTab != MainAppTab.map.rawValue else { return }
+            shouldKeepMapAlive = false
+            mapReleaseTask = nil
+        }
+    }
+
+    private func releaseHiddenMapImmediately() {
+        guard router.selectedTab != MainAppTab.map.rawValue else { return }
+        mapPrewarmTask?.cancel()
+        mapPrewarmTask = nil
+        mapReleaseTask?.cancel()
+        mapReleaseTask = nil
+        shouldKeepMapAlive = false
+    }
+
+    private func scheduleOverdueLeadBadgeRefresh(after delay: TimeInterval = 0.05) {
+        overdueLeadBadgeTask?.cancel()
+        let context = viewContext
+
+        overdueLeadBadgeTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled else { return }
+
+            let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
+            request.predicate = Lead.Status.activeFollowUpPredicate(dueBefore: Date())
+            request.includesPendingChanges = true
+            request.includesSubentities = false
+
+            do {
+                let count = try context.count(for: request)
+                guard !Task.isCancelled else { return }
+                overdueLeadBadgeCount = min(count, 99)
+            } catch {
+                AppLog.warning("Tabs", "Could not refresh follow-up badge count: \(error.localizedDescription)")
+            }
+
+            overdueLeadBadgeTask = nil
+        }
+    }
+
     private func initializeLocationServices() {
         print("📍 MainTabView: Initializing location services for immediate map centering")
+        locationManager.refreshAuthorizationStatusFromSystem(startIfAuthorized: false)
 
-        // Check if onboarding is completed before requesting permissions
-        let onboardingCompleted = UserDefaults.standard.bool(forKey: "onboarding_completed")
+        // Check the live onboarding state before requesting permissions.
+        let canRequestLocationOutsideOnboarding = OnboardingManager.shared.isCompleted && !OnboardingManager.shared.showOnboarding
 
         switch locationManager.authorizationStatus {
         case .notDetermined:
-            if onboardingCompleted {
+            if canRequestLocationOutsideOnboarding {
                 print("📍 MainTabView: Onboarding completed - requesting location permission")
                 locationManager.requestLocationPermission()
             } else {
@@ -107,16 +373,7 @@ struct MainTabView: View {
             }
         case .authorizedWhenInUse, .authorizedAlways:
             print("📍 MainTabView: Permission already granted, starting location updates")
-            locationManager.startLocationUpdates()
-
-            // If we have a cached location, immediately center on it
-            if locationManager.location != nil {
-                print("📍 MainTabView: Found cached location, centering map immediately")
-                locationManager.forceInitialLocationCenter()
-            } else {
-                print("📍 MainTabView: No cached location, requesting immediate update")
-                locationManager.requestImmediateLocation()
-            }
+            locationManager.startLaunchLocationCentering()
         case .denied, .restricted:
             print("📍 MainTabView: Location permission denied/restricted")
         @unknown default:
@@ -128,29 +385,53 @@ struct MainTabView: View {
 struct TabBarButton: View {
     let title: String
     let icon: String
+    let selectedIcon: String
     let isSelected: Bool
+    var badgeCount: Int = 0
+    let accessibilityID: String
     let action: () -> Void
-    
-    init(title: String, icon: String, isSelected: Bool, action: @escaping () -> Void) {
-        self.title = title
-        self.icon = icon
-        self.isSelected = isSelected
-        self.action = action
-    }
-    
+
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
+        Button(action: {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            action()
+        }) {
+            VStack(spacing: 3) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: isSelected ? selectedIcon : icon)
+                        .font(.obsidianAction)
+                        .symbolRenderingMode(.hierarchical)
+                    if badgeCount > 0 {
+                        Text("\(badgeCount)")
+                            .font(.nano)
+                            .foregroundColor(.white)
+                            .frame(minWidth: 14, minHeight: 14)
+                            .background(Color.statusNotInterested)
+                            .clipShape(Circle())
+                            .offset(x: 8, y: -4)
+                    }
+                }
                 Text(title)
-                    .font(.caption)
+                    .font(.nano)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
-            .foregroundColor(isSelected ? .accentColor : .secondary)
+            .foregroundColor(isSelected ? Color.electricViolet : Color.textMuted)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(isSelected ? Color.electricViolet.opacity(0.15) : Color.clear)
+                    .padding(.horizontal, 4)
+            )
+            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isSelected)
         }
         .buttonStyle(PlainButtonStyle())
+        .frame(maxWidth: .infinity, minHeight: 56)
+        .contentShape(Rectangle())
+        .accessibilityLabel(title)
+        .accessibilityIdentifier(accessibilityID)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 

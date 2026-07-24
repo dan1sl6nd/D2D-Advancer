@@ -9,6 +9,7 @@ struct CustomAppointmentTypeCreatorView: View {
     @State private var selectedColor: String = "blue"
     @State private var showingIconPicker = false
     @State private var showingPreview = false
+    @State private var saveErrorMessage: String?
     
     let editingType: CustomAppointmentType?
     
@@ -45,154 +46,82 @@ struct CustomAppointmentTypeCreatorView: View {
     }
     
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Type Details Card
-                        typeDetailsCard
-                        
-                        // Appearance Card
-                        appearanceCard
-                        
-                        // Preview Card
-                        previewCard
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
-                }
-                .background(Color(UIColor.systemGroupedBackground))
-            }
-            .navigationTitle(editingType != nil ? "Edit Type" : "Create Type")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .safeAreaInset(edge: .bottom) {
-                // Card-based button design
-                HStack(spacing: 16) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                            Text("Cancel")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(UIColor.secondarySystemBackground))
-                                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        )
-                    }
-                    
-                    Button(action: {
-                        saveType()
-                    }) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3)
-                            Text(editingType != nil ? "Update Type" : "Create Type")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            !isValidType ? Color.gray : Color.blue,
-                                            !isValidType ? Color.gray.opacity(0.8) : Color.blue.opacity(0.8)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: !isValidType ? .clear : .blue.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                    .disabled(!isValidType)
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    typeDetailsCard
+                    appearanceCard
+                    previewCard
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .obsidianScreenBackground()
+            .obsidianPushedNavigation(
+                editingType != nil ? "Edit Type" : "Create Type",
+                titleAccessibilityIdentifier: "customAppointmentTypeEditor",
+                backButtonAccessibilityIdentifier: "customAppointmentTypeBackButton"
+            )
+            .safeAreaInset(edge: .bottom) {
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: !isValidType,
+                    primaryAccessibilityIdentifier: "customAppointmentTypeSaveButton",
+                    secondaryAccessibilityIdentifier: "customAppointmentTypeCancelButton",
+                    primaryAction: saveType,
+                    secondaryAction: { dismiss() },
+                    primaryLabel: {
+                        Label(editingType != nil ? "Update" : "Create", systemImage: "checkmark.circle.fill")
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
+                    }
                 )
             }
             .sheet(isPresented: $showingIconPicker) {
                 IconPickerView(selectedIcon: $selectedIcon)
             }
+            .alert(
+                "Type not saved",
+                isPresented: Binding(
+                    get: { saveErrorMessage != nil },
+                    set: { if !$0 { saveErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(saveErrorMessage ?? "Please try again.")
+            }
         }
+        .obsidianModalBackground()
     }
     
     private var typeDetailsCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "tag.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Type Details")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Type Name Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Type Name")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
-                TextField("Enter type name", text: $typeName)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                    )
-            }
+        ObsidianSectionCard(
+            title: "Type Details",
+            icon: "tag.fill",
+            subtitle: "The name shown in appointment lists and details."
+        ) {
+            LeadFormTextField(
+                title: "Type Name",
+                placeholder: "Enter type name",
+                text: $typeName,
+                icon: "tag.fill",
+                accessibilityIdentifier: "customAppointmentTypeNameField"
+            )
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private var appearanceCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "paintbrush.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Appearance")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Icon Selection
+        ObsidianSectionCard(
+            title: "Appearance",
+            icon: "paintbrush.fill",
+            subtitle: "Pick an icon and color that are easy to scan."
+        ) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Icon")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
                 
                 Button(action: {
                     showingIconPicker = true
@@ -200,36 +129,36 @@ struct CustomAppointmentTypeCreatorView: View {
                     HStack {
                         Image(systemName: selectedIcon)
                             .foregroundColor(selectedColorObj)
-                            .font(.title3)
+                            .font(.obsidianCallout)
                             .frame(width: 24)
                         
                         Text("Tap to change icon")
-                            .foregroundColor(.primary)
-                        
+                            .foregroundColor(Color.textPrimary)
+
                         Spacer()
-                        
+
                         Image(systemName: "chevron.right")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
+                            .foregroundColor(Color.textSecondary)
+                            .font(.obsidianSmall)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(10)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("customAppointmentTypeIconButton")
             }
             
             // Color Selection
             VStack(alignment: .leading, spacing: 12) {
                 Text("Color")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
                 
                 LazyVGrid(columns: [
                     GridItem(.adaptive(minimum: 60), spacing: 12)
@@ -246,63 +175,44 @@ struct CustomAppointmentTypeCreatorView: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private var previewCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "eye.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Preview")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Preview Display
+        ObsidianSectionCard(
+            title: "Preview",
+            icon: "eye.fill",
+            subtitle: "How this type appears in scheduling."
+        ) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("How your appointment type will appear:")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
                 
                 // Preview Chip
                 HStack {
                     Image(systemName: selectedIcon)
                         .foregroundColor(selectedColorObj)
-                        .font(.title3)
+                        .font(.obsidianCallout)
                         .frame(width: 24)
                     
                     Text(typeName.isEmpty ? "New Appointment Type" : typeName)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                        .font(.obsidianBody)
+                        .foregroundColor(Color.textPrimary)
                     
                     Spacer()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(selectedColorObj.opacity(0.15))
-                .cornerRadius(10)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(selectedColorObj.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(selectedColorObj.opacity(0.35), lineWidth: 0.5)
                 )
             }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private func saveType() {
         let customType = CustomAppointmentType(
             id: editingType?.id ?? UUID().uuidString,
@@ -313,10 +223,16 @@ struct CustomAppointmentTypeCreatorView: View {
             dateCreated: editingType?.dateCreated ?? Date()
         )
         
+        let didSave: Bool
         if editingType != nil {
-            typeManager.updateCustomType(customType)
+            didSave = typeManager.updateCustomType(customType)
         } else {
-            typeManager.addCustomType(customType)
+            didSave = typeManager.addCustomType(customType)
+        }
+
+        guard didSave else {
+            saveErrorMessage = typeManager.lastErrorMessage ?? "Could not save this appointment type. Please try again."
+            return
         }
         
         dismiss()
@@ -366,13 +282,14 @@ struct ColorSelectionChip: View {
                     )
                 
                 Text(colorName)
-                    .font(.caption2)
+                    .font(.nano)
                     .fontWeight(.medium)
-                    .foregroundColor(isSelected ? color : .secondary)
+                    .foregroundColor(isSelected ? color : Color.textSecondary)
             }
             .padding(.vertical, 8)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("customAppointmentTypeColor_\(colorValue)")
     }
 }
 
@@ -398,10 +315,11 @@ struct IconPickerView: View {
     }
     
     var body: some View {
-        NavigationView {
-            VStack {
+        NavigationStack {
+            VStack(spacing: 0) {
                 IconSearchBar(text: $searchText)
                     .padding(.horizontal, 16)
+                    .padding(.top, 12)
                 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
@@ -410,10 +328,9 @@ struct IconPickerView: View {
                                 // Category Header
                                 HStack {
                                     Text(category)
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.primary)
-                                    
+                                        .font(.obsidianTitle)
+                                        .foregroundColor(Color.textPrimary)
+
                                     Spacer()
                                 }
                                 .padding(.horizontal, 16)
@@ -439,17 +356,24 @@ struct IconPickerView: View {
                     .padding(.vertical, 20)
                 }
             }
-            .navigationTitle("Choose Icon")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
+            .obsidianScreenBackground()
+            .accessibilityIdentifier("customAppointmentTypeIconPicker")
+            .obsidianPushedNavigation(
+                "Choose Icon",
+                backButtonAccessibilityIdentifier: "customAppointmentTypeIconPickerBackButton",
+                onBack: { dismiss() }
+            ) {
+                ObsidianCompactIconButton(
+                    icon: "checkmark",
+                    accessibilityLabel: "Done choosing icon",
+                    accentColor: Color.electricViolet,
+                    accessibilityIdentifier: "customAppointmentTypeIconPickerDoneButton"
+                ) {
+                    dismiss()
                 }
             }
         }
+        .obsidianModalBackground()
     }
 }
 
@@ -462,14 +386,13 @@ struct IconSelectionChip: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Image(systemName: iconData.symbol)
-                    .font(.title2)
-                    .foregroundColor(isSelected ? .blue : .primary)
+                    .font(.obsidianCallout)
+                    .foregroundColor(isSelected ? Color.electricViolet : Color.textPrimary)
                     .frame(width: 28, height: 28)
-                
+
                 Text(iconData.name)
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
+                    .font(.micro)
+                    .foregroundColor(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -477,16 +400,15 @@ struct IconSelectionChip: View {
             .padding(.vertical, 12)
             .padding(.horizontal, 6)
             .frame(minWidth: 85, minHeight: 75)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.blue.opacity(0.15) : Color(UIColor.tertiarySystemBackground))
-            )
+            .background(isSelected ? Color.electricViolet.opacity(0.15) : Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? Color.electricViolet : Color.obsidianBorder.opacity(0.35), lineWidth: isSelected ? 1.5 : 0.5)
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("customAppointmentTypeIcon_\(iconData.symbol)")
     }
 }
 
@@ -496,23 +418,31 @@ struct IconSearchBar: View {
     var body: some View {
         HStack {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            
+                .foregroundColor(Color.textSecondary)
+
             TextField("Search icons...", text: $text)
-            
+                .font(.obsidianBody)
+                .foregroundColor(Color.textPrimary)
+                .accessibilityIdentifier("customAppointmentTypeIconSearchField")
+
             if !text.isEmpty {
                 Button(action: {
                     text = ""
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                 }
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(UIColor.tertiarySystemBackground))
-        .cornerRadius(10)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+        )
+        .accessibilityIdentifier("customAppointmentTypeIconSearchBar")
     }
 }
 

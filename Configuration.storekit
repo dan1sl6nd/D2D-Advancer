@@ -3,7 +3,7 @@
   "nonRenewingSubscriptions" : [],
   "products" : [],
   "settings" : {
-    "_applicationInternalID" : "6738387157",
+    "_applicationInternalID" : "6751178741",
     "_developerTeamID" : "RF247ARQB7",
     "_lastSynchronizedDate" : null
   },
@@ -18,7 +18,7 @@
           "codeOffers" : [],
           "displayPrice" : "9.99",
           "familyShareable" : false,
-          "groupNumber" : 1,
+          "groupNumber" : 2,
           "internalID" : "weekly_sub",
           "introductoryOffer" : {
             "internalID" : "weekly_trial",
@@ -42,7 +42,7 @@
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "36.99",
+          "displayPrice" : "49.99",
           "familyShareable" : false,
           "groupNumber" : 2,
           "internalID" : "yearly_sub",
@@ -57,6 +57,100 @@
           "productID" : "com.d2dadvancer.yearly",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "Yearly Subscription",
+          "subscriptionGroupID" : "premium_access",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "monthly_sub",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Monthly access for one field professional",
+              "displayName" : "Solo Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.d2dadvancer.solo.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Solo Monthly Subscription",
+          "subscriptionGroupID" : "premium_access",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "99.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "solo_yearly_sub",
+          "introductoryOffer" : {
+            "internalID" : "solo_yearly_trial_14d",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "Annual access for one field professional",
+              "displayName" : "Solo Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.d2dadvancer.solo.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Solo Yearly Subscription",
+          "subscriptionGroupID" : "premium_access",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "29.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "team_monthly_sub",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Team workspace for one owner and two workers",
+              "displayName" : "Team Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.d2dadvancer.team3.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Team Monthly Subscription",
+          "subscriptionGroupID" : "premium_access",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "299.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "team_yearly_sub",
+          "introductoryOffer" : {
+            "internalID" : "team_yearly_trial_14d",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "Annual Team workspace for one owner and two workers",
+              "displayName" : "Team Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.d2dadvancer.team3.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Team Yearly Subscription",
           "subscriptionGroupID" : "premium_access",
           "type" : "RecurringSubscription"
         }

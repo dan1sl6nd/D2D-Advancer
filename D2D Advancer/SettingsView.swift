@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreData
 import UniformTypeIdentifiers
+import AuthenticationServices
 
 struct SettingsView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -9,285 +10,540 @@ struct SettingsView: View {
     @ObservedObject private var syncManager = UserDataSyncManager.shared
     @AppStorage("isDarkMode") private var darkModeEnabled = false
     @State private var showingOnboarding = false
-    @State private var showingResetThemeConfirm = false
-    
+    @State private var selectedSyncProvider = CloudSyncProvider.current
+    @State private var showingSyncProviderRestart = false
+    @State private var showRestartNeeded = false
+    @State private var isMigrating = false
+
+    private var localLeadCount: Int? {
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: viewContext)
+        do {
+            return try viewContext.count(for: request)
+        } catch {
+            return nil
+        }
+    }
+
+    private func performProviderSwitch() {
+        let oldProvider = CloudSyncProvider.current
+        let newProvider = selectedSyncProvider
+
+        // If switching FROM Firebase, do a final sync first
+        if oldProvider == .firebase && userAccountManager.isLoggedIn {
+            isMigrating = true
+            syncManager.startSync()
+
+            // Wait for sync to finish, then notify user
+            Task {
+                // Poll sync status
+                for _ in 0..<60 { // max 30 seconds
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    if !syncManager.syncStatus.isBusy { break }
+                }
+
+                await MainActor.run {
+                    isMigrating = false
+                    CloudSyncProvider.current = newProvider
+                    showRestartNeeded = true
+                }
+            }
+        } else {
+            CloudSyncProvider.current = newProvider
+            showRestartNeeded = true
+        }
+    }
+
     private var syncStatusIcon: String {
         switch syncManager.syncStatus {
-        case .idle:
-            return "icloud.and.arrow.up"
-        case .syncing:
-            return "arrow.clockwise"
-        case .completed:
-            return "checkmark.icloud"
-        case .failed(_):
-            return "exclamationmark.icloud"
+        case .idle: return "icloud.and.arrow.up"
+        case .syncing, .downloading: return "arrow.clockwise"
+        case .uploading: return "icloud.and.arrow.up.fill"
+        case .completed: return "checkmark.icloud"
+        case .failed: return "exclamationmark.icloud"
         }
     }
-    
+
     private var syncStatusColor: Color {
         switch syncManager.syncStatus {
-        case .idle:
-            return .blue
-        case .syncing:
-            return .blue
-        case .completed:
-            return .green
-        case .failed(_):
-            return .red
+        case .idle: return Color.electricViolet
+        case .syncing, .uploading, .downloading: return Color.electricViolet
+        case .completed: return Color.statusInterested
+        case .failed: return Color.statusNotInterested
         }
     }
-    
+
     private var syncStatusText: String {
-        switch syncManager.syncStatus {
-        case .idle:
-            if let lastSync = syncManager.lastSyncDate {
-                return "Last synced: \(DateFormatter.localizedString(from: lastSync, dateStyle: .none, timeStyle: .short))"
-            } else {
-                return "Ready to sync"
-            }
-        case .syncing:
-            return "Syncing..."
-        case .completed:
-            return "Sync completed"
-        case .failed(let error):
-            return "Sync failed: \(error)"
-        }
+        syncManager.syncStatus.displayText.isEmpty
+            ? (syncManager.lastSyncDate.map { "Last synced: \(DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short))" } ?? "Ready to sync")
+            : syncManager.syncStatus.displayText
     }
     
     var body: some View {
-        NavigationView {
-            List {
-                // User Info Section
-                Section("Account") {
-                    if userAccountManager.isGuestMode {
-                        GuestInfoRowView()
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ObsidianScreenTitle(
+                        title: "Settings",
+                        subtitle: "Account, sync, notifications, and app defaults.",
+                        icon: "gearshape.2.fill"
+                    )
+                    .padding(.bottom, 2)
 
-                        NavigationLink(destination: CreateAccountFromGuestView(userAccountManager: userAccountManager)) {
-                            HStack {
-                                Image(systemName: "person.crop.circle.badge.plus")
-                                    .foregroundColor(.green)
-                                    .frame(width: 20)
-                                Text("Create Account")
-                                    .foregroundColor(.green)
-                                    .fontWeight(.semibold)
-                                Spacer()
-                            }
-                        }
-                    } else {
-                        UserInfoRowView(userAccountManager: userAccountManager)
+                    accountSettingsSection
+                    cloudSyncSettingsSection
 
-                        NavigationLink(destination: AccountManagementView(userAccountManager: userAccountManager)) {
-                            HStack {
-                                Image(systemName: "person.crop.circle.badge.gearshape")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 20)
-                                Text("Manage Account")
-                                Spacer()
-                            }
-                        }
-                    }
-                }
-
-                // Data Sync Section (only for logged-in users)
-                if userAccountManager.isLoggedIn {
-                    Section("Data Sync") {
-                    HStack {
-                        if syncManager.syncStatus == .syncing {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .foregroundColor(.blue)
-                                .accessibilityLabel("Syncing in progress")
-                        } else {
-                            Image(systemName: syncStatusIcon)
-                                .foregroundColor(syncStatusColor)
-                                .frame(width: 20)
-                                .accessibilityHidden(true) // Hide decorative icon
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Sync Data")
-                                .font(.body)
-                                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                            Text(syncStatusText)
-                                .font(.caption)
-                                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                                .foregroundColor(syncStatusColor)
-                        }
-                        
-                        Spacer()
-                        
-                        if syncManager.syncStatus != .syncing {
-                            Button("Sync") {
-                                syncManager.syncWithServer()
-                            }
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                            .accessibilityLabel("Sync data now")
-                            .accessibilityHint("Synchronize local data with cloud storage")
-                        }
-                    }
-                    .disabled(syncManager.syncStatus == .syncing)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Data synchronization")
-                    .accessibilityValue(syncStatusText)
-                    
-                    Toggle("Auto Sync", isOn: $syncManager.isAutoSyncEnabled)
-                        .accessibilityLabel("Auto sync")
-                        .accessibilityHint("Automatically synchronize data when changes are made")
-                }
-                }
-
-                // App Preferences Section
-                Section("Preferences") {
-                    HStack {
-                        Image(systemName: "moon.fill")
-                            .foregroundColor(.purple)
-                            .frame(width: 20)
-                        
-                        Text("Dark Mode")
-                        
-                        Spacer()
-                        
-                        Toggle("", isOn: $darkModeEnabled)
-                    }
-                    
-                    NavigationLink(destination: NotificationSettingsView()) {
-                        HStack {
-                            Image(systemName: "bell.fill")
-                                .foregroundColor(.orange)
-                                .frame(width: 20)
-                            Text("Notifications")
-                            Spacer()
-                        }
-                    }
-                    NavigationLink(destination: ThemeSettingsView()) {
-                        HStack {
-                            Image(systemName: "paintbrush")
-                                .foregroundColor(.purple)
-                                .frame(width: 20)
-                            Text("Theme")
-                            Spacer()
-                        }
-                    }
-                    NavigationLink(destination: CalendarSettingsView()) {
-                        HStack {
-                            Image(systemName: "calendar")
-                                .foregroundColor(.red)
-                                .frame(width: 20)
-                            Text("Calendar")
-                            Spacer()
-                        }
-                    }
-                    NavigationLink(destination: AppPreferencesView()) {
-                        HStack {
-                            Image(systemName: "gearshape.2.fill")
-                                .foregroundColor(.gray)
-                                .frame(width: 20)
-                            Text("App Preferences")
-                            Spacer()
-                        }
-                    }
-                    
-                    NavigationLink(destination: AppointmentTypePresetsView()) {
-                        HStack {
-                            Image(systemName: "calendar.badge.plus")
-                                .foregroundColor(.blue)
-                                .frame(width: 20)
-                            Text("Appointment Types")
-                            Spacer()
-                        }
+                    if userAccountManager.isLoggedIn && selectedSyncProvider == .firebase {
+                        firebaseSyncSection
                     }
 
-                    Button(action: {
-                        showingResetThemeConfirm = true
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.counterclockwise.circle")
-                                .foregroundColor(.red)
-                                .frame(width: 20)
-                            Text("Reset Theme")
-                                .foregroundColor(.red)
-                            Spacer()
-                        }
+                    preferencesSection
+                    helpSection
+                    aboutSection
+
+                    if userAccountManager.hasActiveSession {
+                        signOutSection
                     }
                 }
-                
-                // Help & Tutorial Section
-                Section("Help & Tutorial") {
-                    // Card-based button to match app style
-                    Button(action: {
-                        OnboardingManager.shared.startOnboarding()
-                        showingOnboarding = true
-                    }) {
-                        MoreCardView(
-                            icon: "questionmark.circle",
-                            iconColor: .blue,
-                            title: "Show Tutorial",
-                            subtitle: "Walk through features and best practices",
-                            showChevron: false
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .accessibilityLabel("Show app tutorial")
-                    .accessibilityHint("Restart the onboarding tutorial to learn about app features")
-                    
-                }
-                
-                // About Section
-                Section("About") {
-                    HStack {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.blue)
-                            .frame(width: 20)
-                        
-                        Text("Version")
-                        
-                        Spacer()
-                        
-                        Text("1.0.0")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // Sign Out Section (only for logged-in users)
-                if userAccountManager.isLoggedIn {
-                    Section {
-                        SignOutRowView(userAccountManager: userAccountManager)
-                    }
-                }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
             }
-            .navigationBarHidden(true)
+            .obsidianScreenBackground()
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingOnboarding) {
                 OnboardingView(isPresented: $showingOnboarding)
                     .interactiveDismissDisabled()
             }
-        }
-            .alert("Reset Theme", isPresented: $showingResetThemeConfirm) {
-                Button("Cancel", role: .cancel) {}
-                Button("Reset", role: .destructive) {
-                    CustomizableThemeManager.shared.resetToDefault()
+            .alert("Switch to \(selectedSyncProvider.displayName)?", isPresented: $showingSyncProviderRestart) {
+                Button("Switch") {
+                    performProviderSwitch()
+                }
+                Button("Cancel", role: .cancel) {
+                    selectedSyncProvider = CloudSyncProvider.current
                 }
             } message: {
-                Text("This will restore all theme colors and styles to the default Professional preset.")
+                if CloudSyncProvider.current == .firebase && selectedSyncProvider == .icloud {
+                    Text(LeadCountDisplay.firebaseToICloudMessage(for: localLeadCount))
+                } else if selectedSyncProvider == .icloud {
+                    Text(LeadCountDisplay.iCloudUploadMessage(for: localLeadCount))
+                } else {
+                    Text("Your local data will be preserved with the new sync provider.")
+                }
             }
+            .alert("Restart Required", isPresented: $showRestartNeeded) {
+                Button("OK") { }
+            } message: {
+                Text("Please close and reopen the app for the sync provider change to take full effect.")
+            }
+            .overlay {
+                if isMigrating {
+                    Color.obsidianBlack.opacity(0.92)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(.electricViolet)
+
+                        Text("Syncing from Firebase before switching...")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(.textSecondary)
+                    }
+                    .padding(22)
+                    .background(Color.obsidianSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+                    )
+                }
+            }
+            .onAppear {
+                selectedSyncProvider = CloudSyncProvider.current
+                if userAccountManager.isAuthenticated && !userAccountManager.hasRecentlyRefreshed {
+                    userAccountManager.refreshUserState()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var accountSettingsSection: some View {
+        MoreSectionGroup(
+            title: "Account",
+            icon: accountIcon,
+            subtitle: accountSubtitle,
+            accentColor: accountTint
+        ) {
+            MoreCardView(
+                icon: accountIcon,
+                iconColor: accountTint,
+                title: accountTitle,
+                subtitle: accountSubtitle
+            )
+
+            if userAccountManager.isLoggedIn {
+                settingsDivider
+
+                NavigationLink(destination: AccountManagementView(userAccountManager: userAccountManager)) {
+                    MoreCardView(
+                        icon: "person.crop.circle.badge.gearshape",
+                        iconColor: Color.electricViolet,
+                        title: "Manage Account",
+                        subtitle: "Name, password, email verification, and account deletion",
+                        showChevron: true
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+            } else if !userAccountManager.isAppleAuthed && CloudSyncProvider.current == .firebase {
+                settingsDivider
+
+                NavigationLink(destination: AuthenticationView()) {
+                    MoreCardView(
+                        icon: "person.crop.circle.badge.plus",
+                        iconColor: Color.statusInterested,
+                        title: "Sign In or Create Account",
+                        subtitle: "Use Firebase sync across devices",
+                        showChevron: true
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+    }
+
+    private var cloudSyncSettingsSection: some View {
+        MoreSectionGroup(
+            title: "Cloud Sync",
+            icon: selectedSyncProvider.icon,
+            subtitle: syncProviderSubtitle,
+            accentColor: syncProviderTint
+        ) {
+            MoreCardView(
+                icon: "cloud.fill",
+                iconColor: syncProviderTint,
+                title: "Cloud Storage",
+                subtitle: selectedSyncProvider.displayName,
+                trailingContent: {
+                    Picker("Cloud storage provider", selection: $selectedSyncProvider) {
+                        ForEach(
+                            PersonalCloudMigrationPolicy.availableProviders(current: CloudSyncProvider.current),
+                            id: \.self
+                        ) { provider in
+                            Label(provider.displayName, systemImage: provider.icon)
+                                .tag(provider)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .onChange(of: selectedSyncProvider) { _, newValue in
+                        if newValue != CloudSyncProvider.current {
+                            showingSyncProviderRestart = true
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    private var firebaseSyncSection: some View {
+        MoreSectionGroup(
+            title: "Firebase Sync",
+            icon: syncStatusIcon,
+            subtitle: syncStatusText,
+            accentColor: syncStatusColor
+        ) {
+            MoreCardView(
+                icon: syncStatusIcon,
+                iconColor: syncStatusColor,
+                title: "Sync Data",
+                subtitle: syncStatusText,
+                trailingContent: {
+                    if syncManager.syncStatus == .syncing {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .tint(Color.electricViolet)
+                    } else {
+                        SettingsInlineActionButton(title: "Sync", color: Color.electricViolet) {
+                            syncManager.syncWithServer()
+                        }
+                    }
+                }
+            )
+            .disabled(syncManager.syncStatus == .syncing)
+
+            settingsDivider
+
+            MoreCardView(
+                icon: "arrow.triangle.2.circlepath",
+                iconColor: Color.electricViolet,
+                title: "Auto Sync",
+                subtitle: "Automatically sync changes when Firebase is active",
+                trailingContent: {
+                    Toggle("Auto Sync", isOn: $syncManager.isAutoSyncEnabled)
+                        .labelsHidden()
+                        .toggleStyle(SwitchToggleStyle(tint: Color.electricViolet))
+                        .accessibilityLabel("Auto Sync")
+                        .accessibilityValue(syncManager.isAutoSyncEnabled ? "Enabled" : "Disabled")
+                        .accessibilityHint("Toggles automatic data sync.")
+                }
+            )
+        }
+    }
+
+    private var preferencesSection: some View {
+        MoreSectionGroup(
+            title: "Preferences",
+            icon: "slider.horizontal.3",
+            subtitle: "Customize how D2D Advancer behaves.",
+            accentColor: Color.electricViolet
+        ) {
+            MoreCardView(
+                icon: "moon.fill",
+                iconColor: Color.electricViolet,
+                title: "Dark Mode",
+                subtitle: darkModeEnabled ? "Enabled" : "Disabled",
+                trailingContent: {
+                    Toggle("Dark Mode", isOn: $darkModeEnabled)
+                        .labelsHidden()
+                        .toggleStyle(SwitchToggleStyle(tint: Color.electricViolet))
+                        .accessibilityLabel("Dark Mode")
+                        .accessibilityValue(darkModeEnabled ? "Enabled" : "Disabled")
+                        .accessibilityHint("Toggles dark appearance for the app.")
+                }
+            )
+
+            settingsDivider
+            settingsNavigationCard(title: "Notifications", subtitle: "Reminders and alerts", icon: "bell.fill", color: Color.statusNotHome) {
+                NotificationSettingsView()
+            }
+            settingsDivider
+            settingsNavigationCard(title: "Calendar", subtitle: "Calendar sync and appointment defaults", icon: "calendar", color: Color.statusNotInterested) {
+                CalendarSettingsView()
+            }
+            settingsDivider
+            settingsNavigationCard(title: "App Preferences", subtitle: "Default lead, follow-up, and map choices", icon: "gearshape.2.fill", color: Color.textSecondary) {
+                AppPreferencesView()
+            }
+            settingsDivider
+            settingsNavigationCard(title: "Appointment Types", subtitle: "Default and custom job types", icon: "calendar.badge.plus", color: Color.electricViolet) {
+                AppointmentTypePresetsView()
+            }
+        }
+    }
+
+    private var helpSection: some View {
+        MoreSectionGroup(
+            title: "Help",
+            icon: "questionmark.circle.fill",
+            subtitle: "Restart onboarding whenever you need a refresher."
+        ) {
+            Button {
+                OnboardingManager.shared.startOnboarding()
+                showingOnboarding = true
+            } label: {
+                MoreCardView(
+                    icon: "questionmark.circle",
+                    iconColor: Color.electricViolet,
+                    title: "Show Tutorial",
+                    subtitle: "Walk through features and best practices"
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityLabel("Show app tutorial")
+            .accessibilityHint("Restart the onboarding tutorial to learn about app features")
+        }
+    }
+
+    private var aboutSection: some View {
+        MoreSectionGroup(
+            title: "About",
+            icon: "info.circle.fill",
+            subtitle: "App version and release information."
+        ) {
+            MoreCardView(
+                icon: "info.circle",
+                iconColor: Color.electricViolet,
+                title: "Version",
+                subtitle: AppVersionDisplay.current
+            )
+        }
+    }
+
+    private var signOutSection: some View {
+        MoreSectionGroup(
+            title: "Session",
+            icon: "rectangle.portrait.and.arrow.right",
+            subtitle: "Sign out of the active account.",
+            accentColor: Color.statusNotInterested
+        ) {
+            Button {
+                userAccountManager.logout()
+            } label: {
+                MoreCardView(
+                    icon: userAccountManager.authStatus == .loading ? "arrow.clockwise" : "rectangle.portrait.and.arrow.right",
+                    iconColor: Color.statusNotInterested,
+                    title: userAccountManager.authStatus == .loading ? "Syncing & Signing Out..." : "Sign Out",
+                    subtitle: "Finish sync, then leave this account",
+                    titleColor: Color.statusNotInterested
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .disabled(userAccountManager.authStatus == .loading)
+        }
+    }
+
+    private func settingsNavigationCard<Destination: View>(
+        title: String,
+        subtitle: String,
+        icon: String,
+        color: Color,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination()) {
+            MoreCardView(
+                icon: icon,
+                iconColor: color,
+                title: title,
+                subtitle: subtitle,
+                showChevron: true
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    private var settingsDivider: some View {
+        Rectangle()
+            .fill(Color.obsidianBorder.opacity(0.45))
+            .frame(height: 0.5)
+            .padding(.leading, 74)
+    }
+
+    private var accountTitle: String {
+        if let firebaseUser = userAccountManager.currentUser {
+            return userAccountManager.currentUserDisplayName ?? firebaseUser.displayName ?? "Signed In"
+        }
+        if userAccountManager.isAppleAuthed {
+            let appleName = userAccountManager.appleUserFullName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return appleName?.isEmpty == false ? (appleName ?? "Signed in with Apple") : "Signed in with Apple"
+        }
+        switch CloudSyncProvider.current {
+        case .icloud: return "iCloud Sync"
+        case .firebase: return "Guest Account"
+        case .off: return "Local Data"
+        }
+    }
+
+    private var accountSubtitle: String {
+        if let firebaseEmail = userAccountManager.currentUser?.email, !firebaseEmail.isEmpty {
+            return firebaseEmail
+        }
+        if let appleEmail = userAccountManager.appleUserEmail, !appleEmail.isEmpty {
+            return appleEmail
+        }
+        if userAccountManager.isAppleAuthed {
+            return "Apple ID connected"
+        }
+        switch CloudSyncProvider.current {
+        case .icloud: return "Uses your device Apple ID automatically"
+        case .firebase: return "Sign in to use Firebase sync"
+        case .off: return "Stored on this device"
+        }
+    }
+
+    private var accountIcon: String {
+        if userAccountManager.isAppleAuthed && !userAccountManager.isLoggedIn {
+            return "applelogo"
+        }
+        switch CloudSyncProvider.current {
+        case .icloud: return "icloud.fill"
+        case .firebase: return userAccountManager.isLoggedIn ? "person.circle.fill" : "person.crop.circle.badge.questionmark"
+        case .off: return "iphone"
+        }
+    }
+
+    private var accountTint: Color {
+        if userAccountManager.isLoggedIn || userAccountManager.isAppleAuthed {
+            return Color.electricViolet
+        }
+        switch CloudSyncProvider.current {
+        case .icloud: return Color.statusConverted
+        case .firebase: return Color.statusInterested
+        case .off: return Color.textSecondary
+        }
+    }
+
+    private var syncProviderSubtitle: String {
+        switch selectedSyncProvider {
+        case .off:
+            return "Data is stored locally only. No cloud backup."
+        case .firebase:
+            return "Syncs via Firebase. Requires account sign-in. Works across devices."
+        case .icloud:
+            return "Syncs automatically via iCloud using your Apple ID."
+        }
+    }
+
+    private var syncProviderTint: Color {
+        switch selectedSyncProvider {
+        case .off: return Color.textSecondary
+        case .firebase: return Color.electricViolet
+        case .icloud: return Color.statusConverted
+        }
     }
 }
 
 struct GuestInfoRowView: View {
+    private var provider: CloudSyncProvider {
+        CloudSyncProvider.current
+    }
+
+    private var icon: String {
+        switch provider {
+        case .icloud: return "icloud.fill"
+        case .firebase: return "person.crop.circle.badge.questionmark"
+        case .off: return "iphone"
+        }
+    }
+
+    private var color: Color {
+        switch provider {
+        case .icloud: return Color.statusConverted
+        case .firebase: return Color.statusInterested
+        case .off: return Color.textSecondary
+        }
+    }
+
+    private var title: String {
+        switch provider {
+        case .icloud: return "iCloud Sync"
+        case .firebase: return "Guest Account"
+        case .off: return "Local Data"
+        }
+    }
+
+    private var subtitle: String {
+        switch provider {
+        case .icloud: return "Uses your device Apple ID automatically"
+        case .firebase: return "Sign in to use Firebase sync"
+        case .off: return "Stored on this device"
+        }
+    }
+
     var body: some View {
         HStack {
-            Image(systemName: "person.crop.circle.badge.questionmark")
-                .foregroundColor(.green)
-                .frame(width: 24, height: 24)
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                    .frame(width: 24, height: 24)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Guest Account")
-                    .font(.headline)
-                    .foregroundColor(.green)
-                Text("Data stored locally on this device")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.obsidianCallout)
+                        .foregroundColor(color)
+                    Text(subtitle)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                }
 
             Spacer()
         }
@@ -298,21 +554,43 @@ struct GuestInfoRowView: View {
 struct UserInfoRowView: View {
     @ObservedObject var userAccountManager: FirebaseUserAccountManager
 
+    private var displayName: String {
+        if let firebaseUser = userAccountManager.currentUser {
+            return userAccountManager.currentUserDisplayName ?? firebaseUser.displayName ?? "User"
+        }
+        if let appleName = userAccountManager.appleUserFullName, !appleName.isEmpty {
+            return appleName
+        }
+        return "Signed in with Apple"
+    }
+
+    private var subtitle: String {
+        if let firebaseEmail = userAccountManager.currentUser?.email, !firebaseEmail.isEmpty {
+            return firebaseEmail
+        }
+        if let appleEmail = userAccountManager.appleUserEmail, !appleEmail.isEmpty {
+            return appleEmail
+        }
+        return "Apple ID connected"
+    }
+
+    private var icon: String {
+        userAccountManager.isAppleAuthed && !userAccountManager.isLoggedIn ? "applelogo" : "person.circle.fill"
+    }
+
     var body: some View {
         HStack {
-            Image(systemName: "person.circle.fill")
-                .foregroundColor(.blue)
-                .frame(width: 24, height: 24)
+                Image(systemName: icon)
+                    .foregroundColor(Color.electricViolet)
+                    .frame(width: 24, height: 24)
 
-            VStack(alignment: .leading, spacing: 2) {
-                if let user = userAccountManager.currentUser {
-                    Text(userAccountManager.currentUserDisplayName ?? user.displayName ?? "User")
-                        .font(.headline)
-                    Text(user.email ?? "Unknown")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayName)
+                        .font(.obsidianCallout)
+                    Text(subtitle)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
                 }
-            }
 
             Spacer()
         }
@@ -330,11 +608,11 @@ struct ExitGuestModeRowView: View {
         }) {
             HStack {
                 Image(systemName: "rectangle.portrait.and.arrow.right")
-                    .foregroundColor(.orange)
+                    .foregroundColor(Color.statusNotHome)
                     .frame(width: 20, height: 20)
 
                 Text("Exit Guest Mode")
-                    .foregroundColor(.orange)
+                    .foregroundColor(Color.statusNotHome)
 
                 Spacer()
             }
@@ -358,220 +636,69 @@ struct CreateAccountFromGuestView: View {
     @State private var confirmPassword = ""
     @State private var name = ""
     @State private var showingSuccess = false
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        GeometryReader { geometry in
-            VStack(spacing: 0) {
-                // Dynamic safe area spacer
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color(UIColor.systemBackground),
-                                Color(UIColor.systemBackground).opacity(0.98)
-                            ]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
-
-                ScrollView {
-                    LazyVStack(spacing: 16) {
-                        // Header
-                        VStack(spacing: 12) {
-                            Circle()
-                                .fill(Color.green.opacity(0.1))
-                                .frame(width: 80, height: 80)
-                                .overlay(
-                                    Image(systemName: "person.crop.circle.badge.plus")
-                                        .font(.system(size: 32))
-                                        .foregroundColor(.green)
-                                )
-
-                            VStack(spacing: 6) {
-                                Text("Create Your Account")
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-
-                                Text("Save your data and access it from any device")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                            }
-                        }
-                        .padding(.top, 16)
-                        .padding(.horizontal, 16)
-
-                        // Form Card
-                        VStack(alignment: .leading, spacing: 16) {
-                            HStack {
-                                Image(systemName: "person.text.rectangle")
-                                    .foregroundColor(.green)
-                                    .font(.title2)
-
-                                Text("Account Information")
-                                    .font(.title3)
-                                    .fontWeight(.bold)
-
-                                Spacer()
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.top, 20)
-
-                            VStack(spacing: 16) {
-                                accountTextField(title: "Full Name", text: $name, icon: "person.fill")
-                                accountTextField(title: "Email", text: $email, icon: "envelope.fill", keyboardType: .emailAddress)
-                                accountTextField(title: "Password", text: $password, icon: "lock.fill", isSecure: true)
-                                accountTextField(title: "Confirm Password", text: $confirmPassword, icon: "checkmark.seal.fill", isSecure: true)
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.bottom, 20)
-                        }
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color(UIColor.tertiarySystemBackground),
-                                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-                        )
-                        .padding(.horizontal, 16)
-
-                        // Create Account Button
-                        Button(action: {
-                            createAccount()
-                        }) {
-                            HStack(spacing: 8) {
-                                if userAccountManager.authStatus == .loading {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                        .foregroundColor(.white)
-                                    Text("Creating Account...")
-                                } else {
-                                    Image(systemName: "checkmark.circle.fill")
-                                    Text("Create Account & Save Data")
-                                }
-                            }
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(
-                                        isFormValid ? LinearGradient(
-                                            gradient: Gradient(colors: [Color.green, Color.green.opacity(0.8)]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ) : LinearGradient(
-                                            gradient: Gradient(colors: [Color.gray, Color.gray]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .shadow(color: isFormValid ? Color.green.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 2)
-                            )
-                        }
-                        .disabled(!isFormValid || userAccountManager.authStatus == .loading)
-                        .padding(.horizontal, 16)
-
-                        // Error Card
-                        if case let .failed(error) = userAccountManager.authStatus {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundColor(.red)
-                                    Text("Error")
-                                        .fontWeight(.semibold)
-                                }
-                                Text(error)
-                                    .font(.subheadline)
-                                    .foregroundColor(.red)
-                            }
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.red.opacity(0.1))
-                            )
-                            .padding(.horizontal, 16)
-                        }
-
-                        // Success Card
-                        if case .success = userAccountManager.authStatus {
-                            VStack(spacing: 16) {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                        .font(.title)
-                                    Text("Account Created!")
-                                        .font(.title3)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.green)
-                                }
-
-                                Text("Your data has been successfully migrated to your new account.")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.green.opacity(0.1))
-                            )
-                            .padding(.horizontal, 16)
-                        }
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ObsidianSectionCard(
+                    title: "Account Information",
+                    icon: "person.text.rectangle",
+                    subtitle: "Use an email and password for Firebase sync.",
+                    accentColor: Color.statusInterested
+                ) {
+                    VStack(spacing: 14) {
+                        accountTextField(title: "Full Name", text: $name, icon: "person.fill")
+                        accountTextField(title: "Email", text: $email, icon: "envelope.fill", keyboardType: .emailAddress)
+                        accountTextField(title: "Password", text: $password, icon: "lock.fill", isSecure: true)
+                        accountTextField(title: "Confirm Password", text: $confirmPassword, icon: "checkmark.seal.fill", isSecure: true)
                     }
-                    .padding(.vertical, 8)
                 }
-            }
-            .navigationBarHidden(true)
-            .navigationBarBackButtonHidden(true)
-            .ignoresSafeArea(.all, edges: .top)
-            .safeAreaInset(edge: .bottom) {
-                // Back button
-                Button(action: {
-                    presentationMode.wrappedValue.dismiss()
-                }) {
-                    HStack {
-                        Image(systemName: "chevron.left.circle.fill")
-                            .font(.title3)
-                        Text("Back to Settings")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+
+                if case let .failed(error) = userAccountManager.authStatus {
+                    ObsidianStatusBanner(
+                        icon: "exclamationmark.triangle.fill",
+                        title: "Account creation failed",
+                        message: error,
+                        tint: Color.statusNotInterested
                     )
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
-                )
+
+                if case .success = userAccountManager.authStatus {
+                    ObsidianStatusBanner(
+                        icon: "checkmark.circle.fill",
+                        title: "Account Created",
+                        message: "Your guest data has been migrated to this account.",
+                        tint: Color.statusInterested
+                    )
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 28)
+        }
+        .obsidianScreenBackground()
+        .obsidianPushedNavigation(
+            "Create Account",
+            backButtonAccessibilityIdentifier: "createAccountBackButton",
+            onBack: { dismiss() }
+        )
+        .safeAreaInset(edge: .bottom) {
+            ObsidianBottomActionBar(
+                isPrimaryDisabled: !isFormValid || userAccountManager.authStatus == .loading,
+                primaryAction: createAccount,
+                secondaryAction: { dismiss() },
+                primaryLabel: {
+                    if userAccountManager.authStatus == .loading {
+                        Label("Creating...", systemImage: "arrow.clockwise")
+                    } else {
+                        Label("Create Account", systemImage: "checkmark.circle.fill")
+                    }
+                },
+                secondaryLabel: {
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                }
+            )
         }
         .onAppear {
             userAccountManager.authStatus = .idle
@@ -582,11 +709,11 @@ struct CreateAccountFromGuestView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .foregroundColor(.green)
+                    .foregroundColor(Color.statusInterested)
                     .frame(width: 18)
 
                 Text(title)
-                    .font(.subheadline)
+                    .font(.obsidianFootnote)
                     .fontWeight(.semibold)
             }
 
@@ -599,14 +726,14 @@ struct CreateAccountFromGuestView: View {
                         .autocapitalization(keyboardType == .emailAddress ? .none : .words)
                 }
             }
-            .font(.body)
+            .font(.obsidianCallout)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color(UIColor.systemBackground))
-            .cornerRadius(8)
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.5), lineWidth: 0.5)
             )
         }
     }
@@ -633,7 +760,7 @@ struct CreateAccountFromGuestView: View {
                 // Success - dismiss after a short delay
                 try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
                 await MainActor.run {
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 }
             } catch {
                 // Error already handled by the account manager
@@ -664,12 +791,12 @@ struct SignOutRowView: View {
                         .frame(width: 20, height: 20)
                 } else {
                     Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .foregroundColor(.red)
+                        .foregroundColor(Color.statusNotInterested)
                         .frame(width: 20, height: 20)
                 }
-                
+
                 Text(userAccountManager.authStatus == .loading ? "Syncing & Signing Out..." : "Sign Out")
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.statusNotInterested)
                 
                 Spacer()
             }
@@ -692,308 +819,29 @@ struct AccountManagementView: View {
     @State private var showingPasswordChange = false
     @State private var showingDeleteConfirmation = false
     @State private var showingDeletePasswordPrompt = false
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        GeometryReader { geometry in
-                VStack(spacing: 0) {
-                    // Dynamic safe area spacer that adapts to device
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color(UIColor.systemBackground),
-                                    Color(UIColor.systemBackground).opacity(0.98)
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
-                    
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            // Name editing card
-                            if editingName {
-                                VStack(alignment: .leading, spacing: 16) {
-                                    HStack(spacing: 16) {
-                                        Circle()
-                                            .fill(Color.blue)
-                                            .frame(width: 48, height: 48)
-                                            .overlay(
-                                                Image(systemName: "person.fill")
-                                                    .font(.system(size: 18, weight: .semibold))
-                                                    .foregroundColor(.white)
-                                            )
-                                        
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text("Edit Name")
-                                                .font(.system(size: 17, weight: .semibold, design: .rounded))
-                                                .foregroundColor(.primary)
-                                            
-                                            Text("Update your display name")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.secondary)
-                                        }
-                                        
-                                        Spacer()
-                                    }
-                                    
-                                    VStack(spacing: 12) {
-                                        TextField("Enter your full name", text: $newName)
-                                            .font(.body)
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 12)
-                                            .background(Color(UIColor.tertiarySystemBackground))
-                                            .cornerRadius(12)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
-                                            )
-                                            .textContentType(.name)
-                                            .autocapitalization(.words)
-                                        
-                                        HStack(spacing: 12) {
-                                            Button("Cancel") {
-                                                editingName = false
-                                                newName = userAccountManager.currentUserDisplayName ?? userAccountManager.currentUser?.displayName ?? ""
-                                            }
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.primary)
-                                            .frame(maxWidth: .infinity)
-                                            .frame(height: 50)
-                                            .background(Color(UIColor.tertiarySystemBackground))
-                                            .cornerRadius(12)
-                                            
-                                            Button("Save") {
-                                                userAccountManager.updateUserName(newName: newName)
-                                                editingName = false
-                                            }
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.white)
-                                            .frame(maxWidth: .infinity)
-                                            .frame(height: 50)
-                                            .background(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.gray : Color.blue)
-                                            .cornerRadius(12)
-                                            .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [
-                                                Color(UIColor.tertiarySystemBackground),
-                                                Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                                            ]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                                        )
-                                        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-                                )
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 4)
-                            } else {
-                                AccountCardView(
-                                    icon: "person.fill",
-                                    iconColor: .blue,
-                                    title: "Name",
-                                    subtitle: userAccountManager.currentUserDisplayName ?? userAccountManager.currentUser?.displayName ?? "Unknown",
-                                    trailingContent: {
-                                        Button("Edit") {
-                                            newName = userAccountManager.currentUserDisplayName ?? userAccountManager.currentUser?.displayName ?? ""
-                                            editingName = true
-                                        }
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 6)
-                                        .background(Color.blue)
-                                        .cornerRadius(16)
-                                    }
-                                )
-                            }
-                            
-                            // Email card
-                            AccountCardView(
-                                icon: "envelope.fill",
-                                iconColor: .green,
-                                title: "Email",
-                                subtitle: userAccountManager.currentUser?.email ?? "Unknown",
-                                trailingContent: {
-                                    if FirebaseService.shared.currentUser?.isEmailVerified == true {
-                                        Text("Verified")
-                                            .font(.caption)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 6)
-                                            .background(Color.green)
-                                            .cornerRadius(16)
-                                    } else {
-                                        Button("Verify") {
-                                            userAccountManager.resendVerificationEmail()
-                                        }
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 6)
-                                        .background(Color.orange)
-                                        .cornerRadius(16)
-                                    }
-                                }
-                            )
-                            
-                            // Email Verification Section (if not verified)
-                            if FirebaseService.shared.currentUser?.isEmailVerified == false {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    HStack {
-                                        Image(systemName: "exclamationmark.triangle.fill")
-                                            .foregroundColor(.orange)
-                                        Text("Email not verified")
-                                            .foregroundColor(.orange)
-                                            .fontWeight(.semibold)
-                                        Spacer()
-                                    }
-                                    
-                                    Button("Check Verification Status") {
-                                        userAccountManager.refreshUserState()
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(Color.green)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(12)
-                                    .fontWeight(.semibold)
-                                    
-                                    if case .failed(_) = userAccountManager.authStatus {
-                                        Button("Resend Verification Email") {
-                                            userAccountManager.resendVerificationEmail()
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
-                                        .background(Color.blue)
-                                        .foregroundColor(.white)
-                                        .cornerRadius(12)
-                                        .fontWeight(.semibold)
-                                        .disabled(userAccountManager.authStatus == .loading)
-                                    }
-                                    
-                                    Text("Check your email first, then use the button above to refresh your verification status.")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .multilineTextAlignment(.center)
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [
-                                                Color(UIColor.tertiarySystemBackground),
-                                                Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                                            ]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                                        )
-                                        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-                                )
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 4)
-                            }
-                            
-                            // Change Password Button
-                            Button(action: {
-                                showingPasswordChange = true
-                            }) {
-                                AccountCardView(
-                                    icon: "key.fill",
-                                    iconColor: .orange,
-                                    title: "Change Password",
-                                    showChevron: true
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            
-                            // Delete Account Button
-                            Button(action: {
-                                showingDeletePasswordPrompt = true
-                            }) {
-                                AccountCardView(
-                                    icon: "trash.fill",
-                                    iconColor: .red,
-                                    title: "Delete Account",
-                                    titleColor: .red
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            
-                            // Status Card
-                            if userAccountManager.authStatus != .idle {
-                                statusCard
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                    }
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                accountHero
+                profileSection
+                securitySection
+
+                if FirebaseService.shared.currentUser?.isEmailVerified == false {
+                    emailVerificationCard
                 }
-                .navigationBarHidden(true)
-                .navigationBarBackButtonHidden(true)
-                .ignoresSafeArea(.all, edges: .top)
-                .safeAreaInset(edge: .bottom) {
-                    // Card-based back button at bottom
-                    Button(action: {
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
-                        HStack {
-                            Image(systemName: "chevron.left.circle.fill")
-                                .font(.title3)
-                            Text("Back to Settings")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        Rectangle()
-                            .fill(Color(UIColor.systemBackground))
-                            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
-                    )
+
+                if userAccountManager.authStatus != .idle {
+                    statusCard
                 }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 28)
         }
+        .obsidianScreenBackground()
+        .obsidianPushedNavigation("Account", backButtonAccessibilityIdentifier: "accountManagementBackButton")
         .sheet(isPresented: $showingPasswordChange) {
             PasswordChangeView(userAccountManager: userAccountManager)
         }
@@ -1005,91 +853,248 @@ struct AccountManagementView: View {
             userAccountManager.authStatus = .idle
         }
     }
-    
+
+    private var accountHero: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ObsidianIconTile(icon: "person.crop.circle.fill", tint: Color.electricViolet, size: 48, filled: true)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(userAccountManager.currentUserDisplayName ?? userAccountManager.currentUser?.displayName ?? "Account")
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .accessibilityIdentifier("accountManagementScreen")
+
+                Text(userAccountManager.currentUser?.email ?? "Signed in")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
+
+                Text(FirebaseService.shared.currentUser?.isEmailVerified == true ? "Verified" : "Needs verification")
+                    .font(.micro)
+                    .foregroundColor(FirebaseService.shared.currentUser?.isEmailVerified == true ? Color.statusInterested : Color.statusNotHome)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background((FirebaseService.shared.currentUser?.isEmailVerified == true ? Color.statusInterested : Color.statusNotHome).opacity(0.12))
+                    .clipShape(Capsule())
+                    .padding(.top, 2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
+    }
+
+    private var profileSection: some View {
+        MoreSectionGroup(
+            title: "Profile",
+            icon: "person.fill",
+            subtitle: "Name and email shown on this account.",
+            accentColor: Color.electricViolet
+        ) {
+            if editingName {
+                editNameRow
+            } else {
+                MoreCardView(
+                    icon: "person.fill",
+                    iconColor: Color.electricViolet,
+                    title: "Name",
+                    subtitle: userAccountManager.currentUserDisplayName ?? userAccountManager.currentUser?.displayName ?? "Unknown",
+                    trailingContent: {
+                        SettingsInlineActionButton(title: "Edit", color: Color.electricViolet) {
+                            newName = userAccountManager.currentUserDisplayName ?? userAccountManager.currentUser?.displayName ?? ""
+                            editingName = true
+                        }
+                        .accessibilityIdentifier("accountNameEditButton")
+                    }
+                )
+            }
+
+            Rectangle()
+                .fill(Color.obsidianBorder.opacity(0.5))
+                .frame(height: 0.5)
+                .padding(.leading, 68)
+
+            MoreCardView(
+                icon: "envelope.fill",
+                iconColor: Color.statusInterested,
+                title: "Email",
+                subtitle: userAccountManager.currentUser?.email ?? "Unknown",
+                trailingContent: {
+                    if FirebaseService.shared.currentUser?.isEmailVerified == true {
+                        Text("Verified")
+                            .font(.micro)
+                            .foregroundColor(Color.statusInterested)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color.statusInterested.opacity(0.12))
+                            .clipShape(Capsule())
+                    } else {
+                        SettingsInlineActionButton(title: "Verify", color: Color.statusNotHome) {
+                            userAccountManager.resendVerificationEmail()
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    private var editNameRow: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LeadFormTextField(
+                title: "Display Name",
+                placeholder: "Enter your full name",
+                text: $newName,
+                icon: "person.fill"
+            )
+            .accessibilityIdentifier("accountNameField")
+
+            HStack(spacing: 10) {
+                Button("Cancel") {
+                    editingName = false
+                    newName = userAccountManager.currentUserDisplayName ?? userAccountManager.currentUser?.displayName ?? ""
+                }
+                .frame(maxWidth: .infinity)
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("accountNameCancelButton")
+
+                Button("Save") {
+                    userAccountManager.updateUserName(newName: newName)
+                    editingName = false
+                }
+                .frame(maxWidth: .infinity)
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+                .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
+                .accessibilityIdentifier("accountNameSaveButton")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+    }
+
+    private var securitySection: some View {
+        MoreSectionGroup(
+            title: "Security",
+            icon: "lock.shield.fill",
+            subtitle: "Sign-in and account controls.",
+            accentColor: Color.statusNotHome
+        ) {
+            if userAccountManager.accountAuthenticationMethod == .password {
+                Button {
+                    showingPasswordChange = true
+                } label: {
+                    MoreCardView(
+                        icon: "key.fill",
+                        iconColor: Color.statusNotHome,
+                        title: "Change Password",
+                        subtitle: "Update your sign-in password",
+                        showChevron: true
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("accountChangePasswordButton")
+
+                Rectangle()
+                    .fill(Color.obsidianBorder.opacity(0.5))
+                    .frame(height: 0.5)
+                    .padding(.leading, 68)
+            }
+
+            Button {
+                showingDeletePasswordPrompt = true
+            } label: {
+                MoreCardView(
+                    icon: "trash.fill",
+                    iconColor: Color.statusNotInterested,
+                    title: "Delete Account",
+                    subtitle: "Permanently remove this account",
+                    titleColor: Color.statusNotInterested,
+                    subtitleColor: Color.statusNotInterested.opacity(0.72),
+                    showChevron: true
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("accountDeleteAccountButton")
+        }
+    }
+
+    private var emailVerificationCard: some View {
+        ObsidianSectionCard(
+            title: "Email Not Verified",
+            icon: "exclamationmark.triangle.fill",
+            subtitle: "Check your inbox, then refresh your account status.",
+            accentColor: Color.statusNotHome
+        ) {
+            VStack(spacing: 12) {
+                Button {
+                    userAccountManager.refreshUserState()
+                } label: {
+                    Label("Check Verification Status", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+
+                if case .failed(_) = userAccountManager.authStatus {
+                    Button {
+                        userAccountManager.resendVerificationEmail()
+                    } label: {
+                        Label("Resend Verification Email", systemImage: "envelope.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ObsidianSecondaryButtonStyle())
+                    .disabled(userAccountManager.authStatus == .loading)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var statusCard: some View {
         switch userAccountManager.authStatus {
         case .loading:
             AccountCardView(
                 icon: "arrow.clockwise",
-                iconColor: .orange,
+                iconColor: Color.statusNotHome,
                 title: "Updating...",
                 subtitle: "Please wait"
             )
         case .success:
             AccountCardView(
                 icon: "checkmark.circle.fill",
-                iconColor: .green,
+                iconColor: Color.statusInterested,
                 title: "Update successful",
                 subtitle: "Changes have been saved"
             )
         case let .failed(error):
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Circle()
-                        .fill(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? Color.orange : Color.red)
-                        .frame(width: 48, height: 48)
-                        .overlay(
-                            Image(systemName: error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? "shield.checkerboard" : "exclamationmark.triangle.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
-                        )
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Error")
-                            .font(.system(size: 17, weight: .semibold, design: .rounded))
-                            .foregroundColor(.primary)
-                        
-                        Text(error)
-                            .font(.system(size: 14, weight: .regular, design: .rounded))
-                            .foregroundColor(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? .orange : .red)
-                            .lineLimit(nil)
-                    }
-                    
-                    Spacer()
-                }
-                
-                if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
+            ObsidianSectionCard(
+                title: "Error",
+                icon: error.isSecurityOrRateLimitMessage ? "shield.checkerboard" : "exclamationmark.triangle.fill",
+                subtitle: error,
+                accentColor: error.isSecurityOrRateLimitMessage ? Color.statusNotHome : Color.statusNotInterested
+            ) {
+                if error.isSecurityOrRateLimitMessage {
                     Text("This is a temporary security measure. Your account is safe.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
                         .multilineTextAlignment(.leading)
-                    
+
                     if userAccountManager.isSecurityBlocked && userAccountManager.securityBlockTimeRemaining > 0 {
-                        HStack {
-                            Image(systemName: "clock")
-                                .foregroundColor(.orange)
-                                .font(.caption)
-                            
-                            Text("Try again in: \(userAccountManager.formattedTimeRemaining)")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.orange)
-                        }
+                        ObsidianStatusBanner(
+                            icon: "clock",
+                            title: "Try again in \(userAccountManager.formattedTimeRemaining)",
+                            tint: Color.statusNotHome
+                        )
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color(UIColor.tertiarySystemBackground),
-                                Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color(UIColor.separator), lineWidth: 0.5)
-                    )
-            )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
         case .idle:
             EmptyView()
         }
@@ -1101,559 +1106,643 @@ struct PasswordChangeView: View {
     @State private var currentPassword = ""
     @State private var newPassword = ""
     @State private var confirmPassword = ""
-    @Environment(\.presentationMode) var presentationMode
-    
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
-        ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Password Fields Card
-                    modernSectionCard(title: "Password Information", icon: "key.fill") {
-                        VStack(spacing: 16) {
-                            modernTextField(title: "Current Password", text: $currentPassword, icon: "lock.fill", isSecure: true)
-                            
-                            modernTextField(title: "New Password", text: $newPassword, icon: "lock.rotation", isSecure: true)
-                            
-                            modernTextField(title: "Confirm New Password", text: $confirmPassword, icon: "checkmark.seal.fill", isSecure: true)
-                        }
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
+        NavigationStack {
+            VStack(spacing: 0) {
+                sheetHeader
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        passwordFieldsSection
+                        updateSection
+                        passwordStatusSection
                     }
-                    
-                    // Action Card
-                    modernSectionCard(title: "Update Password", icon: "arrow.triangle.2.circlepath") {
-                        VStack(spacing: 16) {
-                            if userAccountManager.authStatus == .loading {
-                                HStack {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                    Text("Updating password...")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 50)
-                                .background(Color(UIColor.tertiarySystemBackground))
-                                .cornerRadius(12)
-                            } else {
-                                Button("Change Password") {
-                                    guard newPassword == confirmPassword else {
-                                        userAccountManager.authStatus = .failed("Passwords don't match")
-                                        return
-                                    }
-                                    
-                                    userAccountManager.changePassword(
-                                        currentPassword: currentPassword,
-                                        newPassword: newPassword
-                                    )
-                                }
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 50)
-                                .background(isFormValid ? Color.blue : Color(UIColor.separator).opacity(0.3))
-                                .cornerRadius(12)
-                                .disabled(!isFormValid || userAccountManager.authStatus == .loading)
-                            }
-                        }
-                    }
-                    
-                    // Error/Status Card
-                    if case let .failed(error) = userAccountManager.authStatus {
-                        modernSectionCard(title: "Error", icon: "exclamationmark.triangle.fill") {
-                            VStack(spacing: 12) {
-                                HStack {
-                                    if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
-                                        Image(systemName: "shield.checkerboard")
-                                            .foregroundColor(.orange)
-                                            .font(.title2)
-                                    } else {
-                                        Image(systemName: "exclamationmark.triangle.fill")
-                                            .foregroundColor(.red)
-                                            .font(.title2)
-                                    }
-                                    
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(error)
-                                            .foregroundColor(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? .orange : .red)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                        
-                                        if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
-                                            Text("This is a temporary security measure. Your account is safe.")
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
-                                    }
-                                    
-                                    Spacer()
-                                }
-                                
-                                if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
-                                    if userAccountManager.isSecurityBlocked && userAccountManager.securityBlockTimeRemaining > 0 {
-                                        HStack {
-                                            Image(systemName: "clock")
-                                                .foregroundColor(.orange)
-                                            
-                                            Text("Try again in: \(userAccountManager.formattedTimeRemaining)")
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
-                                                .foregroundColor(.orange)
-                                            
-                                            Spacer()
-                                        }
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 12)
-                                        .background(Color.orange.opacity(0.1))
-                                        .cornerRadius(8)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Success Card
-                    if case .success = userAccountManager.authStatus {
-                        modernSectionCard(title: "Success", icon: "checkmark.circle.fill") {
-                            VStack(spacing: 16) {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                        .font(.title2)
-                                    
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Password Updated")
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(.green)
-                                        
-                                        Text("Your password has been successfully changed")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    
-                                    Spacer()
-                                }
-                                
-                                Button("Close") {
-                                    presentationMode.wrappedValue.dismiss()
-                                }
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 50)
-                                .background(Color.green)
-                                .cornerRadius(12)
-                            }
-                        }
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 28)
                 }
-                .padding()
+                .background(screenBackground)
             }
-            .navigationTitle("Change Password")
-            .navigationBarTitleDisplayMode(.inline)
+            .background(screenBackground)
             .navigationBarHidden(true)
-            .navigationBarBackButtonHidden(true)
-            .safeAreaInset(edge: .bottom) {
-                // Card-based back button
-                Button(action: {
-                    presentationMode.wrappedValue.dismiss()
-                }) {
-                    HStack {
-                        Image(systemName: "chevron.left.circle.fill")
-                            .font(.title3)
-                        Text("Back to Account")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
-                    )
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
-                )
-            }
+        }
+        .obsidianModalBackground()
         .onAppear {
             userAccountManager.authStatus = .idle
         }
     }
-    
-    private func modernSectionCard<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text(title)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Spacer()
+
+    private var sheetHeader: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ObsidianIconTile(icon: "key.fill", tint: Color.statusNotHome, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Change Password")
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
+                    .accessibilityIdentifier("passwordChangeSheet")
+
+                Text("Use your current password to update account access.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            
-            content()
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+
+            Spacer(minLength: 0)
+
+            ObsidianCompactIconButton(
+                icon: "xmark",
+                accessibilityLabel: "Close password change",
+                accentColor: Color.textSecondary,
+                accessibilityIdentifier: "passwordChangeCloseButton"
+            ) {
+                dismiss()
+            }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 18)
+        .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .top))
+    }
+
+    private var passwordFieldsSection: some View {
+        ObsidianSectionCard(
+            title: "Password Information",
+            icon: "lock.fill",
+            subtitle: "Enter your current password and choose a new one.",
+            accentColor: Color.statusNotHome
+        ) {
+            VStack(spacing: 12) {
+                passwordField(
+                    title: "Current Password",
+                    text: $currentPassword,
+                    icon: "lock.fill",
+                    identifier: "passwordChangeCurrentField"
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
-        .cornerRadius(16)
-    }
-    
-    private func modernTextField(title: String, text: Binding<String>, icon: String, isSecure: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(.blue)
-                    .frame(width: 20)
-                
-                Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-            }
-            
-            if isSecure {
-                SecureField(title, text: text)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
-                    )
-            } else {
-                TextField(title, text: text)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1)
-                    )
+                passwordField(
+                    title: "New Password",
+                    text: $newPassword,
+                    icon: "lock.rotation",
+                    identifier: "passwordChangeNewField"
+                )
+                passwordField(
+                    title: "Confirm New Password",
+                    text: $confirmPassword,
+                    icon: "checkmark.seal.fill",
+                    identifier: "passwordChangeConfirmField"
+                )
             }
         }
     }
-    
+
+    private var updateSection: some View {
+        ObsidianSectionCard(
+            title: "Update Password",
+            icon: "arrow.triangle.2.circlepath",
+            accentColor: Color.electricViolet
+        ) {
+            if userAccountManager.authStatus == .loading {
+                ObsidianStatusBanner(
+                    icon: "arrow.clockwise",
+                    title: "Updating password...",
+                    message: "Keep this screen open until the update finishes.",
+                    tint: Color.electricViolet
+                )
+            } else {
+                Button {
+                    guard newPassword == confirmPassword else {
+                        userAccountManager.authStatus = .failed("Passwords don't match")
+                        return
+                    }
+
+                    userAccountManager.updatePassword(
+                        currentPassword: currentPassword,
+                        newPassword: newPassword
+                    )
+                } label: {
+                    Label("Change Password", systemImage: "checkmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+                .disabled(!isFormValid || userAccountManager.authStatus == .loading)
+                .opacity(isFormValid ? 1 : 0.55)
+                .accessibilityIdentifier("passwordChangeSubmitButton")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var passwordStatusSection: some View {
+        if case let .failed(error) = userAccountManager.authStatus {
+            ObsidianSectionCard(
+                title: "Error",
+                icon: error.isSecurityOrRateLimitMessage ? "shield.checkerboard" : "exclamationmark.triangle.fill",
+                subtitle: error,
+                accentColor: error.isSecurityOrRateLimitMessage ? Color.statusNotHome : Color.statusNotInterested
+            ) {
+                if error.isSecurityOrRateLimitMessage {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("This is a temporary security measure. Your account is safe.")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+
+                        if userAccountManager.isSecurityBlocked && userAccountManager.securityBlockTimeRemaining > 0 {
+                            ObsidianStatusBanner(
+                                icon: "clock",
+                                title: "Try again in \(userAccountManager.formattedTimeRemaining)",
+                                tint: Color.statusNotHome
+                            )
+                        }
+                    }
+                }
+            }
+        } else if case .success = userAccountManager.authStatus {
+            ObsidianSectionCard(
+                title: "Password Updated",
+                icon: "checkmark.circle.fill",
+                subtitle: "Your password has been successfully changed.",
+                accentColor: Color.statusInterested
+            ) {
+                Button {
+                    dismiss()
+                } label: {
+                    Label("Close", systemImage: "xmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+            }
+        }
+    }
+
+    private func passwordField(title: String, text: Binding<String>, icon: String, identifier: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundColor(Color.electricViolet)
+                    .frame(width: 20)
+
+                Text(title)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
+            }
+
+            SecureField(title, text: text)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color.obsidianElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                )
+                .foregroundColor(Color.textPrimary)
+                .textContentType(.password)
+                .accessibilityIdentifier(identifier)
+        }
+    }
+
     private var isFormValid: Bool {
-        !currentPassword.isEmpty && 
-        !newPassword.isEmpty && 
-        !confirmPassword.isEmpty && 
+        !currentPassword.isEmpty &&
+        !newPassword.isEmpty &&
+        !confirmPassword.isEmpty &&
         newPassword.count >= 6
     }
 }
 
 struct AppPreferencesView: View {
     @ObservedObject private var preferences = AppPreferences.shared
+    @ObservedObject private var categoryManager = ServiceCategoryManager.shared
     
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
-                VStack(spacing: 0) {
-                    // Dynamic safe area spacer that adapts to device
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color(UIColor.systemBackground),
-                                    Color(UIColor.systemBackground).opacity(0.98)
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(height: max(geometry.safeAreaInsets.top + 10, 60))
-                    
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            // Default Lead Status
-                            PreferenceCardView(
-                                icon: "person.badge.plus",
-                                iconColor: .blue,
-                                title: "Default Lead Status",
-                                subtitle: "Status assigned to new leads",
-                                trailingContent: {
-                                    Picker("", selection: $preferences.defaultLeadStatus) {
-                                        Text("Not Contacted").tag("not_contacted")
-                                        Text("Interested").tag("interested")
-                                        Text("Not Interested").tag("not_interested")
-                                        Text("Not Home").tag("not_home")
-                                        Text("Converted").tag("converted")
-                                    }
-                                    .pickerStyle(MenuPickerStyle())
-                                }
-                            )
-                            
-                            // Default Lead Sort
-                            PreferenceCardView(
-                                icon: "arrow.up.arrow.down",
-                                iconColor: .orange,
-                                title: "Default Lead Sort",
-                                subtitle: "How leads are sorted in lists",
-                                trailingContent: {
-                                    Picker("", selection: $preferences.leadSortPreference) {
-                                        Text("Date Updated").tag("date")
-                                        Text("Name").tag("name")
-                                        Text("Status").tag("status")
-                                    }
-                                    .pickerStyle(MenuPickerStyle())
-                                }
-                            )
-                            
-                            // Default Follow-up Time
-                            PreferenceCardView(
-                                icon: "clock.badge.checkmark",
-                                iconColor: .green,
-                                title: "Default Follow-up Time",
-                                subtitle: "Time interval for new follow-ups",
-                                trailingContent: {
-                                    Picker("", selection: $preferences.defaultFollowUpTime) {
-                                        Text("1 Hour").tag("1_hour")
-                                        Text("4 Hours").tag("4_hours")
-                                        Text("1 Day").tag("1_day")
-                                        Text("3 Days").tag("3_days")
-                                        Text("1 Week").tag("1_week")
-                                    }
-                                    .pickerStyle(MenuPickerStyle())
-                                }
-                            )
-                            
-                            // Default Check-in Type
-                            PreferenceCardView(
-                                icon: "door.left.hand.open",
-                                iconColor: .purple,
-                                title: "Default Check-in Type",
-                                subtitle: "Method used for follow-up check-ins",
-                                trailingContent: {
-                                    Picker("", selection: $preferences.defaultCheckInType) {
-                                        Text("Door Knock").tag("door_knock")
-                                        Text("Phone Call").tag("phone_call")
-                                        Text("Text Message").tag("text_message")
-                                        Text("Email").tag("email")
-                                    }
-                                    .pickerStyle(MenuPickerStyle())
-                                }
-                            )
-                            
-                            // Default Map Type
-                            PreferenceCardView(
-                                icon: "map",
-                                iconColor: .cyan,
-                                title: "Default Map Type",
-                                subtitle: "Map style when opening map view",
-                                trailingContent: {
-                                    Picker("", selection: $preferences.mapDefaultView) {
-                                        Text("Standard").tag("standard")
-                                        Text("Satellite").tag("satellite")
-                                        Text("Hybrid").tag("hybrid")
-                                    }
-                                    .pickerStyle(MenuPickerStyle())
-                                }
-                            )
-                            
-                            // Auto Backup Frequency
-                            PreferenceCardView(
-                                icon: "icloud.and.arrow.up",
-                                iconColor: .indigo,
-                                title: "Auto Backup Frequency",
-                                subtitle: "How often data is automatically backed up",
-                                trailingContent: {
-                                    Picker("", selection: $preferences.autoBackupFrequency) {
-                                        Text("Daily").tag("daily")
-                                        Text("Weekly").tag("weekly")
-                                        Text("Monthly").tag("monthly")
-                                        Text("Never").tag("never")
-                                    }
-                                    .pickerStyle(MenuPickerStyle())
-                                }
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                MoreSectionGroup(
+                    title: "Lead Defaults",
+                    icon: "person.badge.plus",
+                    subtitle: "Starting values for new leads."
+                ) {
+                    PreferenceCardView(
+                        icon: "tag.fill",
+                        iconColor: Color.statusInterested,
+                        title: "Default Service",
+                        subtitle: "Preselected for new leads",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default service",
+                                selection: defaultServiceSelection,
+                                options: [(value: "", label: "None")] + categoryManager.allCategories.map {
+                                    (value: $0.id, label: $0.name)
+                                },
+                                accessibilityIdentifier: "appPreferenceDefaultServicePicker"
                             )
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                    )
+
+                    preferencesDivider
+
+                    PreferenceCardView(
+                        icon: "person.badge.plus",
+                        iconColor: Color.electricViolet,
+                        title: "Default Lead Status",
+                        subtitle: "For every new lead",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default lead status",
+                                selection: $preferences.defaultLeadStatus,
+                                options: [
+                                    (value: "not_contacted", label: "Not Contacted"),
+                                    (value: "interested", label: "Interested"),
+                                    (value: "not_interested", label: "Not Interested"),
+                                    (value: "not_home", label: "Not Home"),
+                                    (value: "converted", label: "Sold")
+                                ],
+                                accessibilityIdentifier: "appPreferenceLeadStatusPicker"
+                            )
+                        }
+                    )
+
+                    preferencesDivider
+
+                    PreferenceCardView(
+                        icon: "arrow.up.arrow.down",
+                        iconColor: Color.statusNotHome,
+                        title: "Default Lead Sort",
+                        subtitle: "Default list order",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default lead sort",
+                                selection: $preferences.leadSortPreference,
+                                options: [
+                                    (value: "date", label: "Date Updated"),
+                                    (value: "created", label: "Date Created"),
+                                    (value: "name", label: "Name"),
+                                    (value: "status", label: "Status")
+                                ],
+                                accessibilityIdentifier: "appPreferenceLeadSortPicker"
+                            )
+                        }
+                    )
+                }
+
+                MoreSectionGroup(
+                    title: "Follow-up Defaults",
+                    icon: "clock.badge.checkmark",
+                    subtitle: "Reminder timing and visit type.",
+                    accentColor: Color.statusInterested
+                ) {
+                    PreferenceCardView(
+                        icon: "clock.badge.checkmark",
+                        iconColor: Color.statusInterested,
+                        title: "Default Follow-up Time",
+                        subtitle: "Default reminder window",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default follow-up time",
+                                selection: $preferences.defaultFollowUpTime,
+                                options: [
+                                    (value: "1_hour", label: "1 Hour"),
+                                    (value: "4_hours", label: "4 Hours"),
+                                    (value: "1_day", label: "1 Day"),
+                                    (value: "3_days", label: "3 Days"),
+                                    (value: "1_week", label: "1 Week")
+                                ],
+                                accessibilityIdentifier: "appPreferenceFollowUpTimePicker"
+                            )
+                        }
+                    )
+
+                    preferencesDivider
+
+                    PreferenceCardView(
+                        icon: "door.left.hand.open",
+                        iconColor: Color.electricViolet,
+                        title: "Default Check-in Type",
+                        subtitle: "Default follow-up method",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default check-in type",
+                                selection: $preferences.defaultCheckInType,
+                                options: [
+                                    (value: "door_knock", label: "Door Knock"),
+                                    (value: "phone_call", label: "Phone Call"),
+                                    (value: "text_message", label: "Text Message"),
+                                    (value: "email", label: "Email")
+                                ],
+                                accessibilityIdentifier: "appPreferenceCheckInTypePicker"
+                            )
+                        }
+                    )
+                }
+
+                MoreSectionGroup(
+                    title: "Map",
+                    icon: "map",
+                    subtitle: "Choose the map style used at launch.",
+                    accentColor: Color.dataCyan
+                ) {
+                    PreferenceCardView(
+                        icon: "map",
+                        iconColor: Color.dataCyan,
+                        title: "Default Map Type",
+                        subtitle: "Opening map style",
+                        trailingContent: {
+                            preferenceMenu(
+                                title: "Default map type",
+                                selection: $preferences.mapDefaultView,
+                                options: [
+                                    (value: "standard", label: "Standard"),
+                                    (value: "satellite", label: "Satellite"),
+                                    (value: "hybrid", label: "Hybrid")
+                                ],
+                                accessibilityIdentifier: "appPreferenceMapTypePicker"
+                            )
+                        }
+                    )
+
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 28)
+        }
+        .obsidianScreenBackground()
+        .obsidianPushedNavigation(
+            "App Preferences",
+            titleAccessibilityIdentifier: "appPreferencesScreen",
+            backButtonAccessibilityIdentifier: "appPreferencesBackButton"
+        )
+    }
+
+    private var preferencesDivider: some View {
+        Rectangle()
+            .fill(Color.obsidianBorder.opacity(0.45))
+            .frame(height: 0.5)
+            .padding(.leading, 74)
+    }
+
+    private var defaultServiceSelection: Binding<String> {
+        Binding(
+            get: {
+                DefaultServicePreferencePolicy.resolvedCategory(
+                    storedID: preferences.effectiveDefaultServiceCategoryID,
+                    availableCategories: categoryManager.allCategories
+                )?.id ?? ""
+            },
+            set: { preferences.defaultServiceCategoryID = $0 }
+        )
+    }
+
+    private func preferenceMenu(
+        title: String,
+        selection: Binding<String>,
+        options: [(value: String, label: String)],
+        accessibilityIdentifier: String
+    ) -> some View {
+        Menu {
+            ForEach(options, id: \.value) { option in
+                Button {
+                    selection.wrappedValue = option.value
+                } label: {
+                    if selection.wrappedValue == option.value {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
                     }
                 }
-                .navigationBarHidden(true)
-                .ignoresSafeArea(.all, edges: .top)
             }
+        } label: {
+            HStack(spacing: 6) {
+                Text(options.first(where: { $0.value == selection.wrappedValue })?.label ?? title)
+                    .font(.obsidianFootnote)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+
+                Image(systemName: "chevron.down")
+                    .font(.micro)
+            }
+            .foregroundColor(Color.electricViolet)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+            .background(Color.electricViolet.opacity(0.12))
+            .clipShape(Capsule())
+            .contentShape(Capsule())
         }
+        .accessibilityLabel(title)
+        .accessibilityValue(options.first(where: { $0.value == selection.wrappedValue })?.label ?? "")
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
 struct DeleteAccountView: View {
     @ObservedObject var userAccountManager: FirebaseUserAccountManager
     @State private var password = ""
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                VStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 50))
-                        .foregroundColor(.red)
-                    
-                    Text("Delete Account")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    
-                    Text("This action cannot be undone and will permanently delete all your data.")
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-                .padding(.bottom, 20)
-                
-                VStack(spacing: 16) {
-                    Text("Enter your password to confirm account deletion:")
-                        .font(.headline)
-                        .multilineTextAlignment(.center)
-                    
-                    SecureField("Current Password", text: $password)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .textContentType(.password)
-                }
-                .padding(.horizontal)
-                
-                if userAccountManager.authStatus == .loading {
-                    ProgressView("Deleting account...")
-                        .padding()
-                } else {
-                    Button("Delete Account") {
-                        userAccountManager.deleteAccount(currentPassword: password)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(isPasswordValid ? Color.red : Color.gray)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .disabled(!isPasswordValid || userAccountManager.authStatus == .loading)
-                    .padding(.horizontal)
-                }
-                
-                if case let .failed(error) = userAccountManager.authStatus {
-                    VStack(spacing: 4) {
-                        HStack {
-                            if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
-                                Image(systemName: "shield.checkerboard")
-                                    .foregroundColor(.orange)
-                                    .font(.caption)
-                            } else {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.red)
-                                    .font(.caption)
-                            }
-                            
-                            Text(error)
-                                .foregroundColor(error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") ? .orange : .red)
-                                .font(.caption)
-                                .multilineTextAlignment(.center)
-                        }
-                        
-                        if error.lowercased().contains("security check") || error.lowercased().contains("blocked") || error.lowercased().contains("too many requests") {
-                            Text("This is a temporary security measure. Your account is safe.")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                            
-                            // Show countdown timer if security block is active
-                            if userAccountManager.isSecurityBlocked && userAccountManager.securityBlockTimeRemaining > 0 {
-                                HStack {
-                                    Image(systemName: "clock")
-                                        .foregroundColor(.orange)
-                                        .font(.caption2)
-                                    
-                                    Text("Try again in: \(userAccountManager.formattedTimeRemaining)")
-                                        .font(.caption2)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.orange)
-                                }
-                                .padding(.top, 2)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                
-                if case .success = userAccountManager.authStatus {
+        let screenBackground = Color.obsidianBackground(for: colorScheme)
+
+        NavigationStack {
+            VStack(spacing: 0) {
+                deleteHeader
+
+                ScrollView {
                     VStack(spacing: 16) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Account deleted successfully")
-                                .foregroundColor(.green)
-                                .fontWeight(.semibold)
+                        ObsidianSectionCard(
+                            title: "Permanent Action",
+                            icon: "exclamationmark.triangle.fill",
+                            subtitle: "This cannot be undone and permanently removes your Team identity and Firebase account data.",
+                            accentColor: Color.statusNotInterested
+                        ) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text(accountDeletionExplanation)
+                                    .font(.obsidianFootnote)
+                                    .foregroundColor(Color.textSecondary)
+
+                                if userAccountManager.accountAuthenticationMethod == .password {
+                                    SecureField("Current Password", text: $password)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 12)
+                                        .background(Color.obsidianElevated)
+                                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                                        )
+                                        .foregroundColor(Color.textPrimary)
+                                        .textContentType(.password)
+                                        .accessibilityIdentifier("deleteAccountPasswordField")
+                                }
+                            }
                         }
-                        .padding()
-                        
-                        Text("Your account and all associated data have been permanently deleted.")
-                            .font(.caption)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
-                        
-                        Button("Close") {
-                            presentationMode.wrappedValue.dismiss()
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        .padding(.horizontal)
+
+                        deleteActionSection
+                        deleteStatusSection
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 28)
                 }
-                
-                Spacer()
+                .background(screenBackground)
             }
-            .padding()
-            .navigationTitle("Delete Account")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(
-                trailing: Button("Cancel") {
-                    presentationMode.wrappedValue.dismiss()
-                }
-            )
+            .background(screenBackground)
+            .navigationBarHidden(true)
         }
+        .obsidianModalBackground()
         .onAppear {
             userAccountManager.authStatus = .idle
+        }
+    }
+
+    private var deleteHeader: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ObsidianIconTile(icon: "trash.fill", tint: Color.statusNotInterested, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Delete Account")
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.textPrimary)
+                    .accessibilityIdentifier("deleteAccountSheet")
+
+                Text("Confirm this only when you are sure.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            ObsidianCompactIconButton(
+                icon: "xmark",
+                accessibilityLabel: "Close delete account",
+                accentColor: Color.textSecondary,
+                accessibilityIdentifier: "deleteAccountCloseButton"
+            ) {
+                dismiss()
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 18)
+        .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .top))
+    }
+
+    private var deleteActionSection: some View {
+        ObsidianSectionCard(
+            title: "Confirm Deletion",
+            icon: "lock.fill",
+            accentColor: Color.statusNotInterested
+        ) {
+            if userAccountManager.authStatus == .loading {
+                ObsidianStatusBanner(
+                    icon: "arrow.clockwise",
+                    title: "Deleting account...",
+                    message: "Keep this screen open until deletion finishes.",
+                    tint: Color.statusNotInterested
+                )
+            } else if userAccountManager.accountAuthenticationMethod == .password {
+                Button {
+                    userAccountManager.deleteAccount(currentPassword: password)
+                } label: {
+                    Label("Delete Account", systemImage: "trash.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianDangerButtonStyle())
+                .disabled(!isPasswordValid || userAccountManager.authStatus == .loading)
+                .opacity(isPasswordValid ? 1 : 0.55)
+                .accessibilityIdentifier("deleteAccountSubmitButton")
+            } else if userAccountManager.accountAuthenticationMethod == .apple {
+                SignInWithAppleButton(
+                    .continue,
+                    onRequest: AppleSignInManager.shared.configureAccountDeletionRequest,
+                    onCompletion: userAccountManager.handleAppleAccountDeletionAuthorization
+                )
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                .frame(maxWidth: .infinity, minHeight: 52, maxHeight: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityLabel("Confirm account deletion with Apple")
+                .accessibilityIdentifier("deleteAccountAppleConfirmationButton")
+            } else {
+                ObsidianStatusBanner(
+                    icon: "person.crop.circle.badge.exclamationmark",
+                    title: "Sign-in method unavailable",
+                    message: "Sign in again with the account's original method, then return here.",
+                    tint: Color.statusNotInterested
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var deleteStatusSection: some View {
+        if case let .failed(error) = userAccountManager.authStatus {
+            ObsidianSectionCard(
+                title: "Error",
+                icon: error.isSecurityOrRateLimitMessage ? "shield.checkerboard" : "exclamationmark.triangle.fill",
+                subtitle: error,
+                accentColor: error.isSecurityOrRateLimitMessage ? Color.statusNotHome : Color.statusNotInterested
+            ) {
+                if error.isSecurityOrRateLimitMessage {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("This is a temporary security measure. Your account is safe.")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+
+                        if userAccountManager.isSecurityBlocked && userAccountManager.securityBlockTimeRemaining > 0 {
+                            ObsidianStatusBanner(
+                                icon: "clock",
+                                title: "Try again in \(userAccountManager.formattedTimeRemaining)",
+                                tint: Color.statusNotHome
+                            )
+                        }
+                    }
+                }
+            }
+        } else if case .success = userAccountManager.authStatus {
+            ObsidianSectionCard(
+                title: "Account Deleted",
+                icon: "checkmark.circle.fill",
+                subtitle: "Your Team identity and Firebase account data have been permanently deleted.",
+                accentColor: Color.statusInterested
+            ) {
+                Button {
+                    dismiss()
+                } label: {
+                    Label("Close", systemImage: "xmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianPrimaryButtonStyle())
+                .accessibilityIdentifier("deleteAccountSuccessCloseButton")
+            }
         }
     }
     
     private var isPasswordValid: Bool {
         !password.isEmpty
+    }
+
+    private var accountDeletionExplanation: String {
+        switch userAccountManager.accountAuthenticationMethod {
+        case .password:
+            return "Enter your current password to confirm deletion. Personal leads stored in your private iCloud workspace are not part of this Team account."
+        case .apple:
+            return "Confirm with Apple to revoke Sign in with Apple and delete this account. Personal leads stored in your private iCloud workspace are not part of this Team account."
+        case .unsupported:
+            return "The app cannot determine how this account was created. Sign in again with the original method before deleting it."
+        }
+    }
+}
+
+private extension String {
+    var isSecurityOrRateLimitMessage: Bool {
+        let lowercasedMessage = lowercased()
+        return lowercasedMessage.contains("security check")
+            || lowercasedMessage.contains("blocked")
+            || lowercasedMessage.contains("too many requests")
     }
 }
 
@@ -1667,13 +1756,13 @@ struct AccountCardView<TrailingContent: View>: View {
     let titleColor: Color
     let showChevron: Bool
     let trailingContent: (() -> TrailingContent)?
-    
+
     init(
         icon: String,
         iconColor: Color,
         title: String,
         subtitle: String? = nil,
-        titleColor: Color = .primary,
+        titleColor: Color = Color.textPrimary,
         showChevron: Bool = false,
         @ViewBuilder trailingContent: @escaping () -> TrailingContent
     ) {
@@ -1685,13 +1774,13 @@ struct AccountCardView<TrailingContent: View>: View {
         self.showChevron = showChevron
         self.trailingContent = trailingContent
     }
-    
+
     init(
         icon: String,
         iconColor: Color,
         title: String,
         subtitle: String? = nil,
-        titleColor: Color = .primary,
+        titleColor: Color = Color.textPrimary,
         showChevron: Bool = false
     ) where TrailingContent == EmptyView {
         self.icon = icon
@@ -1702,64 +1791,43 @@ struct AccountCardView<TrailingContent: View>: View {
         self.showChevron = showChevron
         self.trailingContent = nil
     }
-    
+
     var body: some View {
-        HStack(spacing: 16) {
-            // Icon
-            Circle()
-                .fill(iconColor)
-                .frame(width: 48, height: 48)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                )
-            
+        HStack(alignment: .center, spacing: 14) {
+            ObsidianIconTile(icon: icon, tint: iconColor, size: 42)
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(.obsidianCallout)
                     .foregroundColor(titleColor)
-                
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+
                 if let subtitle = subtitle {
                     Text(subtitle)
-                        .font(.system(size: 14, weight: .regular, design: .rounded))
-                        .foregroundColor(.secondary)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
                         .lineLimit(2)
                 }
             }
-            
+
             Spacer()
-            
+
             if let trailingContent = trailingContent {
                 trailingContent()
             } else if showChevron {
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color.textSecondary)
+                    .font(.obsidianFootnote)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
     }
 }
 
@@ -1785,56 +1853,64 @@ struct PreferenceCardView<TrailingContent: View>: View {
     }
     
     var body: some View {
-        HStack(spacing: 16) {
-            // Icon
-            Circle()
-                .fill(iconColor)
-                .frame(width: 48, height: 48)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                )
-            
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: 12) {
+            ObsidianIconTile(icon: icon, tint: iconColor, size: 34)
+
+            VStack(alignment: .leading, spacing: 7) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
-                
+                    .font(.obsidianFootnote)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color.textPrimary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 if let subtitle = subtitle {
                     Text(subtitle)
-                        .font(.system(size: 14, weight: .regular, design: .rounded))
-                        .foregroundColor(.secondary)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            
-            Spacer()
-            
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+
             trailingContent()
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.electricViolet)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+    }
+}
+
+private struct SettingsInlineActionButton: View {
+    let title: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.obsidianFootnote)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundColor(color)
+                .padding(.horizontal, 14)
+                .frame(minWidth: 68, minHeight: 44)
+                .background(color.opacity(0.12))
+                .clipShape(Capsule())
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                    Capsule()
+                        .stroke(color.opacity(0.28), lineWidth: 0.75)
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 

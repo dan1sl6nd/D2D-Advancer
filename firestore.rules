@@ -1,27 +1,686 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can read and write their own data
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function teamPath(teamId) {
+      return /databases/$(database)/documents/teams/$(teamId);
+    }
+
+    function teamMemberPath(teamId, userId) {
+      return /databases/$(database)/documents/teams/$(teamId)/members/$(userId);
+    }
+
+    function dutySessionPath(teamId, sessionId) {
+      return /databases/$(database)/documents/teams/$(teamId)/dutySessions/$(sessionId);
+    }
+
+    function invitePath(inviteId) {
+      return /databases/$(database)/documents/teamInvites/$(inviteId);
+    }
+
+    function teamOperationsControlPath() {
+      return /databases/$(database)/documents/serviceControls/teamOperations;
+    }
+
+    function teamUsageControlPath(teamId) {
+      return /databases/$(database)/documents/teamUsageControls/$(teamId);
+    }
+
+    function teamOperationsAllowWrite() {
+      return !exists(teamOperationsControlPath())
+        || (
+          "teamWritesEnabled" in get(teamOperationsControlPath()).data
+          && get(teamOperationsControlPath()).data.teamWritesEnabled == true
+        );
+    }
+
+    function teamUsageAllowsWrite(teamId) {
+      return !exists(teamUsageControlPath(teamId))
+        || !("writesAllowed" in get(teamUsageControlPath(teamId)).data)
+        || get(teamUsageControlPath(teamId)).data.writesAllowed == true
+        || (
+          "limitedUntil" in get(teamUsageControlPath(teamId)).data
+          && get(teamUsageControlPath(teamId)).data.limitedUntil is timestamp
+          && get(teamUsageControlPath(teamId)).data.limitedUntil <= request.time
+        );
+    }
+
+    function teamUsageAllowsCreate(teamId, collectionId) {
+      return teamUsageAllowsWrite(teamId)
+        && (
+          !exists(teamUsageControlPath(teamId))
+          || !("blockedCollections" in get(teamUsageControlPath(teamId)).data)
+          || !(get(teamUsageControlPath(teamId)).data.blockedCollections is list)
+          || !(collectionId in get(teamUsageControlPath(teamId)).data.blockedCollections)
+        );
+    }
+
+    function isLegacyTeamPlan(data) {
+      return !("billingSource" in data);
+    }
+
+    function legacyTeamAllowsRead(data) {
+      return isLegacyTeamPlan(data)
+        && (
+          (
+            data.planStatus == "active"
+            && (
+              !("planExpiresAt" in data)
+              || data.planExpiresAt == null
+              || data.planExpiresAt > request.time
+              || (
+                "graceEndsAt" in data
+                && data.graceEndsAt is timestamp
+                && data.graceEndsAt > request.time
+              )
+            )
+          )
+          || (
+            data.planStatus == "grace"
+            && (
+              !("graceEndsAt" in data)
+              || data.graceEndsAt == null
+              || (
+                data.graceEndsAt is timestamp
+                && data.graceEndsAt > request.time
+              )
+            )
+          )
+        );
+    }
+
+    function legacyTeamAllowsWrite(data) {
+      return isLegacyTeamPlan(data)
+        && data.planStatus == "active"
+        && (
+          !("planExpiresAt" in data)
+          || data.planExpiresAt == null
+          || (
+            data.planExpiresAt is timestamp
+            && data.planExpiresAt > request.time
+          )
+        );
+    }
+
+    function verifiedTeamAllowsRead(data) {
+      return data.billingSource == "app_store"
+        && (data.planStatus == "active" || data.planStatus == "grace")
+        && "graceEndsAt" in data
+        && data.graceEndsAt is timestamp
+        && data.graceEndsAt > request.time;
+    }
+
+    function verifiedTeamAllowsWrite(data) {
+      return data.billingSource == "app_store"
+        && data.planStatus == "active"
+        && "planExpiresAt" in data
+        && data.planExpiresAt is timestamp
+        && data.planExpiresAt > request.time;
+    }
+
+    function teamAllowsRead(teamId) {
+      return exists(teamPath(teamId))
+        && (
+          legacyTeamAllowsRead(get(teamPath(teamId)).data)
+          || verifiedTeamAllowsRead(get(teamPath(teamId)).data)
+        );
+    }
+
+    function teamAllowsWrite(teamId) {
+      return teamOperationsAllowWrite()
+        && teamUsageAllowsWrite(teamId)
+        && exists(teamPath(teamId))
+        && (
+          legacyTeamAllowsWrite(get(teamPath(teamId)).data)
+          || verifiedTeamAllowsWrite(get(teamPath(teamId)).data)
+        );
+    }
+
+    function teamWillAllowWrite(teamId) {
+      return teamOperationsAllowWrite()
+        && teamUsageAllowsWrite(teamId)
+        && existsAfter(teamPath(teamId))
+        && (
+          legacyTeamAllowsWrite(getAfter(teamPath(teamId)).data)
+          || verifiedTeamAllowsWrite(getAfter(teamPath(teamId)).data)
+        );
+    }
+
+    function teamWillBeClosed(teamId) {
+      return existsAfter(teamPath(teamId))
+        && getAfter(teamPath(teamId)).data.planStatus == "paused";
+    }
+
+    function isTeamMember(teamId) {
+      return signedIn()
+        && exists(teamMemberPath(teamId, request.auth.uid))
+        && get(teamMemberPath(teamId, request.auth.uid)).data.status == "active";
+    }
+
+    function willBeTeamMember(teamId) {
+      return signedIn()
+        && existsAfter(teamMemberPath(teamId, request.auth.uid))
+        && getAfter(teamMemberPath(teamId, request.auth.uid)).data.status == "active";
+    }
+
+    function isTeamOwner(teamId) {
+      return isTeamMember(teamId)
+        && get(teamMemberPath(teamId, request.auth.uid)).data.role == "owner";
+    }
+
+    function isOwnerTeamCloseUpdate(teamId) {
+      return isTeamOwner(teamId)
+        && resource.data.ownerUserId == request.auth.uid
+        && request.resource.data.ownerUserId == resource.data.ownerUserId
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.memberLimit == resource.data.memberLimit
+        && request.resource.data.memberLimit == 3
+        && request.resource.data.planStatus == "paused"
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "planStatus",
+          "updatedAt"
+        ])
+        && existsAfter(teamMemberPath(teamId, request.auth.uid))
+        && getAfter(teamMemberPath(teamId, request.auth.uid)).data.status == "removed";
+    }
+
+    function pendingInviteAllowsJoin(teamId, inviteId) {
+      return signedIn()
+        && inviteId is string
+        && teamAllowsWrite(teamId)
+        && exists(invitePath(inviteId))
+        && get(invitePath(inviteId)).data.teamId == teamId
+        && get(invitePath(inviteId)).data.status == "pending"
+        && get(invitePath(inviteId)).data.expiresAt > request.time;
+    }
+
+    function inviteWillBeAcceptedBySelf(teamId, inviteId) {
+      return inviteId is string
+        && existsAfter(invitePath(inviteId))
+        && getAfter(invitePath(inviteId)).data.teamId == teamId
+        && getAfter(invitePath(inviteId)).data.status == "accepted"
+        && getAfter(invitePath(inviteId)).data.acceptedByUserId == request.auth.uid;
+    }
+
+    function isJoiningMemberCreate(teamId) {
+      return signedIn()
+        && request.resource.data.teamId == teamId
+        && request.resource.data.role == "member"
+        && request.resource.data.userId == request.auth.uid
+        && pendingInviteAllowsJoin(teamId, request.resource.data.acceptedInviteId)
+        && inviteWillBeAcceptedBySelf(teamId, request.resource.data.acceptedInviteId);
+    }
+
+    function isPendingInviteSeatClaimDelete(teamId) {
+      return signedIn()
+        && resource.data.userId == "pending-rep-" + resource.data.acceptedInviteId
+        && pendingInviteAllowsJoin(teamId, resource.data.acceptedInviteId)
+        && willBeTeamMember(teamId)
+        && getAfter(teamMemberPath(teamId, request.auth.uid)).data.role == "member"
+        && getAfter(teamMemberPath(teamId, request.auth.uid)).data.acceptedInviteId == resource.data.acceptedInviteId
+        && inviteWillBeAcceptedBySelf(teamId, resource.data.acceptedInviteId);
+    }
+
+    function isAssignedToSelf(data) {
+      return signedIn() && data.assignedToUserId == request.auth.uid;
+    }
+
+    function isTeamScoped(data, teamId) {
+      return data.teamId == teamId;
+    }
+
+    function isAssignedTeamRecord(data, teamId) {
+      return isTeamScoped(data, teamId)
+        && isAssignedToSelf(data);
+    }
+
+    function isAssignedTeamRecordInTeamPath(data) {
+      return isAssignedToSelf(data);
+    }
+
+    function isAssignedTeamRecordCreate(teamId) {
+      return teamAllowsWrite(teamId)
+        && isTeamMember(teamId)
+        && isAssignedTeamRecord(request.resource.data, teamId)
+        && request.resource.data.createdByUserId == request.auth.uid
+        && request.resource.data.updatedByUserId == request.auth.uid;
+    }
+
+    function isAssignedTeamRecordUpdate(teamId) {
+      return teamAllowsWrite(teamId)
+        && isTeamMember(teamId)
+        && isAssignedTeamRecord(resource.data, teamId)
+        && isAssignedTeamRecord(request.resource.data, teamId)
+        && request.resource.data.createdByUserId == resource.data.createdByUserId
+        && request.resource.data.updatedByUserId == request.auth.uid;
+    }
+
+    function isRepSessionOwner(data, teamId) {
+      return isTeamScoped(data, teamId)
+        && signedIn()
+        && data.repUserId == request.auth.uid;
+    }
+
+    function isOwnerDutyRecord(teamId, data) {
+      return signedIn()
+        && isTeamMember(teamId)
+        && isTeamScoped(data, teamId)
+        && data.repUserId == get(teamPath(teamId)).data.ownerUserId;
+    }
+
+    function isVisibleDutyRecordInTeamPath(teamId, data) {
+      return signedIn()
+        && isTeamMember(teamId)
+        && (
+          data.repUserId == request.auth.uid
+          || data.repUserId == get(teamPath(teamId)).data.ownerUserId
+        );
+    }
+
+    function isMemberSelfLeaveUpdate(teamId, memberId) {
+      return signedIn()
+        && memberId == request.auth.uid
+        && resource.data.teamId == teamId
+        && resource.data.userId == request.auth.uid
+        && resource.data.role == "member"
+        && resource.data.status == "active"
+        && request.resource.data.teamId == resource.data.teamId
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.status == "removed"
+        && request.resource.data.removedAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "removedAt",
+          "workType",
+          "updatedAt"
+        ]);
+    }
+
+    function memberIdentityPreserved(teamId, memberId) {
+      return resource.data.teamId == teamId
+        && resource.data.userId == memberId
+        && request.resource.data.teamId == resource.data.teamId
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.role == resource.data.role;
+    }
+
+    function isOwnerMemberWorkTypeUpdate(teamId, memberId) {
+      return teamAllowsWrite(teamId)
+        && isTeamOwner(teamId)
+        && memberIdentityPreserved(teamId, memberId)
+        && resource.data.role == "member"
+        && resource.data.status == "active"
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "workType",
+          "updatedAt"
+        ]);
+    }
+
+    function isOwnerMemberRemoveUpdate(teamId, memberId) {
+      return isTeamOwner(teamId)
+        && (teamAllowsWrite(teamId) || teamWillBeClosed(teamId))
+        && memberIdentityPreserved(teamId, memberId)
+        && resource.data.status == "active"
+        && request.resource.data.status == "removed"
+        && request.resource.data.removedAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "removedAt",
+          "workType",
+          "updatedAt"
+        ])
+        && (
+          memberId != request.auth.uid
+          || (
+            existsAfter(teamPath(teamId))
+            && getAfter(teamPath(teamId)).data.planStatus == "paused"
+          )
+        );
+    }
+
+    function isInviteAcceptanceUpdate() {
+      return signedIn()
+        && resource.data.status == "pending"
+        && resource.data.expiresAt is timestamp
+        && resource.data.expiresAt > request.time
+        && !isTeamMember(resource.data.teamId)
+        && willBeTeamMember(resource.data.teamId)
+        && request.resource.data.status == "accepted"
+        && request.resource.data.acceptedByUserId == request.auth.uid
+        && request.resource.data.acceptedAt is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "acceptedByUserId",
+          "acceptedAt"
+        ]);
+    }
+
+    function isOwnerNotificationCreate(teamId) {
+      return teamAllowsWrite(teamId)
+        && isTeamMember(teamId)
+        && isTeamScoped(request.resource.data, teamId)
+        && request.resource.data.createdByUserId == request.auth.uid
+        && (
+          isTeamOwner(teamId)
+          || request.resource.data.assignedToUserId == request.auth.uid
+        );
+    }
+
+    function isDutySessionEndUpdate(teamId) {
+      return signedIn()
+        && isRepSessionOwner(resource.data, teamId)
+        && isRepSessionOwner(request.resource.data, teamId)
+        && resource.data.status == "active"
+        && request.resource.data.status == "ended"
+        && request.resource.data.endedAt is timestamp
+        && request.resource.data.deleteAfter is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "endedAt",
+          "lastLocationAt",
+          "distanceMeters",
+          "deleteAfter"
+        ]);
+    }
+
+    function isTeamCloseDutySessionUpdate(teamId) {
+      return isTeamOwner(teamId)
+        && teamWillBeClosed(teamId)
+        && isTeamScoped(resource.data, teamId)
+        && isTeamScoped(request.resource.data, teamId)
+        && resource.data.repUserId == request.resource.data.repUserId
+        && resource.data.status == "active"
+        && request.resource.data.status == "ended"
+        && request.resource.data.endedAt is timestamp
+        && request.resource.data.deleteAfter is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "endedAt",
+          "lastLocationAt",
+          "distanceMeters",
+          "deleteAfter"
+        ]);
+    }
+
+    function isExitActivityLogCreate(teamId) {
+      return (
+          request.resource.data.kind == "member_left"
+          && request.resource.data.targetUserId == request.auth.uid
+          && existsAfter(teamMemberPath(teamId, request.auth.uid))
+          && getAfter(teamMemberPath(teamId, request.auth.uid)).data.status == "removed"
+        )
+        || (
+          request.resource.data.kind == "team_closed"
+          && isTeamOwner(teamId)
+          && teamWillBeClosed(teamId)
+        )
+        || (
+          request.resource.data.kind == "duty_ended"
+          && request.resource.data.targetUserId == request.auth.uid
+          && request.resource.data.subjectId is string
+          && existsAfter(dutySessionPath(teamId, request.resource.data.subjectId))
+          && getAfter(dutySessionPath(teamId, request.resource.data.subjectId)).data.repUserId == request.auth.uid
+          && getAfter(dutySessionPath(teamId, request.resource.data.subjectId)).data.status == "ended"
+        );
+    }
+
+    match /serviceControls/{controlId} {
+      allow get: if signedIn() && controlId == "teamOperations";
+      allow list, create, update, delete: if false;
+    }
+
+    match /teamUsageControls/{teamId} {
+      allow get: if isTeamMember(teamId);
+      allow list, create, update, delete: if false;
+    }
+
+    match /teamUsageCounters/{teamId} {
+      allow read, write: if false;
+    }
+
+    match /teamUsageEvents/{eventId} {
+      allow read, write: if false;
+    }
+
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      
-      // Allow users to access their leads subcollection
+      allow read, write: if isSelf(userId);
+
+      match /teamProfile/{profileId} {
+        allow read, write: if isSelf(userId);
+      }
+
       match /leads/{leadId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isSelf(userId);
       }
-      
-      // Allow users to access their check-ins subcollection  
+
       match /checkIns/{checkInId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isSelf(userId);
       }
-      
-      // Allow users to access their appointments subcollection
+
       match /appointments/{appointmentId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isSelf(userId);
       }
     }
-    
-    // Default rule: deny all other access
+
+    match /teamInvites/{inviteId} {
+      allow create: if signedIn()
+        && request.resource.data.createdByUserId == request.auth.uid
+        && isTeamOwner(request.resource.data.teamId)
+        && teamAllowsWrite(request.resource.data.teamId);
+      allow get: if signedIn();
+      allow list: if false;
+      allow update: if (isTeamOwner(resource.data.teamId) && teamAllowsWrite(resource.data.teamId))
+        || isInviteAcceptanceUpdate();
+      allow delete: if isTeamOwner(resource.data.teamId)
+        && (teamAllowsWrite(resource.data.teamId) || teamWillBeClosed(resource.data.teamId));
+    }
+
+    match /teams/{teamId} {
+      // Team creation and billing fields are owned by verified Cloud Functions.
+      // The Admin SDK bypasses rules; no app client can mint an active Team plan.
+      allow create: if false;
+      allow read: if isTeamMember(teamId) && teamAllowsRead(teamId);
+      allow update: if isOwnerTeamCloseUpdate(teamId);
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow create: if signedIn()
+          && request.resource.data.teamId == teamId
+          && (
+            (
+              request.resource.data.role == "owner"
+              && request.resource.data.userId == request.auth.uid
+              && getAfter(teamPath(teamId)).data.ownerUserId == request.auth.uid
+            )
+            || (
+              isJoiningMemberCreate(teamId)
+            )
+            || (isTeamOwner(teamId) && teamAllowsWrite(teamId))
+          );
+        allow read: if teamAllowsRead(teamId)
+          && (
+            isTeamOwner(teamId)
+            || (
+              isTeamMember(teamId)
+              && (
+                memberId == request.auth.uid
+                || resource.data.role == "owner"
+              )
+            )
+          );
+        allow update: if isOwnerMemberWorkTypeUpdate(teamId, memberId)
+          || isOwnerMemberRemoveUpdate(teamId, memberId)
+          || isMemberSelfLeaveUpdate(teamId, memberId);
+        allow delete: if (
+            isTeamOwner(teamId)
+            && (teamAllowsWrite(teamId) || teamWillBeClosed(teamId))
+          )
+          || (
+            isPendingInviteSeatClaimDelete(teamId)
+          );
+      }
+
+      match /leads/{leadId} {
+        allow get: if teamAllowsRead(teamId)
+          && (
+            isTeamOwner(teamId)
+            || (isTeamMember(teamId) && isAssignedTeamRecord(resource.data, teamId))
+          );
+        allow list: if teamAllowsRead(teamId)
+          && (
+            isTeamOwner(teamId)
+            || (isTeamMember(teamId) && isAssignedTeamRecordInTeamPath(resource.data))
+          );
+        allow create: if teamUsageAllowsCreate(teamId, "leads")
+          && (
+            (teamAllowsWrite(teamId) && isTeamOwner(teamId) && isTeamScoped(request.resource.data, teamId))
+            || isAssignedTeamRecordCreate(teamId)
+          );
+        allow update: if teamAllowsWrite(teamId)
+          && (
+            (
+              isTeamOwner(teamId)
+              && isTeamScoped(resource.data, teamId)
+              && isTeamScoped(request.resource.data, teamId)
+            )
+            || isAssignedTeamRecordUpdate(teamId)
+          );
+        allow delete: if teamAllowsWrite(teamId) && isTeamOwner(teamId);
+      }
+
+      match /bookings/{bookingId} {
+        allow get: if teamAllowsRead(teamId)
+          && (
+            isTeamOwner(teamId)
+            || (isTeamMember(teamId) && isAssignedTeamRecord(resource.data, teamId))
+          );
+        allow list: if teamAllowsRead(teamId)
+          && (
+            isTeamOwner(teamId)
+            || (isTeamMember(teamId) && isAssignedTeamRecordInTeamPath(resource.data))
+          );
+        allow create: if teamUsageAllowsCreate(teamId, "bookings")
+          && (
+            (teamAllowsWrite(teamId) && isTeamOwner(teamId) && isTeamScoped(request.resource.data, teamId))
+            || isAssignedTeamRecordCreate(teamId)
+          );
+        allow update: if teamAllowsWrite(teamId)
+          && (
+            (
+              isTeamOwner(teamId)
+              && isTeamScoped(resource.data, teamId)
+              && isTeamScoped(request.resource.data, teamId)
+            )
+            || isAssignedTeamRecordUpdate(teamId)
+          );
+        allow delete: if teamAllowsWrite(teamId) && isTeamOwner(teamId);
+      }
+
+      match /ownerNotifications/{notificationId} {
+        allow read: if teamAllowsRead(teamId) && isTeamOwner(teamId);
+        allow update, delete: if teamAllowsWrite(teamId) && isTeamOwner(teamId);
+        allow create: if teamUsageAllowsCreate(teamId, "ownerNotifications")
+          && isOwnerNotificationCreate(teamId);
+      }
+
+      match /activityLog/{entryId} {
+        allow read: if teamAllowsRead(teamId)
+          && (
+            isTeamOwner(teamId)
+            || (
+              isTeamMember(teamId)
+              && (
+                resource.data.actorUserId == request.auth.uid
+                || resource.data.targetUserId == request.auth.uid
+              )
+            )
+          );
+        allow create: if signedIn()
+          && request.resource.data.teamId == teamId
+          && request.resource.data.actorUserId == request.auth.uid
+          && (
+            (
+              teamUsageAllowsCreate(teamId, "activityLog")
+              && (
+                (teamAllowsWrite(teamId) && isTeamMember(teamId))
+                || (teamWillAllowWrite(teamId) && willBeTeamMember(teamId))
+              )
+            )
+            || isExitActivityLogCreate(teamId)
+          );
+        allow update, delete: if false;
+      }
+
+      match /dutySessions/{sessionId} {
+        allow get: if teamAllowsRead(teamId)
+          && (
+            isTeamOwner(teamId)
+            || (isTeamMember(teamId) && isRepSessionOwner(resource.data, teamId))
+            || isOwnerDutyRecord(teamId, resource.data)
+          );
+        allow list: if teamAllowsRead(teamId)
+          && (
+            isTeamOwner(teamId)
+            || isVisibleDutyRecordInTeamPath(teamId, resource.data)
+          );
+        allow create: if teamAllowsWrite(teamId)
+          && isTeamMember(teamId)
+          && isRepSessionOwner(request.resource.data, teamId);
+        allow update: if (
+            teamAllowsWrite(teamId)
+            && (
+              isTeamOwner(teamId)
+              || (
+                isTeamMember(teamId)
+                && isRepSessionOwner(resource.data, teamId)
+                && isRepSessionOwner(request.resource.data, teamId)
+              )
+            )
+          )
+          || isDutySessionEndUpdate(teamId)
+          || (
+            isTeamCloseDutySessionUpdate(teamId)
+          );
+        allow delete: if teamAllowsWrite(teamId) && isTeamOwner(teamId);
+      }
+
+      match /dutyLocationPoints/{pointId} {
+        allow get: if teamAllowsRead(teamId)
+          && (
+            isTeamOwner(teamId)
+            || (isTeamMember(teamId) && isRepSessionOwner(resource.data, teamId))
+            || isOwnerDutyRecord(teamId, resource.data)
+          );
+        allow list: if teamAllowsRead(teamId)
+          && (
+            isTeamOwner(teamId)
+            || isVisibleDutyRecordInTeamPath(teamId, resource.data)
+          );
+        allow create: if teamUsageAllowsCreate(teamId, "dutyLocationPoints")
+          && teamAllowsWrite(teamId)
+          && isTeamMember(teamId)
+          && isRepSessionOwner(request.resource.data, teamId);
+        allow update: if teamAllowsWrite(teamId)
+          && isTeamMember(teamId)
+          && isRepSessionOwner(request.resource.data, teamId);
+        allow delete: if teamAllowsWrite(teamId) && isTeamOwner(teamId);
+      }
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

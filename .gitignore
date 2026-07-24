@@ -1,0 +1,31 @@
+.worktrees/
+.superpowers/
+
+# Local generated tool/build caches
+.swiftpm/
+.playwright-mcp/
+DerivedData*/
+
+# Local logs and disposable design scratch files
+firebase-debug.log
+firestore-debug.log
+.DS_Store
+mockup-*.png
+
+# Firebase service account credentials — NEVER commit
+serviceAccount.json
+serviceAccount*.json
+*-firebase-adminsdk-*.json
+functions/.env
+functions/.env.*
+!functions/.env.example
+
+# Firestore export snapshots — contain all user data
+firestore-backup_*.json
+status_repair_report_*.json
+
+# Mac Contacts exports — contain customer contact fields and notes
+D2D-Contacts-*.json
+
+# Node dependencies (for scripts/)
+node_modules/

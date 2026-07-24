@@ -9,10 +9,10 @@ struct SelectableLeadRow: View {
         Button(action: onToggleSelection) {
             HStack(spacing: 12) {
                 Circle()
-                    .stroke(isSelected ? Color.blue : Color.gray.opacity(0.5), lineWidth: 2)
+                    .stroke(isSelected ? Color.electricViolet : Color.obsidianBorder, lineWidth: 2)
                     .background(
                         Circle()
-                            .fill(isSelected ? Color.blue : Color.clear)
+                            .fill(isSelected ? Color.electricViolet : Color.clear)
                     )
                     .frame(width: 24, height: 24)
                     .overlay(
@@ -22,83 +22,94 @@ struct SelectableLeadRow: View {
                             .opacity(isSelected ? 1 : 0)
                     )
                     .animation(.easeInOut(duration: 0.2), value: isSelected)
-                
+
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text(lead.displayName)
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
+                            .font(.obsidianTitle)
+                            .foregroundColor(Color.textPrimary)
                             .lineLimit(1)
-                        
+
                         Spacer()
-                        
-                        StatusBadge(status: LeadStatus(rawValue: lead.status ?? "") ?? .new)
+
+                        StatusBadge(status: lead.leadStatus)
                     }
-                    
+
                     if let address = lead.address, !address.isEmpty {
                         HStack {
                             Image(systemName: "location.fill")
-                                .foregroundColor(.secondary)
-                                .font(.caption)
-                            
+                                .foregroundColor(Color.textSecondary)
+                                .font(.obsidianSmall)
+
                             Text(address)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .font(.obsidianFootnote)
+                                .foregroundColor(Color.textSecondary)
                                 .lineLimit(1)
                         }
                     }
-                    
+
                     HStack {
                         if let phone = lead.phone, !phone.isEmpty {
                             HStack(spacing: 4) {
                                 Image(systemName: "phone.fill")
-                                    .foregroundColor(.blue)
-                                    .font(.caption)
-                                
+                                    .foregroundColor(Color.electricViolet)
+                                    .font(.obsidianSmall)
+
                                 Text(phone)
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
+                                    .font(.obsidianSmall)
+                                    .foregroundColor(Color.electricViolet)
                             }
                         }
-                        
+
                         if let email = lead.email, !email.isEmpty {
                             HStack(spacing: 4) {
                                 Image(systemName: "envelope.fill")
-                                    .foregroundColor(.green)
-                                    .font(.caption)
-                                
+                                    .foregroundColor(Color.statusInterested)
+                                    .font(.obsidianSmall)
+
                                 Text(email)
-                                    .font(.caption)
-                                    .foregroundColor(.green)
+                                    .font(.obsidianSmall)
+                                    .foregroundColor(Color.statusInterested)
                                     .lineLimit(1)
                             }
                         }
-                        
+
                         Spacer()
-                        
+
                         if let followUpDate = lead.followUpDate {
                             HStack(spacing: 4) {
                                 Image(systemName: "clock.badge")
-                                    .foregroundColor(.orange)
-                                    .font(.caption)
-                                
+                                    .foregroundColor(Color.statusNotHome)
+                                    .font(.obsidianSmall)
+
                                 Text(followUpDate, style: .date)
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
+                                    .font(.obsidianSmall)
+                                    .foregroundColor(Color.statusNotHome)
                             }
                         }
                     }
                 }
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.blue.opacity(0.1) : Color(.systemBackground))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
-                    )
+            .padding(16)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+            )
+            .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 3)
+            .overlay(
+                Group {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.electricViolet.opacity(0.1))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.electricViolet, lineWidth: 2)
+                            )
+                            .allowsHitTesting(false)
+                    }
+                }
             )
             .scaleEffect(isSelected ? 0.98 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: isSelected)
@@ -108,24 +119,29 @@ struct SelectableLeadRow: View {
 }
 
 struct StatusBadge: View {
-    let status: LeadStatus
+    private let displayName: String
+    private let color: Color
+
+    init(status: Lead.Status) {
+        self.displayName = status.displayName
+        self.color = status.swiftUIColor
+    }
     
     var body: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(status.color)
+                .fill(color)
                 .frame(width: 8, height: 8)
             
-            Text(status.displayName)
-                .font(.caption)
-                .fontWeight(.medium)
+            Text(displayName)
+                .font(.obsidianSmall)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(status.color.opacity(0.1))
+                .fill(color.opacity(0.1))
         )
-        .foregroundColor(status.color)
+        .foregroundColor(color)
     }
 }

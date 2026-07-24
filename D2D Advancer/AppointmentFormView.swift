@@ -17,10 +17,11 @@ struct AppointmentFormView: View {
     let mode: AppointmentFormMode
     let lead: Lead?
     let existingAppointment: Appointment?
-    let onSave: () -> Void
+    let onSave: () async -> Bool
     let onCancel: () -> Void
     
     @State private var isProcessing = false
+    @State private var formErrorMessage: String?
     
     enum AppointmentFormMode {
         case create
@@ -35,8 +36,8 @@ struct AppointmentFormView: View {
         
         var saveButtonText: String {
             switch self {
-            case .create: return "Schedule Appointment"
-            case .edit: return "Save Changes"
+            case .create: return "Schedule"
+            case .edit: return "Save"
             }
         }
         
@@ -46,6 +47,7 @@ struct AppointmentFormView: View {
             case .edit: return "Saving Changes..."
             }
         }
+
     }
     
     private var endDate: Date {
@@ -65,31 +67,27 @@ struct AppointmentFormView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
-                    // Lead Information Card (only for create mode)
+                LazyVStack(spacing: 16) {
                     if mode == .create, let lead = lead {
                         LeadInfoCard(lead: lead)
                     }
-                    
-                    // Appointment Details
+
                     AppointmentDetailsSection(
                         appointmentType: $appointmentType,
                         customAppointmentTypeId: $customAppointmentTypeId,
                         title: $title,
                         notes: $notes
                     )
-                    
-                    // Date & Time Section
+
                     DateTimeSection(
                         selectedDate: $selectedDate,
                         duration: $duration,
                         durationOptions: durationOptions,
                         endDate: endDate
                     )
-                    
-                    // Location Section
+
                     if let lead = lead {
                         LocationSection(
                             location: $location, 
@@ -100,70 +98,29 @@ struct AppointmentFormView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
             }
-            .navigationTitle(mode.navigationTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
+            .accessibilityIdentifier(mode == .create ? "appointmentCreateForm" : "appointmentEditForm")
+            .obsidianScreenBackground()
+            .obsidianPushedNavigation(
+                mode.navigationTitle,
+                backButtonAccessibilityIdentifier: mode == .create ? "appointmentCreateBackButton" : "appointmentEditBackButton",
+                onBack: onCancel
+            )
             .safeAreaInset(edge: .bottom) {
-                // Card-based button design
-                HStack(spacing: 16) {
-                    Button(action: {
-                        onCancel()
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                            Text("Cancel")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(UIColor.secondarySystemBackground))
-                                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        )
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: title.isEmpty || isProcessing,
+                    primaryAccessibilityIdentifier: mode == .create ? "appointmentScheduleSaveButton" : "appointmentEditSaveButton",
+                    secondaryAccessibilityIdentifier: mode == .create ? "appointmentScheduleCancelButton" : "appointmentEditCancelButton",
+                    primaryAction: saveAppointment,
+                    secondaryAction: onCancel,
+                    primaryLabel: {
+                        Label(mode.saveButtonText, systemImage: "checkmark.circle.fill")
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
                     }
-                    
-                    Button(action: {
-                        saveAppointment()
-                    }) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3)
-                            Text(mode.saveButtonText)
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            title.isEmpty || isProcessing ? Color.gray : Color.blue,
-                                            title.isEmpty || isProcessing ? Color.gray.opacity(0.8) : Color.blue.opacity(0.8)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: title.isEmpty || isProcessing ? .clear : .blue.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                    .disabled(title.isEmpty || isProcessing)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
             .overlay {
@@ -174,13 +131,27 @@ struct AppointmentFormView: View {
                     VStack(spacing: 16) {
                         ProgressView()
                             .scaleEffect(1.2)
+                            .tint(Color.electricViolet)
                         Text(mode.processingText)
-                            .font(.headline)
+                            .font(.obsidianTitle)
+                            .foregroundColor(Color.textPrimary)
                     }
                     .padding(24)
-                    .background(.regularMaterial)
-                    .cornerRadius(16)
+                    .background(Color.obsidianSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
+            }
+            .obsidianModalBackground()
+            .alert(
+                "Appointment not saved",
+                isPresented: Binding(
+                    get: { formErrorMessage != nil },
+                    set: { if !$0 { formErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(formErrorMessage ?? "Please try again.")
             }
         }
     }
@@ -191,9 +162,13 @@ struct AppointmentFormView: View {
         isProcessing = true
         
         Task {
+            let didSave = await onSave()
             await MainActor.run {
-                onSave()
                 isProcessing = false
+                if !didSave {
+                    formErrorMessage = appointmentManager.errorMessage
+                        ?? "Could not save the appointment. Check the details and try again."
+                }
             }
         }
     }

@@ -49,8 +49,10 @@ class ServiceCategoryManager: ObservableObject {
     static let shared = ServiceCategoryManager()
     
     @Published var customCategories: [ServiceCategory] = []
-    private let userDefaults = UserDefaults.standard
-    private let customCategoriesKey = "custom_service_categories"
+    @Published var lastErrorMessage: String?
+    private let userDefaults: UserDefaults
+    private let customCategoriesKey: String
+    private var hasCorruptStoredCategories = false
     
     let defaultCategories: [ServiceCategory] = [
         ServiceCategory(
@@ -115,7 +117,9 @@ class ServiceCategoryManager: ObservableObject {
         )
     ]
     
-    init() {
+    init(userDefaults: UserDefaults = .standard, customCategoriesKey: String = "custom_service_categories") {
+        self.userDefaults = userDefaults
+        self.customCategoriesKey = customCategoriesKey
         loadCustomCategories()
     }
     
@@ -123,7 +127,9 @@ class ServiceCategoryManager: ObservableObject {
         return defaultCategories + customCategories
     }
     
-    func addCustomCategory(_ category: ServiceCategory) {
+    @discardableResult
+    func addCustomCategory(_ category: ServiceCategory) -> Bool {
+        let previousCategories = customCategories
         var customCategory = category
         customCategory = ServiceCategory(
             id: category.id,
@@ -134,19 +140,43 @@ class ServiceCategoryManager: ObservableObject {
             dateCreated: Date()
         )
         customCategories.append(customCategory)
-        saveCustomCategories()
-    }
-    
-    func updateCustomCategory(_ category: ServiceCategory) {
-        if let index = customCategories.firstIndex(where: { $0.id == category.id }) {
-            customCategories[index] = category
-            saveCustomCategories()
+        guard saveCustomCategories() else {
+            customCategories = previousCategories
+            return false
         }
+        return true
     }
     
-    func deleteCustomCategory(_ category: ServiceCategory) {
+    @discardableResult
+    func updateCustomCategory(_ category: ServiceCategory) -> Bool {
+        guard let index = customCategories.firstIndex(where: { $0.id == category.id }) else {
+            lastErrorMessage = "Could not update service because it no longer exists."
+            return false
+        }
+
+        let previousCategory = customCategories[index]
+        customCategories[index] = category
+        guard saveCustomCategories() else {
+            customCategories[index] = previousCategory
+            return false
+        }
+        return true
+    }
+    
+    @discardableResult
+    func deleteCustomCategory(_ category: ServiceCategory) -> Bool {
+        guard customCategories.contains(where: { $0.id == category.id }) else {
+            lastErrorMessage = "Could not delete service because it no longer exists."
+            return false
+        }
+
+        let previousCategories = customCategories
         customCategories.removeAll { $0.id == category.id }
-        saveCustomCategories()
+        guard saveCustomCategories() else {
+            customCategories = previousCategories
+            return false
+        }
+        return true
     }
     
     func getCategory(byId id: String) -> ServiceCategory? {
@@ -157,16 +187,45 @@ class ServiceCategoryManager: ObservableObject {
         return allCategories.first { $0.name.lowercased() == name.lowercased() }
     }
     
-    private func saveCustomCategories() {
-        if let encoded = try? JSONEncoder().encode(customCategories) {
+    @discardableResult
+    private func saveCustomCategories() -> Bool {
+        guard !hasCorruptStoredCategories else {
+            let message = "Could not save service categories because the saved services could not be loaded. Your existing saved data was left untouched."
+            lastErrorMessage = message
+            print("❌ \(message)")
+            return false
+        }
+
+        do {
+            let encoded = try JSONEncoder().encode(customCategories)
             userDefaults.set(encoded, forKey: customCategoriesKey)
+            lastErrorMessage = nil
+            hasCorruptStoredCategories = false
+            return true
+        } catch {
+            let message = "Could not save service categories: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("❌ \(message)")
+            return false
         }
     }
     
     private func loadCustomCategories() {
-        if let data = userDefaults.data(forKey: customCategoriesKey),
-           let categories = try? JSONDecoder().decode([ServiceCategory].self, from: data) {
+        guard let data = userDefaults.data(forKey: customCategoriesKey) else {
+            hasCorruptStoredCategories = false
+            return
+        }
+
+        do {
+            let categories = try JSONDecoder().decode([ServiceCategory].self, from: data)
             customCategories = categories
+            lastErrorMessage = nil
+            hasCorruptStoredCategories = false
+        } catch {
+            let message = "Could not load saved service categories: \(error.localizedDescription)"
+            lastErrorMessage = message
+            hasCorruptStoredCategories = true
+            print("❌ \(message)")
         }
     }
 }

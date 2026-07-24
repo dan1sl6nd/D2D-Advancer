@@ -3,13 +3,56 @@ import UIKit
 import CoreData
 
 struct AppointmentsView: View {
+    let isEmbeddedInWork: Bool
+
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var appointmentManager = AppointmentManager.shared
     @ObservedObject private var router = AppRouter.shared
+    @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
+    @ObservedObject private var teamService = TeamFirebaseService.shared
     @State private var showingScheduleView = false
     @State private var selectedLead: Lead?
     @State private var selectedAppointment: Appointment?
+    @State private var selectedTeamLead: TeamLead?
+    @State private var teamFieldMapSummary: TeamWorkspaceSurfaceSummary?
+    @State private var selectedTeamRepUserId: String?
     @State private var selectedView: AppointmentView = .active
+    @State private var selectedSource: AppointmentSourceScope = .personal
+    @State private var appointmentPendingDeletionConfirmation: Appointment?
+    @State private var showingAppointmentDeletionConfirmation = false
+    @State private var pendingAppointmentDeletion: Appointment?
+    @State private var pendingAppointmentDeletionTask: Task<Void, Never>?
+    @ObservedObject private var paywallManager = PaywallManager.shared
+
+    private var isRunningUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
+    }
+
+    private var shouldLoadTeamWorkspace: Bool {
+        !isRunningUITests || FirebaseEmulatorConfiguration.isEnabled
+    }
+
+    private var teamSurfaceSummary: TeamWorkspaceSurfaceSummary? {
+        TeamWorkspaceSurfaceSummary.make(
+            team: teamService.activeTeam,
+            currentMember: teamService.currentMember,
+            members: teamService.teamMembers,
+            leads: teamService.teamLeads,
+            bookings: teamService.teamBookings,
+            dutySessions: teamService.dutySessions,
+            dutyLocationPoints: teamService.dutyLocationPoints,
+            ownerNotifications: teamService.ownerNotifications
+        )
+    }
+
+    private var roleContext: TeamRoleContext {
+        TeamRoleContext(summary: teamSurfaceSummary)
+    }
+
+    init(isEmbeddedInWork: Bool = false) {
+        self.isEmbeddedInWork = isEmbeddedInWork
+    }
     
     enum AppointmentView: String, CaseIterable {
         case active = "Active"
@@ -24,106 +67,217 @@ struct AppointmentsView: View {
             }
         }
     }
+
+    private enum AppointmentSourceScope: String, CaseIterable {
+        case personal = "Personal"
+        case team = "Team"
+    }
     
     var filteredAppointments: [Appointment] {
         switch selectedView {
         case .active:
             return appointmentManager.appointments
-                .filter { $0.status != .completed && $0.status != .cancelled }
+                .filter {
+                    $0.status != .completed
+                        && $0.status != .cancelled
+                        && $0.id != pendingAppointmentDeletion?.id
+                }
                 .sorted { $0.startDate < $1.startDate }
         case .completed:
             return appointmentManager.appointments
-                .filter { $0.status == .completed }
+                .filter { $0.status == .completed && $0.id != pendingAppointmentDeletion?.id }
                 .sorted { $0.startDate > $1.startDate }
         case .cancelled:
             return appointmentManager.appointments
-                .filter { $0.status == .cancelled }
+                .filter { $0.status == .cancelled && $0.id != pendingAppointmentDeletion?.id }
                 .sorted { $0.startDate > $1.startDate }
         }
     }
     
+    @ViewBuilder
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
-                VStack(spacing: 0) {
-                    safeAreaSpacer(geometry: geometry)
-                    tabSelectionView
-                    appointmentContentView
-                }
-                .ignoresSafeArea(.all, edges: .top)
+        if isEmbeddedInWork {
+            screenContent
+        } else {
+            NavigationStack {
+                screenContent
             }
-            .navigationBarHidden(true)
-            .background(Color(UIColor.systemGroupedBackground))
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingScheduleView = true
-                    }) {
-                        Image(systemName: "plus")
+        }
+    }
+
+    private var screenContent: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                if !isEmbeddedInWork {
+                    safeAreaSpacer(geometry: geometry)
+                    ObsidianHeaderView(
+                        roleContext.appointmentScreenTitle,
+                        titleAccessibilityIdentifier: "appointmentsScreen"
+                    ) {
+                        if roleContext != .technician {
+                            ObsidianCompactIconButton(
+                                icon: "plus",
+                                accessibilityLabel: "Schedule appointment",
+                                accessibilityIdentifier: "appointmentsScheduleButton",
+                                size: 44
+                            ) {
+                                guard paywallManager.gateAction() else { return }
+                                showingScheduleView = true
+                            }
+                        }
                     }
                 }
-            }
-            .sheet(isPresented: $showingScheduleView) {
-                SelectLeadForAppointmentView { lead in
-                    selectedLead = lead
-                    showingScheduleView = false
+
+                if teamSurfaceSummary != nil && roleContext != .technician {
+                    sourceSelectionView
                 }
+
+                tabSelectionView
+                appointmentContentView
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .top
+                    )
+                    .background(Color.obsidianBackground(for: colorScheme))
             }
-            .sheet(item: $selectedLead) { lead in
-                ScheduleAppointmentView(lead: lead)
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: .top
+            )
+            .background(Color.obsidianBackground(for: colorScheme))
+            .ignoresSafeArea(.all, edges: isEmbeddedInWork ? [] : .top)
+        }
+        .navigationBarHidden(true)
+        .background(Color.obsidianBackground(for: colorScheme))
+        .accessibilityIdentifier("appointmentsScreen")
+        .sheet(isPresented: $showingScheduleView) {
+            SelectLeadForAppointmentView { lead in
+                selectedLead = lead
+                showingScheduleView = false
             }
-            .sheet(item: $selectedAppointment) { appointment in
-                AppointmentDetailView(appointmentId: appointment.id)
+        }
+        .sheet(item: $selectedLead) { lead in
+            ScheduleAppointmentView(lead: lead)
+        }
+        .sheet(item: $selectedAppointment) { appointment in
+            AppointmentDetailView(appointmentId: appointment.id)
+        }
+        .sheet(item: $selectedTeamLead) { lead in
+            TeamLeadDetailSheet(initialLead: lead)
+        }
+        .sheet(item: $teamFieldMapSummary) { summary in
+            TeamFieldMapSheet(
+                summary: summary,
+                selectedRepUserId: $selectedTeamRepUserId
+            )
+        }
+        .alert(
+            "Delete Appointment?",
+            isPresented: $showingAppointmentDeletionConfirmation,
+            presenting: appointmentPendingDeletionConfirmation
+        ) { appointment in
+            Button("Delete", role: .destructive) {
+                beginPendingAppointmentDeletion(appointment)
             }
-            .onAppear {
-                print("🗓️ AppointmentsView appeared - listener already active")
-            }
-            .onChange(of: router.targetAppointmentID) { _, newValue in
-                guard let id = newValue else { return }
-                if let appt = appointmentManager.appointments.first(where: { $0.id == id }) {
-                    selectedAppointment = appt
+            Button("Cancel", role: .cancel) {}
+        } message: { appointment in
+            Text("Remove \(appointment.title)? You can undo this for a few seconds.")
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let pendingAppointmentDeletion {
+                ObsidianUndoBanner(message: "\(pendingAppointmentDeletion.title) removed") {
+                    undoPendingAppointmentDeletion()
                 }
-                router.targetAppointmentID = nil
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
+        }
+        .onAppear {
+            print("🗓️ AppointmentsView appeared - listener already active")
+            Task { await loadTeamWorkspaceIfNeeded() }
+        }
+        .onChange(of: roleContext) { _, newRole in
+            if newRole == .technician || newRole == .salesRep {
+                selectedSource = .team
+            } else if teamSurfaceSummary == nil {
+                selectedSource = .personal
+            }
+        }
+        .onChange(of: router.targetAppointmentID) { _, newValue in
+            guard let id = newValue else { return }
+            if let appt = appointmentManager.appointments.first(where: { $0.id == id }) {
+                selectedAppointment = appt
+            }
+            router.targetAppointmentID = nil
+        }
+        .onDisappear {
+            commitPendingAppointmentDeletion()
         }
     }
     
     // MARK: - Extracted View Components
     
     private func safeAreaSpacer(geometry: GeometryProxy) -> some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(UIColor.systemBackground),
-                        Color(UIColor.systemBackground).opacity(0.98)
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .frame(height: max((geometry.safeAreaInsets.top.isNaN ? 0 : geometry.safeAreaInsets.top) + 10, 60))
+            Rectangle()
+                .fill(Color.obsidianBackground(for: colorScheme))
+                .frame(height: ObsidianLayout.safeAreaTop(geometry))
+    }
+
+    private var sourceSelectionView: some View {
+        HStack(spacing: 4) {
+            ForEach(AppointmentSourceScope.allCases, id: \.self) { source in
+                let isSelected = selectedSource == source
+                Button {
+                    selectedSource = source
+                } label: {
+                    Text(source.rawValue)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(isSelected ? .white : Color.textSecondary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .fill(isSelected ? Color.electricViolet : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("appointmentSource_\(source.rawValue.lowercased())")
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+            }
+        }
+        .padding(4)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
     }
     
     private var tabSelectionView: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 4) {
             ForEach(AppointmentView.allCases, id: \.self) { tab in
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         selectedView = tab
                     }
                 }) {
-                    Text(tab.rawValue)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    Label(tab.rawValue, systemImage: tab.icon)
+                        .font(.obsidianFootnote)
+                        .labelStyle(.titleAndIcon)
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(selectedView == tab ? .white : .primary)
+                        .foregroundColor(selectedView == tab ? .white : Color.textSecondary)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 9)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(selectedView == tab ? Color.blue : Color.clear)
-                                .opacity(selectedView == tab ? 1 : 0)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(selectedView == tab ? Color.electricViolet : Color.clear)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel("\(tab.rawValue) appointments")
@@ -132,20 +286,31 @@ struct AppointmentsView: View {
                 .accessibilityRemoveTraits(.isImage)
             }
         }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.obsidianSurface.opacity(0.88))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 1)
+        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Appointment filter tabs")
         .padding(.horizontal, 16)
         .padding(.bottom, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(UIColor.tertiarySystemBackground))
-                .padding(.horizontal, 12)
-        )
+        .background(Color.obsidianBackground(for: colorScheme))
     }
     
     private var appointmentContentView: some View {
         Group {
-            if filteredAppointments.isEmpty {
+            if selectedSource == .team {
+                if teamSurfaceSummary == nil {
+                    emptyStateView
+                } else {
+                    appointmentScrollView
+                }
+            } else if filteredAppointments.isEmpty {
                 emptyStateView
             } else {
                 appointmentScrollView
@@ -156,56 +321,105 @@ struct AppointmentsView: View {
     private var appointmentScrollView: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
-                ForEach(filteredAppointments) { appointment in
-                    AppointmentInteractiveRowView(
-                        appointment: appointment,
-                        onTap: { selectedAppointment = appointment },
-                        onComplete: { updateAppointmentStatus(appointment, to: .completed) },
-                        onCancel: { updateAppointmentStatus(appointment, to: .cancelled) },
-                        onReactivate: { updateAppointmentStatus(appointment, to: .scheduled) },
-                        onDelete: { deleteAppointment(appointment) }
+                if selectedSource == .team, let summary = teamSurfaceSummary {
+                    TeamWorkInlineSection(
+                        summary: summary,
+                        content: .jobs,
+                        bookingFilter: teamBookingMatchesSelectedView,
+                        selectedRepUserId: $selectedTeamRepUserId,
+                        onOpenMap: { teamFieldMapSummary = teamSurfaceSummary },
+                        onSelectLead: { selectedTeamLead = $0 }
                     )
-                    .onLongPressGesture {
-                        handleLongPressDelete(appointment)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 4)
+                }
+
+                if selectedSource == .personal {
+                    ForEach(filteredAppointments) { appointment in
+                        AppointmentInteractiveRowView(
+                            appointment: appointment,
+                            onTap: { selectedAppointment = appointment },
+                            onComplete: { updateAppointmentStatus(appointment, to: .completed) },
+                            onCancel: { updateAppointmentStatus(appointment, to: .cancelled) },
+                            onReactivate: { updateAppointmentStatus(appointment, to: .scheduled) },
+                            onDelete: { requestAppointmentDeletion(appointment) }
+                        )
                     }
                 }
             }
             .padding(.vertical, 8)
+            .padding(.bottom, 12)
         }
+    }
+
+    private func teamBookingMatchesSelectedView(_ booking: TeamBooking) -> Bool {
+        switch selectedView {
+        case .active:
+            return booking.status != .completed && booking.status != .cancelled
+        case .completed:
+            return booking.status == .completed
+        case .cancelled:
+            return booking.status == .cancelled
+        }
+    }
+
+    private func loadTeamWorkspaceIfNeeded() async {
+        guard shouldLoadTeamWorkspace else { return }
+        await teamService.loadCurrentTeam(
+            displayName: userAccountManager.currentUserDisplayName,
+            email: userAccountManager.currentUserEmail
+        )
     }
     
     private func updateAppointmentStatus(_ appointment: Appointment, to status: Appointment.AppointmentStatus) {
+        guard paywallManager.gateAction() else { return }
         Task {
             var updatedAppointment = appointment
             updatedAppointment.status = status
             _ = await AppointmentManager.shared.updateAppointment(updatedAppointment)
         }
     }
-    
+
     private func deleteAppointment(_ appointment: Appointment) {
+        guard paywallManager.gateAction() else { return }
         Task {
             await AppointmentManager.shared.deleteAppointment(appointment)
         }
     }
-    
-    private func handleLongPressDelete(_ appointment: Appointment) {
+
+    private func requestAppointmentDeletion(_ appointment: Appointment) {
+        guard paywallManager.gateAction() else { return }
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
-        
-        let alert = UIAlertController(
-            title: "Delete Appointment",
-            message: "Delete appointment '\(appointment.title)'?",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
-            deleteAppointment(appointment)
-        })
-        
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
-            window.rootViewController?.present(alert, animated: true)
+
+        appointmentPendingDeletionConfirmation = appointment
+        showingAppointmentDeletionConfirmation = true
+    }
+
+    private func beginPendingAppointmentDeletion(_ appointment: Appointment) {
+        commitPendingAppointmentDeletion()
+        pendingAppointmentDeletion = appointment
+
+        pendingAppointmentDeletionTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled,
+                  pendingAppointmentDeletion?.id == appointment.id else { return }
+            commitPendingAppointmentDeletion()
         }
+    }
+
+    private func undoPendingAppointmentDeletion() {
+        pendingAppointmentDeletionTask?.cancel()
+        pendingAppointmentDeletionTask = nil
+        pendingAppointmentDeletion = nil
+    }
+
+    private func commitPendingAppointmentDeletion() {
+        pendingAppointmentDeletionTask?.cancel()
+        pendingAppointmentDeletionTask = nil
+        guard let appointment = pendingAppointmentDeletion else { return }
+        pendingAppointmentDeletion = nil
+        deleteAppointment(appointment)
     }
     
     private func deleteAppointments(offsets: IndexSet) {
@@ -220,45 +434,35 @@ struct AppointmentsView: View {
     }
     
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            
-            Circle()
-                .fill(Color.gray.opacity(0.2))
-                .frame(width: 80, height: 80)
-                .overlay(
-                    Image(systemName: selectedView.icon)
-                        .font(.system(size: 32))
-                        .foregroundColor(.gray)
-                )
-            
-            VStack(spacing: 8) {
-                Text("No \(selectedView.rawValue.lowercased()) appointments")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Text(emptyMessage)
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-            }
-            
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .listRowSeparator(.hidden)
+        ObsidianEmptyState(
+            icon: selectedView.icon,
+            title: roleContext.appointmentEmptyTitle,
+            message: emptyMessage,
+            actionTitle: selectedView == .active ? "Schedule" : nil,
+            actionIcon: "plus",
+            action: selectedView == .active ? {
+                guard paywallManager.gateAction() else { return }
+                showingScheduleView = true
+            } : nil,
+            verticalOffset: -56
+        )
     }
     
     private var emptyMessage: String {
         switch selectedView {
         case .active:
-            return "Start scheduling appointments with your customers to keep track of installations and follow-ups."
+            if roleContext == .technician {
+                return "Assigned technician jobs will appear here with arrival time, route, and status controls."
+            }
+            return "Start scheduling appointments with your customers to keep track of jobs and follow-ups."
         case .completed:
-            return "Completed appointments will appear here after you mark them as finished."
+            return roleContext == .technician
+                ? "Completed jobs will appear here after you mark them done."
+                : "Completed appointments will appear here after you mark them finished."
         case .cancelled:
-            return "Cancelled appointments will appear here when you cancel scheduled appointments."
+            return roleContext == .technician
+                ? "Cancelled jobs will appear here when service work is cancelled."
+                : "Cancelled appointments will appear here when you cancel scheduled appointments."
         }
     }
     
@@ -281,114 +485,94 @@ struct AppointmentInteractiveRowView: View {
     @State private var showingCalendarEditor = false
     
     var body: some View {
-        HStack(spacing: 16) {
-            // Appointment type icon circle
-            Circle()
-                .fill(appointment.displayColor(using: customTypeManager.customTypes))
-                .frame(width: 48, height: 48)
-                .overlay(
-                    Image(systemName: appointment.displayIcon(using: customTypeManager.customTypes))
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
+        let accent = appointment.displayColor(using: customTypeManager.customTypes)
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                ObsidianIconTile(
+                    icon: appointment.displayIcon(using: customTypeManager.customTypes),
+                    tint: accent,
+                    size: 46
                 )
-                .accessibilityHidden(true)
-            
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(appointment.title)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(.primary)
-                        .accessibilityAddTraits(.isHeader)
-                    
-                    Spacer()
-                    
-                    // Quick action: Open in Maps (location)
-                    if !appointment.location.isEmpty {
-                        Button(action: {
-                            openMaps(for: appointment.location)
-                        }) {
-                            Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 16, weight: .semibold))
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .foregroundColor(.orange)
-                        .accessibilityLabel("Open in Maps")
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(appointment.title)
+                            .font(.themeTitle)
+                            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                            .foregroundColor(Color.textPrimary)
+                            .lineLimit(1)
+                            .accessibilityAddTraits(.isHeader)
+
+                        Spacer(minLength: 6)
+
+                        AppointmentStatusBadge(status: appointment.status)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Status")
+                            .accessibilityValue(appointment.status.rawValue)
                     }
-                    
-                    // Quick action: Calendar (add or open)
-                    Button(action: {
-                        if (appointment.calendarEventId ?? "").isEmpty {
-                            addToCalendar(appointment)
-                        } else {
-                            openCalendarDate(appointment.startDate)
-                        }
-                    }) {
-                        Image(systemName: (appointment.calendarEventId ?? "").isEmpty ? "calendar.badge.plus" : "calendar")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .foregroundColor(.blue)
-                    .accessibilityLabel((appointment.calendarEventId ?? "").isEmpty ? "Add to Calendar" : "Open in Calendar")
-                    
-                    // Status badge
-                    AppointmentStatusBadge(status: appointment.status)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Status")
-                    .accessibilityValue(appointment.status.rawValue)
-                }
-                
-                // Date and time
-                HStack(spacing: 4) {
-                    Image(systemName: "clock.fill")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
-                        .accessibilityHidden(true)
+
                     Text("\(appointment.startDate.formatted(.dateTime.month().day())) at \(appointment.startDate.formatted(.dateTime.hour().minute()))")
-                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .font(.obsidianFootnote)
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                         .lineLimit(1)
+
+                    if !appointment.location.isEmpty {
+                        Label(appointment.location, systemImage: "location.fill")
+                            .font(.micro)
+                            .foregroundColor(Color.textMuted)
+                            .lineLimit(1)
+                    } else if let associatedLead {
+                        Label(associatedLead.displayName, systemImage: "person.fill")
+                            .font(.micro)
+                            .foregroundColor(Color.textMuted)
+                            .lineLimit(1)
+                    }
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Date and time")
-                .accessibilityValue("\(appointment.startDate.formatted(.dateTime.month().day())) at \(appointment.startDate.formatted(.dateTime.hour().minute()))")
-                
-                HStack {
-                    Text(appointment.displayName(using: customTypeManager.customTypes))
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(appointment.displayColor(using: customTypeManager.customTypes))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(appointment.displayColor(using: customTypeManager.customTypes).opacity(0.15))
-                        )
-                    
-                    Spacer()
+            }
+
+            HStack(spacing: 8) {
+                Label(appointment.displayName(using: customTypeManager.customTypes), systemImage: "tag.fill")
+                    .font(.micro)
+                    .foregroundColor(accent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(accent.opacity(0.12)))
+
+                Spacer(minLength: 0)
+
+                if !appointment.location.isEmpty {
+                    rowActionButton(
+                        icon: "mappin.and.ellipse",
+                        tint: Color.statusNotHome,
+                        accessibilityLabel: "Open in Maps"
+                    ) {
+                        openMaps(for: appointment.location)
+                    }
+                }
+
+                rowActionButton(
+                    icon: (appointment.calendarEventId ?? "").isEmpty ? "calendar.badge.plus" : "calendar",
+                    tint: Color.electricViolet,
+                    accessibilityLabel: (appointment.calendarEventId ?? "").isEmpty ? "Add to Calendar" : "Open in Calendar"
+                ) {
+                    if (appointment.calendarEventId ?? "").isEmpty {
+                        addToCalendar(appointment)
+                    } else {
+                        openCalendarDate(appointment.startDate)
+                    }
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
         )
+        .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
         .padding(.horizontal, 16)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -433,6 +617,7 @@ struct AppointmentInteractiveRowView: View {
             }
         }
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("appointmentRow")
         .onAppear {
             loadAssociatedLead()
         }
@@ -440,6 +625,29 @@ struct AppointmentInteractiveRowView: View {
             refreshId = UUID()
         }
         .id(refreshId)
+    }
+
+    private func rowActionButton(
+        icon: String,
+        tint: Color,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.obsidianCallout)
+                .fontWeight(.semibold)
+                .foregroundColor(tint)
+                .frame(width: 44, height: 44)
+                .background(tint.opacity(0.12))
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(tint.opacity(0.2), lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel(accessibilityLabel)
     }
     
     private func addToCalendar(_ appt: Appointment) {
@@ -454,8 +662,7 @@ struct AppointmentInteractiveRowView: View {
                     if let idx = AppointmentManager.shared.appointments.firstIndex(where: { $0.id == appt.id }) {
                         var updated = AppointmentManager.shared.appointments[idx]
                         updated.calendarEventId = id
-                        AppointmentManager.shared.appointments[idx] = updated
-                        await AppointmentManager.shared.syncAppointmentToFirebase(updated)
+                        _ = await AppointmentManager.shared.updateAppointment(updated)
                     }
                 }
             } else {
@@ -465,11 +672,7 @@ struct AppointmentInteractiveRowView: View {
     }
 
     private func openMaps(for location: String) {
-        guard !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let encoded = location.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let url = URL(string: "http://maps.apple.com/?q=\(encoded)") {
-            UIApplication.shared.open(url)
-        }
+        Utilities.openMapsSearch(query: location)
     }
 
     private func openCalendarDate(_ date: Date) {
@@ -484,7 +687,7 @@ struct AppointmentInteractiveRowView: View {
     private func loadAssociatedLead() {
         guard let leadId = appointment.leadId else { return }
         
-        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: viewContext)
         request.predicate = NSPredicate(format: "id == %@", leadId as CVarArg)
         request.fetchLimit = 1
         
@@ -497,382 +700,10 @@ struct AppointmentInteractiveRowView: View {
     }
 }
 
-// MARK: - AppointmentRowView (Legacy)
-
-struct AppointmentRowView: View {
-    let appointment: Appointment
-    @Environment(\.managedObjectContext) private var viewContext
-    @ObservedObject private var customTypeManager = CustomAppointmentTypeManager.shared
-    @State private var associatedLead: Lead?
-    @State private var refreshId = UUID()
-    
-    var body: some View {
-        HStack(spacing: 16) {
-            // Appointment type icon circle
-            Circle()
-                .fill(appointment.displayColor(using: customTypeManager.customTypes))
-                .frame(width: 48, height: 48)
-                .overlay(
-                    Image(systemName: appointment.displayIcon(using: customTypeManager.customTypes))
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                )
-                .accessibilityHidden(true)
-            
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(appointment.title)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .foregroundColor(.primary)
-                        .accessibilityAddTraits(.isHeader)
-                    
-                    Spacer()
-                    
-                    // Status badge
-                    AppointmentStatusBadge(status: appointment.status)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Status")
-                    .accessibilityValue(appointment.status.rawValue)
-                }
-                
-                // Date and time
-                HStack(spacing: 4) {
-                    Image(systemName: "clock.fill")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
-                        .accessibilityHidden(true)
-                    Text("\(appointment.startDate.formatted(.dateTime.month().day())) at \(appointment.startDate.formatted(.dateTime.hour().minute()))")
-                        .font(.system(size: 14, weight: .regular, design: .rounded))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Date and time")
-                .accessibilityValue("\(appointment.startDate.formatted(.dateTime.month().day())) at \(appointment.startDate.formatted(.dateTime.hour().minute()))")
-                
-                HStack {
-                    Text(appointment.displayName(using: customTypeManager.customTypes))
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(appointment.displayColor(using: customTypeManager.customTypes))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(appointment.displayColor(using: customTypeManager.customTypes).opacity(0.15))
-                        )
-                    
-                    Spacer()
-                }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-        .onAppear {
-            loadAssociatedLead()
-        }
-        .onChange(of: customTypeManager.customTypes) {
-            refreshId = UUID()
-        }
-        .id(refreshId)
-    }
-    
-    private func loadAssociatedLead() {
-        guard let leadId = appointment.leadId else { return }
-        
-        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", leadId as CVarArg)
-        request.fetchLimit = 1
-        
-        do {
-            let leads = try viewContext.fetch(request)
-            associatedLead = leads.first
-        } catch {
-            print("Failed to fetch associated lead: \(error)")
-        }
-    }
-}
-
-
-struct EmptyAppointmentsView: View {
-    let selectedView: AppointmentsView.AppointmentView
-    
-    var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: selectedView.icon)
-                .font(.system(size: 64))
-                .foregroundColor(.secondary)
-            
-            VStack(spacing: 8) {
-                Text("No \(selectedView.rawValue.lowercased()) appointments")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Text(emptyMessage)
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
-    }
-    
-    private var emptyMessage: String {
-        switch selectedView {
-        case .active:
-            return "Start scheduling appointments with your customers to keep track of installations and follow-ups."
-        case .completed:
-            return "Completed appointments will appear here after you mark them as finished."
-        case .cancelled:
-            return "Cancelled appointments will appear here when you cancel scheduled appointments."
-        }
-    }
-}
-
-struct AppointmentCard: View {
-    let appointment: Appointment
-    let viewContext: NSManagedObjectContext
-    @ObservedObject private var appointmentManager = AppointmentManager.shared
-    @ObservedObject private var customTypeManager = CustomAppointmentTypeManager.shared
-    @State private var showingDetails = false
-    @State private var associatedLead: Lead?
-    @State private var showingLeadDetail = false
-    @State private var refreshId = UUID()
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header with type and status
-            HStack {
-                HStack(spacing: 8) {
-                    Image(systemName: appointment.displayIcon(using: customTypeManager.customTypes))
-                        .foregroundColor(appointment.displayColor(using: customTypeManager.customTypes))
-                    
-                    Text(appointment.displayName(using: customTypeManager.customTypes))
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(appointment.displayColor(using: customTypeManager.customTypes))
-                }
-                
-                Spacer()
-                
-                AppointmentStatusBadge(status: appointment.status)
-            }
-            
-            // Title
-            Text(appointment.title)
-                .font(.headline)
-                .fontWeight(.semibold)
-                .multilineTextAlignment(.leading)
-            
-            // Date and time
-            HStack {
-                Image(systemName: "clock")
-                    .foregroundColor(.secondary)
-                    .frame(width: 16)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(appointment.startDate.formatted(.dateTime.day().month().year()))
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    
-                    Text("\(appointment.startDate.formatted(.dateTime.hour().minute())) - \(appointment.endDate.formatted(.dateTime.hour().minute()))")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-            }
-            
-            // Location
-            if !appointment.location.isEmpty {
-                HStack {
-                    Image(systemName: "location")
-                        .foregroundColor(.secondary)
-                        .frame(width: 16)
-                    
-                    Text(appointment.location)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                    
-                    Spacer()
-                }
-            }
-            
-            // Notes preview
-            if !appointment.notes.isEmpty {
-                HStack {
-                    Image(systemName: "note.text")
-                        .foregroundColor(.secondary)
-                        .frame(width: 16)
-                    
-                    Text(appointment.notes)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                    
-                    Spacer()
-                }
-            }
-            
-            // Customer info
-            if let lead = associatedLead {
-                HStack {
-                    Image(systemName: "person")
-                        .foregroundColor(.secondary)
-                        .frame(width: 16)
-                    
-                    Text(lead.displayName)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    
-                    Spacer()
-                    
-                    Button("View Lead") {
-                        showingLeadDetail = true
-                    }
-                    .font(.caption)
-                    .foregroundColor(.blue)
-                }
-            }
-            
-            // Action buttons
-            HStack(spacing: 8) {
-                Button("Details") {
-                    showingDetails = true
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                
-                if appointment.status == .scheduled || appointment.status == .confirmed {
-                    Button("Complete") {
-                        markComplete()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .foregroundColor(.white)
-                    .background(.green)
-                    
-                    Button("Cancel") {
-                        markCancelled()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .foregroundColor(.red)
-                } else if appointment.status == .completed || appointment.status == .cancelled {
-                    Button("Reactivate") {
-                        reactivateAppointment()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .foregroundColor(.blue)
-                }
-                
-                Spacer()
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
-        )
-        .onAppear {
-            loadAssociatedLead()
-        }
-        .onChange(of: customTypeManager.customTypes) {
-            refreshId = UUID()
-        }
-        .id(refreshId)
-        .sheet(isPresented: $showingDetails) {
-            AppointmentDetailView(appointmentId: appointment.id)
-        }
-        .sheet(isPresented: $showingLeadDetail) {
-            if let lead = associatedLead {
-                LeadDetailView(lead: lead)
-            }
-        }
-    }
-    
-    private func loadAssociatedLead() {
-        guard let leadId = appointment.leadId else { return }
-        
-        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", leadId as CVarArg)
-        request.fetchLimit = 1
-        
-        do {
-            let leads = try viewContext.fetch(request)
-            associatedLead = leads.first
-        } catch {
-            print("Failed to fetch associated lead: \(error)")
-        }
-    }
-    
-    private func markComplete() {
-        var updatedAppointment = appointment
-        updatedAppointment.status = .completed
-        
-        Task {
-            await appointmentManager.updateAppointment(updatedAppointment)
-        }
-    }
-    
-    private func markCancelled() {
-        var updatedAppointment = appointment
-        updatedAppointment.status = .cancelled
-        
-        Task {
-            await appointmentManager.updateAppointment(updatedAppointment)
-        }
-    }
-    
-    private func reactivateAppointment() {
-        var updatedAppointment = appointment
-        updatedAppointment.status = .scheduled
-        
-        Task {
-            await appointmentManager.updateAppointment(updatedAppointment)
-        }
-    }
-    
-}
-
+// MARK: - Appointment Lead Selection
 
 struct SelectLeadForAppointmentView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     @FetchRequest(
@@ -880,10 +711,10 @@ struct SelectLeadForAppointmentView: View {
         predicate: NSPredicate(format: "status IN %@", ["interested", "scheduled", "converted"]),
         animation: .default
     ) private var eligibleLeads: FetchedResults<Lead>
-    
+
     @State private var searchText = ""
     let onLeadSelected: (Lead) -> Void
-    
+
     var filteredLeads: [Lead] {
         if searchText.isEmpty {
             return Array(eligibleLeads)
@@ -896,69 +727,70 @@ struct SelectLeadForAppointmentView: View {
     }
     
     var body: some View {
-        NavigationView {
-            VStack {
-                SearchBar(text: $searchText)
-                    .padding(.horizontal, 16)
-                
-                if filteredLeads.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "person.3.fill")
-                            .font(.system(size: 48))
-                            .foregroundColor(.secondary)
-                        
-                        Text("No eligible leads found")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                        
-                        Text("Only interested, scheduled, or converted leads can have appointments scheduled.")
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    ObsidianSectionCard(
+                        title: "Find Lead",
+                        icon: "magnifyingglass",
+                        subtitle: "\(filteredLeads.count) eligible \(filteredLeads.count == 1 ? "lead" : "leads")"
+                    ) {
+                        LeadFormTextField(
+                            title: "Search",
+                            placeholder: "Name or address",
+                            text: $searchText,
+                            icon: "magnifyingglass",
+                            accessibilityIdentifier: "appointmentLeadSearchField"
+                        )
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List(filteredLeads, id: \.id) { lead in
-                        LeadSelectionRow(lead: lead) {
-                            onLeadSelected(lead)
+
+                    if filteredLeads.isEmpty {
+                        ObsidianEmptyState(
+                            icon: "person.3.fill",
+                            title: "No eligible leads",
+                            message: "Only interested, scheduled, or converted leads can have appointments scheduled."
+                        )
+                        .accessibilityIdentifier("appointmentLeadPickerEmptyState")
+                    } else {
+                        LazyVStack(spacing: 12) {
+                            ForEach(filteredLeads, id: \.id) { lead in
+                                LeadSelectionRow(lead: lead) {
+                                    onLeadSelected(lead)
+                                }
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 20)
+                .padding(.bottom, 28)
             }
-            .navigationTitle("Select Customer")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
+            .obsidianScreenBackground()
+            .obsidianPushedNavigation(
+                "Select Lead",
+                backButtonAccessibilityIdentifier: "appointmentLeadPickerBackButton",
+                onBack: { dismiss() }
+            )
             .safeAreaInset(edge: .bottom) {
-                // Card-based cancel button
                 Button(action: {
                     dismiss()
                 }) {
-                    HStack {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                        Text("Cancel")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(UIColor.secondarySystemBackground))
-                            .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                    )
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("appointmentLeadPickerCancelButton")
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(
-                    Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+                    Color.obsidianBackground(for: colorScheme)
+                        .ignoresSafeArea(edges: .bottom)
+                        .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: -3)
                 )
             }
         }
+        .obsidianModalBackground()
+        .accessibilityIdentifier("appointmentLeadPickerSheet")
     }
 }
 
@@ -967,53 +799,79 @@ struct LeadSelectionRow: View {
     let onTap: () -> Void
     
     var body: some View {
+        let status = lead.leadStatus
+
         Button(action: onTap) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(lead.displayName)
-                        .font(.headline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                    
-                    if let address = lead.address {
-                        Text(address)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+            HStack(alignment: .top, spacing: 12) {
+                ObsidianIconTile(icon: "person.fill", tint: status.swiftUIColor, size: 42)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(lead.displayName)
+                            .font(.obsidianTitle)
+                            .foregroundColor(Color.textPrimary)
                             .lineLimit(1)
+
+                        Spacer(minLength: 8)
+
+                        LeadStatusBadge(status: status)
                     }
-                    
-                    LeadStatusBadge(status: LeadStatus.from(leadStatus: lead.leadStatus))
+
+                    if let address = lead.address, !address.isEmpty {
+                        Label(address, systemImage: "location.fill")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Text("Schedule appointment")
+                        .font(.micro)
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color.electricViolet)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Color.electricViolet.opacity(0.12))
+                        .clipShape(Capsule())
                 }
-                
-                Spacer()
-                
+
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
-                    .font(.caption)
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
+                    .padding(.top, 4)
             }
-            .padding(.vertical, 4)
+            .padding(14)
+            .background(Color.obsidianSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+            )
+            .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("appointmentLeadSelectionRow")
     }
 }
 
 struct LeadStatusBadge: View {
-    let status: LeadStatus
+    let status: Lead.Status
     
     var body: some View {
         Text(status.displayName)
-            .font(.caption2)
+            .font(.micro)
             .fontWeight(.semibold)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(status.color.opacity(0.2))
-            .foregroundColor(status.color)
-            .cornerRadius(8)
+            .background(status.swiftUIColor.opacity(0.2))
+            .foregroundColor(status.swiftUIColor)
+            .clipShape(Capsule())
     }
 }
 
 struct AppointmentDetailView: View {
     let appointmentId: UUID
+    private let embeddedTabBarClearance: CGFloat = 56
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var customTypeManager = CustomAppointmentTypeManager.shared
@@ -1022,6 +880,8 @@ struct AppointmentDetailView: View {
     @State private var associatedLead: Lead?
     @State private var showingLeadDetail = false
     @State private var showingCalendarEditor = false
+    @State private var showingDeleteConfirmation = false
+    @State private var isDeletingAppointment = false
     @State private var refreshId = UUID()
     
     private var appointment: Appointment? {
@@ -1029,7 +889,7 @@ struct AppointmentDetailView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             GeometryReader { geometry in
                 ScrollView {
                     VStack(spacing: 16) {
@@ -1058,15 +918,15 @@ struct AppointmentDetailView: View {
                             VStack(spacing: 16) {
                                 Image(systemName: "calendar.badge.exclamationmark")
                                     .font(.system(size: 48))
-                                    .foregroundColor(.secondary)
-                                
+                                    .foregroundColor(Color.textSecondary)
+
                                 Text("Appointment Not Found")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                
+                                    .font(.obsidianHeadline)
+                                    .foregroundColor(Color.textPrimary)
+
                                 Text("This appointment may have been deleted.")
-                                    .font(.body)
-                                    .foregroundColor(.secondary)
+                                    .font(.obsidianBody)
+                                    .foregroundColor(Color.textSecondary)
                                     .multilineTextAlignment(.center)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1075,216 +935,14 @@ struct AppointmentDetailView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 20)
                 }
-                .background(Color(UIColor.systemGroupedBackground))
+                .background(Color.obsidianBackground(for: colorScheme))
             }
-            .navigationTitle("Appointment Details")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
+            .obsidianPushedNavigation(
+                "Appointment Details",
+                backButtonAccessibilityIdentifier: "appointmentDetailBackButton"
+            )
             .safeAreaInset(edge: .bottom) {
-                // Card-based button design
-                VStack(spacing: 12) {
-                    // Status action buttons (only for active appointments)
-                    if let appointment = appointment, appointment.status == .scheduled || appointment.status == .confirmed {
-                        HStack(spacing: 12) {
-                            // Complete button
-                            Button(action: {
-                                Task {
-                                    var updatedAppointment = appointment
-                                    updatedAppointment.status = .completed
-                                    _ = await AppointmentManager.shared.updateAppointment(updatedAppointment)
-                                }
-                            }) {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.title3)
-                                    Text("Mark Complete")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
-                                }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(
-                                            LinearGradient(
-                                                gradient: Gradient(colors: [Color.green, Color.green.opacity(0.8)]),
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            )
-                                        )
-                                        .shadow(color: .green.opacity(0.3), radius: 4, x: 0, y: 2)
-                                )
-                            }
-                            
-                            // Cancel button
-                            Button(action: {
-                                Task {
-                                    var updatedAppointment = appointment
-                                    updatedAppointment.status = .cancelled
-                                    _ = await AppointmentManager.shared.updateAppointment(updatedAppointment)
-                                }
-                            }) {
-                                HStack {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.title3)
-                                    Text("Cancel")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
-                                }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(
-                                            LinearGradient(
-                                                gradient: Gradient(colors: [Color.red, Color.red.opacity(0.8)]),
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            )
-                                        )
-                                        .shadow(color: .red.opacity(0.3), radius: 4, x: 0, y: 2)
-                                )
-                            }
-                        }
-                    }
-                    
-                    // Action buttons in organized sections
-                    VStack(spacing: 16) {
-                        // Primary actions row
-                        HStack(spacing: 12) {
-                            Button(action: {
-                                showingEditView = true
-                            }) {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "pencil")
-                                        .font(.callout)
-                                    Text("Edit")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                }
-                                .foregroundColor(.primary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color(UIColor.secondarySystemBackground))
-                                )
-                            }
-
-                            Button(action: {
-                                dismiss()
-                            }) {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "checkmark")
-                                        .font(.callout)
-                                    Text("Done")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.blue)
-                                )
-                            }
-                        }
-
-                        // Calendar actions row (if applicable)
-                        if let appointment = appointment {
-                            if (appointment.calendarEventId ?? "").isEmpty == false {
-                                HStack(spacing: 12) {
-                                    Button(action: { openCalendarDate(appointment.startDate) }) {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "calendar")
-                                                .font(.callout)
-                                            Text("View")
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
-                                        }
-                                        .foregroundColor(.blue)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.blue.opacity(0.1))
-                                        )
-                                    }
-
-                                    Button(action: { showCalendarEditor(appointment) }) {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "pencil.and.outline")
-                                                .font(.callout)
-                                            Text("Edit Event")
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
-                                        }
-                                        .foregroundColor(.purple)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.purple.opacity(0.1))
-                                        )
-                                    }
-                                }
-                            } else {
-                                Button(action: { addToCalendar(appointment) }) {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "calendar.badge.plus")
-                                            .font(.callout)
-                                        Text("Add to Calendar")
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                    }
-                                    .foregroundColor(.blue)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.blue.opacity(0.1))
-                                    )
-                                }
-                            }
-                        }
-
-                        // Reactivate button (for completed or cancelled appointments)
-                        if let appointment = appointment, appointment.status == .completed || appointment.status == .cancelled {
-                            Button(action: {
-                                Task {
-                                    var updatedAppointment = appointment
-                                    updatedAppointment.status = .scheduled
-                                    _ = await AppointmentManager.shared.updateAppointment(updatedAppointment)
-                                }
-                            }) {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "arrow.clockwise")
-                                        .font(.callout)
-                                    Text("Reactivate Appointment")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                }
-                                .foregroundColor(.green)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.green.opacity(0.1))
-                                )
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
-                )
+                appointmentDetailBottomBar
             }
             .sheet(isPresented: $showingEditView) {
                 if let appointment = appointment {
@@ -1293,18 +951,17 @@ struct AppointmentDetailView: View {
             }
             .sheet(isPresented: $showingCalendarEditor) {
                 if let appointment = appointment {
-                    CalendarEventEditView(appointment: appointment) { eventId in
-                        // onSaved
-                        Task { @MainActor in
-                            if let idx = AppointmentManager.shared.appointments.firstIndex(where: { $0.id == appointment.id }) {
-                                var updated = AppointmentManager.shared.appointments[idx]
-                                updated.calendarEventId = eventId
-                                AppointmentManager.shared.appointments[idx] = updated
-                                await AppointmentManager.shared.syncAppointmentToFirebase(updated)
-                            }
-                            showingCalendarEditor = false
-                        }
-                    } onCancel: {
+	                    CalendarEventEditView(appointment: appointment) { eventId in
+	                        // onSaved
+	                        Task { @MainActor in
+	                            if let idx = AppointmentManager.shared.appointments.firstIndex(where: { $0.id == appointment.id }) {
+	                                var updated = AppointmentManager.shared.appointments[idx]
+	                                updated.calendarEventId = eventId
+	                                _ = await AppointmentManager.shared.updateAppointment(updated)
+	                            }
+	                            showingCalendarEditor = false
+	                        }
+	                    } onCancel: {
                         showingCalendarEditor = false
                     }
                 }
@@ -1314,6 +971,14 @@ struct AppointmentDetailView: View {
                     LeadDetailView(lead: lead)
                 }
             }
+            .alert("Delete Appointment?", isPresented: $showingDeleteConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    deleteAppointmentPermanently()
+                }
+            } message: {
+                Text("This permanently removes the appointment, its reminder notifications, and any linked calendar event.")
+            }
             .onAppear {
                 loadAssociatedLead()
             }
@@ -1321,6 +986,201 @@ struct AppointmentDetailView: View {
                 refreshId = UUID()
             }
             .id(refreshId)
+        }
+        .obsidianModalBackground()
+        .accessibilityIdentifier("appointmentDetailScreen")
+    }
+
+    @ViewBuilder
+    private var appointmentDetailBottomBar: some View {
+        if let appointment {
+            VStack(spacing: 8) {
+                if appointment.status == .scheduled || appointment.status == .confirmed {
+                    HStack(spacing: 8) {
+                        appointmentActionButton(
+                            title: "Cancel",
+                            icon: "xmark",
+                            tone: .danger,
+                            accessibilityIdentifier: "appointmentDetailCancelButton"
+                        ) {
+                            updateAppointmentStatus(appointment, to: .cancelled)
+                        }
+
+                        appointmentActionButton(
+                            title: "Complete",
+                            icon: "checkmark",
+                            tone: .primary,
+                            accessibilityIdentifier: "appointmentDetailCompleteButton"
+                        ) {
+                            updateAppointmentStatus(appointment, to: .completed)
+                        }
+                    }
+                } else if appointment.status == .completed || appointment.status == .cancelled {
+                    appointmentActionButton(
+                        title: "Reactivate",
+                        icon: "arrow.clockwise",
+                        tone: .secondary,
+                        accessibilityIdentifier: "appointmentDetailReactivateButton"
+                    ) {
+                        updateAppointmentStatus(appointment, to: .scheduled)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    appointmentActionButton(
+                        title: "Delete",
+                        icon: "trash",
+                        tone: .danger,
+                        disabled: isDeletingAppointment,
+                        accessibilityIdentifier: "appointmentDetailDeleteButton"
+                    ) {
+                        showingDeleteConfirmation = true
+                    }
+
+                    appointmentActionButton(
+                        title: "Edit",
+                        icon: "pencil",
+                        tone: .secondary,
+                        accessibilityIdentifier: "appointmentDetailEditButton"
+                    ) {
+                        showingEditView = true
+                    }
+
+                    appointmentActionButton(
+                        title: "Done",
+                        icon: "checkmark",
+                        tone: .primary,
+                        accessibilityIdentifier: "appointmentDetailDoneButton"
+                    ) {
+                        dismiss()
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color.obsidianElevated)
+                    .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: -3)
+            )
+            .padding(.horizontal, 12)
+            // The app's custom tab bar is outside SwiftUI's safe-area calculation.
+            .padding(.bottom, embeddedTabBarClearance + 8)
+            .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .bottom))
+        } else {
+            appointmentActionButton(
+                title: "Done",
+                icon: "checkmark",
+                tone: .primary,
+                accessibilityIdentifier: "appointmentDetailDoneButton"
+            ) {
+                dismiss()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, embeddedTabBarClearance + 12)
+            .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea(edges: .bottom))
+        }
+    }
+
+    private func appointmentActionButton(
+        title: String,
+        icon: String,
+        tone: AppointmentActionTone,
+        disabled: Bool = false,
+        accessibilityIdentifier: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 16, height: 16)
+
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .allowsTightening(true)
+            }
+            .foregroundColor(tone.foregroundColor)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .padding(.horizontal, 8)
+            .background(tone.backgroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(tone.borderColor, lineWidth: 1)
+            )
+            .opacity(disabled ? 0.55 : 1)
+            .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier(accessibilityIdentifier ?? title)
+    }
+
+    private enum AppointmentActionTone {
+        case primary
+        case secondary
+        case danger
+
+        var foregroundColor: Color {
+            switch self {
+            case .primary:
+                return .white
+            case .secondary:
+                return Color.textPrimary
+            case .danger:
+                return Color.statusNotInterested
+            }
+        }
+
+        var backgroundColor: Color {
+            switch self {
+            case .primary:
+                return Color.electricViolet
+            case .secondary:
+                return Color.obsidianSurface
+            case .danger:
+                return Color.statusNotInterested.opacity(0.08)
+            }
+        }
+
+        var borderColor: Color {
+            switch self {
+            case .primary:
+                return Color.electricViolet.opacity(0.85)
+            case .secondary:
+                return Color.obsidianBorder.opacity(0.75)
+            case .danger:
+                return Color.statusNotInterested.opacity(0.4)
+            }
+        }
+    }
+
+    private func updateAppointmentStatus(_ appointment: Appointment, to status: Appointment.AppointmentStatus) {
+        Task {
+            var updatedAppointment = appointment
+            updatedAppointment.status = status
+            _ = await AppointmentManager.shared.updateAppointment(updatedAppointment)
+        }
+    }
+
+    private func deleteAppointmentPermanently() {
+        guard let appointment, !isDeletingAppointment else { return }
+
+        isDeletingAppointment = true
+        Task {
+            let didDelete = await AppointmentManager.shared.deleteAppointment(appointment)
+            await MainActor.run {
+                isDeletingAppointment = false
+                if didDelete {
+                    dismiss()
+                }
+            }
         }
     }
 
@@ -1332,486 +1192,229 @@ struct AppointmentDetailView: View {
     }
 
     private func openMaps(for location: String) {
-        guard !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let encoded = location.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let url = URL(string: "http://maps.apple.com/?q=\(encoded)") {
-            UIApplication.shared.open(url)
-        }
+        Utilities.openMapsSearch(query: location)
     }
     
     private func appointmentHeaderCard(appointment: Appointment) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "calendar.badge.checkmark")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Appointment Details")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Type and Status
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Image(systemName: appointment.displayIcon(using: customTypeManager.customTypes))
-                        .foregroundColor(appointment.displayColor(using: customTypeManager.customTypes))
-                        .font(.title2)
-                        .frame(width: 24)
-                    
-                    Text(appointment.displayName(using: customTypeManager.customTypes))
-                        .font(.headline)
-                        .foregroundColor(appointment.displayColor(using: customTypeManager.customTypes))
-                    
-                    Spacer()
-                    
+        let accent = appointment.displayColor(using: customTypeManager.customTypes)
+
+        return HStack(alignment: .top, spacing: 12) {
+            ObsidianIconTile(
+                icon: appointment.displayIcon(using: customTypeManager.customTypes),
+                tint: accent,
+                size: 46,
+                filled: true
+            )
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(appointment.title)
+                        .font(.themeTitle)
+                        .foregroundColor(Color.textPrimary)
+                        .lineLimit(2)
+
+                    Spacer(minLength: 6)
+
                     AppointmentStatusBadge(status: appointment.status)
                 }
-                
-                Text(appointment.title)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
+
+                Text(appointment.displayName(using: customTypeManager.customTypes))
+                    .font(.obsidianFootnote)
+                    .foregroundColor(accent)
+                    .lineLimit(1)
+
+                Label(appointment.startDate.formatted(.dateTime.weekday(.abbreviated).month().day().hour().minute()), systemImage: "clock")
+                    .font(.micro)
+                    .foregroundColor(Color.textMuted)
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
+        .padding()
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.6), lineWidth: 0.5)
         )
     }
     
     private func dateTimeCard(appointment: Appointment) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "clock.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Date & Time")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: "calendar")
-                        .foregroundColor(.blue)
-                        .frame(width: 20)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(appointment.startDate.formatted(.dateTime.day().month().year().weekday(.wide)))
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                        
-                        Text("\(appointment.startDate.formatted(.dateTime.hour().minute())) - \(appointment.endDate.formatted(.dateTime.hour().minute()))")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                }
-                
-                let duration = appointment.endDate.timeIntervalSince(appointment.startDate)
-                let safeDuration = duration.isNaN || duration < 0 ? 3600 : duration // Default to 1 hour if invalid
-                let hours = Int(safeDuration) / 3600
-                let minutes = Int(safeDuration) % 3600 / 60
-                let durationText = hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
-                
-                HStack {
-                    Image(systemName: "hourglass")
-                        .foregroundColor(.blue)
-                        .frame(width: 20)
-                    
-                    Text("Duration: \(durationText)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                }
+        LeadFormSectionCard(title: "Schedule", icon: "calendar.badge.clock") {
+            VStack(spacing: 12) {
+                ObsidianDetailRow(
+                    title: "Date",
+                    value: appointment.startDate.formatted(.dateTime.day().month().year().weekday(.wide)),
+                    icon: "calendar",
+                    tint: Color.electricViolet
+                )
+
+                ObsidianDetailRow(
+                    title: "Time",
+                    value: "\(appointment.startDate.formatted(.dateTime.hour().minute())) - \(appointment.endDate.formatted(.dateTime.hour().minute()))",
+                    icon: "clock.fill",
+                    tint: Color.statusNotHome
+                )
+
+                ObsidianDetailRow(
+                    title: "Duration",
+                    value: appointmentDurationText(appointment),
+                    icon: "hourglass",
+                    tint: Color.statusConverted
+                )
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
     }
     
     private func locationCard(appointment: Appointment) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "location.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Location")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                if !appointment.location.isEmpty {
-                    Button("Open in Maps") {
-                        openMaps(for: appointment.location)
-                    }
-                    .font(.caption)
-                    .foregroundColor(.blue)
+        LeadFormSectionCard(title: "Location", icon: "map.fill") {
+            VStack(spacing: 12) {
+                ObsidianDetailRow(
+                    title: "Address",
+                    value: appointment.location,
+                    icon: "mappin.circle.fill",
+                    tint: Color.statusNotInterested,
+                    valueLineLimit: 3
+                )
+
+                ObsidianActionTile(
+                    title: "Open in Maps",
+                    icon: "location.north.line.fill",
+                    tint: Color.electricViolet
+                ) {
+                    openMaps(for: appointment.location)
                 }
             }
-            
-            HStack {
-                Image(systemName: "mappin.circle.fill")
-                    .foregroundColor(.blue)
-                    .frame(width: 20)
-                
-                Text(appointment.location)
-                    .font(.body)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-            }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
     }
     
     private func customerInformationCard(lead: Lead) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "person.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Customer Information")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                Button("View Lead") {
-                    showingLeadDetail = true
+        LeadFormSectionCard(title: "Customer", icon: "person.crop.circle.fill") {
+            VStack(spacing: 12) {
+                ObsidianDetailRow(
+                    title: "Name",
+                    value: lead.displayName,
+                    icon: "person.fill",
+                    tint: Color.electricViolet
+                )
+
+                if let address = lead.address, !address.isEmpty {
+                    ObsidianDetailRow(
+                        title: "Address",
+                        value: address,
+                        icon: "house.fill",
+                        tint: Color.statusNotInterested,
+                        valueLineLimit: 3
+                    )
                 }
-                .font(.caption)
-                .foregroundColor(.blue)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(8)
-            }
-            
-            VStack(alignment: .leading, spacing: 16) {
-                // Name and Address
-                VStack(alignment: .leading, spacing: 8) {
-                    if let name = lead.name, !name.isEmpty {
-                        HStack {
-                            Image(systemName: "person.circle.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 20)
-                            
-                            Text(name)
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                        }
-                    }
-                    
-                    if let address = lead.address, !address.isEmpty {
-                        HStack {
-                            Image(systemName: "house.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 20)
-                            
-                            Text(address)
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
+
+                if let phone = lead.phone, !phone.isEmpty {
+                    ObsidianDetailRow(
+                        title: "Phone",
+                        value: phone,
+                        icon: "phone.fill",
+                        tint: Color.statusInterested
+                    ) {
+                        ObsidianCompactIconButton(
+                            icon: "phone.fill",
+                            accessibilityLabel: "Call customer",
+                            accentColor: Color.statusInterested,
+                            size: 36
+                        ) {
+                            Utilities.makePhoneCall(to: phone)
                         }
                     }
                 }
-                
-                // Contact Information
-                VStack(alignment: .leading, spacing: 8) {
-                    if let phone = lead.phone, !phone.isEmpty {
-                        HStack {
-                            Image(systemName: "phone.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 20)
-                            
-                            Text(phone)
-                                .font(.body)
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                if let url = URL(string: "tel:\(phone)") {
-                                    UIApplication.shared.open(url)
-                                }
-                            }) {
-                                Image(systemName: "phone.circle.fill")
-                                    .foregroundColor(.green)
-                                    .font(.title3)
-                            }
-                        }
-                    }
-                    
-                    if let email = lead.email, !email.isEmpty {
-                        HStack {
-                            Image(systemName: "envelope.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 20)
-                            
-                            Text(email)
-                                .font(.body)
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                if let url = URL(string: "mailto:\(email)") {
-                                    UIApplication.shared.open(url)
-                                }
-                            }) {
-                                Image(systemName: "envelope.circle.fill")
-                                    .foregroundColor(.blue)
-                                    .font(.title3)
-                            }
+
+                if let email = lead.email, !email.isEmpty {
+                    ObsidianDetailRow(
+                        title: "Email",
+                        value: email,
+                        icon: "envelope.fill",
+                        tint: Color.statusNotHome,
+                        valueLineLimit: 1
+                    ) {
+                        ObsidianCompactIconButton(
+                            icon: "envelope.fill",
+                            accessibilityLabel: "Email customer",
+                            accentColor: Color.electricViolet,
+                            size: 36
+                        ) {
+                            Utilities.sendEmail(to: email)
                         }
                     }
                 }
-                
-                // Lead Status and Priority
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Status")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fontWeight(.medium)
-                        
-                        LeadStatusBadge(status: LeadStatus.from(leadStatus: lead.leadStatus))
-                    }
-                    
+
+                HStack(spacing: 10) {
+                    LeadStatusBadge(status: lead.leadStatus)
+
                     if lead.priority > 0 {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Priority")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .fontWeight(.medium)
-                            
-                            HStack {
-                                ForEach(1...Int(lead.priority), id: \.self) { _ in
-                                    Image(systemName: "star.fill")
-                                        .foregroundColor(.orange)
-                                        .font(.caption)
-                                }
-                            }
-                        }
+                        Label("Priority \(Int(lead.priority))", systemImage: "star.fill")
+                            .font(.micro)
+                            .foregroundColor(Color.statusNotHome)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Capsule().fill(Color.statusNotHome.opacity(0.12)))
                     }
-                    
-                    Spacer()
+
+                    Spacer(minLength: 0)
                 }
-                
-                // Financial Information
-                if lead.price > 0 || lead.estimatedValue > 0 {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if lead.price > 0 {
-                            HStack {
-                                Image(systemName: "dollarsign.circle.fill")
-                                    .foregroundColor(.green)
-                                    .frame(width: 20)
-                                
-                                Text("Price: $\(lead.price, specifier: "%.2f")")
-                                    .font(.body)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.primary)
-                                
-                                Spacer()
-                            }
-                        }
-                        
-                        if lead.estimatedValue > 0 && lead.estimatedValue != lead.price {
-                            HStack {
-                                Image(systemName: "chart.line.uptrend.xyaxis.circle.fill")
-                                    .foregroundColor(.orange)
-                                    .frame(width: 20)
-                                
-                                Text("Estimated: $\(lead.estimatedValue, specifier: "%.2f")")
-                                    .font(.body)
-                                    .foregroundColor(.secondary)
-                                
-                                Spacer()
-                            }
-                        }
-                    }
+
+                if lead.price > 0 {
+                    ObsidianDetailRow(
+                        title: "Sold Price",
+                        value: lead.price.formatted(.currency(code: "CAD")),
+                        icon: "dollarsign.circle.fill",
+                        tint: Color.statusConverted
+                    )
+                } else if lead.estimatedValue > 0 {
+                    ObsidianDetailRow(
+                        title: "Estimated Value",
+                        value: lead.estimatedValue.formatted(.currency(code: "CAD")),
+                        icon: "chart.line.uptrend.xyaxis.circle.fill",
+                        tint: Color.statusConverted
+                    )
                 }
-                
-                // Additional Information
-                VStack(alignment: .leading, spacing: 8) {
-                    if let source = lead.source, !source.isEmpty {
-                        HStack {
-                            Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 20)
-                            
-                            Text("Source: \(source)")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                        }
-                    }
-                    
-                    if lead.visitCount > 0 {
-                        HStack {
-                            Image(systemName: "person.2.circle.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 20)
-                            
-                            Text("Visits: \(lead.visitCount)")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                        }
-                    }
-                    
-                    if let lastContact = lead.lastContactDate {
-                        HStack {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .foregroundColor(.blue)
-                                .frame(width: 20)
-                            
-                            Text("Last Contact: \(lastContact.formatted(.dateTime.month().day().year()))")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                        }
-                    }
-                }
-                
-                // Tags
-                if let tags = lead.tags, !tags.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Tags")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fontWeight(.medium)
-                        
-                        Text(tags)
-                            .font(.body)
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(UIColor.tertiarySystemBackground))
-                            .cornerRadius(8)
-                    }
+
+                ObsidianActionTile(
+                    title: "View Full Lead",
+                    subtitle: "Open customer details and all lead actions.",
+                    icon: "arrow.up.forward.app.fill",
+                    tint: Color.electricViolet
+                ) {
+                    showingLeadDetail = true
                 }
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
     }
     
     private func notesCard(appointment: Appointment) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "note.text")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Notes")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
+        LeadFormSectionCard(title: "Notes", icon: "note.text") {
             Text(appointment.notes)
-                .font(.body)
-                .foregroundColor(.primary)
-                .padding(.leading, 32)
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                .font(.obsidianBody)
+                .foregroundColor(Color.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Color.obsidianElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                 )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
+        }
+    }
+
+    private func appointmentDurationText(_ appointment: Appointment) -> String {
+        let duration = appointment.endDate.timeIntervalSince(appointment.startDate)
+        let safeDuration = duration.isNaN || duration < 0 ? 3600 : duration
+        let hours = Int(safeDuration) / 3600
+        let minutes = Int(safeDuration) % 3600 / 60
+        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
     }
     
     private func loadAssociatedLead() {
         guard let appointment = appointment,
               let leadId = appointment.leadId else { return }
 
-        let request: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let request: NSFetchRequest<Lead> = Lead.fetchRequest(in: viewContext)
         request.predicate = NSPredicate(format: "id == %@", leadId as CVarArg)
         request.fetchLimit = 1
 
@@ -1847,36 +1450,12 @@ struct AppointmentDetailView: View {
                     if let idx = AppointmentManager.shared.appointments.firstIndex(where: { $0.id == appt.id }) {
                         var updated = AppointmentManager.shared.appointments[idx]
                         updated.calendarEventId = id
-                        AppointmentManager.shared.appointments[idx] = updated
-                        await AppointmentManager.shared.syncAppointmentToFirebase(updated)
+                        _ = await AppointmentManager.shared.updateAppointment(updated)
                     }
                 }
             } else {
                 print("❌ Failed to create calendar event")
             }
-        }
-    }
-}
-
-struct DetailSection<Content: View>: View {
-    let title: String
-    let icon: String
-    @ViewBuilder let content: Content
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(.blue)
-                    .frame(width: 20)
-                
-                Text(title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-            }
-            
-            content
-                .padding(.leading, 32)
         }
     }
 }
@@ -1938,7 +1517,7 @@ struct EditAppointmentView: View {
             lead: associatedLead,
             existingAppointment: appointment,
             onSave: {
-                updateAppointment()
+                await updateAppointment()
             },
             onCancel: {
                 dismiss()
@@ -1954,7 +1533,7 @@ struct EditAppointmentView: View {
         
         // Find the lead associated with this appointment
         let context = PersistenceController.shared.container.viewContext
-        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest()
+        let fetchRequest: NSFetchRequest<Lead> = Lead.fetchRequest(in: context)
         fetchRequest.predicate = NSPredicate(format: "id == %@", leadId as CVarArg)
         
         do {
@@ -1965,7 +1544,8 @@ struct EditAppointmentView: View {
         }
     }
     
-    private func updateAppointment() {
+    @MainActor
+    private func updateAppointment() async -> Bool {
         let endDate = selectedDate.addingTimeInterval(duration)
         
         let updatedAppointment = Appointment(
@@ -1982,498 +1562,38 @@ struct EditAppointmentView: View {
             status: appointment.status
         )
         
-        Task {
-            let success = await appointmentManager.updateAppointment(updatedAppointment)
-            
-            await MainActor.run {
-                if success {
-                    dismiss()
-                } else {
-                    // Error handling is managed by AppointmentManager
-                    print("❌ Appointment update failed")
-                }
-            }
+        let success = await appointmentManager.updateAppointment(updatedAppointment)
+        if success {
+            dismiss()
+        } else {
+            print("❌ Appointment update failed")
         }
+        return success
     }
 }
 
 // MARK: - Edit Form Sections
 
-struct EditAppointmentDetailsSection: View {
-    @Binding var appointmentType: Appointment.AppointmentType
-    @Binding var customAppointmentTypeId: String?
-    @Binding var title: String
-    @Binding var notes: String
-    @ObservedObject private var customTypeManager = CustomAppointmentTypeManager.shared
-    @State private var showingCustomTypeCreator = false
-    
-    private var allAppointmentTypes: [AppointmentTypeWrapper] {
-        customTypeManager.allAppointmentTypes
-    }
-    
-    private var selectedTypeWrapper: AppointmentTypeWrapper? {
-        if let customId = customAppointmentTypeId {
-            return allAppointmentTypes.first { 
-                if case .customType(let custom) = $0 {
-                    return custom.id == customId
-                }
-                return false
-            }
-        } else {
-            return allAppointmentTypes.first {
-                if case .defaultType(let defaultType) = $0 {
-                    return defaultType == appointmentType
-                }
-                return false
-            }
-        }
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "calendar.badge.plus")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Appointment Details")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                Button("New Type") {
-                    showingCustomTypeCreator = true
-                }
-                .font(.caption)
-                .foregroundColor(.blue)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(8)
-            }
-            
-            // Appointment Type Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Appointment Type")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .clipped()
-                
-                LazyVGrid(columns: [
-                    GridItem(.adaptive(minimum: 100), spacing: 8)
-                ], spacing: 8) {
-                    ForEach(allAppointmentTypes) { typeWrapper in
-                        EditAppointmentTypeChipWrapper(
-                            typeWrapper: typeWrapper,
-                            isSelected: isSelected(typeWrapper),
-                            onTap: {
-                                selectType(typeWrapper)
-                            },
-                            onDelete: typeWrapper.isCustom ? {
-                                if case .customType(let custom) = typeWrapper {
-                                    customTypeManager.deleteCustomType(custom)
-                                }
-                            } : nil
-                        )
-                        .clipped()
-                    }
-                }
-                .clipped()
-            }
-            .clipped()
-            
-            // Title Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Appointment Title")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .clipped()
-                
-                TextField("Enter appointment title", text: $title)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                    )
-                    .clipped()
-            }
-            .clipped()
-            
-            // Notes Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Notes")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $notes)
-                        .frame(minHeight: 100)
-                        .padding(12)
-                        .background(Color(UIColor.tertiarySystemBackground))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                        )
-                    
-                    if notes.isEmpty {
-                        Text("Add appointment notes...")
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 20)
-                            .allowsHitTesting(false)
-                    }
-                }
-            }
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
-        .clipped()
-        .sheet(isPresented: $showingCustomTypeCreator) {
-            CustomAppointmentTypeCreatorView()
-        }
-    }
-    
-    private func isSelected(_ typeWrapper: AppointmentTypeWrapper) -> Bool {
-        switch typeWrapper {
-        case .defaultType(let defaultType):
-            return customAppointmentTypeId == nil && appointmentType == defaultType
-        case .customType(let custom):
-            return customAppointmentTypeId == custom.id
-        }
-    }
-    
-    private func selectType(_ typeWrapper: AppointmentTypeWrapper) {
-        // Extract the lead name from existing title if it exists
-        let leadNameSuffix = extractLeadNameFromTitle(title)
-        
-        switch typeWrapper {
-        case .defaultType(let defaultType):
-            appointmentType = defaultType
-            customAppointmentTypeId = nil
-            // Update title to match the appointment type, preserving lead name
-            title = defaultType.rawValue + leadNameSuffix
-        case .customType(let custom):
-            customAppointmentTypeId = custom.id
-            // Keep the appointmentType as a fallback
-            // Update title to match the custom type, preserving lead name
-            title = custom.name + leadNameSuffix
-        }
-    }
-    
-    private func extractLeadNameFromTitle(_ currentTitle: String) -> String {
-        // Look for pattern " - [Lead Name]" at the end of the title
-        if let dashIndex = currentTitle.lastIndex(of: "-") {
-            let afterDash = currentTitle[currentTitle.index(after: dashIndex)...].trimmingCharacters(in: .whitespaces)
-            
-            // Only treat it as a lead name suffix if there's content after the dash
-            if !afterDash.isEmpty {
-                return " - " + afterDash
-            }
-        }
-        return ""
-    }
-}
-
-struct EditAppointmentTypeChipWrapper: View {
-    let typeWrapper: AppointmentTypeWrapper
-    let isSelected: Bool
-    let onTap: () -> Void
-    let onDelete: (() -> Void)?
-    
-    var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 4) {
-                ZStack(alignment: .topTrailing) {
-                    VStack(spacing: 4) {
-                        Image(systemName: typeWrapper.icon)
-                            .font(.title3)
-                        
-                        Text(typeWrapper.name)
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-                    }
-                    
-                    if typeWrapper.isCustom, let onDelete = onDelete {
-                        Button(action: onDelete) {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.red)
-                                .background(Color.white, in: Circle())
-                        }
-                        .offset(x: 8, y: -8)
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-            }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, minHeight: 70)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? typeWrapper.color.opacity(0.2) : Color(UIColor.tertiarySystemBackground))
-            )
-            .foregroundColor(isSelected ? typeWrapper.color : .primary)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(typeWrapper.color.opacity(isSelected ? 0.8 : 0.3), lineWidth: isSelected ? 2 : 1)
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-
-struct EditAppointmentTypeChip: View {
-    let type: Appointment.AppointmentType
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: type.icon)
-                    .font(.title3)
-                
-                Text(type.rawValue)
-                    .font(.caption)
-                    .fontWeight(.medium)
-            }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? type.color.opacity(0.2) : Color(UIColor.tertiarySystemBackground))
-            )
-            .foregroundColor(isSelected ? type.color : .primary)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(type.color.opacity(isSelected ? 0.8 : 0.3), lineWidth: isSelected ? 2 : 1)
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-
-struct EditDateTimeSection: View {
-    @Binding var selectedDate: Date
-    @Binding var duration: TimeInterval
-    let durationOptions: [(String, TimeInterval)]
-    let endDate: Date
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "clock.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Date & Time")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Start Date & Time Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Start Date & Time")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
-                DatePicker("", selection: $selectedDate, displayedComponents: [.date, .hourAndMinute])
-                    .datePickerStyle(.compact)
-                    .labelsHidden()
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                    )
-            }
-            
-            // Duration Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Duration")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
-                Menu {
-                    ForEach(Array(durationOptions.enumerated()), id: \.offset) { _, option in
-                        Button(action: {
-                            duration = option.1
-                        }) {
-                            HStack {
-                                Text(option.0)
-                                if duration == option.1 {
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: "hourglass")
-                            .foregroundColor(.blue)
-                            .frame(width: 20)
-                        
-                        Text(durationOptions.first(where: { $0.1 == duration })?.0 ?? "1 hour")
-                            .foregroundColor(.primary)
-                        
-                        Spacer()
-                        
-                        Image(systemName: "chevron.down")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                    )
-                }
-            }
-            
-            // End Time Display Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("End Time")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
-                HStack {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .foregroundColor(.blue)
-                        .frame(width: 20)
-                    
-                    Text(endDate.formatted(.dateTime.day().month().year().hour().minute()))
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color(UIColor.tertiarySystemBackground).opacity(0.5))
-                .cornerRadius(10)
-            }
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
-    }
-}
-
 struct EditLocationSection: View {
     @Binding var location: String
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "location.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Location")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Location Input Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Appointment Location")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
-                HStack {
-                    Image(systemName: "mappin.circle.fill")
-                        .foregroundColor(.blue)
-                        .frame(width: 20)
-                    
-                    TextField("Enter appointment location", text: $location)
-                        .font(.body)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color(UIColor.tertiarySystemBackground))
-                .cornerRadius(10)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+        LeadFormSectionCard(title: "Location", icon: "location.fill") {
+            VStack(alignment: .leading, spacing: 10) {
+                LeadFormTextField(
+                    title: "Appointment Location",
+                    placeholder: "Street address or service location",
+                    text: $location,
+                    icon: "mappin.circle.fill",
+                    accessibilityIdentifier: "appointmentEditLocationField"
                 )
-                
-                Text("Optional: Add specific location details for this appointment")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 4)
+
+                Label("Optional: add unit number, parking notes, or service-specific details.", systemImage: "info.circle")
+                    .font(.micro)
+                    .foregroundColor(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(UIColor.tertiarySystemBackground),
-                            Color(UIColor.tertiarySystemBackground).opacity(0.8)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-        )
     }
 }
 

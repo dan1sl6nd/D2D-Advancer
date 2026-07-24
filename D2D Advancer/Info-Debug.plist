@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>D2D Advancer</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>d2dadvancer.auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>d2dadvancer</string>
+			</array>
+		</dict>
+	</array>
+	<key>D2DFirebaseEmulatorHost</key>
+	<string>$(D2D_DEFAULT_FIREBASE_EMULATOR_HOST)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.business</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSCalendarsUsageDescription</key>
+	<string>D2D Advancer would like access to your Calendar to save scheduled appointments and reminders.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>D2D Advancer uses full calendar access only when you choose to add or update scheduled appointments in Calendar.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>D2D Advancer uses the camera when you choose to attach a property or job photo to a lead.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>D2D Advancer accesses Contacts only when you choose to import matching service contacts or save a lead to Contacts.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>D2D Advancer uses local network access only in debug UI tests to connect to Firebase emulators on this Mac.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>D2D Advancer uses your location while the app is open to center the map, navigate to work, and share your position with your team only while you are on duty.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>D2D Advancer uses the microphone only when you choose to record a voice note for a lead.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>D2D Advancer accesses your photo library only when you choose an existing property or job photo to attach to a lead.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>D2D Advancer uses speech recognition only when you choose to transcribe a recorded lead note.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict/>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UIRequiresFullScreen</key>
+	<true/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+	</array>
+</dict>
+</plist>

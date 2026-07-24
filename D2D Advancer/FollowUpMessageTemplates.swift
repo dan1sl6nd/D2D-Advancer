@@ -44,12 +44,26 @@ struct MessageTemplate: Codable, Identifiable {
     }
 }
 
+enum MessageTemplatePriceFormatter {
+    static func string(from value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "CAD"
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 0
+
+        return formatter.string(from: NSNumber(value: value)) ?? "$0"
+    }
+}
+
 class FollowUpMessageTemplates: ObservableObject {
     static let shared = FollowUpMessageTemplates()
     
     @Published var customTemplates: [MessageTemplate] = []
-    private let userDefaults = UserDefaults.standard
-    private let customTemplatesKey = "custom_message_templates"
+    @Published var lastErrorMessage: String?
+    private let userDefaults: UserDefaults
+    private let customTemplatesKey: String
+    private var hasCorruptStoredTemplates = false
     
     let defaultTemplates: [MessageTemplate] = [
         // Initial Follow-Up Messages
@@ -259,7 +273,9 @@ class FollowUpMessageTemplates: ObservableObject {
         )
     ]
     
-    init() {
+    init(userDefaults: UserDefaults = .standard, customTemplatesKey: String = "custom_message_templates") {
+        self.userDefaults = userDefaults
+        self.customTemplatesKey = customTemplatesKey
         loadCustomTemplates()
     }
     
@@ -267,7 +283,9 @@ class FollowUpMessageTemplates: ObservableObject {
         return defaultTemplates + customTemplates
     }
     
-    func addCustomTemplate(_ template: MessageTemplate) {
+    @discardableResult
+    func addCustomTemplate(_ template: MessageTemplate) -> Bool {
+        let previousTemplates = customTemplates
         var customTemplate = template
         customTemplate = MessageTemplate(
             id: template.id,
@@ -280,31 +298,84 @@ class FollowUpMessageTemplates: ObservableObject {
             dateCreated: Date()
         )
         customTemplates.append(customTemplate)
-        saveCustomTemplates()
-    }
-    
-    func updateCustomTemplate(_ template: MessageTemplate) {
-        if let index = customTemplates.firstIndex(where: { $0.id == template.id }) {
-            customTemplates[index] = template
-            saveCustomTemplates()
+        guard saveCustomTemplates() else {
+            customTemplates = previousTemplates
+            return false
         }
+        return true
     }
     
-    func deleteCustomTemplate(_ template: MessageTemplate) {
+    @discardableResult
+    func updateCustomTemplate(_ template: MessageTemplate) -> Bool {
+        guard let index = customTemplates.firstIndex(where: { $0.id == template.id }) else {
+            lastErrorMessage = "Could not update template because it no longer exists."
+            return false
+        }
+
+        let previousTemplate = customTemplates[index]
+        customTemplates[index] = template
+        guard saveCustomTemplates() else {
+            customTemplates[index] = previousTemplate
+            return false
+        }
+        return true
+    }
+    
+    @discardableResult
+    func deleteCustomTemplate(_ template: MessageTemplate) -> Bool {
+        guard customTemplates.contains(where: { $0.id == template.id }) else {
+            lastErrorMessage = "Could not delete template because it no longer exists."
+            return false
+        }
+
+        let previousTemplates = customTemplates
         customTemplates.removeAll { $0.id == template.id }
-        saveCustomTemplates()
+        guard saveCustomTemplates() else {
+            customTemplates = previousTemplates
+            return false
+        }
+        return true
     }
     
-    private func saveCustomTemplates() {
-        if let encoded = try? JSONEncoder().encode(customTemplates) {
+    @discardableResult
+    private func saveCustomTemplates() -> Bool {
+        guard !hasCorruptStoredTemplates else {
+            let message = "Could not save message templates because the saved templates could not be loaded. Your existing saved data was left untouched."
+            lastErrorMessage = message
+            print("❌ \(message)")
+            return false
+        }
+
+        do {
+            let encoded = try JSONEncoder().encode(customTemplates)
             userDefaults.set(encoded, forKey: customTemplatesKey)
+            lastErrorMessage = nil
+            hasCorruptStoredTemplates = false
+            return true
+        } catch {
+            let message = "Could not save message templates: \(error.localizedDescription)"
+            lastErrorMessage = message
+            print("❌ \(message)")
+            return false
         }
     }
     
     private func loadCustomTemplates() {
-        if let data = userDefaults.data(forKey: customTemplatesKey),
-           let templates = try? JSONDecoder().decode([MessageTemplate].self, from: data) {
+        guard let data = userDefaults.data(forKey: customTemplatesKey) else {
+            hasCorruptStoredTemplates = false
+            return
+        }
+
+        do {
+            let templates = try JSONDecoder().decode([MessageTemplate].self, from: data)
             customTemplates = templates
+            lastErrorMessage = nil
+            hasCorruptStoredTemplates = false
+        } catch {
+            let message = "Could not load saved message templates: \(error.localizedDescription)"
+            lastErrorMessage = message
+            hasCorruptStoredTemplates = true
+            print("❌ \(message)")
         }
     }
     
@@ -332,13 +403,10 @@ class FollowUpMessageTemplates: ObservableObject {
 
         // Format and replace simple price placeholder (if not already replaced by expression)
         if lead.price > 0 {
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .currency
-            formatter.currencyCode = "CAD"
-            let priceString = formatter.string(from: NSNumber(value: lead.price)) ?? "$0.00"
+            let priceString = MessageTemplatePriceFormatter.string(from: lead.price)
             personalizedMessage = personalizedMessage.replacingOccurrences(of: "{price}", with: priceString)
         } else {
-            personalizedMessage = personalizedMessage.replacingOccurrences(of: "{price}", with: "$0.00")
+            personalizedMessage = personalizedMessage.replacingOccurrences(of: "{price}", with: "$0")
         }
 
         // Replace service type placeholder
@@ -399,11 +467,7 @@ class FollowUpMessageTemplates: ObservableObject {
                 break
             }
 
-            // Format as currency
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .currency
-            formatter.currencyCode = "CAD"
-            let priceString = formatter.string(from: NSNumber(value: calculatedPrice)) ?? "$0.00"
+            let priceString = MessageTemplatePriceFormatter.string(from: calculatedPrice)
 
             // Replace the expression with the calculated value
             result = (result as NSString).replacingCharacters(in: match.range(at: 0), with: priceString)

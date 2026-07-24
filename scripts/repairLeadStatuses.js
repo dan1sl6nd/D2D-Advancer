@@ -18,7 +18,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const admin = require('firebase-admin');
+const { applicationDefault, initializeApp } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
 // ---------- CLI args ----------
 const argv = process.argv.slice(2);
@@ -40,8 +41,8 @@ if (!PROJECT) {
 
 // ---------- Firebase init ----------
 try {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
+  initializeApp({
+    credential: applicationDefault(),
     projectId: PROJECT,
   });
 } catch (e) {
@@ -50,7 +51,7 @@ try {
   process.exit(1);
 }
 
-const db = admin.firestore();
+const db = getFirestore();
 
 // ---------- Normalization logic ----------
 function normalizeStatus(raw) {
@@ -176,4 +177,3 @@ run().then(() => process.exit(0)).catch((e) => {
   console.error(e);
   process.exit(1);
 });
-

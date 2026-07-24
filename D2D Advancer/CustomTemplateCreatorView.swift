@@ -2,14 +2,16 @@ import SwiftUI
 
 struct CustomTemplateCreatorView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var templateManager = FollowUpMessageTemplates.shared
-    
+
     @State private var title: String = ""
     @State private var message: String = ""
     @State private var selectedCategory: MessageTemplate.MessageCategory = .initial
     @State private var isForSMS: Bool = true
     @State private var isForEmail: Bool = true
     @State private var showingPreview: Bool = false
+    @State private var saveErrorMessage: String?
     
     let editingTemplate: MessageTemplate?
     
@@ -31,83 +33,40 @@ struct CustomTemplateCreatorView: View {
     }
     
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
+        NavigationStack {
+            VStack(spacing: 0) {
                 ScrollView {
                     VStack(spacing: 16) {
-                        // Template Info Card
                         templateDetailsCard
-                        
-                        // Message Content Card
                         messageContentCard
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
+                    .padding(.top, 18)
+                    .padding(.bottom, 28)
                 }
-                .background(Color(UIColor.systemGroupedBackground))
+                .scrollDismissesKeyboard(.immediately)
+                .background(Color.obsidianBackground(for: colorScheme))
+                .accessibilityIdentifier("customTemplateEditorSheet")
             }
-            .navigationTitle(editingTemplate != nil ? "Edit Template" : "Create Template")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
+            .background(Color.obsidianBackground(for: colorScheme))
+            .obsidianPushedNavigation(
+                editingTemplate != nil ? "Edit Template" : "Create Template",
+                backButtonAccessibilityIdentifier: "customTemplateCloseButton",
+                onBack: { dismiss() }
+            )
             .safeAreaInset(edge: .bottom) {
-                // Card-based button design
-                HStack(spacing: 16) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                            Text("Cancel")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(UIColor.secondarySystemBackground))
-                                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        )
+                ObsidianBottomActionBar(
+                    isPrimaryDisabled: !isValidTemplate,
+                    primaryAccessibilityIdentifier: "customTemplateSaveButton",
+                    secondaryAccessibilityIdentifier: "customTemplateCancelButton",
+                    primaryAction: saveTemplate,
+                    secondaryAction: { dismiss() },
+                    primaryLabel: {
+                        Label(editingTemplate != nil ? "Update" : "Save", systemImage: "checkmark.circle.fill")
+                    },
+                    secondaryLabel: {
+                        Label("Cancel", systemImage: "xmark.circle.fill")
                     }
-                    
-                    Button(action: {
-                        saveTemplate()
-                    }) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3)
-                            Text(editingTemplate != nil ? "Update Template" : "Save Template")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            !isValidTemplate ? Color.gray : Color.blue,
-                                            !isValidTemplate ? Color.gray.opacity(0.8) : Color.blue.opacity(0.8)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: !isValidTemplate ? .clear : .blue.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                    .disabled(!isValidTemplate)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    Rectangle()
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
                 )
             }
             .sheet(isPresented: $showingPreview) {
@@ -116,10 +75,24 @@ struct CustomTemplateCreatorView: View {
                     message: message,
                     category: selectedCategory
                 )
+                .presentationDetents([.large])
+                .obsidianModalBackground()
+            }
+            .alert(
+                "Template not saved",
+                isPresented: Binding(
+                    get: { saveErrorMessage != nil },
+                    set: { if !$0 { saveErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(saveErrorMessage ?? "Please try again.")
             }
         }
+        .obsidianModalBackground()
     }
-    
+
     private func saveTemplate() {
         let template = MessageTemplate(
             id: editingTemplate?.id ?? UUID().uuidString,
@@ -132,10 +105,16 @@ struct CustomTemplateCreatorView: View {
             dateCreated: editingTemplate?.dateCreated ?? Date()
         )
 
+        let didSave: Bool
         if editingTemplate != nil {
-            templateManager.updateCustomTemplate(template)
+            didSave = templateManager.updateCustomTemplate(template)
         } else {
-            templateManager.addCustomTemplate(template)
+            didSave = templateManager.addCustomTemplate(template)
+        }
+
+        guard didSave else {
+            saveErrorMessage = templateManager.lastErrorMessage ?? "Could not save this template. Please try again."
+            return
         }
 
         dismiss()
@@ -153,44 +132,24 @@ struct CustomTemplateCreatorView: View {
     // MARK: - Card Components
     
     private var templateDetailsCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "doc.text.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Template Details")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
+        ObsidianSectionCard(
+            title: "Template Details",
+            icon: "doc.text.fill",
+            subtitle: "Name the template and choose where it appears."
+        ) {
+            VStack(alignment: .leading, spacing: 18) {
+            LeadFormTextField(
+                title: "Template Name",
+                placeholder: "Enter template name",
+                text: $title,
+                icon: "doc.text.fill",
+                accessibilityIdentifier: "customTemplateTitleField"
+            )
             
-            // Template Name Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Template Name")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
-                TextField("Enter template name", text: $title)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                    )
-            }
-            
-            // Category Section
             VStack(alignment: .leading, spacing: 12) {
                 Text("Category")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
                 
                 Menu {
                     ForEach(MessageTemplate.MessageCategory.allCases, id: \.self) { category in
@@ -210,136 +169,130 @@ struct CustomTemplateCreatorView: View {
                 } label: {
                     HStack {
                         Image(systemName: selectedCategory.icon)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 20)
                         Text(selectedCategory.rawValue)
-                            .foregroundColor(.primary)
+                            .font(.obsidianBody)
+                            .foregroundColor(Color.textPrimary)
                         Spacer()
                         Image(systemName: "chevron.down")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
+                            .foregroundColor(Color.textSecondary)
+                            .font(.obsidianSmall)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(10)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                    )
+                }
+                .accessibilityIdentifier("customTemplateCategoryMenu")
+            }
+            
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Message Channels")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
+
+                VStack(spacing: 12) {
+                    channelToggleRow(
+                        title: "SMS Messages",
+                        icon: "message.fill",
+                        isOn: $isForSMS,
+                        accessibilityIdentifier: "customTemplateSMSToggle"
+                    )
+                    channelToggleRow(
+                        title: "Email Messages",
+                        icon: "envelope.fill",
+                        isOn: $isForEmail,
+                        accessibilityIdentifier: "customTemplateEmailToggle"
                     )
                 }
             }
-            
-            // Message Channels Section
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Message Channels")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
-                VStack(spacing: 12) {
-                    HStack {
-                        Image(systemName: "message.fill")
-                            .foregroundColor(.blue)
-                            .frame(width: 20)
-                        Text("SMS Messages")
-                            .font(.body)
-                        Spacer()
-                        Toggle("", isOn: $isForSMS)
-                            .toggleStyle(SwitchToggleStyle(tint: .blue))
-                    }
-                    
-                    HStack {
-                        Image(systemName: "envelope.fill")
-                            .foregroundColor(.blue)
-                            .frame(width: 20)
-                        Text("Email Messages")
-                            .font(.body)
-                        Spacer()
-                        Toggle("", isOn: $isForEmail)
-                            .toggleStyle(SwitchToggleStyle(tint: .blue))
-                    }
-                }
-            }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        }
     }
-    
+
     private var messageContentCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "text.bubble.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Message Content")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Template Message Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Template Message")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
+        ObsidianSectionCard(
+            title: "Message Content",
+            icon: "text.bubble.fill",
+            subtitle: "Use placeholders to personalize messages from lead data."
+        ) {
+            VStack(alignment: .leading, spacing: 18) {
+            Button(action: {
+                showingPreview = true
+            }) {
+                HStack(spacing: 14) {
+                    ObsidianIconTile(icon: "eye.fill", tint: Color.electricViolet, size: 42)
 
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $message)
-                        .frame(minHeight: 120)
-                        .padding(12)
-                        .background(Color(UIColor.tertiarySystemBackground))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
-                        )
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Preview Message")
+                            .font(.obsidianCallout)
+                            .foregroundColor(Color.textPrimary)
 
-                    if message.isEmpty {
-                        Text("Type your message here...")
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 20)
-                            .allowsHitTesting(false)
+                        Text("Check how this template looks with sample data")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.textSecondary)
+                            .lineLimit(2)
                     }
-                }
-            }
 
-            // Placeholder Insertion Section
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.right")
+                        .font(.obsidianSmall.weight(.semibold))
+                        .foregroundColor(Color.textMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("customTemplatePreviewButton")
+            .background(Color.obsidianElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+            )
+
+            LeadNotesEditor(
+                title: "Template Message",
+                text: $message,
+                minHeight: 128,
+                accessibilityIdentifier: "customTemplateMessageField",
+                keyboardDoneAccessibilityIdentifier: "customTemplateMessageDoneButton"
+            )
+
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Image(systemName: "tag.fill")
-                        .foregroundColor(.blue)
-                        .font(.caption)
+                        .foregroundColor(Color.electricViolet)
+                        .font(.obsidianSmall)
                     Text("Insert Placeholders")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textPrimary)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Tap to insert placeholder into your message")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.obsidianSmall)
+                        .foregroundColor(Color.textSecondary)
 
                     HStack(spacing: 4) {
                         Image(systemName: "info.circle.fill")
-                            .font(.caption2)
-                            .foregroundColor(.blue)
+                            .font(.nano)
+                            .foregroundColor(Color.electricViolet)
                         Text("Use math with price: {price + 50}, {price * 1.1}, {price - 100}, {price / 2}")
-                            .font(.caption2)
-                            .foregroundColor(.blue)
+                            .font(.micro)
+                            .foregroundColor(Color.electricViolet)
                     }
                     .padding(.vertical, 4)
                     .padding(.horizontal, 8)
-                    .background(Color.blue.opacity(0.05))
-                    .cornerRadius(6)
+                    .background(Color.electricViolet.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -348,242 +301,239 @@ struct CustomTemplateCreatorView: View {
                             Button(action: {
                                 insertPlaceholder(item.placeholder)
                             }) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(item.placeholder)
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.blue)
-                                    Text(item.description)
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
+	                                VStack(alignment: .leading, spacing: 4) {
+	                                    Text(item.placeholder)
+	                                        .font(.obsidianSmall)
+	                                        .foregroundColor(Color.electricViolet)
+	                                    Text(item.description)
+	                                        .font(.micro)
+	                                        .foregroundColor(Color.textSecondary)
+	                                }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(Color.blue.opacity(0.1))
-                                .cornerRadius(8)
+                                .background(Color.electricViolet.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(Color.electricViolet.opacity(0.3), lineWidth: 0.5)
                                 )
                             }
+                            .accessibilityIdentifier("customTemplatePlaceholder_\(item.placeholder)")
                         }
                     }
                 }
             }
             
-            // Preview Button
             if !message.isEmpty {
                 Button(action: {
                     showingPreview = true
                 }) {
-                    HStack {
-                        Image(systemName: "eye.fill")
-                        Text("Preview Message")
+                    HStack(spacing: 14) {
+                        ObsidianIconTile(icon: "eye.fill", tint: Color.electricViolet, size: 42)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Preview Message")
+                                .font(.obsidianCallout)
+                                .foregroundColor(Color.textPrimary)
+
+                            Text("Check how this template looks with sample data")
+                                .font(.obsidianFootnote)
+                                .foregroundColor(Color.textSecondary)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Image(systemName: "chevron.right")
+                            .font(.obsidianSmall.weight(.semibold))
+                            .foregroundColor(Color.textMuted)
                     }
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.blue)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 20)
-                    .background(Color.blue.opacity(0.1))
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("customTemplatePreviewCard")
+                .background(Color.obsidianElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+                )
             }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        }
+    }
+
+    private func channelToggleRow(
+        title: String,
+        icon: String,
+        isOn: Binding<Bool>,
+        accessibilityIdentifier: String
+    ) -> some View {
+        HStack(spacing: 12) {
+            ObsidianIconTile(icon: icon, tint: Color.electricViolet, size: 34)
+
+            Text(title)
+                .font(.obsidianCallout)
+                .foregroundColor(Color.textPrimary)
+
+            Spacer()
+
+            Toggle(title, isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(SwitchToggleStyle(tint: Color.electricViolet))
+                .accessibilityLabel(title)
+                .accessibilityValue(isOn.wrappedValue ? "Enabled" : "Disabled")
+                .accessibilityIdentifier(accessibilityIdentifier)
+        }
+        .padding(12)
+        .background(Color.obsidianElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
+        )
     }
 }
 
 struct PreviewTemplateView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     let title: String
     let message: String
     let category: MessageTemplate.MessageCategory
     
     var body: some View {
-        NavigationView {
-            GeometryReader { geometry in
+        NavigationStack {
+            VStack(spacing: 0) {
                 ScrollView {
                     VStack(spacing: 16) {
-                        // Template Header Card
                         templateHeaderCard
-                        
-                        // Message Preview Card
                         messagePreviewCard
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
+                    .padding(.top, 18)
+                    .padding(.bottom, 28)
                 }
-                .background(Color(UIColor.systemGroupedBackground))
+                .background(Color.obsidianBackground(for: colorScheme))
+                .accessibilityIdentifier("customTemplatePreviewSheet")
             }
-            .navigationTitle("Template Preview")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                }
-            }
+            .background(Color.obsidianBackground(for: colorScheme))
+            .obsidianPushedNavigation(
+                "Template Preview",
+                backButtonAccessibilityIdentifier: "customTemplatePreviewCloseButton",
+                onBack: { dismiss() }
+            )
         }
+        .obsidianModalBackground()
     }
-    
+
     private var templateHeaderCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "doc.text.viewfinder")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Template Information")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Template Details
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Image(systemName: category.icon)
-                        .foregroundColor(category == .urgent ? .red : .blue)
-                        .font(.title2)
-                        .frame(width: 24)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(title)
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        
-                        Text(category.rawValue)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                }
-                .padding(.vertical, 8)
-            }
+        ObsidianSectionCard(
+            title: "Template Information",
+            icon: "doc.text.viewfinder",
+            accentColor: category == .urgent ? Color.statusNotInterested : Color.electricViolet
+        ) {
+            ObsidianDetailRow(
+                title: category.rawValue,
+                value: title,
+                icon: category.icon,
+                tint: category == .urgent ? Color.statusNotInterested : Color.electricViolet
+            )
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private var messagePreviewCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            HStack {
-                Image(systemName: "eye.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Message Preview")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-            }
-            
-            // Sample Data Info
+        ObsidianSectionCard(
+            title: "Message Preview",
+            icon: "eye.fill",
+            subtitle: "Sample values are substituted before sending.",
+            accentColor: Color.electricViolet
+        ) {
+            VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Preview with Sample Data")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: "person.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
-                        Text("Customer: John Smith")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+	                        Text("Customer: John Smith")
+	                            .font(.obsidianSmall)
+	                            .foregroundColor(Color.textSecondary)
                     }
 
                     HStack {
                         Image(systemName: "location.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
-                        Text("Address: 123 Main St, Toronto")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+	                        Text("Address: 123 Main St, Toronto")
+	                            .font(.obsidianSmall)
+	                            .foregroundColor(Color.textSecondary)
                     }
 
                     HStack {
                         Image(systemName: "dollarsign.circle.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
-                        Text("Price: $2,500.00 CAD")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+	                        Text("Price: $2,500.00 CAD")
+	                            .font(.obsidianSmall)
+	                            .foregroundColor(Color.textSecondary)
                     }
 
                     HStack {
                         Image(systemName: "tag.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
-                        Text("Service: Window Cleaning")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+	                        Text("Service: Window Cleaning")
+	                            .font(.obsidianSmall)
+	                            .foregroundColor(Color.textSecondary)
                     }
 
                     HStack {
                         Image(systemName: "phone.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
-                        Text("Phone: (416) 555-1234")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+	                        Text("Phone: (416) 555-1234")
+	                            .font(.obsidianSmall)
+	                            .foregroundColor(Color.textSecondary)
                     }
 
                     HStack {
                         Image(systemName: "envelope.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.electricViolet)
                             .frame(width: 16)
                         Text("Email: john.smith@example.com")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(.obsidianSmall)
+                            .foregroundColor(Color.textSecondary)
                     }
                 }
             }
             
-            // Preview Message
             VStack(alignment: .leading, spacing: 12) {
                 Text("Personalized Message")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textPrimary)
+
                 Text(previewMessage)
-                    .font(.body)
-                    .foregroundColor(.primary)
+                    .font(.obsidianBody)
+                    .foregroundColor(Color.textPrimary)
                     .padding(16)
-                    .background(Color(UIColor.tertiarySystemBackground))
-                    .cornerRadius(12)
+                    .background(Color.obsidianElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.45), lineWidth: 0.5)
                     )
             }
         }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        }
     }
-    
+
     private var previewMessage: String {
         var preview = message
         let samplePrice: Double = 2500.00
@@ -594,7 +544,10 @@ struct PreviewTemplateView: View {
         // Then replace simple placeholders
         preview = preview.replacingOccurrences(of: "{name}", with: "John Smith")
         preview = preview.replacingOccurrences(of: "{address}", with: "123 Main St, Toronto")
-        preview = preview.replacingOccurrences(of: "{price}", with: "$2,500.00 CAD")
+        preview = preview.replacingOccurrences(
+            of: "{price}",
+            with: MessageTemplatePriceFormatter.string(from: samplePrice)
+        )
         preview = preview.replacingOccurrences(of: "{service_type}", with: "Window Cleaning")
         preview = preview.replacingOccurrences(of: "{phone}", with: "(416) 555-1234")
         preview = preview.replacingOccurrences(of: "{email}", with: "john.smith@example.com")
@@ -643,11 +596,7 @@ struct PreviewTemplateView: View {
                 break
             }
 
-            // Format as currency
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .currency
-            formatter.currencyCode = "CAD"
-            let priceString = formatter.string(from: NSNumber(value: calculatedPrice)) ?? "$0.00"
+            let priceString = MessageTemplatePriceFormatter.string(from: calculatedPrice)
 
             // Replace the expression with the calculated value
             result = (result as NSString).replacingCharacters(in: match.range(at: 0), with: priceString)

@@ -1,51 +1,73 @@
 import SwiftUI
 import CoreLocation
-import UserNotifications
 
 // MARK: - Onboarding Data Model
 
 struct OnboardingProfile: Codable, Equatable {
-    enum SalesGoal: String, CaseIterable, Codable, Identifiable {
-        case organizePipeline
-        case bookMoreAppointments
-        case territoryPlanning
-        case followUpAutomation
+    enum StartDestination: String, Codable, CaseIterable, Identifiable {
+        case personal
+        case team
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .organizePipeline: return "Organize my pipeline"
-            case .bookMoreAppointments: return "Fill my appointment calendar"
-            case .territoryPlanning: return "Optimize my knocking territory"
-            case .followUpAutomation: return "Automate follow-ups"
+            case .personal: return "Personal workspace"
+            case .team: return "Join or create a team"
             }
         }
 
         var subtitle: String {
             switch self {
-            case .organizePipeline: return "Keep every lead, status, and note in one place"
-            case .bookMoreAppointments: return "Schedule, track, and confirm appointments with ease"
-            case .territoryPlanning: return "Surface the hottest streets and prioritize daily routes"
-            case .followUpAutomation: return "Trigger reminders, scripts, and next steps automatically"
+            case .personal: return "Keep your leads private and sync them with iCloud."
+            case .team: return "Use an invite code or set up an owner workspace after onboarding."
             }
         }
 
         var icon: String {
             switch self {
-            case .organizePipeline: return "tray.full.fill"
-            case .bookMoreAppointments: return "calendar.badge.plus"
-            case .territoryPlanning: return "map.fill"
-            case .followUpAutomation: return "bolt.fill"
+            case .personal: return "person.crop.circle.fill"
+            case .team: return "person.3.fill"
+            }
+        }
+    }
+
+    enum SalesGoal: String, CaseIterable, Codable, Identifiable {
+        case organizePipeline
+        case bookMoreAppointments
+        case territoryPlanning
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .organizePipeline: return "Manage my leads"
+            case .bookMoreAppointments: return "Book appointments"
+            case .territoryPlanning: return "Plan my territory"
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .organizePipeline: return "Track every door I knock with notes and follow-ups"
+            case .bookMoreAppointments: return "Schedule and manage my appointments efficiently"
+            case .territoryPlanning: return "Find the best streets and plan my routes"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .organizePipeline: return "person.text.rectangle.fill"
+            case .bookMoreAppointments: return "calendar.badge.clock"
+            case .territoryPlanning: return "map.circle.fill"
             }
         }
 
         var accent: Color {
             switch self {
-            case .organizePipeline: return .blue
-            case .bookMoreAppointments: return .orange
-            case .territoryPlanning: return .green
-            case .followUpAutomation: return .purple
+            case .organizePipeline: return .electricViolet
+            case .bookMoreAppointments: return .statusNotHome
+            case .territoryPlanning: return .statusInterested
             }
         }
     }
@@ -53,54 +75,39 @@ struct OnboardingProfile: Codable, Equatable {
     enum FocusArea: String, CaseIterable, Codable, Identifiable {
         case territoryInsights
         case automatedReminders
-        case appointmentScheduling
-        case messageTemplates
         case leadOrganization
-        case calendarSync
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .territoryInsights: return "Territory insights"
-            case .automatedReminders: return "Smart reminders"
-            case .appointmentScheduling: return "Appointment scheduling"
-            case .messageTemplates: return "Message templates"
-            case .leadOrganization: return "Lead organization"
-            case .calendarSync: return "Calendar sync"
+            case .territoryInsights: return "Smart territory planning"
+            case .automatedReminders: return "Follow-up reminders"
+            case .leadOrganization: return "Lead management"
             }
         }
 
         var subtitle: String {
             switch self {
-            case .territoryInsights: return "Use heatmaps and demographic layers to prioritize doors"
-            case .automatedReminders: return "Stay on top of every follow-up with auto reminders"
-            case .appointmentScheduling: return "Track bookings and keep your day coordinated"
-            case .messageTemplates: return "Send proven scripts and quick messages from the field"
-            case .leadOrganization: return "Segment, filter, and track every lead status easily"
-            case .calendarSync: return "Sync events with your calendar for one source of truth"
+            case .territoryInsights: return "See the best neighborhoods and plan optimal routes"
+            case .automatedReminders: return "Never miss a follow-up with automatic reminders"
+            case .leadOrganization: return "Keep all your leads organized and easy to find"
             }
         }
 
         var icon: String {
             switch self {
-            case .territoryInsights: return "mappin.and.ellipse"
+            case .territoryInsights: return "map.circle.fill"
             case .automatedReminders: return "bell.badge.fill"
-            case .appointmentScheduling: return "calendar"
-            case .messageTemplates: return "text.bubble.fill"
-            case .leadOrganization: return "square.stack.3d.up.fill"
-            case .calendarSync: return "link"
+            case .leadOrganization: return "folder.fill.badge.person.crop"
             }
         }
 
         var accent: Color {
             switch self {
-            case .territoryInsights: return .green
-            case .automatedReminders: return .purple
-            case .appointmentScheduling: return .orange
-            case .messageTemplates: return .pink
-            case .leadOrganization: return .blue
-            case .calendarSync: return .teal
+            case .territoryInsights: return .statusInterested
+            case .automatedReminders: return .statusNotHome
+            case .leadOrganization: return .electricViolet
             }
         }
     }
@@ -108,31 +115,27 @@ struct OnboardingProfile: Codable, Equatable {
     enum WorkflowStyle: String, CaseIterable, Codable, Identifiable {
         case structured
         case hustle
-        case dataDriven
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .structured: return "Structured & scheduled"
-            case .hustle: return "Fast-paced & flexible"
-            case .dataDriven: return "Metrics obsessed"
+            case .structured: return "I like planning ahead"
+            case .hustle: return "I prefer flexibility"
             }
         }
 
         var subtitle: String {
             switch self {
-            case .structured: return "Daily game plans, pre-built cadences, and repeatable systems"
-            case .hustle: return "Quick lead capture, rapid follow-ups, and territory snapshots"
-            case .dataDriven: return "Detailed dashboards, goal tracking, and performance alerts"
+            case .structured: return "Organized schedules and planned daily routes"
+            case .hustle: return "Quick decisions and adapting on the fly"
             }
         }
 
         var icon: String {
             switch self {
-            case .structured: return "calendar.badge.clock"
+            case .structured: return "list.bullet.clipboard.fill"
             case .hustle: return "bolt.circle.fill"
-            case .dataDriven: return "gauge.with.dots.needle.67percent"
             }
         }
     }
@@ -140,24 +143,25 @@ struct OnboardingProfile: Codable, Equatable {
     var salesGoal: SalesGoal?
     var focusAreas: Set<FocusArea>
     var workflowStyle: WorkflowStyle?
+    var startDestination: StartDestination?
     var completedAt: Date?
 
     init(
         salesGoal: SalesGoal? = nil,
         focusAreas: Set<FocusArea> = [],
         workflowStyle: WorkflowStyle? = nil,
+        startDestination: StartDestination? = nil,
         completedAt: Date? = nil
     ) {
         self.salesGoal = salesGoal
         self.focusAreas = focusAreas
         self.workflowStyle = workflowStyle
+        self.startDestination = startDestination
         self.completedAt = completedAt
     }
 
     var isComplete: Bool {
-        salesGoal != nil &&
-        !focusAreas.isEmpty &&
-        workflowStyle != nil
+        completedAt != nil
     }
 }
 
@@ -165,11 +169,7 @@ struct OnboardingProfile: Codable, Equatable {
 
 enum OnboardingPage: Int, CaseIterable {
     case welcome
-    case salesGoal
-    case focusAreas
-    case workflowStyle
     case locationPermission
-    case notificationPermission
     case summary
 
     var index: Int { rawValue }
@@ -177,24 +177,16 @@ enum OnboardingPage: Int, CaseIterable {
     var title: String {
         switch self {
         case .welcome: return "Welcome to D2D Advancer"
-        case .salesGoal: return "How do you sell today?"
-        case .focusAreas: return "Where do you want an edge?"
-        case .workflowStyle: return "How do you run your day?"
-        case .locationPermission: return "Enable location tracking"
-        case .notificationPermission: return "Stay on top of follow-ups"
-        case .summary: return "Your custom launch plan"
+        case .locationPermission: return "Enable location services"
+        case .summary: return "Choose your workspace"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .welcome: return "We'll learn how you work and tailor the experience so you get value on day one."
-        case .salesGoal: return "Pick the outcome that matters most right now."
-        case .focusAreas: return "Choose the areas where you need the most support. We'll surface the right tools."
-        case .workflowStyle: return "Everyone sells differently. We'll match your workflow to the right features."
-        case .locationPermission: return "We'll use your location to automatically log doors and surface territory insights."
-        case .notificationPermission: return "Get timely reminders so you never miss a follow-up or appointment."
-        case .summary: return "Here's how we'll configure D2D Advancer to help you win faster."
+        case .welcome: return "Capture doors, organize follow-ups, and schedule work from one field workspace."
+        case .locationPermission: return "Center the map, resolve nearby addresses, and navigate to work."
+        case .summary: return "Personal records stay private. Team records are shared only when assigned."
         }
     }
 
@@ -248,14 +240,10 @@ class OnboardingManager: ObservableObject {
 
     func canAdvance(from page: OnboardingPage) -> Bool {
         switch page {
-        case .welcome, .summary, .locationPermission, .notificationPermission:
+        case .welcome, .locationPermission:
             return true
-        case .salesGoal:
-            return profile.salesGoal != nil
-        case .focusAreas:
-            return !profile.focusAreas.isEmpty
-        case .workflowStyle:
-            return profile.workflowStyle != nil
+        case .summary:
+            return profile.startDestination != nil
         }
     }
 
@@ -298,16 +286,24 @@ class OnboardingManager: ObservableObject {
             isCompleted = true
         }
 
-        // Apple Guideline 5.6 Compliant: Subscription-required app with trial option
-        // This is acceptable because:
-        // 1. Weekly plan offers 3-day free trial (prominently displayed)
-        // 2. Yearly plan is direct subscription with best value pricing
-        // 3. Clear cancellation policy stated for both plans
-        // 4. Messaging is transparent and informative
-        // 5. Users can choose the plan that works best for them
-        if !PaywallManager.shared.isPremium {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        if profile.startDestination == .team {
+            AppRouter.shared.openMore()
+        }
+
+        // Team setup remains accessible without showing the personal Pro offer.
+        // Existing subscribers are restored by PaywallManager before this check.
+        if !PaywallManager.shared.isPremium && profile.startDestination != .team {
+            // Let the full-screen onboarding cover finish dismissing before
+            // presenting the subscription sheet. Overlapping presentations can
+            // leave the paywall visible but temporarily non-interactive.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 PaywallManager.shared.shouldShowPaywall = true
+            }
+        }
+
+        Task { @MainActor in
+            if FirebaseService.shared.isAuthenticated {
+                await FirebaseService.shared.syncCurrentAccountProfileToClouds()
             }
         }
     }
@@ -337,6 +333,10 @@ class OnboardingManager: ObservableObject {
 
     func selectWorkflowStyle(_ style: OnboardingProfile.WorkflowStyle) {
         profile.workflowStyle = style
+    }
+
+    func selectStartDestination(_ destination: OnboardingProfile.StartDestination) {
+        profile.startDestination = destination
     }
 
     private func checkOnboardingStatus() {
@@ -435,6 +435,7 @@ struct OnboardingView: View {
     @StateObject private var locationManager = OnboardingLocationManager()
     @Environment(\.dismiss) private var dismiss
     @Binding var isPresented: Bool
+    private let heroCardHeight: CGFloat = 132
 
     private let gridColumns = [
         GridItem(.flexible(), spacing: 16),
@@ -444,32 +445,26 @@ struct OnboardingView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color.blue.opacity(0.2),
-                        Color.purple.opacity(0.12),
-                        Color(UIColor.systemBackground)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                Color.obsidianBlack
+                    .ignoresSafeArea()
 
-                VStack(spacing: 24) {
+                VStack(spacing: 20) {
                     headerSection
-                        .padding(.top, max(geometry.safeAreaInsets.top + 12, 40))
+                        .padding(.top, ObsidianLayout.safeAreaTop(geometry, extra: 12, minimum: 40))
 
                     ScrollView {
-                        VStack(spacing: 24) {
-                            content(for: onboardingManager.currentPage)
+                        VStack(spacing: 18) {
+                            content(
+                                for: onboardingManager.currentPage,
+                                usesCompactWelcomeLayout: geometry.size.height < 900
+                            )
                         }
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, 20)
                         .padding(.bottom, 24)
                     }
 
                     navigationControls
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, max(geometry.safeAreaInsets.bottom + 16, 32))
+                        .padding(.bottom, ObsidianLayout.safeAreaBottom(geometry, extra: 16, minimum: 32))
                 }
             }
         }
@@ -491,12 +486,13 @@ struct OnboardingView: View {
 
             VStack(spacing: 8) {
                 Text(onboardingManager.currentPage.title)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.displayMedium)
+                    .foregroundColor(.textPrimary)
                     .multilineTextAlignment(.center)
 
                 Text(onboardingManager.currentPage.subtitle)
-                    .font(.system(size: 16, weight: .regular, design: .rounded))
-                    .foregroundColor(.secondary)
+                    .font(.obsidianBody)
+                    .foregroundColor(.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
@@ -505,250 +501,126 @@ struct OnboardingView: View {
     }
 
     @ViewBuilder
-    private func content(for page: OnboardingPage) -> some View {
+    private func content(
+        for page: OnboardingPage,
+        usesCompactWelcomeLayout: Bool
+    ) -> some View {
         switch page {
         case .welcome:
-            welcomeContent
-        case .salesGoal:
-            VStack(spacing: 16) {
-                ForEach(OnboardingProfile.SalesGoal.allCases) { goal in
-                    SelectionCard(
-                        icon: goal.icon,
-                        title: goal.title,
-                        subtitle: goal.subtitle,
-                        accent: goal.accent,
-                        isSelected: onboardingManager.profile.salesGoal == goal
-                    ) {
-                        onboardingManager.selectSalesGoal(goal)
-                    }
-                }
-            }
-
-        case .focusAreas:
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Pick at least one priority (you can change these later).")
-                    .font(.system(size: 14, design: .rounded))
-                    .foregroundColor(.secondary)
-
-                LazyVGrid(columns: gridColumns, spacing: 16) {
-                    ForEach(OnboardingProfile.FocusArea.allCases) { focus in
-                        MultiSelectionCard(
-                            icon: focus.icon,
-                            title: focus.title,
-                            subtitle: focus.subtitle,
-                            accent: focus.accent,
-                            isSelected: onboardingManager.profile.focusAreas.contains(focus)
-                        ) {
-                            onboardingManager.toggleFocusArea(focus)
-                        }
-                    }
-                }
-            }
-
-        case .workflowStyle:
-            VStack(spacing: 16) {
-                ForEach(OnboardingProfile.WorkflowStyle.allCases) { style in
-                    SelectionCard(
-                        icon: style.icon,
-                        title: style.title,
-                        subtitle: style.subtitle,
-                        accent: .purple,
-                        isSelected: onboardingManager.profile.workflowStyle == style
-                    ) {
-                        onboardingManager.selectWorkflowStyle(style)
-                    }
-                }
-            }
-
+            welcomeContent(usesCompactLayout: usesCompactWelcomeLayout)
         case .locationPermission:
             locationPermissionContent
-
-        case .notificationPermission:
-            notificationPermissionContent
-
         case .summary:
             summaryContent
         }
     }
 
-    private var welcomeContent: some View {
-        VStack(spacing: 24) {
+    private func welcomeContent(usesCompactLayout: Bool) -> some View {
+        VStack(spacing: usesCompactLayout ? 12 : 18) {
             ZStack {
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.blue.opacity(0.18), Color.purple.opacity(0.18)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.obsidianSurface)
+                    .frame(height: usesCompactLayout ? 88 : heroCardHeight)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
                     )
-                    .frame(height: 180)
                     .overlay(
                         Image(systemName: "sparkles")
-                            .font(.system(size: 72))
-                            .foregroundStyle(LinearGradient(
-                                colors: [Color.blue, Color.purple],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ))
+                            .font(.displayHero)
+                            .foregroundColor(.electricViolet)
                     )
             }
 
-            VStack(spacing: 12) {
+            VStack(spacing: usesCompactLayout ? 8 : 12) {
                 FeatureHighlightRow(
                     icon: "mappin.circle.fill",
-                    title: "Unlock smarter territory planning",
-                    subtitle: "Use heatmaps and neighborhood scores to plan high-converting routes."
+                    title: "Work directly from the map",
+                    subtitle: "Save the nearest address, record the outcome, and move to the next door.",
+                    isCompact: usesCompactLayout
                 )
 
                 FeatureHighlightRow(
                     icon: "checkmark.circle.fill",
                     title: "Stay on top of every lead",
-                    subtitle: "Capture doors, notes, and tasks so nothing slips through the cracks."
+                    subtitle: "Capture doors, notes, and tasks so nothing slips through the cracks.",
+                    isCompact: usesCompactLayout
                 )
 
                 FeatureHighlightRow(
                     icon: "bolt.badge.clock",
-                    title: "Automate tedious follow-ups",
-                    subtitle: "Schedule reminders and send proven scripts in one tap."
+                    title: "Keep next steps clear",
+                    subtitle: "Schedule reminders, appointments, and technician work without duplicate entry.",
+                    isCompact: usesCompactLayout
                 )
             }
         }
     }
 
     private var locationPermissionContent: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 18) {
             ZStack {
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.green.opacity(0.18), Color.blue.opacity(0.18)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.obsidianSurface)
+                    .frame(height: heroCardHeight)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
                     )
-                    .frame(height: 180)
                     .overlay(
                         Image(systemName: "location.circle.fill")
-                            .font(.system(size: 72))
-                            .foregroundStyle(LinearGradient(
-                                colors: [Color.green, Color.blue],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ))
+                            .font(.displayHero)
+                            .foregroundColor(.statusInterested)
                     )
             }
 
             VStack(spacing: 12) {
                 FeatureHighlightRow(
                     icon: "map.fill",
-                    title: "Auto-log your doors",
-                    subtitle: "We'll track where you knock so you can focus on the conversation, not the paperwork."
+                    title: "Center the field map",
+                    subtitle: "Use your current position to see nearby leads and navigate to assigned work."
                 )
 
                 FeatureHighlightRow(
-                    icon: "chart.line.uptrend.xyaxis",
-                    title: "Surface territory insights",
-                    subtitle: "Get heatmaps, demographic overlays, and data-driven route recommendations."
+                    icon: "mappin.and.ellipse",
+                    title: "Resolve nearby addresses",
+                    subtitle: "Long-press the map to save the closest usable street address."
                 )
 
                 FeatureHighlightRow(
-                    icon: "figure.walk.circle.fill",
-                    title: "Track your daily progress",
-                    subtitle: "See how many doors you've hit and optimize your coverage in real time."
+                    icon: "location.fill.viewfinder",
+                    title: "Share only while on duty",
+                    subtitle: "Team location sharing stays off unless you manually go on duty."
                 )
             }
 
             Text("You can change this in Settings at any time.")
-                .font(.system(size: 13, design: .rounded))
-                .foregroundColor(.secondary)
-                .padding(.top, 8)
-        }
-    }
-
-    private var notificationPermissionContent: some View {
-        VStack(spacing: 24) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.purple.opacity(0.18), Color.pink.opacity(0.18)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(height: 180)
-                    .overlay(
-                        Image(systemName: "bell.badge.fill")
-                            .font(.system(size: 72))
-                            .foregroundStyle(LinearGradient(
-                                colors: [Color.purple, Color.pink],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ))
-                    )
-            }
-
-            VStack(spacing: 12) {
-                FeatureHighlightRow(
-                    icon: "alarm.fill",
-                    title: "Never miss a follow-up",
-                    subtitle: "Get timely reminders for callbacks, appointments, and scheduled check-ins."
-                )
-
-                FeatureHighlightRow(
-                    icon: "calendar.badge.clock",
-                    title: "Appointment confirmations",
-                    subtitle: "Receive alerts before your scheduled appointments so you're always prepared."
-                )
-
-                FeatureHighlightRow(
-                    icon: "sparkles",
-                    title: "Smart territory alerts",
-                    subtitle: "Get notified when you're near high-priority areas or hot leads."
-                )
-            }
-
-            Text("You can customize notification preferences in Settings.")
-                .font(.system(size: 13, design: .rounded))
-                .foregroundColor(.secondary)
+                .font(.obsidianFootnote)
+                .foregroundColor(.textSecondary)
                 .padding(.top, 8)
         }
     }
 
     private var summaryContent: some View {
-        let focusAreas = OnboardingProfile.FocusArea.allCases.filter { onboardingManager.profile.focusAreas.contains($0) }
-
-        return VStack(spacing: 20) {
-            SummaryCard(
-                icon: onboardingManager.profile.salesGoal?.icon ?? "sparkles",
-                title: onboardingManager.profile.salesGoal?.title ?? "Let’s build your workspace",
-                subtitle: onboardingManager.profile.salesGoal?.subtitle ?? "We’ll fine tune your experience as you explore."
-            )
-
-            SummarySection(
-                title: "What we'll spotlight",
-                items: focusAreas.map { focus in
-                    SummaryItem(
-                        icon: focus.icon,
-                        title: focus.title,
-                        subtitle: focus.subtitle
-                    )
+        VStack(spacing: 14) {
+            ForEach(OnboardingProfile.StartDestination.allCases) { destination in
+                SelectionCard(
+                    icon: destination.icon,
+                    title: destination.title,
+                    subtitle: destination.subtitle,
+                    accent: destination == .team ? .statusInterested : .electricViolet,
+                    isSelected: onboardingManager.profile.startDestination == destination
+                ) {
+                    onboardingManager.selectStartDestination(destination)
                 }
-            )
-
-            if let workflow = onboardingManager.profile.workflowStyle {
-                SummarySection(
-                    title: "Workflow fit",
-                    items: [
-                        SummaryItem(
-                            icon: workflow.icon,
-                            title: workflow.title,
-                            subtitle: workflow.subtitle
-                        )
-                    ]
-                )
+                .accessibilityIdentifier("onboardingWorkspace_\(destination.rawValue)")
             }
+
+            Text("You can create or join one Team Workspace later from More. Existing personal leads remain private.")
+                .font(.obsidianFootnote)
+                .foregroundColor(.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
         }
     }
 
@@ -759,26 +631,18 @@ struct OnboardingView: View {
             }) {
                 HStack {
                     Text(buttonTitle)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.obsidianAction)
 
                     Image(systemName: buttonIcon)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.obsidianHeadline)
                 }
-                .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(
-                    LinearGradient(
-                        colors: [buttonColor.0, buttonColor.1],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .cornerRadius(18)
-                .shadow(color: buttonColor.0.opacity(0.28), radius: 14, x: 0, y: 8)
             }
+            .buttonStyle(ObsidianPrimaryButtonStyle())
+            .padding(.horizontal, 20)
             .disabled(!onboardingManager.canAdvance(from: onboardingManager.currentPage))
             .opacity(onboardingManager.canAdvance(from: onboardingManager.currentPage) ? 1 : 0.45)
+            .accessibilityIdentifier("onboardingContinueButton")
 
             if onboardingManager.currentPage.previous != nil {
                 Button(action: {
@@ -786,18 +650,14 @@ struct OnboardingView: View {
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.obsidianSmall)
                         Text("Back")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .font(.obsidianCallout)
                     }
-                    .foregroundColor(.blue)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.blue.opacity(0.12))
-                    )
                 }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+                .padding(.horizontal, 20)
             }
         }
     }
@@ -805,10 +665,8 @@ struct OnboardingView: View {
     private var buttonTitle: String {
         switch onboardingManager.currentPage {
         case .summary:
-            return "Finish & launch"
-        case .locationPermission:
             return "Continue"
-        case .notificationPermission:
+        case .locationPermission:
             return "Continue"
         default:
             return "Continue"
@@ -821,8 +679,6 @@ struct OnboardingView: View {
             return "checkmark.seal.fill"
         case .locationPermission:
             return "location.fill"
-        case .notificationPermission:
-            return "bell.fill"
         default:
             return "arrow.right.circle.fill"
         }
@@ -831,11 +687,9 @@ struct OnboardingView: View {
     private var buttonColor: (Color, Color) {
         switch onboardingManager.currentPage {
         case .locationPermission:
-            return (Color.green, Color.blue)
-        case .notificationPermission:
-            return (Color.purple, Color.pink)
+            return (Color.statusInterested, Color.electricViolet)
         default:
-            return (Color.blue, Color.purple)
+            return (Color.electricViolet, Color.electricViolet)
         }
     }
 
@@ -845,8 +699,6 @@ struct OnboardingView: View {
             onboardingManager.completeOnboarding()
         case .locationPermission:
             requestLocationPermission()
-        case .notificationPermission:
-            requestNotificationPermission()
         default:
             onboardingManager.nextStep()
         }
@@ -887,46 +739,6 @@ struct OnboardingView: View {
         }
     }
 
-    private func requestNotificationPermission() {
-        // Apple Guideline 5.1.1: Always show the system permission dialog
-        // Check current authorization status first
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            DispatchQueue.main.async {
-                switch settings.authorizationStatus {
-                case .notDetermined:
-                    // REQUIRED: Request authorization - this will show the system dialog
-                    // Users must see the system dialog and make a choice
-                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-                        DispatchQueue.main.async {
-                            if let error = error {
-                                print("❌ Notification permission error: \(error.localizedDescription)")
-                            }
-
-                            if granted {
-                                print("✅ Notification permission granted")
-                            } else {
-                                print("⚠️ Notification permission denied")
-                            }
-
-                            // Move to next step ONLY after user has seen and responded to dialog
-                            onboardingManager.nextStep()
-                        }
-                    }
-
-                case .authorized:
-                    print("✅ Notifications already authorized")
-                    onboardingManager.nextStep()
-
-                case .denied, .provisional, .ephemeral:
-                    print("⚠️ Notification permission denied or limited")
-                    onboardingManager.nextStep()
-
-                @unknown default:
-                    onboardingManager.nextStep()
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Components
@@ -939,19 +751,7 @@ private struct OnboardingProgressIndicator: View {
         HStack(spacing: 8) {
             ForEach(0..<total, id: \.self) { index in
                 Capsule()
-                    .fill(
-                        index <= currentIndex
-                        ? LinearGradient(
-                            colors: [Color.blue, Color.purple],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        : LinearGradient(
-                            colors: [Color.gray.opacity(0.25), Color.gray.opacity(0.18)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .fill(index <= currentIndex ? Color.electricViolet : Color.textSecondary.opacity(0.2))
                     .frame(height: 4)
                     .animation(.easeInOut(duration: 0.3), value: currentIndex)
             }
@@ -972,39 +772,45 @@ private struct SelectionCard: View {
             HStack(spacing: 16) {
                 ZStack {
                     Circle()
-                        .fill(accent.opacity(0.12))
-                        .frame(width: 64, height: 64)
+                        .fill(accent.opacity(0.2))
+                        .frame(width: 56, height: 56)
 
                     Image(systemName: icon)
-                        .font(.system(size: 26, weight: .semibold))
+                        .font(.obsidianHeadline)
                         .foregroundColor(accent)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        .foregroundColor(.primary)
+                        .font(.obsidianCallout)
+                        .foregroundColor(.textPrimary)
 
                     Text(subtitle)
-                        .font(.system(size: 14, design: .rounded))
-                        .foregroundColor(.secondary)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
 
-                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(isSelected ? accent : Color.secondary.opacity(0.4))
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.obsidianHeadline)
+                    .foregroundColor(isSelected ? accent : Color.textMuted)
             }
             .padding(18)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(UIColor.secondarySystemBackground))
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.obsidianSurface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(isSelected ? accent : Color.clear, lineWidth: 2)
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(isSelected ? accent.opacity(0.85) : Color.obsidianBorder.opacity(0.55), lineWidth: isSelected ? 1.4 : 0.5)
+                    )
+                    .shadow(
+                        color: isSelected ? accent.opacity(0.3) : Color.clear,
+                        radius: 12,
+                        x: 0,
+                        y: 6
                     )
             )
         }
@@ -1025,41 +831,41 @@ private struct MultiSelectionCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(accent.opacity(0.16))
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(accent.opacity(0.2))
                             .frame(width: 44, height: 44)
 
                         Image(systemName: icon)
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.obsidianHeadline)
                             .foregroundColor(accent)
                     }
 
                     Spacer()
 
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(isSelected ? accent : Color.secondary.opacity(0.4))
+                        .font(.obsidianHeadline)
+                        .foregroundColor(isSelected ? accent : Color.textMuted)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundColor(.primary)
+                        .font(.obsidianCallout)
+                        .foregroundColor(.textPrimary)
 
                     Text(subtitle)
-                        .font(.system(size: 13, design: .rounded))
-                        .foregroundColor(.secondary)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(18)
             .frame(maxWidth: .infinity, minHeight: 150)
             .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(UIColor.secondarySystemBackground))
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.obsidianSurface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(isSelected ? accent : Color.clear, lineWidth: 2)
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(isSelected ? accent.opacity(0.85) : Color.obsidianBorder.opacity(0.55), lineWidth: isSelected ? 1.4 : 0.5)
                     )
             )
         }
@@ -1071,34 +877,40 @@ private struct FeatureHighlightRow: View {
     let icon: String
     let title: String
     let subtitle: String
+    var isCompact = false
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: isCompact ? 12 : 16) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.16))
-                    .frame(width: 48, height: 48)
+                    .fill(Color.electricViolet.opacity(0.2))
+                    .frame(width: isCompact ? 40 : 48, height: isCompact ? 40 : 48)
                 Image(systemName: icon)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(.blue)
+                    .font(.obsidianHeadline)
+                    .foregroundColor(Color.electricViolet)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: isCompact ? 4 : 6) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
+                    .font(.obsidianCallout)
+                    .foregroundColor(.textPrimary)
 
                 Text(subtitle)
-                    .font(.system(size: 13, design: .rounded))
-                    .foregroundColor(.secondary)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
         }
-        .padding(18)
+        .padding(isCompact ? 12 : 18)
         .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color(UIColor.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.obsidianSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+                )
         )
     }
 }
@@ -1112,39 +924,33 @@ private struct SummaryCard: View {
         VStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.blue.opacity(0.2), Color.purple.opacity(0.15)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(Color.electricViolet.opacity(0.14))
                     .frame(width: 96, height: 96)
 
                 Image(systemName: icon)
-                    .font(.system(size: 40, weight: .semibold))
-                    .foregroundStyle(LinearGradient(
-                        colors: [Color.blue, Color.purple],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ))
+                    .font(.displayMedium)
+                    .foregroundColor(.electricViolet)
             }
 
             Text(title)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundColor(.primary)
+                .font(.obsidianHeadline)
+                .foregroundColor(.textPrimary)
 
             Text(subtitle)
-                .font(.system(size: 15, design: .rounded))
-                .foregroundColor(.secondary)
+                .font(.obsidianBody)
+                .foregroundColor(.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
         }
         .padding(24)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 28)
-                .fill(Color(UIColor.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.obsidianSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+                )
         )
     }
 }
@@ -1156,8 +962,8 @@ private struct SummarySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title)
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundColor(.secondary)
+                .font(.obsidianTitle)
+                .foregroundColor(.textPrimary)
 
             ForEach(items) { item in
                 SummaryItemView(item: item)
@@ -1166,8 +972,12 @@ private struct SummarySection: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 24)
-                .fill(Color(UIColor.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.obsidianSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+                )
         )
     }
 }
@@ -1185,18 +995,18 @@ private struct SummaryItemView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             Image(systemName: item.icon)
-                .font(.system(size: 22))
-                .foregroundColor(.blue)
+                .font(.obsidianHeadline)
+                .foregroundColor(Color.electricViolet)
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
+                    .font(.obsidianCallout)
+                    .foregroundColor(.textPrimary)
 
                 Text(item.subtitle)
-                    .font(.system(size: 13, design: .rounded))
-                    .foregroundColor(.secondary)
+                    .font(.obsidianFootnote)
+                    .foregroundColor(.textSecondary)
             }
 
             Spacer()
@@ -1210,12 +1020,8 @@ extension View {
         of value: Value,
         perform action: @escaping (Value) -> Void
     ) -> some View {
-        if #available(iOS 17, *) {
-            onChange(of: value, initial: false) { _, newValue in
-                action(newValue)
-            }
-        } else {
-            onChange(of: value, perform: action)
+        onChange(of: value, initial: false) { _, newValue in
+            action(newValue)
         }
     }
 }

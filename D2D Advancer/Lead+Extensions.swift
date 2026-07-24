@@ -1,10 +1,11 @@
 import Foundation
 import CoreData
 import CoreLocation
+import SwiftUI
 import FirebaseFirestore
 
 extension Lead {
-    enum Status: String, CaseIterable, Sendable {
+    enum Status: String, CaseIterable, Sendable, Codable, Hashable {
         case notContacted = "not_contacted"
         case notHome = "not_home"
         case interested = "interested"
@@ -22,7 +23,7 @@ extension Lead {
             case .converted:
                 return "Sold"
             case .notInterested:
-                return "No Interest"
+                return "Not Interested"
             }
         }
         
@@ -40,12 +41,134 @@ extension Lead {
                 return "red"
             }
         }
+
+        var icon: String {
+            switch self {
+            case .notContacted: return "plus.circle"
+            case .notHome: return "house"
+            case .interested: return "heart"
+            case .converted: return "checkmark.seal"
+            case .notInterested: return "xmark.circle"
+            }
+        }
+
+        var swiftUIColor: Color {
+            switch self {
+            case .notContacted: return .statusNotContacted
+            case .notHome: return .statusNotHome
+            case .interested: return .statusInterested
+            case .converted: return .statusConverted
+            case .notInterested: return .statusNotInterested
+            }
+        }
+
+        static func normalizedRawValue(from rawStatus: String?) -> String? {
+            guard let rawStatus else { return nil }
+            let normalized = rawStatus
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "_")
+                .replacingOccurrences(of: " ", with: "_")
+            guard !normalized.isEmpty else { return nil }
+
+            switch normalized {
+            case converted.rawValue, "sold", "closed", "close", "won":
+                return converted.rawValue
+            case notInterested.rawValue, "notinterested", "no_interest", "nointerest", "lost":
+                return notInterested.rawValue
+            case notHome.rawValue, "nothome", "no_answer", "noanswer", "customer_not_home":
+                return notHome.rawValue
+            case interested.rawValue, "prospect", "booked", "scheduled":
+                return interested.rawValue
+            case notContacted.rawValue, "notcontacted", "new", "cold":
+                return notContacted.rawValue
+            default:
+                return nil
+            }
+        }
+
+        static func normalizedRawValueOrDefault(from rawStatus: String?) -> String {
+            normalizedRawValue(from: rawStatus) ?? notContacted.rawValue
+        }
+
+        /// Decodes both the current five-value status model and status values
+        /// written by older saved-search and import implementations.
+        static func filterStatus(from rawStatus: String) -> Status? {
+            let normalized = rawStatus
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "_")
+                .replacingOccurrences(of: " ", with: "_")
+
+            switch normalized {
+            case notContacted.rawValue, "new", "scheduled", "visited", "follow_up":
+                return .notContacted
+            case notHome.rawValue, "not_home", "contacted", "away", "later":
+                return .notHome
+            case interested.rawValue, "prospect", "booked":
+                return .interested
+            case converted.rawValue, "sold", "closed", "won":
+                return .converted
+            case notInterested.rawValue, "notinterested", "pass", "lost":
+                return .notInterested
+            default:
+                return nil
+            }
+        }
+
+        var compactDisplayName: String {
+            switch self {
+            case .notContacted: return "New"
+            case .notHome: return "Not Home"
+            case .interested: return "Interested"
+            case .converted: return "Sold"
+            case .notInterested: return "Pass"
+            }
+        }
+
+        var allowsActiveFollowUp: Bool {
+            self != .converted && self != .notInterested
+        }
+
+        func resolvedFollowUpDate(_ proposedDate: Date?) -> Date? {
+            allowsActiveFollowUp ? proposedDate : nil
+        }
+
+        static var activeFollowUpRawValues: [String] {
+            allCases
+                .filter(\.allowsActiveFollowUp)
+                .map(\.rawValue)
+        }
+
+        static var activeFollowUpPredicate: NSPredicate {
+            NSPredicate(
+                format: "followUpDate != nil AND (status == nil OR status IN %@)",
+                activeFollowUpRawValues
+            )
+        }
+
+        static func activeFollowUpPredicate(dueBefore date: Date) -> NSPredicate {
+            NSPredicate(
+                format: "followUpDate != nil AND followUpDate < %@ AND (status == nil OR status IN %@)",
+                date as NSDate,
+                activeFollowUpRawValues
+            )
+        }
+
+        static func activeFollowUpPredicate(dueFrom startDate: Date, through endDate: Date) -> NSPredicate {
+            NSPredicate(
+                format: "followUpDate >= %@ AND followUpDate <= %@ AND (status == nil OR status IN %@)",
+                startDate as NSDate,
+                endDate as NSDate,
+                activeFollowUpRawValues
+            )
+        }
     }
     
     
     var leadStatus: Status {
         get {
-            return Status(rawValue: status ?? "not_contacted") ?? .notContacted
+            return Status(rawValue: Status.normalizedRawValueOrDefault(from: status)) ?? .notContacted
         }
         set {
             willChangeValue(forKey: "status")
@@ -54,12 +177,29 @@ extension Lead {
             didChangeValue(forKey: "status")
         }
     }
+
+    func applyLeadStatus(
+        _ newStatus: Status,
+        followUpDate proposedFollowUpDate: Date? = nil,
+        shouldReplaceFollowUpDate: Bool = false,
+        autoSave: Bool = true
+    ) {
+        leadStatus = newStatus
+
+        if shouldReplaceFollowUpDate {
+            setFollowUpDate(newStatus.resolvedFollowUpDate(proposedFollowUpDate), autoSave: autoSave)
+        } else if !newStatus.allowsActiveFollowUp {
+            setFollowUpDate(nil, autoSave: autoSave)
+        }
+    }
     
     // Add helper method to set follow-up date with automatic sync
     func setFollowUpDate(_ date: Date?, autoSave: Bool = true) {
         // Cancel existing follow-up notification if we have an ID
         if let leadId = id {
-            NotificationService.shared.cancelFollowUpNotification(for: leadId)
+            Task { @MainActor in
+                NotificationService.shared.cancelFollowUpNotification(for: leadId)
+            }
         }
 
         // Set the values directly
@@ -70,7 +210,10 @@ extension Lead {
 
         // Schedule new notification if date is set
         if date != nil {
-            NotificationService.shared.scheduleFollowUpNotification(for: self)
+            let lead = self
+            Task { @MainActor in
+                NotificationService.shared.scheduleFollowUpNotification(for: lead)
+            }
         }
 
         // Only auto-save if requested (for views that don't manage their own saving)
@@ -88,6 +231,58 @@ extension Lead {
     }
     
     
+    // MARK: - Follow-up Cadence
+
+    enum FollowUpCadence: String, CaseIterable {
+        case none = "none"
+        case everyThreeDays = "3days"
+        case weekly = "weekly"
+        case biweekly = "biweekly"
+        case monthly = "monthly"
+
+        var displayName: String {
+            switch self {
+            case .none: return "One-time"
+            case .everyThreeDays: return "Every 3 days"
+            case .weekly: return "Weekly"
+            case .biweekly: return "Every 2 weeks"
+            case .monthly: return "Monthly"
+            }
+        }
+
+        var days: Int {
+            switch self {
+            case .none: return 0
+            case .everyThreeDays: return 3
+            case .weekly: return 7
+            case .biweekly: return 14
+            case .monthly: return 30
+            }
+        }
+    }
+
+    var followUpCadence: FollowUpCadence {
+        get {
+            guard let raw = tags, raw.hasPrefix("cadence:") else { return .none }
+            let value = String(raw.dropFirst("cadence:".count))
+            return FollowUpCadence(rawValue: value) ?? .none
+        }
+        set {
+            tags = newValue == .none ? nil : "cadence:\(newValue.rawValue)"
+        }
+    }
+
+    /// Advance recurring work from its due date, or from the contact time when it is already overdue.
+    func advanceFollowUpByCadence(after referenceDate: Date = Date()) -> Date? {
+        let cadence = followUpCadence
+        guard cadence != .none else { return nil }
+        let base = max(followUpDate ?? referenceDate, referenceDate)
+        let calendar = Calendar.current
+        guard let next = calendar.date(byAdding: .day, value: cadence.days, to: base),
+              let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: next) else { return nil }
+        return morning
+    }
+
     var coordinate: CLLocationCoordinate2D {
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
@@ -95,9 +290,26 @@ extension Lead {
     var location: CLLocation {
         return CLLocation(latitude: latitude, longitude: longitude)
     }
+
+    static func entityDescription(in context: NSManagedObjectContext) -> NSEntityDescription {
+        if let entity = context.persistentStoreCoordinator?.managedObjectModel.entitiesByName["Lead"] {
+            return entity
+        }
+
+        guard let entity = NSEntityDescription.entity(forEntityName: "Lead", in: context) else {
+            preconditionFailure("Lead entity not found in managed object context")
+        }
+        return entity
+    }
+
+    static func fetchRequest(in context: NSManagedObjectContext) -> NSFetchRequest<Lead> {
+        let request = NSFetchRequest<Lead>()
+        request.entity = entityDescription(in: context)
+        return request
+    }
     
     static func create(in context: NSManagedObjectContext) -> Lead {
-        let lead = Lead(context: context)
+        let lead = Lead(entity: entityDescription(in: context), insertInto: context)
         lead.id = UUID()
         lead.createdDate = Date()
         lead.updatedDate = Date()

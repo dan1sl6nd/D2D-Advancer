@@ -1,0 +1,34 @@
+BEGIN:VCARD
+VERSION:3.0
+N:A Window Import;Seeded;;;
+FN:Seeded A Window Import
+ORG:Northstar Window Cleaning
+TEL;TYPE=CELL:+14165550101
+EMAIL;TYPE=WORK:window.import@example.com
+ADR;TYPE=HOME:;;100 Queen St W;Toronto;ON;M5H 2N2;Canada
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:B Gutter Import;Seeded;;;
+FN:Seeded B Gutter Import
+ORG:Northstar Gutter Cleaning
+TEL;TYPE=CELL:+14165550102
+EMAIL;TYPE=WORK:gutter.import@example.com
+ADR;TYPE=HOME:;;1 Blue Jays Way;Toronto;ON;M5V 1J1;Canada
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Y Roofing Ignore;Seeded;;;
+FN:Seeded Y Roofing Ignore
+ORG:Northstar Roofing
+TEL;TYPE=CELL:+14165550103
+ADR;TYPE=HOME:;;301 Front St W;Toronto;ON;M5V 2T6;Canada
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Z Duplicate Import;Seeded;;;
+FN:Seeded Z Duplicate Import
+ORG:Northstar Gutter Cleaning
+TEL;TYPE=CELL:+14165550101
+ADR;TYPE=HOME:;;290 Bremner Blvd;Toronto;ON;M5V 3L9;Canada
+END:VCARD

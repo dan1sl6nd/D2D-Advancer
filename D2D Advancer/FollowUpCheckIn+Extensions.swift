@@ -82,7 +82,7 @@ extension FollowUpCheckIn {
             case .interested:
                 return "Showed Interest"
             case .converted:
-                return "Converted"
+                return "Sold"
             case .reschedule:
                 return "Reschedule Needed"
             case .callback:
@@ -102,6 +102,29 @@ extension FollowUpCheckIn {
                 return "red"
             }
         }
+    }
+
+    nonisolated static func resolvedLeadStatus(
+        after outcome: Outcome,
+        currentStatus: Lead.Status
+    ) -> Lead.Status {
+        switch outcome {
+        case .converted:
+            return .converted
+        case .interested:
+            return currentStatus == .converted ? .converted : .interested
+        case .notInterested:
+            return .notInterested
+        case .successful, .noAnswer, .reschedule, .callback:
+            return currentStatus
+        }
+    }
+
+    nonisolated static func effectiveScheduledNextFollowUp(
+        _ scheduledNextFollowUp: Date?,
+        resultingStatus: Lead.Status
+    ) -> Date? {
+        resultingStatus.allowsActiveFollowUp ? scheduledNextFollowUp : nil
     }
     
     var checkInTypeEnum: CheckInType {

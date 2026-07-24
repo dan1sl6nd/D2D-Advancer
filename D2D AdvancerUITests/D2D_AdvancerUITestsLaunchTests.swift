@@ -17,13 +17,30 @@ final class D2D_AdvancerUITestsLaunchTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    private func denySystemPermissionIfPresented(timeout: TimeInterval = 5) {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let denialLabels = ["Don’t Allow", "Don't Allow", "Ask App Not to Track", "Not Now"]
+        for label in denialLabels {
+            let button = springboard.buttons[label]
+            if button.waitForExistence(timeout: timeout) {
+                button.tap()
+                return
+            }
+        }
+    }
+
     @MainActor
     func testLaunch() throws {
         let app = XCUIApplication()
+        app.launchArguments.append("-completeOnboardingForLaunchTests")
+        app.launchArguments.append("-unlockPremiumForUITests")
         app.launch()
 
-        // Insert steps here to perform after app launch but before taking a screenshot,
-        // such as logging into a test account or navigating somewhere in the app
+        denySystemPermissionIfPresented(timeout: 4)
+        denySystemPermissionIfPresented(timeout: 2)
+
+        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 15), "Map should finish launching into the main app")
+        XCTAssertFalse(app.alerts["Error"].waitForExistence(timeout: 5), "Launch should not show the global generic error alert")
 
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "Launch Screen"
