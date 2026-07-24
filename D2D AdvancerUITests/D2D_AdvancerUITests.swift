@@ -331,7 +331,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         let app = makeApp()
         app.launchArguments.append("-useFirebaseEmulators")
         app.launchArguments.append("-resetFirebaseAuthForUITests")
-        app.launchArguments.append("-openMoreTabForUITests")
+        app.launchArguments.append("-openTeamWorkspaceForUITests")
         if let emulatorHost = ProcessInfo.processInfo.environment["D2D_FIREBASE_EMULATOR_HOST"], !emulatorHost.isEmpty {
             app.launchEnvironment["D2D_FIREBASE_EMULATOR_HOST"] = emulatorHost
         }
@@ -564,7 +564,8 @@ final class D2D_AdvancerUITests: XCTestCase {
             "-openLeadsTabForUITests",
             "-openFollowUpTabForUITests",
             "-openAppointmentsTabForUITests",
-            "-openMoreTabForUITests"
+            "-openMoreTabForUITests",
+            "-openTeamWorkspaceForUITests"
         ]
         app.terminate()
         app.launchArguments.removeAll { $0 == "-resetFirebaseAuthForUITests" || tabArguments.contains($0) }
@@ -972,6 +973,11 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     private func openTeamWorkspace(_ app: XCUIApplication, expectedInitialText: String = "Apple Sign-In Required") {
+        let expectedText = app.staticTexts[expectedInitialText]
+        if expectedText.waitForExistence(timeout: 3) {
+            return
+        }
+
         let teamCard = app.descendants(matching: .any)["teamWorkspaceCard"]
         if !teamCard.waitForExistence(timeout: 3) {
             tapButton(app, "tab_More", timeout: 12)
@@ -1379,6 +1385,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         scrollToVisibleText(ownerReturnApp, "Activity Log", direction: .down, maxSwipes: 12)
 
         relaunch(ownerReturnApp, opening: "-openLeadsTabForUITests")
+        tapButton(ownerReturnApp, "leadSource_team", timeout: 20)
         XCTAssertTrue(
             ownerReturnApp.otherElements["teamWorkInlineSection"].waitForExistence(timeout: 20),
             "Team work should be visible inside the main Leads tab"
@@ -1496,6 +1503,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         scrollToVisibleText(app, "Members", direction: .down, maxSwipes: 12)
 
         relaunch(app, opening: "-openLeadsTabForUITests")
+        tapButton(app, "leadSource_team", timeout: 20)
         XCTAssertTrue(
             app.otherElements["teamWorkInlineSection"].waitForExistence(timeout: 20),
             "Team work should be visible inside the main Leads tab"
@@ -1720,6 +1728,9 @@ final class D2D_AdvancerUITests: XCTestCase {
 
     @MainActor
     func testPhysicalDefaultServiceSmokePreservingUserData() throws {
+#if targetEnvironment(simulator)
+        throw XCTSkip("Requires a premium-enabled physical device because this smoke test preserves the device's account and app data.")
+#else
         let app = makeDataPreservingApp(defaultServiceCategoryID: "window_cleaning")
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)
@@ -1758,6 +1769,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         XCTAssertEqual(windowCleaningChip.value as? String, "Not selected")
 
         tapButton(app, "addLeadCancelButton", timeout: 8)
+#endif
     }
 
     @MainActor

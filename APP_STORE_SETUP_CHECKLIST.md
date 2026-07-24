@@ -1,6 +1,6 @@
 # D2D Advancer App Store Release Checklist
 
-Last audited: July 12, 2026
+Last audited: July 23, 2026
 
 This file separates local engineering proof from App Store Connect and production-service proof. Do not mark an item complete based on simulator evidence alone.
 
@@ -10,12 +10,24 @@ This file separates local engineering proof from App Store Connect and productio
 - Bundle ID: `dan1sland.D2D-Advancer`
 - Developer Team ID: `RF247ARQB7`
 - Live App Store version: `1.2`
-- Next marketing version: `1.3`
-- Next project build number: `2`
+- Release candidate: `1.3 (3)`
+- Next unused project build number: `4` or higher
 - Minimum iOS version: `18.5`
 - Category: Business
 
-Before uploading, confirm build `2` has not already been used for version `1.3`. Increment the project build number again if necessary.
+Build `3` was uploaded successfully on July 23, 2026. Do not reuse it for another `1.3` upload.
+
+## Current Release Snapshot
+
+- App Store upload UUID: `6827d80d-2a8f-4337-b93c-ef8d77ef5fc7`.
+- App Store Connect upload processing: complete, with no errors or warnings.
+- App version state: `READY_FOR_REVIEW`.
+- Review draft: five items, consisting of iOS `1.3 (3)` and the four new Solo/Team subscriptions.
+- TestFlight: build `1.3 (3)` is assigned to automatic-distribution group `Internal QA`, but the group has zero testers. The account holder is the only App Store Connect user and Apple disables that row in the tester picker.
+- Simulator Team proof: Firebase-emulator owner, sales-rep, and technician end-to-end UI test passed on iPhone 17 Pro simulator, iOS 26.4.1.
+- Simulator regression proof: all nine UI scenarios that were killed at zero duration in the overloaded 287-test run passed in focused reruns; the seeded Apple Contacts import also passed against a clean temporary simulator Contacts store.
+- Physical proof: data-preserving default-service/map/add-lead smoke test passed on `dan1sland iPhone 17`, iOS 26.5.2.
+- Submission is intentionally not started. TestFlight purchase and restore are not yet verified.
 
 ## Toolchain Requirement
 
@@ -39,13 +51,13 @@ Subscription group: `Premium Access`
 
 App Store Connect checks:
 
-- [ ] All product IDs exactly match the app, StoreKit configuration, Cloud Functions, and App Store Connect.
-- [ ] Team products are a higher subscription level than Solo; monthly/yearly variants with equal access share a level.
-- [ ] Products are available in the intended territories.
-- [ ] Prices and trial terms match the paywall shown in the submitted build.
-- [ ] Subscription localizations are complete and within App Store Connect limits.
-- [ ] Paid Applications agreement, tax, and banking status are active.
-- [ ] All four new subscriptions are attached to the version submitted for review when required.
+- [x] All product IDs exactly match the app, StoreKit configuration, Cloud Functions, and App Store Connect.
+- [x] Team products are a higher subscription level than Solo; monthly/yearly variants with equal access share a level.
+- [x] Products are available in all 175 configured territories.
+- [x] Prices and trial terms match the submitted build: monthly plans have no trial; yearly plans have a two-week trial.
+- [x] Subscription localizations, review notes, and review screenshots are complete.
+- [x] Paid Apps Agreement, Royal Bank of Canada payout account, and Canadian/U.S. tax forms are active. The current Paid Apps Agreement is effective through August 17, 2026.
+- [x] All four new subscriptions are attached to the same review draft as version `1.3 (3)`.
 - [ ] Purchase, restore, renewal-state, expiration, cancellation, and billing-retry behavior are tested with StoreKit sandbox/TestFlight.
 
 ## Store Listing
@@ -68,7 +80,7 @@ Recommended screenshot sequence:
 6. Team workspace and assigned work.
 7. Overview and performance summary.
 
-- [ ] Confirm required iPhone and iPad screenshot slots on the live version page.
+- [x] Five 1290x2796 iPhone screenshots and five 2048x2732 iPad screenshots completed processing for version `1.3`.
 - [ ] Verify screenshots contain no real customer names, addresses, phone numbers, or account data.
 - [ ] Verify every claim in the description exists in the submitted build.
 - [ ] Do not claim behavioral analytics, background GPS tracking, or "bank-level" encryption.
@@ -79,9 +91,9 @@ Recommended screenshot sequence:
 - Privacy policy: `https://dan1sl6nd.github.io/D2D-Advancer/PRIVACY_POLICY.html`
 - Terms: `https://dan1sl6nd.github.io/D2D-Advancer/TERMS_OF_USE.html`
 
-- [ ] Deploy the current `PRIVACY_POLICY.md` to the hosted privacy-policy URL.
-- [ ] Open every URL from a device without a developer login and confirm HTTP 200 plus readable mobile layout.
-- [ ] Confirm the in-app links point to the same current pages.
+- [ ] Deploy the current `PRIVACY_POLICY.md` to the hosted privacy-policy URL. GitHub Pages publishes from `main`, which does not yet contain the July 18 Contacts-import disclosure.
+- [x] All three public URLs returned HTTP 200 without a developer login on July 23, 2026.
+- [x] The paywall and More screens point to these same current URLs.
 
 ## App Privacy Answers
 
@@ -101,11 +113,13 @@ Match App Store Connect answers to the app privacy manifest and hosted policy. C
 
 The app declares no cross-app tracking. Do not select Analytics for app-owned data unless analytics collection is intentionally added and verified in the submitted build.
 
-- [ ] Confirm Firebase SDK privacy details against the exact embedded SDK versions.
-- [ ] Confirm 30-day Team duty-location retention is disclosed.
-- [ ] Confirm owner/member visibility and assigned-record privacy are disclosed.
-- [ ] Confirm Sign in with Apple and Firebase account deletion are described accurately.
-- [ ] Replace the live `Data Not Collected` answer with disclosures that match Team/Firebase and optional user-entered data handling.
+- Firebase Auth and Firestore 12.1.0 also declare unlinked Other Diagnostic Data used for Analytics, with no tracking, in their embedded privacy manifests.
+
+- [x] Confirm Firebase SDK privacy details against the exact embedded SDK versions.
+- [x] Confirm 30-day Team duty-location retention is disclosed.
+- [x] Confirm owner/member visibility and assigned-record privacy are disclosed.
+- [x] Confirm Sign in with Apple and Firebase account deletion are described accurately.
+- [x] App Store Connect now includes Other Diagnostic Data used for Analytics, not linked to identity, and not used for tracking. The original 11 linked App Functionality data types remain unchanged.
 
 ## Permissions and Review Notes
 
@@ -138,10 +152,11 @@ Suggested review path:
 
 ## Local Engineering Gate
 
-- [x] Clean Release build and static analysis complete with zero errors and reviewed warnings for version `1.3 (2)`.
-- [x] Full unit-test target passes from a fresh result bundle (185 tests).
-- [ ] Serial UI smoke suite passes on a current iPhone simulator after the subscription/backend migration.
-- [x] Focused paywall and multi-account Team migration UI flows pass on a current iPhone simulator.
+- [x] Clean Release archive and static analysis complete with zero errors and reviewed warnings for version `1.3 (3)`.
+- [x] Full unit-test target passes from a fresh result bundle (242 tests).
+- [x] The broad 287-test run completed with 270 passes, 8 intentional skips, and 9 zero-duration UI-runner `SIGKILL` results rather than assertion failures. All nine affected scenarios passed focused reruns, including the dedicated seeded Apple Contacts import flow. Keep the original runner-pressure result bundle as evidence; do not describe it as an all-green monolithic run.
+- [x] Firebase-emulator Team UI flow passes for owner, sales rep, and technician, including invites, duty state, lead creation, owner alerts, assignments, member details, and Team Field Map.
+- [x] Cloud Functions cost-control and Team entitlement migration tests pass locally (14 tests).
 - [x] Primary navigation and layout pass in light and dark mode.
 - [x] iPad primary-navigation smoke tests pass in light and dark mode.
 - [ ] Permission prompts and denied-permission states are tested.
@@ -152,34 +167,44 @@ Suggested review path:
 - [x] Functions production dependency audit reviewed: no high or critical advisories; 8 moderate transitive advisories remain pending a supported Firebase SDK fix.
 - [x] `PrivacyInfo.xcprivacy` is present in the archived app and validates.
 - [x] Every app icon is opaque and the 1024x1024 marketing icon is present.
-- [x] Generic-device Release archive succeeds for version `1.3 (2)`.
-- [ ] App Store Connect IPA export succeeds with Cloud Managed Apple Distribution signing for the current archive.
+- [x] Generic-device Release archive succeeds for version `1.3 (3)`.
+- [x] App Store Connect IPA export, server validation, upload, and processing succeed for the current archive.
 
 ## Physical Device and TestFlight Gate
 
 - [ ] Fresh install on the oldest supported iOS version available for testing.
-- [ ] Fresh install and upgrade install on a current iPhone.
+- [ ] Fresh install and upgrade install on a current iPhone. The data-preserving upgrade/smoke path passed on iPhone 17; a destructive fresh-install pass is not recorded.
 - [ ] Camera, photo library, microphone, speech, Contacts, Calendar, notifications, and location prompts work without termination.
 - [ ] Location centers reliably and stops Team sharing after Off duty.
 - [ ] iCloud personal lead/appointment sync is verified between devices.
 - [ ] Production Firebase Team owner/worker permissions are verified, unless Team is excluded from this release.
-- [ ] Purchase and restore are verified in TestFlight sandbox.
+- [ ] Purchase and restore are verified in TestFlight sandbox. Build `1.3 (3)` is in `Internal QA`, but its only App Store Connect user is disabled in the tester picker; add another eligible user with app access.
 - [ ] Offline launch, edit queueing, reconnection, and conflict behavior are verified.
 - [ ] No real customer data appears in screenshots, review accounts, or logs.
 
 ## Production and App Store Connect Gate
 
-- [ ] Production Firestore rules match the tested repository rules.
-- [ ] Firebase Cloud Functions are deployed and `createTeamWorkspace` rejects missing, invalid, replayed, or expired Team transactions.
+- [x] Production Firestore rules exactly match the tested 689-line repository rules; both normalized files have SHA-256 `94f4b2b61e4619ab85bb4480bf0cf7aaf1e3406a0a580585c392770fc51d5185`.
+- [x] Production Firestore composite indexes match the three repository indexes. Production TTL policies are active for activity, duty-location, duty-session, notification, rate-limit, and usage-event expiry fields.
+- [x] All six Firebase Cloud Functions are deployed from the tested release source and report `ACTIVE` with common source hash `c8d151e6bc8ae37fca635d0eac58f182d2d3e03f`. A production unauthenticated `createTeamWorkspace` call returned HTTP 401 before any write; invalid, replayed, and expired Team transactions pass against this exact source in the local Functions suite.
+- [x] Keep `firebase-functions` 7.2.5 for release 1.3. Version 7.3.0 adds extension-migration APIs unused by this backend and requires Firebase CLI 15.24.0 for those features; upgrade the SDK and the current 15.23.0 CLI together after release.
 - [x] Production and Sandbox App Store Server Notifications V2 URLs point to the deployed notification function.
 - [ ] An Apple-signed Sandbox notification reaches the function and updates the matching Team entitlement.
-- [ ] Firebase Authentication has Sign in with Apple enabled and configured for the production bundle.
+- [x] Firebase Authentication has Sign in with Apple enabled; Email/Password is also enabled for Team test identities.
+- [x] The production Firebase project is on Blaze and all six deployed functions use the restricted `d2d-team-runtime` service account with bounded memory, concurrency, and instance counts.
+- [ ] Firebase App Check enforcement remains disabled through `D2D_ENFORCE_TEAM_APP_CHECK=false`; enable it only after the submitted client build and real devices are proven with the configured provider.
 - [ ] CloudKit production schema is deployed and query/index requirements are verified.
-- [ ] App Store Connect version metadata, age-rating questionnaire, content-rights answers, export compliance, privacy answers, and review contact are complete.
-- [ ] Correct uploaded build is selected.
-- [ ] Automated App Store Connect validation has no blocking issues.
-- [ ] Version is explicitly added for review and its status is verified after submission.
+- [x] App Store Connect version metadata, age-rating questionnaire, content-rights answers, export compliance, privacy answers, and review contact are complete.
+- [x] Uploaded build `1.3 (3)` is selected and present in the five-item review draft.
+- [x] Apple upload validation and processing completed without blocking issues.
+- [x] Version `1.3 (3)` and all four new subscriptions are explicitly added to one review draft.
+- [ ] The five-item draft is submitted and its post-submission status is verified.
 
 ## Release Decision
 
-The app is ready to submit only when every applicable local, physical-device/TestFlight, production-service, and App Store Connect item above has current evidence. A passing simulator build alone is not a release decision.
+The app is not ready to submit yet. The remaining release blockers are:
+
+1. Merge the release branch to `main` so GitHub Pages publishes the current privacy disclosure.
+2. Add an eligible TestFlight tester, install build `1.3 (3)`, and validate purchase plus restore for Solo and Team.
+3. Complete the remaining physical permission, iCloud sync, offline/reconnect, and production Team checks that are applicable to this release.
+4. Submit the five-item App Store review draft only after the gates above pass.
