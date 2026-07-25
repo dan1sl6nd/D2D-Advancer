@@ -63,6 +63,7 @@ enum TeamAuthPolicy {
 enum TeamInviteDelivery: Equatable, Sendable {
     case appleShareLink
     case firebaseInviteCode
+    case universalLinkWithCodeFallback
 }
 
 enum TeamSharePrivacyModel: Equatable, Sendable {
@@ -197,7 +198,7 @@ enum TeamFirebaseSchema {
     static let teamOperationsControlDocumentId = "teamOperations"
     static let pendingRepUserPrefix = "pending-rep"
     static let inviteExpirationInterval: TimeInterval = 7 * 24 * 60 * 60
-    static let inviteDelivery: TeamInviteDelivery = .firebaseInviteCode
+    static let inviteDelivery: TeamInviteDelivery = .universalLinkWithCodeFallback
     static let sharePrivacyModel: TeamSharePrivacyModel = .assignedFirebaseRecords
 }
 

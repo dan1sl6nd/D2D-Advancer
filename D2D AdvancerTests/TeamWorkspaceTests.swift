@@ -3,6 +3,29 @@ import Foundation
 @testable import D2D_Advancer
 
 struct TeamWorkspaceTests {
+    @Test func teamInviteUniversalLinkRoundTripsValidCodes() throws {
+        let universalURL = try #require(TeamInviteLink.universalURL(for: "ab12cd34"))
+        let fallbackURL = try #require(URL(string: "d2dadvancer://join/AB12CD34"))
+
+        #expect(universalURL.absoluteString == "https://d2d-advancer.web.app/join/AB12CD34")
+        #expect(TeamInviteLink.inviteCode(from: universalURL) == "AB12CD34")
+        #expect(TeamInviteLink.inviteCode(from: fallbackURL) == "AB12CD34")
+    }
+
+    @Test func teamInviteUniversalLinkRejectsUntrustedOrMalformedURLs() throws {
+        let untrustedHost = try #require(URL(string: "https://example.com/join/AB12CD34"))
+        let insecureURL = try #require(URL(string: "http://d2d-advancer.web.app/join/AB12CD34"))
+        let invalidCode = try #require(URL(string: "https://d2d-advancer.web.app/join/NOT-A-CODE"))
+        let extraPath = try #require(URL(string: "https://d2d-advancer.web.app/join/AB12CD34/extra"))
+
+        #expect(TeamInviteLink.inviteCode(from: untrustedHost) == nil)
+        #expect(TeamInviteLink.inviteCode(from: insecureURL) == nil)
+        #expect(TeamInviteLink.inviteCode(from: invalidCode) == nil)
+        #expect(TeamInviteLink.inviteCode(from: extraPath) == nil)
+        #expect(TeamInviteLink.normalizedCode("  ab12cd34 ") == "AB12CD34")
+        #expect(TeamInviteLink.normalizedCode("AB12CD3G") == nil)
+    }
+
     @Test func teamLeadWorkflowUsesFiveCanonicalStatesAndAdoptsLegacyValuesLazily() {
         #expect(TeamLeadStatus.allCases == [
             .notContacted,
@@ -418,7 +441,7 @@ struct TeamWorkspaceTests {
     }
 
     @Test func firebaseTeamInvitesUseSingleUseCodesAndAssignedRecords() {
-        #expect(TeamFirebaseSchema.inviteDelivery == .firebaseInviteCode)
+        #expect(TeamFirebaseSchema.inviteDelivery == .universalLinkWithCodeFallback)
         #expect(TeamFirebaseSchema.sharePrivacyModel == .assignedFirebaseRecords)
         #expect(TeamFirebaseSchema.inviteExpirationInterval == 7 * 24 * 60 * 60)
     }

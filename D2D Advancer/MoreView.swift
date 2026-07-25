@@ -44,6 +44,7 @@ enum SyncStatusSummaryPolicy {
 struct MoreView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.managedObjectContext) private var viewContext
+    @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var preferences = AppPreferences.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var syncManager = UserDataSyncManager.shared
@@ -58,6 +59,7 @@ struct MoreView: View {
     @State private var importFailure: LeadImportFailure?
     @AppStorage("isDarkMode") private var darkModeEnabled = false
     @State private var showingCloudProviderSheet = false
+    @State private var showingTeamWorkspace = false
 
     private var isRunningUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-skipOnboardingForUITests")
@@ -143,6 +145,16 @@ struct MoreView: View {
                     await loadTeamWorkspaceIfNeeded()
                 }
             }
+            .navigationDestination(isPresented: $showingTeamWorkspace) {
+                TeamWorkspaceView()
+            }
+            .onAppear {
+                presentPendingTeamInviteIfNeeded()
+            }
+            .onChange(of: router.pendingTeamInviteCode) { _, inviteCode in
+                guard inviteCode != nil else { return }
+                showingTeamWorkspace = true
+            }
         }
     }
 
@@ -220,7 +232,9 @@ struct MoreView: View {
 
             moreDivider
 
-            NavigationLink(destination: TeamWorkspaceView()) {
+            Button {
+                showingTeamWorkspace = true
+            } label: {
                 MoreCardView(
                     icon: "person.3.fill",
                     iconColor: Color.electricViolet,
@@ -263,6 +277,11 @@ struct MoreView: View {
             .buttonStyle(PlainButtonStyle())
             .accessibilityIdentifier("moreMessageTemplatesCard")
         }
+    }
+
+    private func presentPendingTeamInviteIfNeeded() {
+        guard router.pendingTeamInviteCode != nil else { return }
+        showingTeamWorkspace = true
     }
 
     private var moreSettingsHubSection: some View {

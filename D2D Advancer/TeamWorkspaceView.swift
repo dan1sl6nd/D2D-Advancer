@@ -4,6 +4,7 @@ import AuthenticationServices
 
 struct TeamWorkspaceView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var firebaseService = FirebaseService.shared
     @ObservedObject private var appleSignInManager = AppleSignInManager.shared
@@ -123,6 +124,13 @@ struct TeamWorkspaceView: View {
         .toolbar(.hidden, for: .tabBar)
         .task {
             await loadTeam()
+        }
+        .onAppear {
+            applyPendingTeamInviteCodeIfNeeded()
+        }
+        .onChange(of: router.pendingTeamInviteCode) { _, inviteCode in
+            guard inviteCode != nil else { return }
+            applyPendingTeamInviteCodeIfNeeded()
         }
         .onChange(of: userAccountManager.isLoggedIn) { _, _ in
             Task { await loadTeam() }
@@ -982,7 +990,7 @@ struct TeamWorkspaceView: View {
                 .accessibilityIdentifier("teamCopyInviteCodeButton")
 
                 ShareLink(item: inviteShareText(for: invite, workType: workType)) {
-                    inviteCodeUtilityLabel(title: "Share", icon: "square.and.arrow.up.fill")
+                    inviteCodeUtilityLabel(title: "Share Link", icon: "square.and.arrow.up.fill")
                 }
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityIdentifier("teamShareInviteCodeButton")
@@ -1411,7 +1419,24 @@ struct TeamWorkspaceView: View {
     }
 
     private func inviteShareText(for invite: TeamInvite, workType: TeamMemberWorkType) -> String {
-        "Join my D2D Advancer team as a \(workType.title). Invite code: \(invite.displayCode). Expires \(invite.expiresAt.formatted(date: .abbreviated, time: .shortened))."
+        let expiration = invite.expiresAt.formatted(date: .abbreviated, time: .shortened)
+        guard let url = TeamInviteLink.universalURL(for: invite.displayCode) else {
+            return "Join my D2D Advancer team as a \(workType.title). Invite code: \(invite.displayCode). Expires \(expiration)."
+        }
+        return "Join my D2D Advancer team as a \(workType.title): \(url.absoluteString)\nInvite code: \(invite.displayCode)\nExpires \(expiration)."
+    }
+
+    private func applyPendingTeamInviteCodeIfNeeded() {
+        guard let code = router.consumePendingTeamInviteCode() else { return }
+        inviteCode = code
+        statusMessage = "Invite link opened. Confirm the code below to join the team."
+        statusMessageIsError = false
+        scrollResetToken += 1
+
+        guard canUseTeamWorkspace, teamService.activeTeam == nil else { return }
+        DispatchQueue.main.async {
+            focusedInput = .inviteCode
+        }
     }
 
     private func joinTeam() {

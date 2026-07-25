@@ -234,6 +234,13 @@ struct D2D_AdvancerApp: App {
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             .preferredColorScheme(isDarkMode ? .dark : .light)
             .customThemed()
+            .onOpenURL { url in
+                AppRouter.shared.handleIncomingURL(url)
+            }
+            .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                guard let url = activity.webpageURL else { return }
+                AppRouter.shared.handleIncomingURL(url)
+            }
             .alert("Save Password to Keychain", isPresented: $userAccountManager.shouldShowPasswordSavePrompt) {
                 Button("Save to Keychain") {
                     userAccountManager.savePasswordFromPrompt()
