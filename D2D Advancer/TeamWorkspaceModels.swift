@@ -82,6 +82,56 @@ struct TeamInvite: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+struct TeamInvitePreview: Equatable, Sendable {
+    static let fallbackTeamName = "D2D Advancer Team"
+    static let fallbackOwnerDisplayName = "Team owner"
+
+    var code: String
+    var teamId: String
+    var teamName: String
+    var ownerDisplayName: String
+    var workType: TeamMemberWorkType
+    var expiresAt: Date
+    var planStatus: TeamPlanStatus
+
+    init(
+        code: String,
+        teamId: String,
+        teamName: String?,
+        ownerDisplayName: String?,
+        workType: TeamMemberWorkType,
+        expiresAt: Date,
+        planStatus: TeamPlanStatus
+    ) {
+        self.code = code.uppercased()
+        self.teamId = teamId
+        self.teamName = Self.displayLabel(teamName, fallback: Self.fallbackTeamName)
+        self.ownerDisplayName = Self.displayLabel(
+            ownerDisplayName,
+            fallback: Self.fallbackOwnerDisplayName
+        )
+        self.workType = workType
+        self.expiresAt = expiresAt
+        self.planStatus = planStatus
+    }
+
+    var displayCode: String {
+        code.uppercased()
+    }
+
+    func canJoin(now: Date = Date()) -> Bool {
+        expiresAt > now && planStatus.allowsTeamWrite
+    }
+
+    private static func displayLabel(_ value: String?, fallback: String) -> String {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return fallback
+        }
+        return trimmed
+    }
+}
+
 enum TeamFirebaseSchema {
     enum Collection {
         static let teams = "teams"
@@ -140,6 +190,7 @@ enum TeamFirebaseSchema {
         static let name = "name"
         static let notes = "notes"
         static let ownerUserId = "ownerUserId"
+        static let ownerDisplayName = "ownerDisplayName"
         static let planExpiresAt = "planExpiresAt"
         static let planStatus = "planStatus"
         static let phone = "phone"
@@ -156,6 +207,7 @@ enum TeamFirebaseSchema {
         static let status = "status"
         static let tags = "tags"
         static let teamId = "teamId"
+        static let teamName = "teamName"
         static let title = "title"
         static let updatedAt = "updatedAt"
         static let updatedByUserId = "updatedByUserId"

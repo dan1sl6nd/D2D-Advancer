@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>Join a D2D Advancer Team</title>
+  <meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#08090b" media="(prefers-color-scheme: dark)">
+  <title>D2D Advancer Team Invitation</title>
   <style>
     :root {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -18,46 +20,88 @@
 
     body {
       min-height: 100vh;
+      min-height: 100dvh;
       margin: 0;
       display: grid;
       place-items: center;
-      padding: 24px;
+      padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
     }
 
     main {
       width: min(100%, 430px);
-      padding: 28px;
+      padding: 24px;
       border: 1px solid #d8dce3;
-      border-radius: 16px;
+      border-radius: 8px;
       background: #ffffff;
       box-shadow: 0 14px 40px rgb(15 23 42 / 10%);
     }
 
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .app-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 13px;
+      box-shadow: 0 4px 14px rgb(15 23 42 / 14%);
+    }
+
+    .eyebrow {
+      margin: 0 0 4px;
+      color: #8a6412;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
     h1 {
-      margin: 0 0 12px;
-      font-size: 28px;
+      margin: 0;
+      font-size: 27px;
       line-height: 1.15;
       letter-spacing: 0;
     }
 
-    p {
-      margin: 0 0 18px;
-      color: #5b6472;
-      font-size: 16px;
-      line-height: 1.45;
+    h2 {
+      margin: 0 0 8px;
+      font-size: 19px;
+      line-height: 1.3;
+      letter-spacing: 0;
     }
 
-    .code {
+    p {
+      margin: 0;
+      color: #5b6472;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .summary {
+      margin-bottom: 20px;
+    }
+
+    .privacy {
+      display: flex;
+      gap: 10px;
       margin: 20px 0;
-      padding: 16px;
-      border: 1px solid #d8dce3;
-      border-radius: 10px;
-      background: #f4f5f7;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: 2px;
-      text-align: center;
+      padding: 14px 0;
+      border-top: 1px solid #e1e4e9;
+      border-bottom: 1px solid #e1e4e9;
+    }
+
+    .privacy-icon {
+      flex: 0 0 auto;
+      color: #8a6412;
+      font-size: 18px;
+      line-height: 1.35;
+    }
+
+    .privacy p {
+      font-size: 14px;
     }
 
     .actions {
@@ -65,25 +109,84 @@
       gap: 10px;
     }
 
-    a {
+    a,
+    button {
       min-height: 50px;
       display: grid;
       place-items: center;
-      border-radius: 10px;
-      font-size: 17px;
-      font-weight: 700;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 750;
+      letter-spacing: 0;
       text-decoration: none;
+      cursor: pointer;
     }
 
     .primary {
       color: #ffffff;
-      background: #9a6b0d;
+      border: 1px solid #8a6412;
+      background: #8a6412;
     }
 
     .secondary {
       color: #111827;
       border: 1px solid #c7ccd5;
       background: transparent;
+    }
+
+    details {
+      margin-top: 18px;
+      color: #5b6472;
+      font-size: 14px;
+    }
+
+    summary {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .invite-details {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding-top: 8px;
+    }
+
+    .code {
+      min-width: 0;
+      padding: 13px;
+      border: 1px solid #d8dce3;
+      border-radius: 8px;
+      background: #f4f5f7;
+      color: #111827;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 20px;
+      font-weight: 750;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+
+    .copy {
+      min-height: 48px;
+      padding: 0 14px;
+    }
+
+    .copy-status {
+      min-height: 20px;
+      margin-top: 8px;
+      color: #5b6472;
+      font-size: 13px;
+    }
+
+    .fine-print {
+      margin-top: 16px;
+      font-size: 13px;
     }
 
     [hidden] {
@@ -102,48 +205,122 @@
         box-shadow: none;
       }
 
-      p {
+      .eyebrow,
+      .privacy-icon {
+        color: #d9ad52;
+      }
+
+      p,
+      details,
+      .copy-status {
         color: #a8adb8;
       }
 
-      .code {
-        border-color: #3a3c43;
-        background: #23252a;
+      .privacy {
+        border-color: #303238;
+      }
+
+      .primary {
+        border-color: #9a7118;
+        background: #9a7118;
       }
 
       .secondary {
         color: #f8fafc;
         border-color: #4a4d55;
       }
+
+      .code {
+        color: #f8fafc;
+        border-color: #3a3c43;
+        background: #23252a;
+      }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Join a D2D Advancer Team</h1>
-    <p id="message">Open D2D Advancer to review and accept this team invitation.</p>
-    <div id="code" class="code" hidden></div>
+    <div class="brand">
+      <img class="app-icon" src="/app-icon.png" alt="">
+      <div>
+        <p class="eyebrow">D2D Advancer</p>
+        <h1>Team invitation</h1>
+      </div>
+    </div>
+
+    <section class="summary">
+      <h2 id="headline">You have been invited to a team</h2>
+      <p id="message">Open D2D Advancer to securely review your role and accept this invitation.</p>
+    </section>
+
+    <div class="privacy">
+      <span class="privacy-icon" aria-hidden="true">●</span>
+      <p id="validity-note">This invite is single-use and expires seven days after it was created. D2D Advancer verifies it before you join.</p>
+    </div>
+
     <div class="actions">
       <a id="open-app" class="primary" href="https://apps.apple.com/app/id6751178741">Open D2D Advancer</a>
-      <a class="secondary" href="https://apps.apple.com/app/id6751178741">Get D2D Advancer</a>
+      <a id="get-app" class="secondary" href="https://apps.apple.com/app/id6751178741">Get the App</a>
     </div>
+
+    <details id="invite-details" hidden>
+      <summary>Invite details</summary>
+      <div class="invite-details">
+        <div id="code" class="code"></div>
+        <button id="copy-code" class="secondary copy" type="button">Copy Code</button>
+      </div>
+      <p id="copy-status" class="copy-status" role="status" aria-live="polite"></p>
+    </details>
+
+    <p id="fine-print" class="fine-print">If the invitation expired or was already used, ask the team owner for a new link.</p>
   </main>
   <script>
+    const appStoreURL = "https://apps.apple.com/app/id6751178741";
     const pathParts = window.location.pathname.split("/").filter(Boolean);
     const inviteCode = (pathParts[1] || "").toUpperCase();
-    const isValidInvite = /^[A-F0-9]{8}$/.test(inviteCode);
-    const codeElement = document.getElementById("code");
+    const isValidInvite = pathParts[0] === "join" && /^[A-F0-9]{8}$/.test(inviteCode);
+    const headlineElement = document.getElementById("headline");
     const messageElement = document.getElementById("message");
+    const validityNoteElement = document.getElementById("validity-note");
     const openAppLink = document.getElementById("open-app");
+    const getAppLink = document.getElementById("get-app");
+    const inviteDetails = document.getElementById("invite-details");
+    const codeElement = document.getElementById("code");
+    const copyCodeButton = document.getElementById("copy-code");
+    const copyStatusElement = document.getElementById("copy-status");
+    const finePrintElement = document.getElementById("fine-print");
 
-    if (pathParts[0] === "join" && isValidInvite) {
+    if (isValidInvite) {
       codeElement.textContent = inviteCode;
-      codeElement.hidden = false;
+      inviteDetails.hidden = false;
       openAppLink.href = `d2dadvancer://join/${inviteCode}`;
     } else {
-      messageElement.textContent = "This invitation link is invalid. Ask the team owner for a new invite.";
+      headlineElement.textContent = "This invitation link is not valid";
+      messageElement.textContent = "Ask the team owner to send you a new D2D Advancer invite link.";
+      validityNoteElement.textContent = "Invite links contain an eight-character code and are verified securely inside the app.";
+      openAppLink.href = appStoreURL;
       openAppLink.textContent = "Get D2D Advancer";
+      getAppLink.hidden = true;
+      finePrintElement.hidden = true;
     }
+
+    copyCodeButton.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(inviteCode);
+        copyStatusElement.textContent = "Invite code copied.";
+      } catch {
+        const input = document.createElement("textarea");
+        input.value = inviteCode;
+        input.setAttribute("readonly", "");
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+        copyStatusElement.textContent = "Invite code copied.";
+      }
+    });
   </script>
 </body>
 </html>

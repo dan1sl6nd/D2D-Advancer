@@ -457,6 +457,49 @@ struct TeamWorkspaceTests {
         #expect(invite.displayCode == "AB12CD34")
     }
 
+    @Test func invitePreviewKeepsLegacyInvitesReadableWithoutMetadata() {
+        let preview = TeamInvitePreview(
+            code: "ab12cd34",
+            teamId: "team-1",
+            teamName: "  ",
+            ownerDisplayName: nil,
+            workType: .technician,
+            expiresAt: Date(timeIntervalSince1970: 2_000),
+            planStatus: .active
+        )
+
+        #expect(preview.displayCode == "AB12CD34")
+        #expect(preview.teamName == TeamInvitePreview.fallbackTeamName)
+        #expect(preview.ownerDisplayName == TeamInvitePreview.fallbackOwnerDisplayName)
+        #expect(preview.workType == .technician)
+    }
+
+    @Test func invitePreviewRequiresAnUnexpiredWritableTeam() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let preview = TeamInvitePreview(
+            code: "AB12CD34",
+            teamId: "team-1",
+            teamName: "North Crew",
+            ownerDisplayName: "Daniil",
+            workType: .salesRep,
+            expiresAt: now.addingTimeInterval(60),
+            planStatus: .active
+        )
+        let gracePreview = TeamInvitePreview(
+            code: "AB12CD34",
+            teamId: "team-1",
+            teamName: "North Crew",
+            ownerDisplayName: "Daniil",
+            workType: .salesRep,
+            expiresAt: now.addingTimeInterval(60),
+            planStatus: .grace
+        )
+
+        #expect(preview.canJoin(now: now))
+        #expect(!preview.canJoin(now: now.addingTimeInterval(61)))
+        #expect(!gracePreview.canJoin(now: now))
+    }
+
     @Test func memberCanReadOnlyAssignedLeadWhenPlanIsReadable() {
         let lead = TeamLead(
             id: "lead-1",

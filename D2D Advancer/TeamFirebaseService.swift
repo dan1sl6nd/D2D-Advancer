@@ -423,7 +423,17 @@ final class TeamFirebaseService: ObservableObject {
         )
 
         let batch = db.batch()
-        batch.setData(inviteData(invite, team: team, workType: workType, createdByUserId: user.uid, createdAt: now), forDocument: inviteRef(invite.code))
+        batch.setData(
+            inviteData(
+                invite,
+                team: team,
+                ownerDisplayName: member.displayName,
+                workType: workType,
+                createdByUserId: user.uid,
+                createdAt: now
+            ),
+            forDocument: inviteRef(invite.code)
+        )
         batch.setData(memberData(pendingMember, updatedAt: now), forDocument: memberRef(teamId: team.id, userId: pendingMember.userId))
         addActivityLog(
             to: batch,
@@ -439,6 +449,39 @@ final class TeamFirebaseService: ObservableObject {
 
         teamMembers = TeamMemberRoster.upserting(pendingMember, into: teamMembers)
         return invite
+    }
+
+    func fetchInvitePreview(inviteCode: String) async throws -> TeamInvitePreview {
+        try await prepareFirestoreForTeamUse()
+        _ = try await requireFreshFirebaseUser()
+        guard let code = TeamInviteLink.normalizedCode(inviteCode) else {
+            throw TeamFirebaseServiceError.invalidInvite
+        }
+
+        let snapshot = try await inviteRef(code).getDocument()
+        guard let data = snapshot.data(),
+              let teamId = data[TeamFirebaseSchema.Field.teamId] as? String,
+              let status = data[TeamFirebaseSchema.Field.status] as? String,
+              status == TeamFirebaseSchema.InviteStatus.pending,
+              let expiresAt = Self.dateValue(data[TeamFirebaseSchema.Field.expiresAt]),
+              expiresAt > Date() else {
+            throw TeamFirebaseServiceError.invalidInvite
+        }
+
+        let workType = (data[TeamFirebaseSchema.Field.workType] as? String)
+            .flatMap(TeamMemberWorkType.init(rawValue:)) ?? .salesRep
+        let planStatus = (data[TeamFirebaseSchema.Field.planStatus] as? String)
+            .flatMap(TeamPlanStatus.init(rawValue:)) ?? .active
+
+        return TeamInvitePreview(
+            code: code,
+            teamId: teamId,
+            teamName: data[TeamFirebaseSchema.Field.teamName] as? String,
+            ownerDisplayName: data[TeamFirebaseSchema.Field.ownerDisplayName] as? String,
+            workType: workType,
+            expiresAt: expiresAt,
+            planStatus: planStatus
+        )
     }
 
     func joinTeam(inviteCode: String, displayName: String?, email: String?) async throws {
@@ -2482,9 +2525,18 @@ private extension TeamFirebaseService {
         ].filterNilValues()
     }
 
-    func inviteData(_ invite: TeamInvite, team: TeamWorkspace, workType: TeamMemberWorkType, createdByUserId: String, createdAt: Date) -> [String: Any] {
+    func inviteData(
+        _ invite: TeamInvite,
+        team: TeamWorkspace,
+        ownerDisplayName: String,
+        workType: TeamMemberWorkType,
+        createdByUserId: String,
+        createdAt: Date
+    ) -> [String: Any] {
         [
             TeamFirebaseSchema.Field.teamId: invite.teamId,
+            TeamFirebaseSchema.Field.teamName: team.name,
+            TeamFirebaseSchema.Field.ownerDisplayName: ownerDisplayName,
             TeamFirebaseSchema.Field.createdByUserId: createdByUserId,
             TeamFirebaseSchema.Field.createdAt: Timestamp(date: createdAt),
             TeamFirebaseSchema.Field.expiresAt: Timestamp(date: invite.expiresAt),

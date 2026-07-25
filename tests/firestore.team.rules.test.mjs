@@ -978,10 +978,14 @@ function pendingMemberData(now) {
 function inviteData(now) {
   return {
     teamId: "team-1",
+    teamName: "North Crew",
+    ownerDisplayName: "Owner One",
     createdByUserId: "owner-1",
     createdAt: now,
     expiresAt: Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    status: "pending"
+    status: "pending",
+    planStatus: "active",
+    workType: "sales_rep"
   };
 }
 

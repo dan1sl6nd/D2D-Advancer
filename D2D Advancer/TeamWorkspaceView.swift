@@ -4,6 +4,7 @@ import AuthenticationServices
 
 struct TeamWorkspaceView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var userAccountManager = FirebaseUserAccountManager.shared
     @ObservedObject private var firebaseService = FirebaseService.shared
@@ -13,6 +14,11 @@ struct TeamWorkspaceView: View {
     @ObservedObject private var dutyLocationCoordinator = TeamDutyLocationCoordinator.shared
     @State private var teamName = "My Team"
     @State private var inviteCode = ""
+    @State private var pendingInviteCode: String?
+    @State private var invitePreview: TeamInvitePreview?
+    @State private var invitePreviewError: String?
+    @State private var isLoadingInvitePreview = false
+    @State private var showingInviteDetails = false
     #if DEBUG
     @State private var teamAccountEmail = ""
     @State private var teamAccountPassword = ""
@@ -44,14 +50,16 @@ struct TeamWorkspaceView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let team = teamService.activeTeam,
+            if pendingInviteCode == nil,
+               let team = teamService.activeTeam,
                teamService.currentMember?.role == .owner,
                canUseTeamWorkspace {
                 ownerPinnedInvitePanel(team: team)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
             }
-            if let team = teamService.activeTeam,
+            if pendingInviteCode == nil,
+               let team = teamService.activeTeam,
                let member = teamService.currentMember,
                member.role != .owner,
                canUseTeamWorkspace {
@@ -67,7 +75,9 @@ struct TeamWorkspaceView: View {
                             .frame(height: 0)
                             .id(scrollTopAnchor)
 
-                        if canUseTeamWorkspace, teamService.activeTeam != nil {
+                        if pendingInviteCode == nil,
+                           canUseTeamWorkspace,
+                           teamService.activeTeam != nil {
                             introCard
                         }
 
@@ -79,11 +89,13 @@ struct TeamWorkspaceView: View {
                         }
                         #endif
 
-                        if shouldShowInitialLoadingCard {
+                        if shouldShowInitialLoadingCard && pendingInviteCode == nil {
                             loadingCard("Loading team workspace...")
                         }
 
-                        if !canUseTeamWorkspace {
+                        if let pendingInviteCode {
+                            pendingTeamInviteCard(code: pendingInviteCode)
+                        } else if !canUseTeamWorkspace {
                             appleSignInRequiredCard
                         } else if let team = teamService.activeTeam, let member = teamService.currentMember {
                             planStateCard(team, member: member)
@@ -120,10 +132,17 @@ struct TeamWorkspaceView: View {
             }
         }
         .background(Color.obsidianBackground(for: colorScheme).ignoresSafeArea())
-        .obsidianPushedNavigation("Team", backButtonAccessibilityIdentifier: "teamWorkspaceBackButton")
+        .obsidianPushedNavigation(
+            "Team",
+            backButtonAccessibilityIdentifier: "teamWorkspaceBackButton",
+            onBack: handleTeamWorkspaceBack
+        )
         .toolbar(.hidden, for: .tabBar)
         .task {
             await loadTeam()
+        }
+        .task(id: invitePreviewTaskID) {
+            await loadPendingInvitePreviewIfNeeded()
         }
         .onAppear {
             applyPendingTeamInviteCodeIfNeeded()
@@ -651,6 +670,199 @@ struct TeamWorkspaceView: View {
         }
     }
 
+    private func pendingTeamInviteCard(code: String) -> some View {
+        TeamInfoCard {
+            HStack(alignment: .top, spacing: 12) {
+                ObsidianIconTile(
+                    icon: "person.2.badge.plus.fill",
+                    tint: Color.electricViolet,
+                    size: 48,
+                    filled: true
+                )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("TEAM INVITATION")
+                        .font(.micro)
+                        .foregroundColor(Color.electricViolet)
+
+                    Text("You're invited to join")
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textPrimary)
+
+                    Text(invitePreview?.teamName ?? TeamInvitePreview.fallbackTeamName)
+                        .font(.obsidianTitle)
+                        .foregroundColor(Color.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("teamInvitePreviewTeamName")
+                }
+            }
+
+            Divider()
+                .overlay(Color.obsidianBorder.opacity(0.6))
+
+            if let preview = invitePreview {
+                inviteMetadataRow(
+                    icon: "person.crop.circle.badge.checkmark",
+                    title: "Role",
+                    value: preview.workType.title,
+                    accessibilityIdentifier: "teamInvitePreviewRole"
+                )
+                inviteMetadataRow(
+                    icon: "crown.fill",
+                    title: "Invited by",
+                    value: preview.ownerDisplayName,
+                    accessibilityIdentifier: "teamInvitePreviewOwner"
+                )
+                inviteMetadataRow(
+                    icon: "clock.badge.checkmark",
+                    title: "Expires",
+                    value: inviteExpirationText(preview.expiresAt),
+                    accessibilityIdentifier: "teamInvitePreviewExpiration"
+                )
+            } else if canUseTeamWorkspace && isLoadingInvitePreview {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .tint(Color.electricViolet)
+
+                    Text("Verifying invitation...")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                }
+                .accessibilityIdentifier("teamInvitePreviewLoading")
+            }
+
+            Label(
+                "Your personal leads stay private. You only receive assigned Team work, and location is shared only while you turn On Duty.",
+                systemImage: "lock.shield.fill"
+            )
+            .font(.obsidianFootnote)
+            .foregroundColor(Color.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            if !canUseTeamWorkspace {
+                Text("Continue with Apple to securely review and accept this invitation.")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                appleTeamSignInButton
+
+                #if DEBUG
+                if FirebaseEmulatorConfiguration.isEnabled {
+                    emulatorAccountForm
+                }
+                #endif
+            } else if teamService.activeTeam != nil || teamService.currentMember != nil {
+                inviteInlineNotice(
+                    "This account already belongs to a team. Close or leave that workspace before joining another.",
+                    color: Color.statusNotHome
+                )
+            } else if let preview = invitePreview {
+                if preview.canJoin() {
+                    setupActionButton(
+                        title: isWorking ? "Joining Team..." : "Join Team",
+                        icon: "person.badge.plus",
+                        accessibilityIdentifier: "teamInviteReviewJoinButton"
+                    ) {
+                        joinTeam()
+                    }
+                } else {
+                    inviteInlineNotice(
+                        "This team is not currently accepting invite changes.",
+                        color: Color.statusNotHome
+                    )
+                }
+            } else if let invitePreviewError {
+                inviteInlineNotice(invitePreviewError, color: Color.statusNotInterested)
+
+                Button {
+                    Task {
+                        await loadPendingInvitePreviewIfNeeded(force: true)
+                    }
+                } label: {
+                    Label("Try Again", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ObsidianSecondaryButtonStyle())
+                .accessibilityIdentifier("teamInvitePreviewRetryButton")
+            }
+
+            DisclosureGroup(isExpanded: $showingInviteDetails) {
+                HStack(spacing: 10) {
+                    Text(code)
+                        .font(.system(.body, design: .monospaced, weight: .semibold))
+                        .foregroundColor(Color.textPrimary)
+                        .textSelection(.enabled)
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        copyPendingInviteCode(code)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.obsidianFootnote)
+                            .foregroundColor(Color.electricViolet)
+                            .frame(width: 34, height: 34)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .accessibilityLabel("Copy invite code")
+                    .accessibilityIdentifier("teamInvitePreviewCopyCodeButton")
+                }
+                .padding(.top, 8)
+            } label: {
+                Label("Invite details", systemImage: "number.square")
+                    .font(.obsidianFootnote)
+                    .foregroundColor(Color.textSecondary)
+            }
+            .tint(Color.electricViolet)
+            .accessibilityIdentifier("teamInviteDetailsDisclosure")
+
+            Button("Not Now") {
+                dismissPendingTeamInvite()
+            }
+            .buttonStyle(ObsidianGhostButtonStyle())
+            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier("teamInviteNotNowButton")
+        }
+        .accessibilityIdentifier("teamInviteReviewCard")
+    }
+
+    private func inviteMetadataRow(
+        icon: String,
+        title: String,
+        value: String,
+        accessibilityIdentifier: String
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.electricViolet)
+                .frame(width: 24)
+
+            Text(title)
+                .font(.obsidianFootnote)
+                .foregroundColor(Color.textSecondary)
+
+            Spacer(minLength: 8)
+
+            Text(value)
+                .font(.obsidianFootnote)
+                .fontWeight(.semibold)
+                .foregroundColor(Color.textPrimary)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private func inviteInlineNotice(_ message: String, color: Color) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.obsidianFootnote)
+            .foregroundColor(color)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var appleTeamSignInButton: some View {
         SignInWithAppleButton(
             .continue,
@@ -661,7 +873,7 @@ struct TeamWorkspaceView: View {
                 appleSignInManager.handleAuthorizationCompletion(result, requireFirebaseTeamSession: true)
             }
         )
-        .signInWithAppleButtonStyle(.white)
+        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
         .frame(height: 54)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityIdentifier("teamAppleSignInButton")
@@ -1273,6 +1485,10 @@ struct TeamWorkspaceView: View {
         TeamAuthPolicy.canUseTeamWorkspace(isFirebaseAuthenticated: firebaseService.isAuthenticated)
     }
 
+    private var invitePreviewTaskID: String {
+        "\(pendingInviteCode ?? "none")|\(canUseTeamWorkspace)"
+    }
+
     private var hasVisibleSetupActionError: Bool {
         guard isShowingTeamSetup,
               statusMessageIsError,
@@ -1314,6 +1530,9 @@ struct TeamWorkspaceView: View {
         )
 
         guard let snapshot else { return nil }
+        if pendingInviteCode != nil && snapshot.level == .setup {
+            return nil
+        }
         if isShowingTeamSetup && snapshot.level == .setup {
             return nil
         }
@@ -1427,19 +1646,93 @@ struct TeamWorkspaceView: View {
     }
 
     private func applyPendingTeamInviteCodeIfNeeded() {
-        guard let code = router.consumePendingTeamInviteCode() else { return }
+        guard let code = router.pendingTeamInviteCode,
+              code != pendingInviteCode else {
+            return
+        }
+
+        pendingInviteCode = code
         inviteCode = code
-        statusMessage = "Invite link opened. Confirm the code below to join the team."
+        invitePreview = nil
+        invitePreviewError = nil
+        isLoadingInvitePreview = false
+        showingInviteDetails = false
+        statusMessage = nil
         statusMessageIsError = false
         scrollResetToken += 1
+    }
 
-        guard canUseTeamWorkspace, teamService.activeTeam == nil else { return }
-        DispatchQueue.main.async {
-            focusedInput = .inviteCode
+    private func loadPendingInvitePreviewIfNeeded(force: Bool = false) async {
+        guard let code = pendingInviteCode else {
+            invitePreview = nil
+            invitePreviewError = nil
+            isLoadingInvitePreview = false
+            return
+        }
+        guard canUseTeamWorkspace else {
+            invitePreview = nil
+            invitePreviewError = nil
+            isLoadingInvitePreview = false
+            return
+        }
+        if !force, invitePreview?.code == code {
+            return
+        }
+
+        isLoadingInvitePreview = true
+        invitePreviewError = nil
+        defer {
+            if pendingInviteCode == code {
+                isLoadingInvitePreview = false
+            }
+        }
+        do {
+            let preview = try await teamService.fetchInvitePreview(inviteCode: code)
+            guard pendingInviteCode == code else { return }
+            invitePreview = preview
+        } catch {
+            guard pendingInviteCode == code else { return }
+            invitePreview = nil
+            invitePreviewError = TeamFirebaseService.isOfflineError(error)
+                ? "Connect to the internet to verify this invitation."
+                : TeamFirebaseService.userFacingErrorMessage(for: error)
+        }
+    }
+
+    private func inviteExpirationText(_ expiresAt: Date) -> String {
+        expiresAt.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func copyPendingInviteCode(_ code: String) {
+        UIPasteboard.general.string = code
+        statusMessage = "Invite code copied."
+        statusMessageIsError = false
+        UIAccessibility.post(notification: .announcement, argument: "Invite code copied")
+    }
+
+    private func dismissPendingTeamInvite() {
+        router.clearPendingTeamInvite()
+        pendingInviteCode = nil
+        inviteCode = ""
+        invitePreview = nil
+        invitePreviewError = nil
+        isLoadingInvitePreview = false
+        showingInviteDetails = false
+        statusMessage = nil
+        statusMessageIsError = false
+        dismiss()
+    }
+
+    private func handleTeamWorkspaceBack() {
+        if pendingInviteCode != nil {
+            dismissPendingTeamInvite()
+        } else {
+            dismiss()
         }
     }
 
     private func joinTeam() {
+        let isJoiningFromInviteLink = pendingInviteCode != nil
         runTeamAction(successMessage: "Joined team.", scrollToTopOnSuccess: true) {
             try await teamService.joinTeam(
                 inviteCode: inviteCode,
@@ -1447,6 +1740,13 @@ struct TeamWorkspaceView: View {
                 email: userAccountManager.currentUserEmail
             )
             inviteCode = ""
+            if isJoiningFromInviteLink {
+                router.clearPendingTeamInvite()
+                pendingInviteCode = nil
+                invitePreview = nil
+                invitePreviewError = nil
+                showingInviteDetails = false
+            }
         }
     }
 

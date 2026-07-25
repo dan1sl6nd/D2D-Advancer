@@ -135,8 +135,7 @@ final class AppRouter: ObservableObject {
         selectedTab = MainAppTab.more.rawValue
     }
 
-    func consumePendingTeamInviteCode() -> String? {
-        defer { pendingTeamInviteCode = nil }
-        return pendingTeamInviteCode
+    func clearPendingTeamInvite() {
+        pendingTeamInviteCode = nil
     }
 }
