@@ -28,7 +28,7 @@ Metering event documents use `expiresAt`; GPS sessions, GPS points, activity ent
 
 ## Unit economics guardrail
 
-The local StoreKit configuration prices the included owner plus two-worker Team plan at USD 29.99 monthly or USD 299.99 yearly. Even under a conservative 30% App Store commission assumption, that leaves about USD 20.99 per monthly subscriber or USD 17.50 per month from an annual subscriber before backend cost.
+The local StoreKit configuration prices the included owner plus two-worker Team plan at USD 39.99 monthly or USD 319.99 yearly. Even under a conservative 30% App Store commission assumption, that leaves about USD 27.99 per monthly subscriber or USD 18.67 per month from an annual subscriber before backend cost.
 
 The 5,000-write daily Team ceiling is 150,000 client writes in a 30-day month. The idempotent meter adds roughly two backend writes and two transaction reads per source write, plus one Function invocation. Ignoring the shared Firebase free allowance, current Iowa list pricing puts those Firestore operations around USD 0.52 per maximally active Team per month before storage, egress, logs, and other services. The operating target is therefore:
 

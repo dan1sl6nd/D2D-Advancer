@@ -15,10 +15,10 @@ Create these products in the existing Premium Access subscription group:
 
 | Product ID | Display name | Period | Intended US price |
 | --- | --- | --- | --- |
-| `com.d2dadvancer.solo.monthly` | Solo Monthly | 1 month | $9.99 |
-| `com.d2dadvancer.solo.yearly` | Solo Yearly | 1 year | $99.99 |
-| `com.d2dadvancer.team3.monthly` | Team Monthly | 1 month | $29.99 |
-| `com.d2dadvancer.team3.yearly` | Team Yearly | 1 year | $299.99 |
+| `com.d2dadvancer.solo.monthly` | Solo Monthly | 1 month | $14.99 |
+| `com.d2dadvancer.solo.yearly` | Solo Yearly | 1 year | $119.99 |
+| `com.d2dadvancer.team3.monthly` | Team Monthly | 1 month | $39.99 |
+| `com.d2dadvancer.team3.yearly` | Team Yearly | 1 year | $319.99 |
 
 Keep all existing subscription products available to their current subscribers. Legacy products stay hidden from new purchases in the app.
 

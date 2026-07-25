@@ -8,10 +8,10 @@ All products belong to one App Store subscription group so a customer cannot acc
 
 | Level | Product ID | Reference name | Period | Intended US price |
 | --- | --- | --- | --- | --- |
-| 1 | `com.d2dadvancer.team3.yearly` | Team Yearly | 1 year | $299.99 |
-| 1 | `com.d2dadvancer.team3.monthly` | Team Monthly | 1 month | $29.99 |
-| 2 | `com.d2dadvancer.solo.yearly` | Solo Yearly | 1 year | $99.99 |
-| 2 | `com.d2dadvancer.solo.monthly` | Solo Monthly | 1 month | $9.99 |
+| 1 | `com.d2dadvancer.team3.yearly` | Team Yearly | 1 year | $319.99 |
+| 1 | `com.d2dadvancer.team3.monthly` | Team Monthly | 1 month | $39.99 |
+| 2 | `com.d2dadvancer.solo.yearly` | Solo Yearly | 1 year | $119.99 |
+| 2 | `com.d2dadvancer.solo.monthly` | Solo Monthly | 1 month | $14.99 |
 
 Team includes one owner plus two worker seats. A worker can be a sales rep or technician. Workers receive assigned Team work without buying their own Team subscription.
 

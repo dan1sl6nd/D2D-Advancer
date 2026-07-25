@@ -63,7 +63,7 @@
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "9.99",
+          "displayPrice" : "14.99",
           "familyShareable" : false,
           "groupNumber" : 2,
           "internalID" : "monthly_sub",
@@ -84,7 +84,7 @@
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "99.99",
+          "displayPrice" : "119.99",
           "familyShareable" : false,
           "groupNumber" : 2,
           "internalID" : "solo_yearly_sub",
@@ -110,7 +110,7 @@
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "29.99",
+          "displayPrice" : "39.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "team_monthly_sub",
@@ -131,7 +131,7 @@
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "299.99",
+          "displayPrice" : "319.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "team_yearly_sub",

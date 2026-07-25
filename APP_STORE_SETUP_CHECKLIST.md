@@ -39,10 +39,10 @@ Subscription group: `Premium Access`
 
 | Product | Product ID | Duration | Intended US price | Availability |
 | --- | --- | --- | --- | --- |
-| Solo Monthly | `com.d2dadvancer.solo.monthly` | 1 month | USD 9.99 | New paywall |
-| Solo Yearly | `com.d2dadvancer.solo.yearly` | 1 year | USD 99.99 | New paywall |
-| Team Monthly | `com.d2dadvancer.team3.monthly` | 1 month | USD 29.99 | New paywall |
-| Team Yearly | `com.d2dadvancer.team3.yearly` | 1 year | USD 299.99 | New paywall |
+| Solo Monthly | `com.d2dadvancer.solo.monthly` | 1 month | USD 14.99 | New paywall |
+| Solo Yearly | `com.d2dadvancer.solo.yearly` | 1 year | USD 119.99 | New paywall |
+| Team Monthly | `com.d2dadvancer.team3.monthly` | 1 month | USD 39.99 | New paywall |
+| Team Yearly | `com.d2dadvancer.team3.yearly` | 1 year | USD 319.99 | New paywall |
 | Legacy Weekly | `com.d2dadvancer.weekly` | 1 week | Existing App Store price | Existing subscribers |
 | Legacy Yearly | `com.d2dadvancer.yearly` | 1 year | Existing App Store price | Existing subscribers |
 | Legacy Monthly | `com.d2dadvancer.monthly` | 1 month | Existing App Store price | Recognition only |
