@@ -622,6 +622,64 @@ describe("D2D team Firestore rules", () => {
     await assertSucceeds(batch.commit());
   });
 
+  it("allows a verified owner to close a team with a pending invite using the narrow app payload", async () => {
+    const createdAt = Timestamp.fromMillis(Date.now() - 60_000);
+    const closeAt = Timestamp.now();
+    const planExpiresAt = Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const graceEndsAt = Timestamp.fromMillis(Date.now() + 37 * 24 * 60 * 60 * 1000);
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "teams/team-1"), verifiedTeamData("owner-1", createdAt, {
+        planExpiresAt,
+        graceEndsAt
+      }));
+      await setDoc(doc(db, "teams/team-1/members/owner-1"), ownerMemberData("owner-1", createdAt));
+      await setDoc(
+        doc(db, "teams/team-1/members/pending-rep-INVITE01"),
+        pendingMemberData(createdAt)
+      );
+      await setDoc(doc(db, "teamInvites/INVITE01"), inviteData(createdAt));
+      await setDoc(
+        doc(db, "users/owner-1/teamProfile/current"),
+        teamProfileData("team-1", "owner", createdAt)
+      );
+    });
+
+    const ownerDb = testEnv.authenticatedContext("owner-1").firestore();
+    const batch = writeBatch(ownerDb);
+    batch.set(doc(ownerDb, "teams/team-1"), {
+      updatedAt: closeAt,
+      planStatus: "paused"
+    }, { merge: true });
+    batch.delete(doc(ownerDb, "users/owner-1/teamProfile/current"));
+    batch.set(doc(ownerDb, "teams/team-1/members/owner-1"), {
+      ...ownerMemberData("owner-1", createdAt),
+      status: "removed",
+      workType: "owner",
+      removedAt: closeAt,
+      updatedAt: closeAt
+    }, { merge: true });
+    batch.set(doc(ownerDb, "teams/team-1/members/pending-rep-INVITE01"), {
+      ...pendingMemberData(createdAt),
+      status: "removed",
+      workType: "sales_rep",
+      removedAt: closeAt,
+      updatedAt: closeAt
+    }, { merge: true });
+    batch.delete(doc(ownerDb, "teamInvites/INVITE01"));
+    batch.set(doc(ownerDb, "teams/team-1/activityLog/team-closed-with-invite"), activityLogData({
+      actorUserId: "owner-1",
+      kind: "team_closed",
+      subjectId: "team-1",
+      subjectTitle: "Test Team",
+      targetUserId: "owner-1",
+      now: closeAt
+    }));
+
+    await assertSucceeds(batch.commit());
+  });
+
   it("keeps grace teams read-only and blocks normal team edits", async () => {
     await seedTeamWithTwoRepsAndWork("grace");
 

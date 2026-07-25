@@ -1366,7 +1366,14 @@ final class TeamFirebaseService: ObservableObject {
         let batch = db.batch()
         var pendingWriteCount = 3
 
-        batch.setData(teamData(team), forDocument: teamRef(team.id), merge: true)
+        batch.setData(
+            [
+                TeamFirebaseSchema.Field.planStatus: TeamPlanStatus.paused.rawValue,
+                TeamFirebaseSchema.Field.updatedAt: Timestamp(date: now)
+            ],
+            forDocument: teamRef(team.id),
+            merge: true
+        )
         batch.deleteDocument(teamProfileRef(userId: user.uid))
 
         for teamMember in members {
