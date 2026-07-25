@@ -28,10 +28,12 @@ enum TeamCachedMembershipLocalStore {
     static func loadFreshSnapshot(
         from userDefaults: UserDefaults,
         key: String,
+        expectedUserId: String,
         now: Date = Date(),
         maxAge: TimeInterval
     ) throws -> TeamCachedMembershipSnapshot? {
         guard let snapshot = try loadSnapshot(from: userDefaults, key: key) else { return nil }
+        guard snapshot.member.userId == expectedUserId else { return nil }
         return snapshot.isFresh(now: now, maxAge: maxAge) ? snapshot : nil
     }
 }
@@ -146,7 +148,9 @@ final class TeamFirebaseService: ObservableObject {
         FirebaseBootstrap.configureIfNeeded()
         db = Firestore.firestore()
         FirebaseEmulatorConfiguration.applyIfNeeded(firestore: db)
-        restoreCachedMembershipIfAvailable()
+        if let authenticatedUserId = Auth.auth().currentUser?.uid {
+            restoreCachedMembershipIfAvailable(authenticatedUserId: authenticatedUserId)
+        }
     }
 
     nonisolated static let removedTeamAccessMessage = "You no longer have access to this team. Ask the owner for a new invite if needed."
@@ -198,6 +202,18 @@ final class TeamFirebaseService: ObservableObject {
             || message.localizedCaseInsensitiveContains("connection appears to be offline")
             || message.localizedCaseInsensitiveContains("network connection was lost")
             || message.localizedCaseInsensitiveContains("not connected to the internet")
+    }
+
+    nonisolated static func shouldInvalidateFirebaseSession(after error: Error) -> Bool {
+        let nsError = error as NSError
+        guard nsError.domain == AuthErrors.domain else { return false }
+
+        return [
+            AuthErrorCode.invalidUserToken.rawValue,
+            AuthErrorCode.userTokenExpired.rawValue,
+            AuthErrorCode.userDisabled.rawValue,
+            AuthErrorCode.userNotFound.rawValue
+        ].contains(nsError.code)
     }
 
     nonisolated static func shouldClearMemberSessionAfterPermissionError(
@@ -263,7 +279,8 @@ final class TeamFirebaseService: ObservableObject {
 
         do {
             try await prepareFirestoreForTeamUse(force: true)
-            let user = try requireFirebaseUser()
+            let user = try await requireFreshFirebaseUser()
+            restoreCachedMembershipIfAvailable(authenticatedUserId: user.uid)
             do {
                 teamOperationsControl = try await loadTeamOperationsControl()
             } catch {
@@ -340,7 +357,11 @@ final class TeamFirebaseService: ObservableObject {
             lastSuccessfulTeamSyncAt = Date()
             lastTeamSyncFailureAt = nil
         } catch TeamFirebaseServiceError.notAuthenticated {
-            restoreCachedMembershipIfAvailable()
+            clearLocalTeam(removeCachedMembership: true)
+        } catch TeamFirebaseServiceError.firebaseSessionExpired {
+            clearLocalTeam(removeCachedMembership: true)
+            lastTeamSyncFailureAt = Date()
+            lastErrorMessage = TeamFirebaseServiceError.firebaseSessionExpired.localizedDescription
         } catch {
             lastTeamSyncFailureAt = Date()
             if Self.isOfflineError(error), activeTeam != nil, currentMember != nil {
@@ -1783,13 +1804,14 @@ private extension TeamFirebaseService {
         }
     }
 
-    private func restoreCachedMembershipIfAvailable() {
+    private func restoreCachedMembershipIfAvailable(authenticatedUserId: String) {
         guard activeTeam == nil || currentMember == nil else { return }
         let cached: TeamCachedMembershipSnapshot?
         do {
             cached = try TeamCachedMembershipLocalStore.loadFreshSnapshot(
                 from: .standard,
                 key: Self.cachedMembershipKey,
+                expectedUserId: authenticatedUserId,
                 maxAge: Self.cachedMembershipMaxAge
             )
         } catch {
@@ -1799,7 +1821,10 @@ private extension TeamFirebaseService {
             AppLog.warning("Team", message)
             return
         }
-        guard let cached else { return }
+        guard let cached else {
+            UserDefaults.standard.removeObject(forKey: Self.cachedMembershipKey)
+            return
+        }
 
         activeTeam = cached.team
         currentMember = cached.member
@@ -1831,8 +1856,11 @@ private extension TeamFirebaseService {
         } catch {
             hasPreparedFirestoreNetwork = false
             AppLog.warning("Team", "Firebase Team session token refresh failed: \(error.localizedDescription)")
-            try? Auth.auth().signOut()
-            throw TeamFirebaseServiceError.firebaseSessionExpired
+            if Self.shouldInvalidateFirebaseSession(after: error) {
+                try? Auth.auth().signOut()
+                throw TeamFirebaseServiceError.firebaseSessionExpired
+            }
+            throw error
         }
     }
 

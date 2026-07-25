@@ -408,6 +408,7 @@ struct TeamWorkspaceTests {
         #expect(try TeamCachedMembershipLocalStore.loadFreshSnapshot(
             from: defaults,
             key: key,
+            expectedUserId: member.userId,
             now: now,
             maxAge: 14 * 24 * 60 * 60
         ) == nil)
@@ -416,6 +417,7 @@ struct TeamWorkspaceTests {
         let loaded = try #require(try TeamCachedMembershipLocalStore.loadFreshSnapshot(
             from: defaults,
             key: key,
+            expectedUserId: member.userId,
             now: now.addingTimeInterval(60),
             maxAge: 14 * 24 * 60 * 60
         ))
@@ -425,6 +427,15 @@ struct TeamWorkspaceTests {
         #expect(try TeamCachedMembershipLocalStore.loadFreshSnapshot(
             from: defaults,
             key: key,
+            expectedUserId: "different-user",
+            now: now.addingTimeInterval(60),
+            maxAge: 14 * 24 * 60 * 60
+        ) == nil)
+
+        #expect(try TeamCachedMembershipLocalStore.loadFreshSnapshot(
+            from: defaults,
+            key: key,
+            expectedUserId: member.userId,
             now: now.addingTimeInterval(15 * 24 * 60 * 60),
             maxAge: 14 * 24 * 60 * 60
         ) == nil)
@@ -434,10 +445,21 @@ struct TeamWorkspaceTests {
             try TeamCachedMembershipLocalStore.loadFreshSnapshot(
                 from: defaults,
                 key: key,
+                expectedUserId: member.userId,
                 now: now,
                 maxAge: 14 * 24 * 60 * 60
             )
         }
+    }
+
+    @Test func firebaseTeamSessionInvalidatesExpiredCredentialsButPreservesOfflineSessions() {
+        let invalidToken = NSError(domain: "FIRAuthErrorDomain", code: 17_017)
+        let expiredToken = NSError(domain: "FIRAuthErrorDomain", code: 17_021)
+        let networkError = NSError(domain: "FIRAuthErrorDomain", code: 17_020)
+
+        #expect(TeamFirebaseService.shouldInvalidateFirebaseSession(after: invalidToken))
+        #expect(TeamFirebaseService.shouldInvalidateFirebaseSession(after: expiredToken))
+        #expect(!TeamFirebaseService.shouldInvalidateFirebaseSession(after: networkError))
     }
 
     @Test func firebaseTeamInvitesUseSingleUseCodesAndAssignedRecords() {

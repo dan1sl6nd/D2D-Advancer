@@ -13,6 +13,8 @@ SOURCE_PACKAGES_PATH="${SOURCE_PACKAGES_PATH:-/tmp/D2DPhysicalTeamSourcePackages
 DEVELOPMENT_TEAM_ID="${DEVELOPMENT_TEAM_ID:-RF247ARQB7}"
 XCODEBUILD_TIMEOUT_SECONDS="${XCODEBUILD_TIMEOUT_SECONDS:-900}"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
+OWNER_SESSION_TOUCHED=0
+REP_SESSION_TOUCHED=0
 
 detect_emulator_host() {
   local host=""
@@ -95,6 +97,47 @@ if [[ "${FLOW_MODE}" == "full" ]]; then
   require_online_device "${REP_DEVICE_ID}" "Rep"
 fi
 
+reset_team_test_session() {
+  local device_id="$1"
+  local label="$2"
+
+  if xcrun devicectl device process launch \
+    --device "${device_id}" \
+    --terminate-existing \
+    dan1sland.D2D-Advancer \
+    -- \
+    -resetFirebaseAuthForUITests \
+    -resetTeamWorkspaceCacheForUITests >/dev/null; then
+    echo "${label} temporary Team test identity and cache cleared."
+    return 0
+  fi
+
+  echo "Could not clear the temporary Team test identity from ${label} (${device_id})." >&2
+  echo "Open Team Workspace on that phone, sign out, then continue with Apple before production use." >&2
+  return 1
+}
+
+cleanup_team_test_sessions() {
+  local original_status="$?"
+  local cleanup_failed=0
+  trap - EXIT
+  set +e
+
+  if [[ "${OWNER_SESSION_TOUCHED}" == "1" ]]; then
+    reset_team_test_session "${OWNER_DEVICE_ID}" "Owner" || cleanup_failed=1
+  fi
+  if [[ "${REP_SESSION_TOUCHED}" == "1" ]]; then
+    reset_team_test_session "${REP_DEVICE_ID}" "Rep" || cleanup_failed=1
+  fi
+
+  if [[ "${cleanup_failed}" == "1" && "${original_status}" == "0" ]]; then
+    original_status=1
+  fi
+  exit "${original_status}"
+}
+
+trap cleanup_team_test_sessions EXIT
+
 run_team_test() {
   local device_id="$1"
   local test_name="$2"
@@ -168,6 +211,7 @@ echo "Using Firebase emulator host: ${D2D_FIREBASE_EMULATOR_HOST}"
 echo "Using Team UI run id: ${RUN_ID}"
 echo "Using physical flow mode: ${FLOW_MODE}"
 
+OWNER_SESSION_TOUCHED=1
 run_team_test "${OWNER_DEVICE_ID}" "testTeamPhysicalOwnerCreatesTeamAndInvite"
 
 if [[ "${FLOW_MODE}" == "owner" ]]; then
@@ -184,5 +228,6 @@ fi
 export D2D_TEAM_INVITE_CODE
 echo "Using invite code for rep join: ${D2D_TEAM_INVITE_CODE}"
 
+REP_SESSION_TOUCHED=1
 run_team_test "${REP_DEVICE_ID}" "testTeamPhysicalRepJoinsAndCreatesInterestedLead"
 run_team_test "${OWNER_DEVICE_ID}" "testTeamPhysicalOwnerSeesRepWork"
