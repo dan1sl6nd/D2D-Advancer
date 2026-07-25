@@ -46,10 +46,10 @@ if [[ "${D2D_PHYSICAL_TEAM_INSIDE_EMULATORS:-0}" != "1" ]]; then
     exit 1
   fi
 
-  echo "Starting Firebase emulators for physical Team flow..."
+  echo "Starting Firebase Auth, Firestore, and Functions emulators for physical Team flow..."
   exec env JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk}" \
     /Users/dan1sland/.npm-global/bin/firebase emulators:exec \
-      --only auth,firestore \
+      --only auth,firestore,functions \
       --project d2d-advancer \
       "bash \"${SCRIPT_PATH}\""
 fi
