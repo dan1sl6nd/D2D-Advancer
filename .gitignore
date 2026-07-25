@@ -5,6 +5,7 @@
 .swiftpm/
 .playwright-mcp/
 DerivedData*/
+.firebase/
 
 # Local logs and disposable design scratch files
 firebase-debug.log
