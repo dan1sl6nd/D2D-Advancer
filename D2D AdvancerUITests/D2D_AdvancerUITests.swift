@@ -405,6 +405,65 @@ final class D2D_AdvancerUITests: XCTestCase {
         }
     }
 
+    private func requireExistingTeamAccountPhysicalUITestHarness() throws {
+        guard teamTestConfigBool(
+            environmentKey: "D2D_RUN_TEAM_EXISTING_ACCOUNT_UI_TESTS",
+            infoKey: "D2DRunTeamExistingAccountUITests"
+        ) else {
+            throw XCTSkip("Existing-account Team UI tests require an explicit data-preserving physical-device opt-in.")
+        }
+    }
+
+    private func existingTeamInviteCode() throws -> String {
+        guard let inviteCode = teamTestConfigValue(
+            environmentKey: "D2D_TEAM_INVITE_CODE",
+            infoKey: "D2DTeamInviteCode"
+        ), !inviteCode.isEmpty else {
+            throw XCTSkip("D2D_TEAM_INVITE_CODE is required for the existing-account Team join flow.")
+        }
+        return inviteCode
+    }
+
+    private func makeExistingTeamAccountApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append("-openTeamWorkspaceForUITests")
+        return app
+    }
+
+    private func prepareExistingAccountInviteJoin(_ app: XCUIApplication, inviteCode: String) {
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        let setupTitle = app.staticTexts["Create or Accept Team"]
+        let appleSignInTitle = app.staticTexts["Apple Sign-In Required"]
+        let activeTeamTitle = app.staticTexts["My Team"]
+        let deadline = Date().addingTimeInterval(25)
+        while Date() < deadline,
+              !setupTitle.exists,
+              !appleSignInTitle.exists,
+              !activeTeamTitle.exists {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+
+        XCTAssertFalse(
+            appleSignInTitle.exists,
+            "The existing device account must finish Sign in with Apple before joining a Team."
+        )
+        XCTAssertFalse(
+            activeTeamTitle.exists,
+            "The existing device account already belongs to a Team; do not overwrite membership."
+        )
+        XCTAssertTrue(setupTitle.exists, "Expected the existing account to be ready to create or accept a Team.")
+
+        let inviteField = waitForIdentifiedElement(app, "teamInviteCodeField", timeout: 12)
+        typeText(inviteCode, into: inviteField)
+        dismissTeamKeyboardIfPresent(app)
+        XCTAssertEqual(inviteField.value as? String, inviteCode)
+
+        let joinButton = scrollToButton(app, "teamJoinTeamButton")
+        XCTAssertTrue(joinButton.isEnabled, "Join Team should be enabled after entering a valid invite code.")
+    }
+
     private func teamUITestCredentials() -> TeamUITestCredentials {
         let rawRunId = teamTestConfigValue(
             environmentKey: "D2D_TEAM_UI_RUN_ID",
@@ -1443,6 +1502,40 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapButton(app, "teamCreateInviteButton", timeout: 12)
         let inviteCode = readInviteCode(app)
         print("TEAM_PHYSICAL_INVITE_CODE=\(inviteCode)")
+    }
+
+    @MainActor
+    func testTeamExistingAccountPhysicalInvitePreflight() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+
+        let inviteCode = try existingTeamInviteCode()
+        let app = makeExistingTeamAccountApp()
+        prepareExistingAccountInviteJoin(app, inviteCode: inviteCode)
+
+        XCTAssertTrue(
+            app.buttons["teamJoinTeamButton"].exists,
+            "The data-preserving preflight should stop with Join Team visible and must not accept membership."
+        )
+    }
+
+    @MainActor
+    func testTeamExistingAccountPhysicalAcceptInvite() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+        guard teamTestConfigBool(
+            environmentKey: "D2D_CONFIRM_TEAM_JOIN_UI_TESTS",
+            infoKey: "D2DConfirmTeamJoinUITests"
+        ) else {
+            throw XCTSkip("Accepting Team membership requires D2D_CONFIRM_TEAM_JOIN_UI_TESTS=1.")
+        }
+
+        let inviteCode = try existingTeamInviteCode()
+        let app = makeExistingTeamAccountApp()
+        prepareExistingAccountInviteJoin(app, inviteCode: inviteCode)
+
+        scrollToButton(app, "teamJoinTeamButton").tap()
+        waitForText(app, "Joined team.", timeout: 30)
+        resetVerticalScrollToTop(app)
+        waitForText(app, "Activity Log", timeout: 15)
     }
 
     @MainActor
