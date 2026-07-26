@@ -121,7 +121,7 @@ function verifier(environment: Environment): SignedDataVerifier {
   );
 }
 
-async function verifyTransactionJWS(signedTransaction: string): Promise<NormalizedTeamTransaction> {
+async function verifyTransactionJWS(signedTransaction: string): Promise<AppStoreTeamTransaction> {
   const hintedEnvironment = untrustedEnvironment(signedTransaction);
   const environments = hintedEnvironment
     ? [hintedEnvironment]
@@ -131,7 +131,7 @@ async function verifyTransactionJWS(signedTransaction: string): Promise<Normaliz
   for (const environment of environments) {
     try {
       const decoded = await verifier(environment).verifyAndDecodeTransaction(signedTransaction);
-      return normalizeTeamTransaction(decoded as AppStoreTeamTransaction);
+      return decoded as AppStoreTeamTransaction;
     } catch (error) {
       lastError = error;
     }
@@ -139,6 +139,28 @@ async function verifyTransactionJWS(signedTransaction: string): Promise<Normaliz
 
   logger.warn("App Store Team transaction verification failed", { error: String(lastError) });
   throw new HttpsError("failed-precondition", "The Team purchase could not be verified with Apple.");
+}
+
+function normalizeVerifiedTeamTransaction(
+  transaction: AppStoreTeamTransaction,
+  fallbackOwnerUserId?: string
+): NormalizedTeamTransaction {
+  try {
+    return normalizeTeamTransaction(
+      transaction,
+      fallbackOwnerUserId ? teamAppAccountTokenForUser(fallbackOwnerUserId) : undefined
+    );
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : "The verified Team purchase is incomplete.";
+    logger.warn("Verified App Store Team transaction was rejected", {
+      error: message,
+      environment: transaction.environment,
+      productId: transaction.productId
+    });
+    throw new HttpsError("failed-precondition", message);
+  }
 }
 
 async function verifyNotificationJWS(signedPayload: string): Promise<{
@@ -187,6 +209,18 @@ function emulatorTeamTransaction(ownerUserId: string, value: unknown): Normalize
     signedAtMillis: Date.now(),
     transactionId: `emulator-transaction-${safeOwnerId}`
   };
+}
+
+async function teamTransactionForOwner(
+  ownerUserId: string,
+  signedTransaction: unknown
+): Promise<NormalizedTeamTransaction> {
+  const emulatorTransaction = emulatorTeamTransaction(ownerUserId, signedTransaction);
+  if (emulatorTransaction) {
+    return emulatorTransaction;
+  }
+  const decoded = await verifyTransactionJWS(requireSignedTransaction(signedTransaction));
+  return normalizeVerifiedTeamTransaction(decoded, ownerUserId);
 }
 
 function assertPurchaseBelongsToOwner(
@@ -535,8 +569,10 @@ export const syncTeamEntitlement = onCall(TEAM_CALLABLE_OPTIONS, async (request)
 
   await enforceUserRateLimit(ownerUserId, "sync-entitlement", SYNC_ENTITLEMENT_RATE_LIMIT);
 
-  const transaction = emulatorTeamTransaction(ownerUserId, request.data?.signedTransaction)
-    ?? await verifyTransactionJWS(requireSignedTransaction(request.data?.signedTransaction));
+  const transaction = await teamTransactionForOwner(
+    ownerUserId,
+    request.data?.signedTransaction
+  );
   return syncEntitlementForOwner(ownerUserId, transaction);
 });
 
@@ -549,8 +585,10 @@ export const createTeamWorkspace = onCall(TEAM_CALLABLE_OPTIONS, async (request)
   await assertTeamOperationsAllowWrite();
   await enforceUserRateLimit(ownerUserId, "create-team", CREATE_TEAM_RATE_LIMIT);
 
-  const verifiedTransaction = emulatorTeamTransaction(ownerUserId, request.data?.signedTransaction)
-    ?? await verifyTransactionJWS(requireSignedTransaction(request.data?.signedTransaction));
+  const verifiedTransaction = await teamTransactionForOwner(
+    ownerUserId,
+    request.data?.signedTransaction
+  );
   assertPurchaseBelongsToOwner(ownerUserId, verifiedTransaction);
   const now = new Date();
   const state = deriveTeamEntitlementState(verifiedTransaction, now.getTime());
@@ -749,8 +787,14 @@ export const meterTeamUsage = onDocumentWritten({
 });
 
 async function applyNotificationTransaction(
-  transaction: NormalizedTeamTransaction
+  transaction: AppStoreTeamTransaction
 ): Promise<void> {
+  if (!transaction.originalTransactionId) {
+    throw new HttpsError(
+      "failed-precondition",
+      "The App Store transaction is missing an identifier."
+    );
+  }
   assertSafeDocumentId(transaction.originalTransactionId);
 
   const db = getFirestore();
@@ -764,7 +808,10 @@ async function applyNotificationTransaction(
     return;
   }
 
-  await syncEntitlementForOwner(ownerUserId, transaction);
+  await syncEntitlementForOwner(
+    ownerUserId,
+    normalizeVerifiedTeamTransaction(transaction, ownerUserId)
+  );
 }
 
 export const appStoreServerNotifications = onRequest(async (request, response) => {

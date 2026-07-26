@@ -1581,7 +1581,12 @@ struct TeamWorkspaceView: View {
                 statusMessage = "Team created."
                 scrollResetToken += 1
             } catch TeamFirebaseServiceError.teamPlanRequired {
-                paywallManager.showTeamPaywall()
+                paywallManager.showTeamPaywall(
+                    message: paywallManager.hasIgnoredLocalTeamTransaction
+                        ? "Your previous Xcode test purchase is not a real subscription. Choose a Team plan to subscribe through Apple."
+                        : nil,
+                    isError: paywallManager.hasIgnoredLocalTeamTransaction
+                )
             } catch {
                 statusMessage = TeamFirebaseService.userFacingErrorMessage(for: error)
                 statusMessageIsError = true

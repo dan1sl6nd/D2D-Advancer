@@ -386,16 +386,26 @@ final class TeamFirebaseService: ObservableObject {
         #if DEBUG
         if FirebaseEmulatorConfiguration.isEnabled {
             signedTransaction = "D2D_EMULATOR_TEAM_ENTITLEMENT"
-        } else if let currentTransaction = await PaywallManager.shared.activeTeamTransactionJWS() {
-            signedTransaction = currentTransaction
+        } else if let currentTransaction = await PaywallManager.shared.activeTeamTransaction() {
+            switch currentTransaction.eligibility {
+            case .eligible, .missingAccountToken:
+                signedTransaction = currentTransaction.jwsRepresentation
+            case .xcode:
+                throw TeamFirebaseServiceError.xcodeTeamPlan
+            }
         } else {
             throw TeamFirebaseServiceError.teamPlanRequired
         }
         #else
-        guard let currentTransaction = await PaywallManager.shared.activeTeamTransactionJWS() else {
+        guard let currentTransaction = await PaywallManager.shared.activeTeamTransaction() else {
             throw TeamFirebaseServiceError.teamPlanRequired
         }
-        signedTransaction = currentTransaction
+        switch currentTransaction.eligibility {
+        case .eligible, .missingAccountToken:
+            signedTransaction = currentTransaction.jwsRepresentation
+        case .xcode:
+            throw TeamFirebaseServiceError.xcodeTeamPlan
+        }
         #endif
 
         let teamId = try await TeamBillingService.shared.createTeam(
@@ -1383,7 +1393,7 @@ final class TeamFirebaseService: ObservableObject {
         )
         batch.deleteDocument(teamProfileRef(userId: user.uid))
 
-        for teamMember in members {
+        for teamMember in members where teamMember.status == .active {
             batch.setData(
                 memberRemovalData(removedAt: now),
                 forDocument: memberRef(teamId: team.id, userId: teamMember.userId),
@@ -1645,6 +1655,7 @@ enum TeamFirebaseServiceError: LocalizedError {
     case teamFull
     case teamPlanRequired
     case writeBlocked
+    case xcodeTeamPlan
 
     var errorDescription: String? {
         switch self {
@@ -1670,6 +1681,8 @@ enum TeamFirebaseServiceError: LocalizedError {
             return "Choose an active Team plan before creating a workspace."
         case .writeBlocked:
             return "Team edits are currently read-only."
+        case .xcodeTeamPlan:
+            return "This is an Xcode test subscription. Production Team workspaces require an App Store Sandbox or live Team subscription."
         }
     }
 }

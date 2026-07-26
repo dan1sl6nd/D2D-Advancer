@@ -65,7 +65,8 @@ export function teamAppAccountTokenForUser(ownerUserId: string): string {
 }
 
 export function normalizeTeamTransaction(
-  transaction: AppStoreTeamTransaction
+  transaction: AppStoreTeamTransaction,
+  fallbackAppAccountToken?: string
 ): NormalizedTeamTransaction {
   if (!transaction.productId || !TEAM_PRODUCT_IDS.has(transaction.productId)) {
     throw new Error("A current Team subscription is required.");
@@ -73,7 +74,8 @@ export function normalizeTeamTransaction(
   if (!transaction.originalTransactionId || !transaction.transactionId) {
     throw new Error("The App Store transaction is missing an identifier.");
   }
-  if (!transaction.appAccountToken) {
+  const appAccountToken = transaction.appAccountToken ?? fallbackAppAccountToken;
+  if (!appAccountToken) {
     throw new Error("The Team purchase is not linked to this account.");
   }
   if (!transaction.environment) {
@@ -84,7 +86,7 @@ export function normalizeTeamTransaction(
   }
 
   return {
-    appAccountToken: transaction.appAccountToken,
+    appAccountToken,
     environment: transaction.environment,
     expiresAtMillis: transaction.expiresDate as number,
     originalTransactionId: transaction.originalTransactionId,

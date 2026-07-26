@@ -69,6 +69,27 @@ describe("Team entitlement migration policy", () => {
     }));
   });
 
+  it("migrates a verified legacy Team transaction with a deterministic owner token", () => {
+    const ownerToken = teamAppAccountTokenForUser("legacy-owner");
+    const legacyTransaction = {
+      environment: "Sandbox",
+      expiresDate: now + 60_000,
+      originalTransactionId: "1000000010",
+      productId: "com.d2dadvancer.team.monthly",
+      signedDate: now,
+      transactionId: "1000000011"
+    };
+
+    assert.throws(
+      () => normalizeTeamTransaction(legacyTransaction),
+      /not linked/i
+    );
+    assert.equal(
+      normalizeTeamTransaction(legacyTransaction, ownerToken).appAccountToken,
+      ownerToken
+    );
+  });
+
   it("never lets an older renewal overwrite the current Team entitlement", () => {
     const newest = normalizeTeamTransaction({
       appAccountToken: "0d111c55-7c4d-4f56-8c73-04aa7ef3c2a1",

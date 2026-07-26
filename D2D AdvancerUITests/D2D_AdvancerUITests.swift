@@ -1519,6 +1519,45 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testTeamExistingOwnerCanCreateWorkspaceWithActiveSubscription() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+
+        let app = makeExistingTeamAccountApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForText(app, "Create or Accept Team", timeout: 25)
+        tapButton(app, "teamCreateTeamButton", timeout: 12)
+        waitForText(app, "Team plan active", timeout: 35)
+    }
+
+    @MainActor
+    func testTeamExistingOwnerCreateReachesTrustedBillingOutcome() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+
+        let app = makeExistingTeamAccountApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForText(app, "Create or Accept Team", timeout: 25)
+        tapButton(app, "teamCreateTeamButton", timeout: 12)
+
+        let activePlan = app.staticTexts["Team plan active"]
+        let ignoredLocalPurchase = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "previous Xcode test purchase")
+        ).firstMatch
+        let deadline = Date().addingTimeInterval(35)
+        while Date() < deadline, !activePlan.exists, !ignoredLocalPurchase.exists {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+
+        XCTAssertTrue(
+            activePlan.exists || ignoredLocalPurchase.exists,
+            "Create Team must either activate a server-verified Apple subscription or route a stale local purchase to the real Team paywall."
+        )
+    }
+
+    @MainActor
     func testTeamExistingAccountPhysicalAcceptInvite() throws {
         try requireExistingTeamAccountPhysicalUITestHarness()
         guard teamTestConfigBool(

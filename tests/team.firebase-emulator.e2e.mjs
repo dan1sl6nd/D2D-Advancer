@@ -91,6 +91,26 @@ test("created owner and rep Firebase accounts can create and join a team", async
       repUserId: rep.uid,
       technicianUserId: technician.uid
     });
+
+    await closeOwnerTeam(owner.db, {
+      teamId,
+      ownerUserId: owner.uid
+    });
+    const replacementTeamId = await createOwnerTeam(owner.functions);
+    assert.notEqual(
+      replacementTeamId,
+      teamId,
+      "closing a workspace allows the same verified owner entitlement to create a replacement"
+    );
+
+    const replacementProfile = await getDoc(
+      doc(owner.db, "users", owner.uid, "teamProfile", "current")
+    );
+    assert.equal(
+      replacementProfile.data()?.teamId,
+      replacementTeamId,
+      "owner profile points to the replacement workspace"
+    );
   } finally {
     await Promise.allSettled([
       deleteApp(owner.app),
@@ -144,6 +164,56 @@ async function createOwnerTeam(functions) {
   assert.equal(result.data.memberLimit, 3);
   assert.ok(result.data.teamId);
   return result.data.teamId;
+}
+
+async function closeOwnerTeam(db, { teamId, ownerUserId }) {
+  const now = Timestamp.now();
+  const members = await getDocs(collection(db, "teams", teamId, "members"));
+  const activeDutySessions = await getDocs(
+    query(collection(db, "teams", teamId, "dutySessions"), where("status", "==", "active"))
+  );
+  const batch = writeBatch(db);
+
+  batch.update(doc(db, "teams", teamId), {
+    planStatus: "paused",
+    updatedAt: now
+  });
+  batch.delete(doc(db, "users", ownerUserId, "teamProfile", "current"));
+  for (const member of members.docs) {
+    if (member.data().status !== "active") {
+      continue;
+    }
+    batch.update(member.ref, {
+      status: "removed",
+      removedAt: now,
+      updatedAt: now
+    });
+  }
+  for (const session of activeDutySessions.docs) {
+    batch.update(session.ref, {
+      status: "ended",
+      endedAt: now,
+      lastLocationAt: now,
+      deleteAfter: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    });
+  }
+  batch.set(doc(db, "teams", teamId, "activityLog", "team-closed"), {
+    teamId,
+    actorUserId: ownerUserId,
+    kind: "team_closed",
+    subjectId: teamId,
+    subjectTitle: "E2E Team",
+    targetUserId: ownerUserId,
+    createdAt: now
+  });
+
+  await batch.commit();
+
+  await assert.rejects(
+    () => getDoc(doc(db, "teams", teamId)),
+    /permission|PERMISSION_DENIED/i,
+    "owner loses access to the closed workspace before creating a replacement"
+  );
 }
 
 async function createInvite(db, { teamId, ownerUserId, inviteCode }) {

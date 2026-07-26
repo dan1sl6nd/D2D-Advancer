@@ -42,6 +42,55 @@ enum SubscriptionProductCatalog {
     }
 }
 
+enum TeamStoreTransactionServerEligibility: Equatable {
+    case eligible
+    case missingAccountToken
+    case xcode
+
+    fileprivate var selectionPriority: Int {
+        switch self {
+        case .eligible:
+            return 2
+        case .missingAccountToken:
+            return 1
+        case .xcode:
+            return 0
+        }
+    }
+
+    var canAttemptServerVerification: Bool {
+        self != .xcode
+    }
+
+    func countsAsStoreEntitlement(allowsLocalStoreKit: Bool) -> Bool {
+        self != .xcode || allowsLocalStoreKit
+    }
+
+    static func evaluate(environment: AppStore.Environment, hasAppAccountToken: Bool) -> Self {
+        if environment == .xcode {
+            return .xcode
+        }
+        return hasAppAccountToken ? .eligible : .missingAccountToken
+    }
+}
+
+struct TeamStoreTransactionCandidate {
+    let jwsRepresentation: String
+    let eligibility: TeamStoreTransactionServerEligibility
+    let expirationDate: Date
+    let originalTransactionID: UInt64
+
+    func isPreferred(over current: Self?) -> Bool {
+        guard let current else {
+            return true
+        }
+        if eligibility.selectionPriority != current.eligibility.selectionPriority {
+            return eligibility.selectionPriority > current.eligibility.selectionPriority
+        }
+        return expirationDate > current.expirationDate
+    }
+}
+
 class PaywallManager: ObservableObject {
     enum Offering: Equatable {
         case solo
@@ -75,6 +124,8 @@ class PaywallManager: ObservableObject {
     @Published private(set) var offering: Offering = .solo
     @Published private(set) var hasActiveTeamStoreSubscription = false
     @Published private(set) var hasVerifiedTeamBillingEntitlement = false
+    @Published private(set) var activeTeamServerEligibility: TeamStoreTransactionServerEligibility?
+    @Published private(set) var hasIgnoredLocalTeamTransaction = false
     @Published private(set) var eligibleTrialDurations: [String: String] = [:]
 
     private let userDefaults = UserDefaults.standard
@@ -90,6 +141,9 @@ class PaywallManager: ObservableObject {
     }
     private var isStoreKitDisabledForUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-disableStoreKitForUITests")
+    }
+    private var allowsLocalStoreKitTransactions: Bool {
+        ProcessInfo.processInfo.arguments.contains("-allowLocalStoreKitTransactions")
     }
 
     private var updateListenerTask: Task<Void, Error>?
@@ -166,10 +220,10 @@ class PaywallManager: ObservableObject {
         return false
     }
 
-    func showTeamPaywall() {
+    func showTeamPaywall(message: String? = nil, isError: Bool = false) {
         offering = .team
-        purchaseStatusMessage = nil
-        purchaseStatusIsError = false
+        purchaseStatusMessage = message
+        purchaseStatusIsError = isError
         shouldShowPaywall = true
     }
 
@@ -501,6 +555,21 @@ class PaywallManager: ObservableObject {
             case .success(let verification):
                 let transaction = try checkVerified(verification)
                 if plan.isTeamPlan {
+                    let eligibility = TeamStoreTransactionServerEligibility.evaluate(
+                        environment: transaction.environment,
+                        hasAppAccountToken: transaction.appAccountToken != nil
+                    )
+                    guard eligibility.countsAsStoreEntitlement(
+                        allowsLocalStoreKit: allowsLocalStoreKitTransactions
+                    ) else {
+                        await transaction.finish()
+                        await checkSubscriptionStatus(syncTeamBilling: false)
+                        setPurchaseStatus(
+                            "A local Xcode test purchase cannot activate a real Team. Use this screen without the Local StoreKit scheme to buy through Apple.",
+                            isError: true
+                        )
+                        return
+                    }
                     let linkingError: Error?
                     do {
                         let entitlement = try await TeamBillingService.shared.syncTeamEntitlement(
@@ -589,11 +658,29 @@ class PaywallManager: ObservableObject {
             try await AppStore.sync()
             await checkSubscriptionStatus()
 
-            if offering == .team, hasActiveTeamStoreSubscription, !hasVerifiedTeamBillingEntitlement {
+            if offering == .team, hasIgnoredLocalTeamTransaction, !hasActiveTeamStoreSubscription {
                 setPurchaseStatus(
-                    "Apple found a Team subscription, but it is not linked to this signed-in owner. Use the D2D account that purchased it, then try Restore Purchases again.",
+                    "A local Xcode test purchase was ignored. Choose a Team plan below to subscribe through the App Store.",
                     isError: true
                 )
+            } else if offering == .team, hasActiveTeamStoreSubscription, !hasVerifiedTeamBillingEntitlement {
+                switch activeTeamServerEligibility {
+                case .xcode:
+                    setPurchaseStatus(
+                        "This is an Xcode test subscription. Use an App Store Sandbox or live Team subscription for a real workspace.",
+                        isError: true
+                    )
+                case .missingAccountToken:
+                    setPurchaseStatus(
+                        "Apple found an older Team subscription. Restore it while signed in to link it to this owner.",
+                        isError: true
+                    )
+                case .eligible, .none:
+                    setPurchaseStatus(
+                        "Apple found a Team subscription, but it is not linked to this signed-in owner. Use the D2D account that purchased it, then try Restore Purchases again.",
+                        isError: true
+                    )
+                }
             } else if offering == .team, hasVerifiedTeamBillingEntitlement {
                 setPurchaseStatus("Team purchase restored and verified for this owner.")
                 print("✅ Team purchase restored")
@@ -629,9 +716,8 @@ class PaywallManager: ObservableObject {
         print("🔍 Checking subscription status...")
         var hasActiveSubscription = false
         var hasActiveTeamSubscription = false
-        var teamSignedTransaction: String?
-        var teamOriginalTransactionID: UInt64?
-        var teamExpirationDate = Date.distantPast
+        var ignoredLocalTeamTransaction = false
+        var selectedTeamTransaction: TeamStoreTransactionCandidate?
 
         for await result in Transaction.currentEntitlements {
             do {
@@ -645,14 +731,31 @@ class PaywallManager: ObservableObject {
                     continue
                 }
 
+                let teamEligibility = isTeamProductID(transaction.productID)
+                    ? TeamStoreTransactionServerEligibility.evaluate(
+                        environment: transaction.environment,
+                        hasAppAccountToken: transaction.appAccountToken != nil
+                    )
+                    : nil
+                if transaction.environment == .xcode && !allowsLocalStoreKitTransactions {
+                    if teamEligibility != nil {
+                        ignoredLocalTeamTransaction = true
+                    }
+                    print("⚠️ Ignoring local Xcode subscription outside the Local StoreKit scheme: \(transaction.productID)")
+                    continue
+                }
+
                 hasActiveSubscription = true
-                if isTeamProductID(transaction.productID) {
+                if let teamEligibility {
                     hasActiveTeamSubscription = true
-                    let expirationDate = transaction.expirationDate ?? .distantFuture
-                    if expirationDate > teamExpirationDate {
-                        teamExpirationDate = expirationDate
-                        teamSignedTransaction = result.jwsRepresentation
-                        teamOriginalTransactionID = transaction.originalID
+                    let candidate = TeamStoreTransactionCandidate(
+                        jwsRepresentation: result.jwsRepresentation,
+                        eligibility: teamEligibility,
+                        expirationDate: transaction.expirationDate ?? .distantFuture,
+                        originalTransactionID: transaction.originalID
+                    )
+                    if candidate.isPreferred(over: selectedTeamTransaction) {
+                        selectedTeamTransaction = candidate
                     }
                 }
                 print("✅ Found active subscription: \(transaction.productID)")
@@ -666,32 +769,38 @@ class PaywallManager: ObservableObject {
         }
 
         hasActiveTeamStoreSubscription = hasActiveTeamSubscription
+        activeTeamServerEligibility = selectedTeamTransaction?.eligibility
+        hasIgnoredLocalTeamTransaction = ignoredLocalTeamTransaction
         setPremiumStatus(hasActiveSubscription)
 
         guard hasActiveTeamSubscription,
-              let teamSignedTransaction,
-              let teamOriginalTransactionID,
+              let selectedTeamTransaction,
               let ownerUserID = Auth.auth().currentUser?.uid else {
             clearVerifiedTeamBilling()
             return
         }
 
         let alreadyVerified = verifiedTeamBillingOwnerUserID == ownerUserID
-            && verifiedTeamOriginalTransactionID == teamOriginalTransactionID
+            && verifiedTeamOriginalTransactionID == selectedTeamTransaction.originalTransactionID
         if !alreadyVerified {
             clearVerifiedTeamBilling()
         }
 
         if syncTeamBilling {
+            guard selectedTeamTransaction.eligibility.canAttemptServerVerification else {
+                clearVerifiedTeamBilling()
+                print("⚠️ Team entitlement is not eligible for production server verification: \(selectedTeamTransaction.eligibility)")
+                return
+            }
             do {
                 let entitlement = try await TeamBillingService.shared.syncTeamEntitlement(
-                    signedTransaction: teamSignedTransaction
+                    signedTransaction: selectedTeamTransaction.jwsRepresentation
                 )
                 guard entitlement.planStatus == .active else {
                     throw TeamBillingServiceError.invalidServerResponse
                 }
                 verifiedTeamBillingOwnerUserID = ownerUserID
-                verifiedTeamOriginalTransactionID = teamOriginalTransactionID
+                verifiedTeamOriginalTransactionID = selectedTeamTransaction.originalTransactionID
                 hasVerifiedTeamBillingEntitlement = true
             } catch {
                 print("⚠️ Team entitlement sync deferred: \(error.localizedDescription)")
@@ -700,9 +809,8 @@ class PaywallManager: ObservableObject {
     }
 
     @MainActor
-    func activeTeamTransactionJWS() async -> String? {
-        var selectedJWS: String?
-        var selectedExpirationDate = Date.distantPast
+    func activeTeamTransaction() async -> TeamStoreTransactionCandidate? {
+        var selectedCandidate: TeamStoreTransactionCandidate?
         for await result in Transaction.currentEntitlements {
             do {
                 let transaction = try checkVerified(result)
@@ -711,16 +819,28 @@ class PaywallManager: ObservableObject {
                       transaction.expirationDate.map({ $0 > Date() }) ?? true else {
                     continue
                 }
-                let expirationDate = transaction.expirationDate ?? .distantFuture
-                if expirationDate > selectedExpirationDate {
-                    selectedExpirationDate = expirationDate
-                    selectedJWS = result.jwsRepresentation
+                let candidate = TeamStoreTransactionCandidate(
+                    jwsRepresentation: result.jwsRepresentation,
+                    eligibility: TeamStoreTransactionServerEligibility.evaluate(
+                        environment: transaction.environment,
+                        hasAppAccountToken: transaction.appAccountToken != nil
+                    ),
+                    expirationDate: transaction.expirationDate ?? .distantFuture,
+                    originalTransactionID: transaction.originalID
+                )
+                guard candidate.eligibility.countsAsStoreEntitlement(
+                    allowsLocalStoreKit: allowsLocalStoreKitTransactions
+                ) else {
+                    continue
+                }
+                if candidate.isPreferred(over: selectedCandidate) {
+                    selectedCandidate = candidate
                 }
             } catch {
                 print("⚠️ Ignoring unverified Team transaction: \(error.localizedDescription)")
             }
         }
-        return selectedJWS
+        return selectedCandidate
     }
 
     /// Force refresh subscription status - useful for manual checks
@@ -735,15 +855,23 @@ class PaywallManager: ObservableObject {
                 do {
                     let transaction = try self.checkVerified(result)
                     if self.isTeamProductID(transaction.productID) {
-                        do {
-                            let entitlement = try await TeamBillingService.shared.syncTeamEntitlement(
-                                signedTransaction: result.jwsRepresentation
-                            )
-                            if entitlement.planStatus == .active {
-                                await self.markTeamBillingVerified(for: transaction)
+                        let eligibility = TeamStoreTransactionServerEligibility.evaluate(
+                            environment: transaction.environment,
+                            hasAppAccountToken: transaction.appAccountToken != nil
+                        )
+                        if eligibility == .eligible {
+                            do {
+                                let entitlement = try await TeamBillingService.shared.syncTeamEntitlement(
+                                    signedTransaction: result.jwsRepresentation
+                                )
+                                if entitlement.planStatus == .active {
+                                    await self.markTeamBillingVerified(for: transaction)
+                                }
+                            } catch {
+                                print("⚠️ Team transaction will retry server sync later: \(error.localizedDescription)")
                             }
-                        } catch {
-                            print("⚠️ Team transaction will retry server sync later: \(error.localizedDescription)")
+                        } else {
+                            print("⚠️ Team transaction skipped server sync: \(eligibility)")
                         }
                     }
                     await transaction.finish()
@@ -797,6 +925,8 @@ class PaywallManager: ObservableObject {
     func resetAll() {
         hasTeamWorkspaceEntitlement = false
         hasActiveTeamStoreSubscription = false
+        activeTeamServerEligibility = nil
+        hasIgnoredLocalTeamTransaction = false
         clearVerifiedTeamBilling()
         eligibleTrialDurations = [:]
         resetPremiumStatus()

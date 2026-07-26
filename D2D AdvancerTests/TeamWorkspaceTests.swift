@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import StoreKit
 @testable import D2D_Advancer
 
 struct TeamWorkspaceTests {
@@ -286,6 +287,72 @@ struct TeamWorkspaceTests {
         ])
         #expect(PaywallManager.trialDurationText(value: 2, unit: .week) == "14 days")
         #expect(PaywallManager.trialDurationText(value: 1, unit: .month) == "1 month")
+    }
+
+    @Test("Server-verifiable Team transactions outrank longer-lived Xcode receipts")
+    func teamTransactionSelectionPrioritizesTrustBeforeExpiration() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let xcode = TeamStoreTransactionCandidate(
+            jwsRepresentation: "xcode",
+            eligibility: .xcode,
+            expirationDate: now.addingTimeInterval(365 * 24 * 60 * 60),
+            originalTransactionID: 1
+        )
+        let legacySandbox = TeamStoreTransactionCandidate(
+            jwsRepresentation: "legacy-sandbox",
+            eligibility: .missingAccountToken,
+            expirationDate: now.addingTimeInterval(60),
+            originalTransactionID: 2
+        )
+        let linkedSandbox = TeamStoreTransactionCandidate(
+            jwsRepresentation: "linked-sandbox",
+            eligibility: .eligible,
+            expirationDate: now.addingTimeInterval(30),
+            originalTransactionID: 3
+        )
+
+        #expect(legacySandbox.isPreferred(over: xcode))
+        #expect(linkedSandbox.isPreferred(over: legacySandbox))
+        #expect(!xcode.isPreferred(over: linkedSandbox))
+    }
+
+    @Test("Team transaction eligibility isolates Xcode while allowing legacy migration")
+    func teamTransactionEligibilityRoutesServerVerification() {
+        #expect(
+            TeamStoreTransactionServerEligibility.evaluate(
+                environment: .xcode,
+                hasAppAccountToken: true
+            ) == .xcode
+        )
+        #expect(
+            TeamStoreTransactionServerEligibility.evaluate(
+                environment: .sandbox,
+                hasAppAccountToken: false
+            ) == .missingAccountToken
+        )
+        #expect(
+            TeamStoreTransactionServerEligibility.evaluate(
+                environment: .production,
+                hasAppAccountToken: true
+            ) == .eligible
+        )
+        #expect(TeamStoreTransactionServerEligibility.missingAccountToken.canAttemptServerVerification)
+        #expect(!TeamStoreTransactionServerEligibility.xcode.canAttemptServerVerification)
+        #expect(
+            TeamStoreTransactionServerEligibility.xcode.countsAsStoreEntitlement(
+                allowsLocalStoreKit: true
+            )
+        )
+        #expect(
+            !TeamStoreTransactionServerEligibility.xcode.countsAsStoreEntitlement(
+                allowsLocalStoreKit: false
+            )
+        )
+        #expect(
+            TeamStoreTransactionServerEligibility.eligible.countsAsStoreEntitlement(
+                allowsLocalStoreKit: false
+            )
+        )
     }
 
     @Test func ownerAndRepMemberRecordsUseExpectedRolesAndInviteLink() {
