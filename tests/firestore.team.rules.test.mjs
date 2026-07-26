@@ -654,16 +654,12 @@ describe("D2D team Firestore rules", () => {
     }, { merge: true });
     batch.delete(doc(ownerDb, "users/owner-1/teamProfile/current"));
     batch.set(doc(ownerDb, "teams/team-1/members/owner-1"), {
-      ...ownerMemberData("owner-1", createdAt),
       status: "removed",
-      workType: "owner",
       removedAt: closeAt,
       updatedAt: closeAt
     }, { merge: true });
     batch.set(doc(ownerDb, "teams/team-1/members/pending-rep-INVITE01"), {
-      ...pendingMemberData(createdAt),
       status: "removed",
-      workType: "sales_rep",
       removedAt: closeAt,
       updatedAt: closeAt
     }, { merge: true });

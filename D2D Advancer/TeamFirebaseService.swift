@@ -1279,7 +1279,11 @@ final class TeamFirebaseService: ObservableObject {
 
         let removed = TeamMember.removed(memberToRemove, removedAt: now)
         let batch = db.batch()
-        batch.setData(memberData(removed, updatedAt: now), forDocument: memberRef(teamId: team.id, userId: memberToRemove.userId), merge: true)
+        batch.setData(
+            memberRemovalData(removedAt: now),
+            forDocument: memberRef(teamId: team.id, userId: memberToRemove.userId),
+            merge: true
+        )
         addActivityLog(
             to: batch,
             teamId: team.id,
@@ -1307,7 +1311,6 @@ final class TeamFirebaseService: ObservableObject {
             throw TeamFirebaseServiceError.writeBlocked
         }
 
-        let removed = TeamMember.removed(member, removedAt: now)
         let batch = db.batch()
         var pendingWriteCount = 3
 
@@ -1328,7 +1331,11 @@ final class TeamFirebaseService: ObservableObject {
             pendingWriteCount += 1
         }
 
-        batch.setData(memberData(removed, updatedAt: now), forDocument: memberRef(teamId: team.id, userId: member.userId), merge: true)
+        batch.setData(
+            memberRemovalData(removedAt: now),
+            forDocument: memberRef(teamId: team.id, userId: member.userId),
+            merge: true
+        )
         batch.deleteDocument(teamProfileRef(userId: user.uid))
         addActivityLog(
             to: batch,
@@ -1377,8 +1384,11 @@ final class TeamFirebaseService: ObservableObject {
         batch.deleteDocument(teamProfileRef(userId: user.uid))
 
         for teamMember in members {
-            let removed = TeamMember.removed(teamMember, removedAt: now)
-            batch.setData(memberData(removed, updatedAt: now), forDocument: memberRef(teamId: team.id, userId: teamMember.userId), merge: true)
+            batch.setData(
+                memberRemovalData(removedAt: now),
+                forDocument: memberRef(teamId: team.id, userId: teamMember.userId),
+                merge: true
+            )
             pendingWriteCount += 1
 
             if teamMember.isPendingInvite, let inviteCode = teamMember.acceptedInviteId {
@@ -2558,6 +2568,14 @@ private extension TeamFirebaseService {
             TeamFirebaseSchema.Field.acceptedInviteId: TeamFirestoreMergePayloadValue.omittedWhenNil(member.acceptedInviteId),
             TeamFirebaseSchema.Field.updatedAt: Timestamp(date: updatedAt)
         ].filterNilValues()
+    }
+
+    func memberRemovalData(removedAt: Date) -> [String: Any] {
+        [
+            TeamFirebaseSchema.Field.status: TeamMemberStatus.removed.rawValue,
+            TeamFirebaseSchema.Field.removedAt: Timestamp(date: removedAt),
+            TeamFirebaseSchema.Field.updatedAt: Timestamp(date: removedAt)
+        ]
     }
 
     func inviteData(
