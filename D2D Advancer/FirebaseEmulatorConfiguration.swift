@@ -33,9 +33,46 @@ enum FirebaseBootstrap {
                 }
             }
         }
+        if ProcessInfo.processInfo.arguments.contains("-verifyStrictTeamCallable") {
+            verifyStrictTeamCallableWhenAuthenticated()
+        }
         #endif
         didConfigure = true
     }
+
+    #if DEBUG
+    private static func verifyStrictTeamCallableWhenAuthenticated() {
+        Task {
+            for _ in 0..<60 where Auth.auth().currentUser == nil {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+
+            guard Auth.auth().currentUser != nil else {
+                print("🛡️ Strict Team callable diagnostic failed: Firebase authentication was not restored")
+                return
+            }
+
+            do {
+                _ = try await Functions.functions()
+                    .httpsCallable("syncTeamEntitlement")
+                    .call(["signedTransaction": "app-check-diagnostic"])
+                print("🛡️ Strict Team callable diagnostic failed: invalid transaction was unexpectedly accepted")
+            } catch {
+                let functionsError = error as NSError
+                if functionsError.domain == FunctionsErrorDomain,
+                   functionsError.code == FunctionsErrorCode.invalidArgument.rawValue {
+                    print("🛡️ Strict Team callable diagnostic passed: App Attest reached backend validation")
+                } else {
+                    print(
+                        "🛡️ Strict Team callable diagnostic failed: "
+                            + "\(functionsError.domain) code \(functionsError.code) "
+                            + functionsError.localizedDescription
+                    )
+                }
+            }
+        }
+    }
+    #endif
 
     private static func configureAppCheckIfNeeded() {
         guard !FirebaseEmulatorConfiguration.isEnabled else { return }
