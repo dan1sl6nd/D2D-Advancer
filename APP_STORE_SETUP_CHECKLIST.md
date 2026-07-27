@@ -186,13 +186,13 @@ Suggested review path:
 
 - [x] Production Firestore rules exactly match the tested 689-line repository rules; both normalized files have SHA-256 `94f4b2b61e4619ab85bb4480bf0cf7aaf1e3406a0a580585c392770fc51d5185`.
 - [x] Production Firestore composite indexes match the three repository indexes. Production TTL policies are active for activity, duty-location, duty-session, notification, rate-limit, and usage-event expiry fields.
-- [x] All six Firebase Cloud Functions are deployed from the tested release source and report `ACTIVE` with common source hash `c8d151e6bc8ae37fca635d0eac58f182d2d3e03f`. A production unauthenticated `createTeamWorkspace` call returned HTTP 401 before any write; invalid, replayed, and expired Team transactions pass against this exact source in the local Functions suite.
+- [x] All six Firebase Cloud Functions report `ACTIVE`. The App Check-enforced `createTeamWorkspace` and `syncTeamEntitlement` callables share source hash `dfc862d7c4cc90056e33dc91c6318c79119463dd`; the other four functions were intentionally left unchanged. Credential-free production requests to both privileged callables returned HTTP 401 before any write, and all 17 local Functions tests passed against the deployed source.
 - [x] Keep `firebase-functions` 7.2.5 for release 1.3. Version 7.3.0 adds extension-migration APIs unused by this backend and requires Firebase CLI 15.24.0 for those features; upgrade the SDK and the current 15.23.0 CLI together after release.
 - [x] Production and Sandbox App Store Server Notifications V2 URLs point to the deployed notification function.
 - [ ] An Apple-signed Sandbox notification reaches the function and updates the matching Team entitlement.
 - [x] Firebase Authentication has Sign in with Apple enabled; Email/Password is also enabled for Team test identities.
 - [x] The production Firebase project is on Blaze and all six deployed functions use the restricted `d2d-team-runtime` service account with bounded memory, concurrency, and instance counts.
-- [ ] Firebase App Check enforcement remains disabled through `D2D_ENFORCE_TEAM_APP_CHECK=false`; enable it only after the submitted client build and real devices are proven with the configured provider.
+- [x] The iOS app is registered with App Attest in Firebase App Check, an iPhone 17 physical build produced a valid production token, and `D2D_ENFORCE_TEAM_APP_CHECK=true` was deployed to `createTeamWorkspace` and `syncTeamEntitlement`. Both production endpoints reject credential-free requests with HTTP 401.
 - [ ] CloudKit production schema is deployed and query/index requirements are verified.
 - [x] App Store Connect version metadata, age-rating questionnaire, content-rights answers, export compliance, privacy answers, and review contact are complete.
 - [x] Uploaded build `1.3 (3)` is selected and present in the five-item review draft.

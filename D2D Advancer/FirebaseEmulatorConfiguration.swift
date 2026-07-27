@@ -5,6 +5,12 @@ import FirebaseCore
 import FirebaseFirestore
 import FirebaseFunctions
 
+private final class D2DAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
+    func createProvider(with app: FirebaseApp) -> AppCheckProvider? {
+        AppAttestProvider(app: app)
+    }
+}
+
 enum FirebaseBootstrap {
     private static var didConfigure = false
 
@@ -17,6 +23,17 @@ enum FirebaseBootstrap {
         configureAppCheckIfNeeded()
         FirebaseApp.configure()
         print("🔥 Firebase configured")
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-verifyAppCheckToken") {
+            AppCheck.appCheck().token(forcingRefresh: true) { token, error in
+                if let error {
+                    print("🛡️ Firebase App Check diagnostic failed: \(error.localizedDescription)")
+                } else if let token {
+                    print("🛡️ Firebase App Check diagnostic passed; token expires \(token.expirationDate)")
+                }
+            }
+        }
+        #endif
         didConfigure = true
     }
 
@@ -27,8 +44,8 @@ enum FirebaseBootstrap {
         AppCheck.setAppCheckProviderFactory(AppCheckDebugProviderFactory())
         print("🛡️ Firebase App Check debug provider configured for Simulator")
         #else
-        AppCheck.setAppCheckProviderFactory(DeviceCheckProviderFactory())
-        print("🛡️ Firebase App Check DeviceCheck provider configured")
+        AppCheck.setAppCheckProviderFactory(D2DAppCheckProviderFactory())
+        print("🛡️ Firebase App Check App Attest provider configured")
         #endif
     }
 }

@@ -22,5 +22,7 @@
 	<array>
 		<string>applinks:d2d-advancer.web.app</string>
 	</array>
+	<key>com.apple.developer.devicecheck.appattest-environment</key>
+	<string>production</string>
 </dict>
 </plist>

@@ -116,8 +116,8 @@ Do not deploy only the hardened Firestore rules while the production Team Functi
 
     TTL deletion is asynchronous and is normally completed within roughly 24 hours after a document expires. TTL deletes are billed document deletes.
 
-11. Ship an iOS build with App Check configured. The Simulator uses the debug provider; physical devices use DeviceCheck.
-12. Register the iOS app in Firebase App Check, register only required Simulator debug tokens, and monitor App Check metrics until supported builds consistently send valid tokens.
+11. Ship an iOS build with App Check configured. The Simulator uses the debug provider; physical devices use App Attest with the production App Attest entitlement.
+12. Register the iOS app with App Attest in Firebase App Check, register only required Simulator debug tokens, and monitor App Check metrics until supported builds consistently send valid tokens. Firebase does not accept App Attest sandbox tokens, so physical development builds must also use the production entitlement.
 13. Change `D2D_ENFORCE_TEAM_APP_CHECK=true`, redeploy the callable Functions, and test one owner and one worker on supported physical builds.
 
 Enabling App Check enforcement before the client rollout is verified will break Team calls for installed older builds. That is not security; it is a self-inflicted outage.
