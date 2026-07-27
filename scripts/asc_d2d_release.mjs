@@ -7,7 +7,7 @@ import { SignJWT, importPKCS8 } from "jose";
 const ROOT = process.cwd();
 const BUNDLE_ID = "dan1sland.D2D-Advancer";
 const VERSION = "1.3";
-const BUILD_NUMBER = "3";
+const BUILD_NUMBER = "4";
 const LOCALE = "en-US";
 const IPHONE_SCREENSHOT_DISPLAY_TYPE = "APP_IPHONE_67";
 const IPAD_SCREENSHOT_DISPLAY_TYPE = "APP_IPAD_PRO_3GEN_129";
