@@ -5,6 +5,7 @@ const {
   cleanRequiredText,
   deriveTeamEntitlementState,
   normalizeTeamTransaction,
+  selectTeamWorkspaceTransaction,
   shouldApplyTeamTransaction,
   teamAppAccountTokenForUser,
   TEAM_GRACE_PERIOD_MS
@@ -145,6 +146,57 @@ describe("Team entitlement migration policy", () => {
     assert.equal(shouldApplyTeamTransaction(existing, renewal), true);
     assert.equal(shouldApplyTeamTransaction(existing, revocation), true);
     assert.equal(shouldApplyTeamTransaction({ ...existing, revocationAtMillis: now }, base), false);
+  });
+
+  it("creates a workspace from the newest stored renewal when the client receipt is stale", () => {
+    const incoming = normalizeTeamTransaction({
+      appAccountToken: "0d111c55-7c4d-4f56-8c73-04aa7ef3c2a1",
+      environment: "Sandbox",
+      expiresDate: now + 60_000,
+      originalTransactionId: "1000000001",
+      productId: "com.d2dadvancer.team3.monthly",
+      signedDate: now,
+      transactionId: "1000000002"
+    });
+    const storedRenewal = {
+      ...incoming,
+      expiresAtMillis: now + 120_000,
+      signedAtMillis: now + 1_000,
+      transactionId: "1000000003"
+    };
+
+    const selection = selectTeamWorkspaceTransaction(storedRenewal, incoming, now);
+    assert.equal(selection?.shouldPersistIncoming, false);
+    assert.equal(selection?.transaction.transactionId, storedRenewal.transactionId);
+  });
+
+  it("does not reuse a newer entitlement from a different or revoked subscription", () => {
+    const incoming = normalizeTeamTransaction({
+      appAccountToken: "0d111c55-7c4d-4f56-8c73-04aa7ef3c2a1",
+      environment: "Sandbox",
+      expiresDate: now + 60_000,
+      originalTransactionId: "1000000001",
+      productId: "com.d2dadvancer.team3.monthly",
+      signedDate: now,
+      transactionId: "1000000002"
+    });
+    const differentSubscription = {
+      ...incoming,
+      expiresAtMillis: now + 120_000,
+      originalTransactionId: "1000000099",
+      signedAtMillis: now + 1_000,
+      transactionId: "1000000100"
+    };
+    const revokedRenewal = {
+      ...incoming,
+      expiresAtMillis: now + 120_000,
+      revocationAtMillis: now,
+      signedAtMillis: now + 1_000,
+      transactionId: "1000000003"
+    };
+
+    assert.equal(selectTeamWorkspaceTransaction(differentSubscription, incoming, now), null);
+    assert.equal(selectTeamWorkspaceTransaction(revokedRenewal, incoming, now), null);
   });
 
   it("derives the same stable owner token as the iOS client", () => {

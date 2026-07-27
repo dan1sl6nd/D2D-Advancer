@@ -47,6 +47,11 @@ export interface TeamEntitlementState {
   planStatus: TeamPlanStatus;
 }
 
+export interface TeamWorkspaceTransactionSelection {
+  shouldPersistIncoming: boolean;
+  transaction: NormalizedTeamTransaction;
+}
+
 export function teamAppAccountTokenForUser(ownerUserId: string): string {
   const bytes = Buffer.from(
     createHash("sha256").update(`d2d-team:${ownerUserId}`, "utf8").digest().subarray(0, 16)
@@ -121,6 +126,43 @@ export function shouldApplyTeamTransaction(
   }
 
   return incoming.signedAtMillis >= existing.signedAtMillis;
+}
+
+export function selectTeamWorkspaceTransaction(
+  existing: NormalizedTeamTransaction | null,
+  incoming: NormalizedTeamTransaction,
+  nowMillis: number = Date.now()
+): TeamWorkspaceTransactionSelection | null {
+  const existingVersion = existing === null
+    ? null
+    : {
+      expiresAtMillis: existing.expiresAtMillis,
+      revocationAtMillis: existing.revocationAtMillis,
+      signedAtMillis: existing.signedAtMillis,
+      transactionId: existing.transactionId
+    };
+
+  if (shouldApplyTeamTransaction(existingVersion, incoming)) {
+    return {
+      shouldPersistIncoming: true,
+      transaction: incoming
+    };
+  }
+
+  const isSameSubscription = existing !== null
+    && existing.originalTransactionId === incoming.originalTransactionId
+    && existing.appAccountToken.toLowerCase() === incoming.appAccountToken.toLowerCase();
+  if (
+    isSameSubscription
+    && deriveTeamEntitlementState(existing, nowMillis).planStatus === "active"
+  ) {
+    return {
+      shouldPersistIncoming: false,
+      transaction: existing
+    };
+  }
+
+  return null;
 }
 
 export function deriveTeamEntitlementState(

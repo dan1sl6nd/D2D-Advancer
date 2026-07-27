@@ -41,6 +41,7 @@ import {
   deriveTeamEntitlementState,
   normalizeTeamTransaction,
   NormalizedTeamTransaction,
+  selectTeamWorkspaceTransaction,
   shouldApplyTeamTransaction,
   StoredTeamTransactionVersion,
   teamAppAccountTokenForUser,
@@ -285,6 +286,40 @@ function storedTeamTransactionVersion(
     signedAtMillis: data.signedAt instanceof Timestamp ? data.signedAt.toMillis() : 0,
     transactionId: data.transactionId
   };
+}
+
+function storedNormalizedTeamTransaction(
+  data: Record<string, unknown> | undefined
+): NormalizedTeamTransaction | null {
+  if (
+    !data
+    || typeof data.appAccountToken !== "string"
+    || typeof data.environment !== "string"
+    || !(data.expiresAt instanceof Timestamp)
+    || typeof data.originalTransactionId !== "string"
+    || typeof data.productId !== "string"
+    || !(data.signedAt instanceof Timestamp)
+    || typeof data.transactionId !== "string"
+  ) {
+    return null;
+  }
+
+  try {
+    return normalizeTeamTransaction({
+      appAccountToken: data.appAccountToken,
+      environment: data.environment,
+      expiresDate: data.expiresAt.toMillis(),
+      originalTransactionId: data.originalTransactionId,
+      productId: data.productId,
+      revocationDate: data.revocationAt instanceof Timestamp
+        ? data.revocationAt.toMillis()
+        : undefined,
+      signedDate: data.signedAt.toMillis(),
+      transactionId: data.transactionId
+    });
+  } catch {
+    return null;
+  }
 }
 
 function teamPlanData(
@@ -631,39 +666,48 @@ export const createTeamWorkspace = onCall(TEAM_CALLABLE_OPTIONS, async (request)
       bindingSnapshot.data()?.ownerUserId,
       accountSnapshot.data()?.ownerUserId
     );
-    if (!shouldApplyTeamTransaction(
-      storedTeamTransactionVersion(entitlementSnapshot.data()),
-      verifiedTransaction
-    )) {
+    const entitlementDataSnapshot = entitlementSnapshot.data();
+    const existingTransaction = entitlementDataSnapshot?.ownerUserId === ownerUserId
+      ? storedNormalizedTeamTransaction(entitlementDataSnapshot)
+      : null;
+    const transactionSelection = selectTeamWorkspaceTransaction(
+      existingTransaction,
+      verifiedTransaction,
+      now.getTime()
+    );
+    if (!transactionSelection) {
       throw new HttpsError(
         "failed-precondition",
         "A newer Team renewal is already linked. Restore purchases and try again."
       );
     }
+    const effectiveTransaction = transactionSelection.transaction;
 
     const timestamp = Timestamp.fromDate(now);
     const initialUsage = initialTeamUsageDecision(now.getTime());
     firestoreTransaction.set(bindingRef, {
-      appAccountToken: verifiedTransaction.appAccountToken,
-      environment: verifiedTransaction.environment,
-      latestTransactionId: verifiedTransaction.transactionId,
-      latestSignedAt: Timestamp.fromMillis(verifiedTransaction.signedAtMillis),
+      appAccountToken: effectiveTransaction.appAccountToken,
+      environment: effectiveTransaction.environment,
+      latestTransactionId: effectiveTransaction.transactionId,
+      latestSignedAt: Timestamp.fromMillis(effectiveTransaction.signedAtMillis),
       ownerUserId,
-      productId: verifiedTransaction.productId,
+      productId: effectiveTransaction.productId,
       updatedAt: timestamp
     }, { merge: true });
     firestoreTransaction.set(accountRef, {
-      originalTransactionId: verifiedTransaction.originalTransactionId,
+      originalTransactionId: effectiveTransaction.originalTransactionId,
       ownerUserId,
       updatedAt: timestamp
     }, { merge: true });
-    firestoreTransaction.set(
-      entitlementRef,
-      entitlementData(ownerUserId, verifiedTransaction, now),
-      { merge: true }
-    );
+    if (transactionSelection.shouldPersistIncoming) {
+      firestoreTransaction.set(
+        entitlementRef,
+        entitlementData(ownerUserId, verifiedTransaction, now),
+        { merge: true }
+      );
+    }
     firestoreTransaction.set(teamRef, {
-      ...teamPlanData(verifiedTransaction, now),
+      ...teamPlanData(effectiveTransaction, now),
       createdAt: timestamp,
       memberLimit: TEAM_MEMBER_LIMIT,
       name: teamName,
