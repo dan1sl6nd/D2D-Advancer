@@ -1,6 +1,6 @@
 # D2D Advancer App Store Release Checklist
 
-Last audited: July 23, 2026
+Last audited: July 27, 2026
 
 This file separates local engineering proof from App Store Connect and production-service proof. Do not mark an item complete based on simulator evidence alone.
 
@@ -10,23 +10,24 @@ This file separates local engineering proof from App Store Connect and productio
 - Bundle ID: `dan1sland.D2D-Advancer`
 - Developer Team ID: `RF247ARQB7`
 - Live App Store version: `1.2`
-- Release candidate: `1.3 (3)`
-- Next unused project build number: `4` or higher
+- Release candidate: `1.3 (4)`
+- Next unused project build number: `5` or higher
 - Minimum iOS version: `18.5`
 - Category: Business
 
-Build `3` was uploaded successfully on July 23, 2026. Do not reuse it for another `1.3` upload.
+Build `4` was uploaded successfully on July 27, 2026. Do not reuse it for another `1.3` upload.
 
 ## Current Release Snapshot
 
-- App Store upload UUID: `6827d80d-2a8f-4337-b93c-ef8d77ef5fc7`.
-- App Store Connect upload processing: complete, with no errors or warnings.
+- App Store upload UUID: `81916891-bc94-4a0e-ac69-32fbeb925d57`.
+- App Store Connect upload transfer: complete, with no errors or warnings.
+- App Store Connect build processing: still pending; Apple has not yet exposed build `1.3 (4)` as a selectable processed build.
 - App version state: `READY_FOR_REVIEW`.
-- Review draft: five items, consisting of iOS `1.3 (3)` and the four new Solo/Team subscriptions.
+- Review draft: five items, still consisting of iOS `1.3 (3)` and the four new Solo/Team subscriptions until build `1.3 (4)` can be attached.
 - TestFlight: build `1.3 (3)` is assigned to automatic-distribution group `Internal QA`, but the group has zero testers. The account holder is the only App Store Connect user and Apple disables that row in the tester picker.
 - Simulator Team proof: Firebase-emulator owner, sales-rep, and technician end-to-end UI test passed on iPhone 17 Pro simulator, iOS 26.4.1.
 - Simulator regression proof: all nine UI scenarios that were killed at zero duration in the overloaded 287-test run passed in focused reruns; the seeded Apple Contacts import also passed against a clean temporary simulator Contacts store.
-- Physical proof: data-preserving default-service/map/add-lead smoke test passed on `dan1sland iPhone 17`, iOS 26.5.2.
+- Physical proof: build `1.3 (4)` was installed over the existing app on `dan1sland iPhone 17`, iOS 26.5.2. Production App Attest reached the strict `syncTeamEntitlement` callable's input validation without a Team write. A copied app-data container confirmed that all 3,049 leads remained in the Core Data store.
 - Submission is intentionally not started. TestFlight purchase and restore are not yet verified.
 
 ## Toolchain Requirement
@@ -152,11 +153,11 @@ Suggested review path:
 
 ## Local Engineering Gate
 
-- [x] Clean Release archive and static analysis complete with zero errors and reviewed warnings for version `1.3 (3)`.
+- [x] Clean Release archive, static analysis, App Store IPA export, and Transporter validation complete without blocking issues for version `1.3 (4)`.
 - [x] Full unit-test target passes from a fresh result bundle (242 tests).
 - [x] The broad 287-test run completed with 270 passes, 8 intentional skips, and 9 zero-duration UI-runner `SIGKILL` results rather than assertion failures. All nine affected scenarios passed focused reruns, including the dedicated seeded Apple Contacts import flow. Keep the original runner-pressure result bundle as evidence; do not describe it as an all-green monolithic run.
 - [x] Firebase-emulator Team UI flow passes for owner, sales rep, and technician, including invites, duty state, lead creation, owner alerts, assignments, member details, and Team Field Map.
-- [x] Cloud Functions cost-control and Team entitlement migration tests pass locally (14 tests).
+- [x] Current Team regression tests pass (63 Swift tests and 17 Cloud Functions tests).
 - [x] Primary navigation and layout pass in light and dark mode.
 - [x] iPad primary-navigation smoke tests pass in light and dark mode.
 - [ ] Permission prompts and denied-permission states are tested.
@@ -167,17 +168,18 @@ Suggested review path:
 - [x] Functions production dependency audit reviewed: no high or critical advisories; 8 moderate transitive advisories remain pending a supported Firebase SDK fix.
 - [x] `PrivacyInfo.xcprivacy` is present in the archived app and validates.
 - [x] Every app icon is opaque and the 1024x1024 marketing icon is present.
-- [x] Generic-device Release archive succeeds for version `1.3 (3)`.
-- [x] App Store Connect IPA export, server validation, upload, and processing succeed for the current archive.
+- [x] Generic-device Release archive succeeds for version `1.3 (4)`.
+- [x] App Store Connect IPA export, server validation, and upload succeed for the current archive.
+- [ ] Apple finishes processing build `1.3 (4)` and exposes it as a selectable build.
 
 ## Physical Device and TestFlight Gate
 
 - [ ] Fresh install on the oldest supported iOS version available for testing.
-- [ ] Fresh install and upgrade install on a current iPhone. The data-preserving upgrade/smoke path passed on iPhone 17; a destructive fresh-install pass is not recorded.
+- [ ] Fresh install and upgrade install on a current iPhone. The data-preserving build `1.3 (4)` upgrade passed on iPhone 17 and a post-install app-container backup confirmed 3,049 leads remained; a destructive fresh-install pass is not recorded.
 - [ ] Camera, photo library, microphone, speech, Contacts, Calendar, notifications, and location prompts work without termination.
 - [ ] Location centers reliably and stops Team sharing after Off duty.
 - [ ] iCloud personal lead/appointment sync is verified between devices.
-- [ ] Production Firebase Team owner/worker permissions are verified, unless Team is excluded from this release.
+- [ ] Production Firebase Team owner/worker permissions are verified, unless Team is excluded from this release. The iPhone 17 passed production App Attest and reached strict callable input validation without a write; the full two-device owner/worker transaction remains unverified because Sofiia's iPhone was unavailable to Xcode.
 - [ ] Purchase and restore are verified in TestFlight sandbox. Build `1.3 (3)` is in `Internal QA`, but its only App Store Connect user is disabled in the tester picker; add another eligible user with app access.
 - [ ] Offline launch, edit queueing, reconnection, and conflict behavior are verified.
 - [ ] No real customer data appears in screenshots, review accounts, or logs.
@@ -192,11 +194,12 @@ Suggested review path:
 - [ ] An Apple-signed Sandbox notification reaches the function and updates the matching Team entitlement.
 - [x] Firebase Authentication has Sign in with Apple enabled; Email/Password is also enabled for Team test identities.
 - [x] The production Firebase project is on Blaze and all six deployed functions use the restricted `d2d-team-runtime` service account with bounded memory, concurrency, and instance counts.
-- [x] The iOS app is registered with App Attest in Firebase App Check, an iPhone 17 physical build produced a valid production token, and `D2D_ENFORCE_TEAM_APP_CHECK=true` was deployed to `createTeamWorkspace` and `syncTeamEntitlement`. Both production endpoints reject credential-free requests with HTTP 401.
+- [x] The iOS app is registered with App Attest in Firebase App Check, an iPhone 17 build `1.3 (4)` produced a valid production token, and `D2D_ENFORCE_TEAM_APP_CHECK=true` was deployed to `createTeamWorkspace` and `syncTeamEntitlement`. The physical diagnostic reached strict callable input validation, while credential-free requests to both endpoints return HTTP 401.
 - [ ] CloudKit production schema is deployed and query/index requirements are verified.
 - [x] App Store Connect version metadata, age-rating questionnaire, content-rights answers, export compliance, privacy answers, and review contact are complete.
-- [x] Uploaded build `1.3 (3)` is selected and present in the five-item review draft.
-- [x] Apple upload validation and processing completed without blocking issues.
+- [x] Uploaded build `1.3 (3)` remains selected and present in the five-item review draft.
+- [x] Apple upload validation and transfer completed without blocking issues for build `1.3 (4)`.
+- [ ] Apple processing completes and build `1.3 (4)` replaces build `1.3 (3)` in the review draft.
 - [x] Version `1.3 (3)` and all four new subscriptions are explicitly added to one review draft.
 - [ ] The five-item draft is submitted and its post-submission status is verified.
 
@@ -205,6 +208,7 @@ Suggested review path:
 The app is not ready to submit yet. The remaining release blockers are:
 
 1. Merge the release branch to `main` so GitHub Pages publishes the current privacy disclosure.
-2. Add an eligible TestFlight tester, install build `1.3 (3)`, and validate purchase plus restore for Solo and Team.
-3. Complete the remaining physical permission, iCloud sync, offline/reconnect, and production Team checks that are applicable to this release.
-4. Submit the five-item App Store review draft only after the gates above pass.
+2. Wait for Apple to finish processing build `1.3 (4)`, then attach it in place of build `1.3 (3)` without submitting the draft.
+3. Validate purchase plus restore for Solo and Team on an Apple sandbox distribution surface.
+4. Complete the remaining physical permission, iCloud sync, offline/reconnect, and two-device production Team checks that are applicable to this release.
+5. Submit the five-item App Store review draft only after the gates above pass.
