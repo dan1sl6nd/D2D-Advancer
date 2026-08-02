@@ -1,6 +1,6 @@
 # D2D Advancer App Store Release Checklist
 
-Last audited: July 27, 2026
+Last audited: August 2, 2026
 
 This file separates local engineering proof from App Store Connect and production-service proof. Do not mark an item complete based on simulator evidence alone.
 
@@ -21,9 +21,9 @@ Build `4` was uploaded successfully on July 27, 2026. Do not reuse it for anothe
 
 - App Store upload UUID: `81916891-bc94-4a0e-ac69-32fbeb925d57`.
 - App Store Connect upload transfer: complete, with no errors or warnings.
-- App Store Connect build processing: still pending; Apple has not yet exposed build `1.3 (4)` as a selectable processed build.
+- App Store Connect build processing: complete. Build `1.3 (4)` is `VALID`, App Store eligible, and unexpired.
 - App version state: `READY_FOR_REVIEW`.
-- Review draft: five items, still consisting of iOS `1.3 (3)` and the four new Solo/Team subscriptions until build `1.3 (4)` can be attached.
+- Review draft: five items, consisting of iOS `1.3 (4)` and the four new Solo/Team subscriptions. The draft remains unsubmitted.
 - TestFlight: build `1.3 (3)` is assigned to automatic-distribution group `Internal QA`, but the group has zero testers. The account holder is the only App Store Connect user and Apple disables that row in the tester picker.
 - Simulator Team proof: Firebase-emulator owner, sales-rep, and technician end-to-end UI test passed on iPhone 17 Pro simulator, iOS 26.4.1.
 - Simulator regression proof: all nine UI scenarios that were killed at zero duration in the overloaded 287-test run passed in focused reruns; the seeded Apple Contacts import also passed against a clean temporary simulator Contacts store.
@@ -170,7 +170,7 @@ Suggested review path:
 - [x] Every app icon is opaque and the 1024x1024 marketing icon is present.
 - [x] Generic-device Release archive succeeds for version `1.3 (4)`.
 - [x] App Store Connect IPA export, server validation, and upload succeed for the current archive.
-- [ ] Apple finishes processing build `1.3 (4)` and exposes it as a selectable build.
+- [x] Apple finishes processing build `1.3 (4)` and exposes it as a selectable build.
 
 ## Physical Device and TestFlight Gate
 
@@ -179,7 +179,7 @@ Suggested review path:
 - [ ] Camera, photo library, microphone, speech, Contacts, Calendar, notifications, and location prompts work without termination.
 - [ ] Location centers reliably and stops Team sharing after Off duty.
 - [ ] iCloud personal lead/appointment sync is verified between devices.
-- [ ] Production Firebase Team owner/worker permissions are verified, unless Team is excluded from this release. The iPhone 17 passed production App Attest and reached strict callable input validation without a write; the full two-device owner/worker transaction remains unverified because Sofiia's iPhone was unavailable to Xcode.
+- [ ] Production Firebase Team owner/worker permissions are verified, unless Team is excluded from this release. On August 2, the iPhone 17 owner leg passed against production and reused its pending single-use invite; Sofiia's iPhone safely left its stale synthetic test Team without removing personal data. The hardened invite/join/duty/lead/owner/map flow passes against local Firebase emulators, but the final production join leg remains unverified because Sofiia's iPhone stayed locked during Xcode launch. Complete container backups were taken first, and the interrupted run did not modify device data.
 - [ ] Purchase and restore are verified in TestFlight sandbox. Build `1.3 (3)` is in `Internal QA`, but its only App Store Connect user is disabled in the tester picker; add another eligible user with app access.
 - [ ] Offline launch, edit queueing, reconnection, and conflict behavior are verified.
 - [ ] No real customer data appears in screenshots, review accounts, or logs.
@@ -197,10 +197,10 @@ Suggested review path:
 - [x] The iOS app is registered with App Attest in Firebase App Check, an iPhone 17 build `1.3 (4)` produced a valid production token, and `D2D_ENFORCE_TEAM_APP_CHECK=true` was deployed to `createTeamWorkspace` and `syncTeamEntitlement`. The physical diagnostic reached strict callable input validation, while credential-free requests to both endpoints return HTTP 401.
 - [ ] CloudKit production schema is deployed and query/index requirements are verified.
 - [x] App Store Connect version metadata, age-rating questionnaire, content-rights answers, export compliance, privacy answers, and review contact are complete.
-- [x] Uploaded build `1.3 (3)` remains selected and present in the five-item review draft.
+- [x] Uploaded build `1.3 (4)` is selected and present in the five-item review draft.
 - [x] Apple upload validation and transfer completed without blocking issues for build `1.3 (4)`.
-- [ ] Apple processing completes and build `1.3 (4)` replaces build `1.3 (3)` in the review draft.
-- [x] Version `1.3 (3)` and all four new subscriptions are explicitly added to one review draft.
+- [x] Apple processing completes and build `1.3 (4)` replaces build `1.3 (3)` in the review draft.
+- [x] Version `1.3 (4)` and all four new subscriptions are explicitly added to one review draft.
 - [ ] The five-item draft is submitted and its post-submission status is verified.
 
 ## Release Decision
@@ -208,7 +208,6 @@ Suggested review path:
 The app is not ready to submit yet. The remaining release blockers are:
 
 1. Merge the release branch to `main` so GitHub Pages publishes the current privacy disclosure.
-2. Wait for Apple to finish processing build `1.3 (4)`, then attach it in place of build `1.3 (3)` without submitting the draft.
-3. Validate purchase plus restore for Solo and Team on an Apple sandbox distribution surface.
-4. Complete the remaining physical permission, iCloud sync, offline/reconnect, and two-device production Team checks that are applicable to this release.
-5. Submit the five-item App Store review draft only after the gates above pass.
+2. Validate purchase plus restore for Solo and Team on an Apple sandbox distribution surface.
+3. Complete the remaining physical permission, iCloud sync, offline/reconnect, and two-device production Team checks that are applicable to this release.
+4. Submit the five-item App Store review draft only after the gates above pass.

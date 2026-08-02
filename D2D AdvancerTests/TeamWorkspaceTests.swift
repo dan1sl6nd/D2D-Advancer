@@ -1825,6 +1825,10 @@ struct TeamWorkspaceTests {
             TeamFirebaseServiceError.serverConfirmationTimedOut.errorDescription
                 == "Team could not be confirmed. Check your connection and try again."
         )
+        #expect(
+            TeamFirebaseServiceError.authenticationTimedOut.errorDescription
+                == "Team sign-in could not be confirmed. Check your connection and try again."
+        )
     }
 
     @Test func teamSyncHealthPolicySummarizesReadySavingOfflineAndBlockedStates() {

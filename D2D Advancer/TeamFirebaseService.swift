@@ -290,7 +290,7 @@ final class TeamFirebaseService: ObservableObject {
                 )
             }
 
-            let profile = try await teamProfileRef(userId: user.uid).getDocument()
+            let profile = try await getServerDocument(teamProfileRef(userId: user.uid))
             guard let teamId = profile.data()?[TeamFirebaseSchema.Field.teamId] as? String,
                   !teamId.isEmpty else {
                 clearLocalTeam(removeCachedMembership: true)
@@ -489,7 +489,7 @@ final class TeamFirebaseService: ObservableObject {
             throw TeamFirebaseServiceError.invalidInvite
         }
 
-        let snapshot = try await inviteRef(code).getDocument()
+        let snapshot = try await getServerDocument(inviteRef(code))
         guard let data = snapshot.data(),
               let teamId = data[TeamFirebaseSchema.Field.teamId] as? String,
               let status = data[TeamFirebaseSchema.Field.status] as? String,
@@ -523,7 +523,7 @@ final class TeamFirebaseService: ObservableObject {
         let code = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !code.isEmpty else { throw TeamFirebaseServiceError.invalidInvite }
 
-        let inviteSnapshot = try await inviteRef(code).getDocument()
+        let inviteSnapshot = try await getServerDocument(inviteRef(code))
         guard let inviteData = inviteSnapshot.data(),
               let teamId = inviteData[TeamFirebaseSchema.Field.teamId] as? String,
               let status = inviteData[TeamFirebaseSchema.Field.status] as? String,
@@ -537,26 +537,38 @@ final class TeamFirebaseService: ObservableObject {
         guard invitePlanStatus?.allowsTeamWrite ?? true else {
             throw TeamFirebaseServiceError.writeBlocked
         }
+        guard let ownerUserId = inviteData[TeamFirebaseSchema.Field.createdByUserId] as? String,
+              !ownerUserId.isEmpty else {
+            throw TeamFirebaseServiceError.invalidInvite
+        }
         let inviteWorkType = (inviteData[TeamFirebaseSchema.Field.workType] as? String)
             .flatMap(TeamMemberWorkType.init(rawValue:))
 
-        let existingProfile = try await teamProfileRef(userId: user.uid).getDocument()
+        let existingProfile = try await getServerDocument(teamProfileRef(userId: user.uid))
         if existingProfile.exists {
             throw TeamFirebaseServiceError.alreadyInTeam
         }
 
         let now = Date()
+        let team = TeamWorkspace(
+            id: teamId,
+            name: Self.nilIfBlank(inviteData[TeamFirebaseSchema.Field.teamName] as? String) ?? "Team",
+            ownerUserId: ownerUserId,
+            createdAt: Self.dateValue(inviteData[TeamFirebaseSchema.Field.createdAt]) ?? now,
+            updatedAt: now,
+            planStatus: invitePlanStatus ?? .active,
+            planExpiresAt: nil,
+            graceEndsAt: nil,
+            memberLimit: TeamWorkspace.includedMemberLimit
+        )
         let pendingUserId = "\(TeamFirebaseSchema.pendingRepUserPrefix)-\(code)"
-        let pendingMemberSnapshot = try? await memberRef(teamId: teamId, userId: pendingUserId).getDocument()
-        let pendingMember = pendingMemberSnapshot
-            .flatMap { snapshot in snapshot.data().flatMap { decodeMember(id: snapshot.documentID, data: $0) } }
         let member = TeamMember.rep(
             teamId: teamId,
             userId: user.uid,
             displayName: Self.nilIfBlank(displayName) ?? Self.nilIfBlank(user.displayName) ?? "Team Rep",
             email: Self.nilIfBlank(email) ?? user.email,
             acceptedInviteId: code,
-            workType: pendingMember?.workType ?? inviteWorkType ?? .salesRep,
+            workType: inviteWorkType ?? .salesRep,
             joinedAt: now
         )
 
@@ -579,9 +591,30 @@ final class TeamFirebaseService: ObservableObject {
             targetUserId: member.userId,
             createdAt: now
         )
-        try await commitTeamBatch(batch, pendingWriteCount: 5)
+        try await commitTeamBatch(
+            batch,
+            pendingWriteCount: 5,
+            allowsLocalQueueFallback: false
+        )
 
-        await loadCurrentTeam(displayName: displayName, email: email)
+        stopTeamRealtimeListeners()
+        activeTeam = team
+        currentMember = member
+        teamMembers = [member]
+        PaywallManager.shared.setTeamWorkspaceAccess(team.effectivePlanStatus().allowsTeamRead)
+        cacheMembership(team: team, member: member)
+        startTeamRealtimeListeners(team: team, member: member)
+        lastSuccessfulTeamSyncAt = Date()
+        lastTeamSyncFailureAt = nil
+        lastErrorMessage = nil
+
+        Task { @MainActor [weak self] in
+            await self?.loadCurrentTeam(
+                displayName: displayName,
+                email: email,
+                forceRefresh: true
+            )
+        }
     }
 
     func cancelPendingInvite(for member: TeamMember) async throws {
@@ -1645,6 +1678,7 @@ final class TeamFirebaseService: ObservableObject {
 
 enum TeamFirebaseServiceError: LocalizedError {
     case alreadyInTeam
+    case authenticationTimedOut
     case firebaseSessionExpired
     case invalidInvite
     case noActiveTeam
@@ -1661,6 +1695,8 @@ enum TeamFirebaseServiceError: LocalizedError {
         switch self {
         case .alreadyInTeam:
             return "This Apple sign-in is already in a team."
+        case .authenticationTimedOut:
+            return "Team sign-in could not be confirmed. Check your connection and try again."
         case .firebaseSessionExpired:
             return "Team sign-in expired. Continue with Apple again to reconnect Team."
         case .invalidInvite:
@@ -1761,6 +1797,7 @@ private extension TeamFirebaseService {
 #endif
 
     static let teamWriteAckWaitLimit: TimeInterval = 8
+    static let teamAuthenticationWaitLimit: TimeInterval = 15
     static let teamServerConfirmationWaitLimit: TimeInterval = 20
 
     func prepareFirestoreForTeamUse(force: Bool = false) async throws {
@@ -1896,13 +1933,19 @@ private extension TeamFirebaseService {
 
     func firebaseIDToken(for user: User, forceRefresh: Bool) async throws -> String {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+            let completion = TeamTokenCompletionBox(continuation: continuation)
+            let timeout = DispatchWorkItem {
+                completion.resume(throwing: TeamFirebaseServiceError.authenticationTimedOut)
+            }
+            completion.setTimeoutWorkItem(timeout)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.teamAuthenticationWaitLimit, execute: timeout)
             user.getIDTokenForcingRefresh(forceRefresh) { token, error in
                 if let error {
-                    continuation.resume(throwing: error)
+                    completion.resume(throwing: error)
                 } else if let token {
-                    continuation.resume(returning: token)
+                    completion.resume(returning: token)
                 } else {
-                    continuation.resume(throwing: TeamFirebaseServiceError.notAuthenticated)
+                    completion.resume(throwing: TeamFirebaseServiceError.notAuthenticated)
                 }
             }
         }
@@ -2127,7 +2170,7 @@ private extension TeamFirebaseService {
         for _ in 0..<5 {
             let code = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8).uppercased()
             let codeString = String(code)
-            let codeExists = try await inviteRef(codeString).getDocument().exists
+            let codeExists = try await getServerDocument(inviteRef(codeString)).exists
             if !codeExists {
                 return codeString
             }
@@ -2136,7 +2179,7 @@ private extension TeamFirebaseService {
     }
 
     func loadTeam(teamId: String) async throws -> TeamWorkspace {
-        let snapshot = try await teamRef(teamId).getDocument()
+        let snapshot = try await getServerDocument(teamRef(teamId))
         guard let data = snapshot.data(), let team = decodeTeam(id: snapshot.documentID, data: data) else {
             throw TeamFirebaseServiceError.noActiveTeam
         }
@@ -2144,7 +2187,7 @@ private extension TeamFirebaseService {
     }
 
     func loadMember(teamId: String, userId: String) async throws -> TeamMember {
-        let snapshot = try await memberRef(teamId: teamId, userId: userId).getDocument()
+        let snapshot = try await getServerDocument(memberRef(teamId: teamId, userId: userId))
         guard let data = snapshot.data(), let member = decodeMember(id: snapshot.documentID, data: data) else {
             throw TeamFirebaseServiceError.noActiveTeam
         }
@@ -2294,12 +2337,12 @@ private extension TeamFirebaseService {
     }
 
     func loadTeamOperationsControl() async throws -> TeamOperationsControl {
-        let snapshot = try await teamOperationsControlRef().getDocument()
+        let snapshot = try await getServerDocument(teamOperationsControlRef())
         return decodeTeamOperationsControl(snapshot.data())
     }
 
     func loadTeamUsageControl(teamId: String) async throws -> TeamUsageControl {
-        let snapshot = try await teamUsageControlRef(teamId: teamId).getDocument()
+        let snapshot = try await getServerDocument(teamUsageControlRef(teamId: teamId))
         return decodeTeamUsageControl(snapshot.data())
     }
 }
@@ -2915,6 +2958,51 @@ private final class TeamWriteCompletionBox: @unchecked Sendable {
         } else {
             continuation.resume()
         }
+    }
+}
+
+private final class TeamTokenCompletionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private let continuation: CheckedContinuation<String, Error>
+    private var didResume = false
+    private var timeoutWorkItem: DispatchWorkItem?
+
+    init(continuation: CheckedContinuation<String, Error>) {
+        self.continuation = continuation
+    }
+
+    func setTimeoutWorkItem(_ timeoutWorkItem: DispatchWorkItem) {
+        lock.lock()
+        self.timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+    }
+
+    func resume(returning token: String) {
+        lock.lock()
+        guard !didResume else {
+            lock.unlock()
+            return
+        }
+        didResume = true
+        let timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+
+        timeoutWorkItem?.cancel()
+        continuation.resume(returning: token)
+    }
+
+    func resume(throwing error: Error) {
+        lock.lock()
+        guard !didResume else {
+            lock.unlock()
+            return
+        }
+        didResume = true
+        let timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+
+        timeoutWorkItem?.cancel()
+        continuation.resume(throwing: error)
     }
 }
 

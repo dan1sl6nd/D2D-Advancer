@@ -4,6 +4,8 @@
 <dict>
 	<key>D2DTeamInviteCode</key>
 	<string>$(D2D_TEAM_INVITE_CODE)</string>
+	<key>D2DTeamMemberDisplayName</key>
+	<string>$(D2D_TEAM_MEMBER_DISPLAY_NAME)</string>
 	<key>D2DRunTeamEmulatorUITests</key>
 	<string>$(D2D_RUN_TEAM_EMULATOR_UI_TESTS)</string>
 	<key>D2DRunTeamExistingAccountUITests</key>
@@ -12,6 +14,8 @@
 	<string>$(D2D_RUN_TEAM_PHYSICAL_UI_TESTS)</string>
 	<key>D2DConfirmTeamJoinUITests</key>
 	<string>$(D2D_CONFIRM_TEAM_JOIN_UI_TESTS)</string>
+	<key>D2DConfirmTeamLeaveUITests</key>
+	<string>$(D2D_CONFIRM_TEAM_LEAVE_UI_TESTS)</string>
 	<key>D2DTeamUIPassword</key>
 	<string>$(D2D_TEAM_UI_PASSWORD)</string>
 	<key>D2DTeamUIRunID</key>

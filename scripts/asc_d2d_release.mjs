@@ -762,9 +762,15 @@ function matchingBuild(builds, included = []) {
 async function findBuild(token, appId) {
   const response = await ascFetch(
     token,
-    `/builds?filter[app]=${appId}&filter[version]=${BUILD_NUMBER}&fields[builds]=version,uploadedDate,processingState,expired,usesNonExemptEncryption&include=preReleaseVersion&fields[preReleaseVersions]=version,platform&limit=200`
+    `/preReleaseVersions?filter[app]=${appId}&filter[version]=${encodeURIComponent(VERSION)}&filter[platform]=IOS&include=builds&fields[preReleaseVersions]=version,platform&fields[builds]=version,uploadedDate,processingState,expired,usesNonExemptEncryption&limit=200&limit[builds]=50`
   );
-  return matchingBuild(response.data ?? [], response.included ?? []) ?? null;
+  return (
+    response.included?.find(
+      (item) =>
+        item.type === "builds" &&
+        item.attributes?.version === BUILD_NUMBER
+    ) ?? null
+  );
 }
 
 async function listMatchingBuildUploads(token, appId) {

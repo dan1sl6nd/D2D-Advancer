@@ -261,6 +261,22 @@ struct TeamWorkspaceView: View {
                 .overlay(Color.obsidianBorder.opacity(0.6))
 
             if member.role == .owner {
+                if effectivePlanStatus != .active {
+                    Text(planRecoveryText(effectivePlanStatus))
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    teamActionButton(
+                        title: "Renew Team Plan",
+                        icon: "creditcard.fill",
+                        color: Color.statusNotHome,
+                        accessibilityIdentifier: "teamRenewPlanButton"
+                    ) {
+                        paywallManager.showTeamPaywall(message: planRecoveryText(effectivePlanStatus))
+                    }
+                }
+
                 Text("Close the workspace to remove worker access and cancel pending invites.")
                     .font(.micro)
                     .foregroundColor(Color.textSecondary)
@@ -1258,6 +1274,7 @@ struct TeamWorkspaceView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .accessibilityIdentifier("teamStatusCard")
     }
 
     private func teamSyncHealthCard(_ snapshot: TeamSyncHealthSnapshot) -> some View {
@@ -1425,9 +1442,6 @@ struct TeamWorkspaceView: View {
             return nil
         }
         if statusMessage == teamService.lastErrorMessage {
-            return nil
-        }
-        if isShowingTeamSetup && statusMessageIsError && isStaleSetupErrorMessage(statusMessage) {
             return nil
         }
         return statusMessage
@@ -1738,7 +1752,7 @@ struct TeamWorkspaceView: View {
 
     private func joinTeam() {
         let isJoiningFromInviteLink = pendingInviteCode != nil
-        runTeamAction(successMessage: "Joined team.", scrollToTopOnSuccess: true) {
+        runTeamAction(successMessage: "Joined team.", scrollToTopOnCompletion: true) {
             try await teamService.joinTeam(
                 inviteCode: inviteCode,
                 displayName: userAccountManager.currentUserDisplayName,
@@ -1763,7 +1777,7 @@ struct TeamWorkspaceView: View {
 
     private func runTeamAction(
         successMessage: String,
-        scrollToTopOnSuccess: Bool = false,
+        scrollToTopOnCompletion: Bool = false,
         action: @escaping () async throws -> Void
     ) {
         isWorking = true
@@ -1775,12 +1789,15 @@ struct TeamWorkspaceView: View {
                 try await action()
                 statusMessage = successMessage
                 statusMessageIsError = false
-                if scrollToTopOnSuccess {
+                if scrollToTopOnCompletion {
                     scrollResetToken += 1
                 }
             } catch {
                 statusMessage = TeamFirebaseService.userFacingErrorMessage(for: error)
                 statusMessageIsError = true
+                if scrollToTopOnCompletion {
+                    scrollResetToken += 1
+                }
             }
             isWorking = false
         }
@@ -1821,13 +1838,6 @@ struct TeamWorkspaceView: View {
 
     private func clearStaleSetupMessagesIfNeeded() {
         guard isShowingTeamSetup else { return }
-
-        if let statusMessage,
-           statusMessageIsError,
-           isStaleSetupErrorMessage(statusMessage) {
-            self.statusMessage = nil
-            statusMessageIsError = false
-        }
 
         if let errorMessage = teamService.lastErrorMessage,
            isStaleSetupErrorMessage(errorMessage) {
@@ -1996,6 +2006,17 @@ struct TeamWorkspaceView: View {
             return Color.statusNotHome
         case .paused:
             return Color.statusNotInterested
+        }
+    }
+
+    private func planRecoveryText(_ status: TeamPlanStatus) -> String {
+        switch status {
+        case .active:
+            return "Team access is active."
+        case .grace:
+            return "Renew through Apple to restore Team edits before the read-only grace period ends."
+        case .paused:
+            return "Renew through Apple to restore Team access and worker assignments."
         }
     }
 

@@ -1151,6 +1151,36 @@ final class D2D_AdvancerUITests: XCTestCase {
         return code.label
     }
 
+    private func readPendingInviteCodeIfPresent(_ app: XCUIApplication) -> String? {
+        let pendingInvitePredicate = NSPredicate(
+            format: "label MATCHES %@",
+            "^Pending .* Invite .*[A-Z0-9]{8}$"
+        )
+        let pendingInviteText = app.staticTexts.matching(pendingInvitePredicate).firstMatch
+
+        for _ in 0..<12 {
+            if pendingInviteText.exists,
+               let codeRange = pendingInviteText.label.range(
+                   of: "[A-Z0-9]{8}$",
+                   options: .regularExpression
+               ) {
+                return String(pendingInviteText.label[codeRange])
+            }
+            app.swipeUp()
+        }
+
+        return nil
+    }
+
+    private func recordProductionInviteCode(_ inviteCode: String) {
+        let evidence = "TEAM_PRODUCTION_INVITE_CODE=\(inviteCode)"
+        let attachment = XCTAttachment(string: evidence)
+        attachment.name = "team-production-invite-code.txt"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        print(evidence)
+    }
+
     private func selectInviteWorkerType(_ app: XCUIApplication, technician: Bool, direction: ScrollDirection = .down) {
         let buttonIdentifier = technician ? "teamInviteWorkerTypeTechnicianButton" : "teamInviteWorkerTypeSalesRepButton"
         scrollToButton(app, buttonIdentifier, direction: direction, maxSwipes: 10).tap()
@@ -1558,6 +1588,33 @@ final class D2D_AdvancerUITests: XCTestCase {
     }
 
     @MainActor
+    func testTeamExistingMemberLeavesCurrentWorkspace() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+        guard teamTestConfigBool(
+            environmentKey: "D2D_CONFIRM_TEAM_LEAVE_UI_TESTS",
+            infoKey: "D2DConfirmTeamLeaveUITests"
+        ) else {
+            throw XCTSkip("Leaving an existing Team requires D2D_CONFIRM_TEAM_LEAVE_UI_TESTS=1.")
+        }
+
+        let app = makeExistingTeamAccountApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+        waitForText(app, "My Team", timeout: 25)
+
+        let leaveButton = scrollToButtonEitherDirection(app, "teamLeaveButton")
+        XCTAssertTrue(leaveButton.isEnabled, "The current worker membership must allow Leave Team.")
+        leaveButton.tap()
+
+        let confirmation = app.alerts["Leave Team?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 8), "Leave Team confirmation should appear.")
+        confirmation.buttons["Leave Team"].tap()
+
+        waitForText(app, "Left team.", timeout: 30)
+        waitForText(app, "Create or Accept Team", timeout: 30)
+    }
+
+    @MainActor
     func testTeamExistingAccountPhysicalAcceptInvite() throws {
         try requireExistingTeamAccountPhysicalUITestHarness()
         guard teamTestConfigBool(
@@ -1572,9 +1629,141 @@ final class D2D_AdvancerUITests: XCTestCase {
         prepareExistingAccountInviteJoin(app, inviteCode: inviteCode)
 
         scrollToButton(app, "teamJoinTeamButton").tap()
-        waitForText(app, "Joined team.", timeout: 30)
+        let joinedTeamMessage = app.staticTexts["Joined team."]
+        if !joinedTeamMessage.waitForExistence(timeout: 30) {
+            resetVerticalScrollToTop(app)
+            let visibleText = app.staticTexts.allElementsBoundByIndex
+                .map(\.label)
+                .filter { !$0.isEmpty }
+                .joined(separator: " | ")
+            XCTFail("Team join did not complete. Visible status: \(visibleText)")
+            return
+        }
         resetVerticalScrollToTop(app)
         waitForText(app, "Activity Log", timeout: 15)
+    }
+
+    @MainActor
+    func testTeamExistingOwnerEnsuresWorkspaceAndCreatesInvite() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+
+        let app = makeExistingTeamAccountApp()
+        app.launch()
+
+        let setupTitle = app.staticTexts["Create or Accept Team"]
+        let activeTeamTitle = app.staticTexts["My Team"]
+        let appleSignInTitle = app.staticTexts["Apple Sign-In Required"]
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline,
+              !setupTitle.exists,
+              !activeTeamTitle.exists,
+              !appleSignInTitle.exists {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+
+        XCTAssertFalse(appleSignInTitle.exists, "The owner must remain signed in with Apple for the production Team gate.")
+        if setupTitle.exists {
+            tapButton(app, "teamCreateTeamButton", timeout: 12)
+            waitForText(app, "Team plan active", timeout: 35)
+        } else {
+            XCTAssertTrue(activeTeamTitle.exists, "Expected an existing Team or the owner workspace setup screen.")
+        }
+
+        if let pendingInviteCode = readPendingInviteCodeIfPresent(app) {
+            recordProductionInviteCode(pendingInviteCode)
+            return
+        }
+
+        let createInviteButton = scrollToButtonEitherDirection(app, "teamCreateInviteButton")
+        XCTAssertTrue(
+            createInviteButton.isEnabled,
+            "The owner's Team plan must be active before the production invite gate can run. Renew the Team plan, then retry."
+        )
+        createInviteButton.tap()
+        recordProductionInviteCode(readInviteCode(app))
+    }
+
+    @MainActor
+    func testTeamExistingMemberJoinsAndCreatesInterestedLead() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+        guard teamTestConfigBool(
+            environmentKey: "D2D_CONFIRM_TEAM_JOIN_UI_TESTS",
+            infoKey: "D2DConfirmTeamJoinUITests"
+        ) else {
+            throw XCTSkip("Accepting Team membership requires D2D_CONFIRM_TEAM_JOIN_UI_TESTS=1.")
+        }
+
+        let inviteCode = try existingTeamInviteCode()
+        let credentials = teamUITestCredentials()
+        let app = makeExistingTeamAccountApp()
+        prepareExistingAccountInviteJoin(app, inviteCode: inviteCode)
+
+        scrollToButton(app, "teamJoinTeamButton").tap()
+        let joinedTeamMessage = app.staticTexts["Joined team."]
+        if !joinedTeamMessage.waitForExistence(timeout: 30) {
+            resetVerticalScrollToTop(app)
+            let visibleText = app.staticTexts.allElementsBoundByIndex
+                .map(\.label)
+                .filter { !$0.isEmpty }
+                .joined(separator: " | ")
+            XCTFail("Team join did not complete. Visible status: \(visibleText)")
+            return
+        }
+        resetVerticalScrollToTop(app)
+        waitForText(app, "Activity Log", timeout: 15)
+
+        tapButton(app, "teamDutyToggleButton", timeout: 12)
+        waitForText(app, "Go Off Duty", timeout: 15)
+
+        relaunch(app, opening: "-openMapTabForUITests")
+        createInterestedLead(app, name: credentials.leadName)
+    }
+
+    @MainActor
+    func testTeamExistingOwnerSeesMemberWork() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+
+        let credentials = teamUITestCredentials()
+        let expectedMemberName = teamTestConfigValue(
+            environmentKey: "D2D_TEAM_MEMBER_DISPLAY_NAME",
+            infoKey: "D2DTeamMemberDisplayName"
+        )
+        let app = makeExistingTeamAccountApp()
+        app.launch()
+
+        waitForText(app, "My Team", timeout: 30)
+        waitForText(app, "2/3 seats", timeout: 20)
+
+        relaunch(app, opening: "-openLeadsTabForUITests")
+        tapButton(app, "leadSource_team", timeout: 20)
+        XCTAssertTrue(
+            app.otherElements["teamWorkInlineSection"].waitForExistence(timeout: 20),
+            "Team work should be available from the owner's Leads tab."
+        )
+        waitForTextContaining(app, credentials.leadName, timeout: 20)
+
+        relaunch(app, opening: "-openMapTabForUITests")
+        tapButton(app, "teamMapShortcut", timeout: 15)
+        waitForText(app, "Team Field Map", timeout: 15)
+        if let expectedMemberName {
+            let memberFilter = app.buttons[expectedMemberName]
+            XCTAssertTrue(memberFilter.waitForExistence(timeout: 15), "Expected the joined member on Team Field Map.")
+            XCTAssertEqual(memberFilter.value as? String, "On duty")
+        }
+    }
+
+    @MainActor
+    func testTeamExistingMemberEndsDutySharing() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+
+        let app = makeExistingTeamAccountApp()
+        app.launch()
+        waitForText(app, "My Team", timeout: 30)
+
+        let dutyButton = scrollToButton(app, "teamDutyToggleButton")
+        XCTAssertEqual(dutyButton.label, "Go Off Duty", "The member should still be on duty after the owner verifies live status.")
+        dutyButton.tap()
+        waitForText(app, "Go On Duty", timeout: 15)
     }
 
     @MainActor
