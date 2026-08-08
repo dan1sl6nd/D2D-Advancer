@@ -1618,17 +1618,21 @@ final class D2D_AdvancerUITests: XCTestCase {
             "No Purchase Found",
             "Test Purchase Not Restored",
             "Team Purchase Needs Attention",
+            "App Store Request in Progress",
             "Restore Taking Too Long",
             "Restore Failed"
         ]
-        let timeoutMessage = "The App Store did not finish the restore request. Check your connection, close and reopen D2D Advancer, then tap Restore Purchases again. Restoring never charges you."
+        let timeoutMessagePrefix = "The App Store is still waiting."
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         var outcomeTitle: String?
         var sawSystemAuthenticationPrompt = false
         let deadline = Date().addingTimeInterval(120)
         while Date() < deadline, outcomeTitle == nil {
             outcomeTitle = outcomeTitles.first { app.staticTexts[$0].exists }
-            if outcomeTitle == nil, app.staticTexts[timeoutMessage].exists {
+            let timeoutMessage = app.staticTexts
+                .matching(NSPredicate(format: "label BEGINSWITH %@", timeoutMessagePrefix))
+                .firstMatch
+            if outcomeTitle == nil, timeoutMessage.exists {
                 outcomeTitle = "Restore Taking Too Long"
             }
             if springboard.alerts.firstMatch.exists {
@@ -3075,9 +3079,25 @@ final class D2D_AdvancerUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(restoreButton.frame.height, 44)
         restoreButton.tap()
         waitForText(app, "Restore Taking Too Long", timeout: 8)
-        waitForTextContaining(app, "The App Store did not finish", timeout: 8)
+        waitForTextContaining(app, "The App Store is still waiting", timeout: 8)
         screenshot(app, name: "Restore purchases timeout guidance")
         XCTAssertTrue(app.descendants(matching: .any)["paywallScreen"].exists)
+    }
+
+    @MainActor
+    func testRestorePurchasesExplainsAnExistingAppStoreRequest() throws {
+        let app = makePaywallApp(showTeamOffer: true)
+        app.launchArguments.append("-simulateStoreKitRequestInProgressForUITests")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForIdentifiedElement(app, "paywallScreen", timeout: 12)
+        let restoreButton = waitForIdentifiedElement(app, "paywallRestoreButton", timeout: 8)
+        XCTAssertTrue(restoreButton.isEnabled)
+        restoreButton.tap()
+        waitForText(app, "App Store Request in Progress", timeout: 8)
+        waitForTextContaining(app, "Complete or cancel the Apple sheet", timeout: 8)
+        screenshot(app, name: "Restore purchases existing request guidance")
     }
 
     @MainActor

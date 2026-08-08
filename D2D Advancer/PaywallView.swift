@@ -419,7 +419,7 @@ struct PaywallView: View {
                     .foregroundColor(.textSecondary)
                     .frame(minHeight: 44)
                     .contentShape(Rectangle())
-                    .disabled(paywallManager.isPurchasing)
+                    .disabled(isRestoringPurchases)
                     .accessibilityIdentifier("paywallRestoreButton")
 
                     Text("•")
@@ -472,7 +472,7 @@ struct PaywallView: View {
     private var purchaseStatusBanner: some View {
         if let message = paywallManager.purchaseStatusMessage {
             HStack(alignment: .top, spacing: 10) {
-                if isRestoringPurchases {
+                if paywallManager.isPurchasing {
                     ProgressView()
                         .controlSize(.small)
                         .tint(.textSecondary)
@@ -551,9 +551,7 @@ struct PaywallView: View {
             restoreResult = nil
             let result = await paywallManager.restorePurchases()
             isRestoringPurchases = false
-            if let result {
-                restoreResult = result
-            }
+            restoreResult = result
         }
     }
 

@@ -97,6 +97,7 @@ struct PurchaseRestoreResult: Identifiable {
         case noPurchaseFound
         case testPurchase
         case accountLinkRequired
+        case requestInProgress
         case timedOut
         case failed
     }
@@ -115,6 +116,8 @@ struct PurchaseRestoreResult: Identifiable {
             return "Test Purchase Not Restored"
         case .accountLinkRequired:
             return "Team Purchase Needs Attention"
+        case .requestInProgress:
+            return "App Store Request in Progress"
         case .timedOut:
             return "Restore Taking Too Long"
         case .failed:
@@ -217,6 +220,9 @@ class PaywallManager: ObservableObject {
     private var simulatesStoreKitRestoreTimeoutForUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-simulateStoreKitRestoreTimeoutForUITests")
     }
+    private var simulatesStoreKitRequestInProgressForUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-simulateStoreKitRequestInProgressForUITests")
+    }
 
     private var updateListenerTask: Task<Void, Error>?
     private var activeAppStoreSyncAttempt: AppStoreSyncAttempt?
@@ -224,6 +230,13 @@ class PaywallManager: ObservableObject {
     private init() {
         loadPremiumStatus()
         loadLeadCount()
+
+#if DEBUG
+        if simulatesStoreKitRequestInProgressForUITests {
+            isPurchasing = true
+            setPurchaseStatus("Waiting for Apple. Complete or cancel the Apple sheet to continue.")
+        }
+#endif
 
         if !isStoreKitDisabledForUITests {
             updateListenerTask = listenForTransactions()
@@ -599,7 +612,13 @@ class PaywallManager: ObservableObject {
 
     @MainActor
     func purchase(plan: SubscriptionPlan) async {
-        guard !isPurchasing else { return }
+        guard !isPurchasing else {
+            setPurchaseStatus(
+                "An App Store request is already in progress. Complete or cancel the Apple sheet before trying again.",
+                isError: true
+            )
+            return
+        }
 
         isPurchasing = true
         setPurchaseStatus(nil)
@@ -619,6 +638,8 @@ class PaywallManager: ObservableObject {
             setPurchaseStatus("This subscription option is unavailable right now. Please try again in a moment.", isError: true)
             return
         }
+
+        setPurchaseStatus("Waiting for Apple. Complete or cancel the Apple purchase sheet to continue.")
 
         do {
             let purchaseOptions = try purchaseOptions(for: plan)
@@ -678,11 +699,15 @@ class PaywallManager: ObservableObject {
                 print("✅ Purchase successful: \(product.displayName)")
 
             case .userCancelled:
-                setPurchaseStatus(nil)
+                setPurchaseStatus("Purchase cancelled. No charge was made.")
                 print("ℹ️ User cancelled purchase")
 
             case .pending:
-                setPurchaseStatus("Purchase is pending approval. Pro unlocks automatically once Apple approves it.")
+                setPurchaseStatus(
+                    plan.isTeamPlan
+                        ? "Purchase is pending approval. Team access unlocks automatically once Apple approves it."
+                        : "Purchase is pending approval. Pro unlocks automatically once Apple approves it."
+                )
                 print("⏳ Purchase pending approval")
 
             @unknown default:
@@ -717,8 +742,13 @@ class PaywallManager: ObservableObject {
     }
 
     @MainActor
-    func restorePurchases() async -> PurchaseRestoreResult? {
-        guard !isPurchasing else { return nil }
+    func restorePurchases() async -> PurchaseRestoreResult {
+        guard !isPurchasing else {
+            return completeRestore(
+                kind: .requestInProgress,
+                message: "Another App Store request is already waiting for Apple. Complete or cancel the Apple sheet, then try Restore Purchases again."
+            )
+        }
 
         isPurchasing = true
         setPurchaseStatus("Checking the App Store for previous purchases...")
@@ -792,7 +822,7 @@ class PaywallManager: ObservableObject {
             print("⚠️ Restore timed out while waiting for App Store.sync()")
             return completeRestore(
                 kind: .timedOut,
-                message: "The App Store did not finish the restore request. Check your connection, close and reopen D2D Advancer, then tap Restore Purchases again. Restoring never charges you."
+                message: "The App Store is still waiting. Complete or cancel any Apple Account sign-in sheet, then tap Restore Purchases again. If no sheet is visible, close and reopen D2D Advancer and try again. Restoring never charges you."
             )
         }
     }

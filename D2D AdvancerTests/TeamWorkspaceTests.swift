@@ -369,6 +369,10 @@ struct TeamWorkspaceTests {
             kind: .timedOut,
             message: "The App Store did not finish the restore request."
         )
+        let requestInProgress = PurchaseRestoreResult(
+            kind: .requestInProgress,
+            message: "Another App Store request is already waiting for Apple."
+        )
 
         #expect(restored.title == "Purchases Restored")
         #expect(restored.isSuccess)
@@ -376,6 +380,8 @@ struct TeamWorkspaceTests {
         #expect(!missing.isSuccess)
         #expect(timedOut.title == "Restore Taking Too Long")
         #expect(!timedOut.isSuccess)
+        #expect(requestInProgress.title == "App Store Request in Progress")
+        #expect(!requestInProgress.isSuccess)
     }
 
     @Test func ownerAndRepMemberRecordsUseExpectedRolesAndInviteLink() {
