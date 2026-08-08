@@ -51,6 +51,32 @@ final class TeamBillingService {
             teamId: payload["teamId"] as? String
         )
     }
+
+    func fetchInvitePreview(inviteCode: String) async throws -> TeamInvitePreview {
+        let result = try await functions.httpsCallable("getTeamInvitePreview").call([
+            "inviteCode": inviteCode
+        ])
+        guard let payload = result.data as? [String: Any],
+              let code = payload["code"] as? String,
+              let teamId = payload["teamId"] as? String,
+              let workTypeValue = payload["workType"] as? String,
+              let workType = TeamMemberWorkType(rawValue: workTypeValue),
+              let expiresAtMillis = payload["expiresAtMillis"] as? NSNumber,
+              let planStatusValue = payload["planStatus"] as? String,
+              let planStatus = TeamPlanStatus(rawValue: planStatusValue) else {
+            throw TeamBillingServiceError.invalidServerResponse
+        }
+
+        return TeamInvitePreview(
+            code: code,
+            teamId: teamId,
+            teamName: payload["teamName"] as? String,
+            ownerDisplayName: payload["ownerDisplayName"] as? String,
+            workType: workType,
+            expiresAt: Date(timeIntervalSince1970: expiresAtMillis.doubleValue / 1_000),
+            planStatus: planStatus
+        )
+    }
 }
 
 struct TeamBillingEntitlement: Equatable {

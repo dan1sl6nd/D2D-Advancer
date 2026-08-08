@@ -47,6 +47,13 @@ export interface TeamEntitlementState {
   planStatus: TeamPlanStatus;
 }
 
+export interface StoredTeamPlanState {
+  billingSource?: string;
+  graceEndsAtMillis: number | null;
+  planExpiresAtMillis: number | null;
+  planStatus?: string;
+}
+
 export interface TeamWorkspaceTransactionSelection {
   shouldPersistIncoming: boolean;
   transaction: NormalizedTeamTransaction;
@@ -184,6 +191,49 @@ export function deriveTeamEntitlementState(
     return { graceEndsAtMillis, planStatus: "grace" };
   }
   return { graceEndsAtMillis, planStatus: "paused" };
+}
+
+export function deriveStoredTeamPlanStatus(
+  state: StoredTeamPlanState,
+  nowMillis: number = Date.now()
+): TeamPlanStatus {
+  const planStatus = state.planStatus;
+  const planExpiresAtMillis = state.planExpiresAtMillis;
+  const graceEndsAtMillis = state.graceEndsAtMillis;
+
+  if (state.billingSource === "app_store") {
+    if (
+      planStatus === "active"
+      && planExpiresAtMillis !== null
+      && planExpiresAtMillis > nowMillis
+    ) {
+      return "active";
+    }
+    if (
+      (planStatus === "active" || planStatus === "grace")
+      && graceEndsAtMillis !== null
+      && graceEndsAtMillis > nowMillis
+    ) {
+      return "grace";
+    }
+    return "paused";
+  }
+
+  if (planStatus === "active") {
+    if (planExpiresAtMillis === null || planExpiresAtMillis > nowMillis) {
+      return "active";
+    }
+    if (graceEndsAtMillis !== null && graceEndsAtMillis > nowMillis) {
+      return "grace";
+    }
+  }
+  if (
+    planStatus === "grace"
+    && (graceEndsAtMillis === null || graceEndsAtMillis > nowMillis)
+  ) {
+    return "grace";
+  }
+  return "paused";
 }
 
 export function cleanRequiredText(value: unknown, fallback: string, maxLength: number): string {

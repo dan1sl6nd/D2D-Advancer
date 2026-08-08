@@ -355,6 +355,29 @@ struct TeamWorkspaceTests {
         )
     }
 
+    @Test("Purchase restore results expose clear user-facing outcomes")
+    func purchaseRestoreResultsExposeClearUserFacingOutcomes() {
+        let restored = PurchaseRestoreResult(
+            kind: .restored,
+            message: "Team purchase restored and verified for this owner."
+        )
+        let missing = PurchaseRestoreResult(
+            kind: .noPurchaseFound,
+            message: "No active D2D Advancer subscription was found for this Apple ID."
+        )
+        let timedOut = PurchaseRestoreResult(
+            kind: .timedOut,
+            message: "The App Store did not finish the restore request."
+        )
+
+        #expect(restored.title == "Purchases Restored")
+        #expect(restored.isSuccess)
+        #expect(missing.title == "No Purchase Found")
+        #expect(!missing.isSuccess)
+        #expect(timedOut.title == "Restore Taking Too Long")
+        #expect(!timedOut.isSuccess)
+    }
+
     @Test func ownerAndRepMemberRecordsUseExpectedRolesAndInviteLink() {
         let joinedAt = Date(timeIntervalSince1970: 2_000)
         let owner = TeamMember.owner(
@@ -523,10 +546,25 @@ struct TeamWorkspaceTests {
         let invalidToken = NSError(domain: "FIRAuthErrorDomain", code: 17_017)
         let expiredToken = NSError(domain: "FIRAuthErrorDomain", code: 17_021)
         let networkError = NSError(domain: "FIRAuthErrorDomain", code: 17_020)
+        let internalRefreshError = NSError(domain: "FIRAuthErrorDomain", code: 17_999)
+        let internalCachedTokenError = NSError(domain: "FIRAuthErrorDomain", code: 17_999)
 
         #expect(TeamFirebaseService.shouldInvalidateFirebaseSession(after: invalidToken))
         #expect(TeamFirebaseService.shouldInvalidateFirebaseSession(after: expiredToken))
         #expect(!TeamFirebaseService.shouldInvalidateFirebaseSession(after: networkError))
+        #expect(TeamFirebaseService.isFirebaseInternalAuthError(internalRefreshError))
+        #expect(
+            TeamFirebaseService.shouldRequireFirebaseReauthentication(
+                afterForcedRefreshError: internalRefreshError,
+                cachedTokenError: internalCachedTokenError
+            )
+        )
+        #expect(
+            !TeamFirebaseService.shouldRequireFirebaseReauthentication(
+                afterForcedRefreshError: internalRefreshError,
+                cachedTokenError: networkError
+            )
+        )
     }
 
     @Test func firebaseTeamInvitesUseSingleUseCodesAndAssignedRecords() {

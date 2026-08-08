@@ -231,6 +231,8 @@ struct TeamWorkspaceView: View {
                 statusMessage,
                 color: statusMessageIsError ? Color.statusNotInterested : Color.statusInterested
             )
+        } else if let errorMessage = visibleTeamErrorMessage {
+            statusCard(errorMessage, color: Color.statusNotInterested)
         } else if canUseTeamWorkspace,
                   !teamService.teamOperationsControl.teamWritesEnabled {
             statusCard(
@@ -784,7 +786,7 @@ struct TeamWorkspaceView: View {
                     }
                 } else {
                     inviteInlineNotice(
-                        "This team is not currently accepting invite changes.",
+                        "The owner needs to renew the Team plan before you can join.",
                         color: Color.statusNotHome
                     )
                 }
@@ -1438,11 +1440,13 @@ struct TeamWorkspaceView: View {
     private var visibleStatusMessage: String? {
         guard canUseTeamWorkspace else { return nil }
         guard let statusMessage else { return nil }
-        if statusMessage == teamSyncStatusMessage {
-            return nil
-        }
-        if statusMessage == teamService.lastErrorMessage {
-            return nil
+        if !statusMessageIsError {
+            if statusMessage == teamSyncStatusMessage {
+                return nil
+            }
+            if statusMessage == teamService.lastErrorMessage {
+                return nil
+            }
         }
         return statusMessage
     }

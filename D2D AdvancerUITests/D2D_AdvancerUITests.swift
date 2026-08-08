@@ -424,9 +424,13 @@ final class D2D_AdvancerUITests: XCTestCase {
         return inviteCode
     }
 
-    private func makeExistingTeamAccountApp() -> XCUIApplication {
+    private func makeExistingTeamAccountApp(pendingInviteCode: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append("-openTeamWorkspaceForUITests")
+        if let pendingInviteCode {
+            app.launchArguments.append("-teamInviteForUITests")
+            app.launchArguments.append(pendingInviteCode)
+        }
         return app
     }
 
@@ -1039,10 +1043,19 @@ final class D2D_AdvancerUITests: XCTestCase {
 
         let teamCard = app.descendants(matching: .any)["teamWorkspaceCard"]
         if !teamCard.waitForExistence(timeout: 3) {
+            if expectedText.exists {
+                return
+            }
             tapButton(app, "tab_More", timeout: 12)
+        }
+        if expectedText.exists {
+            return
         }
         if !teamCard.isHittable {
             app.swipeDown()
+        }
+        if expectedText.exists {
+            return
         }
         let didFindTeamCard = teamCard.waitForExistence(timeout: 8)
         XCTAssertTrue(didFindTeamCard, "Team Workspace card should exist")
@@ -1497,7 +1510,11 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapButton(ownerReturnApp, "teamLeadDetailCloseButton", timeout: 8)
 
         relaunch(ownerReturnApp, opening: "-openMapTabForUITests")
-        tapButton(ownerReturnApp, "addLeadButton", timeout: 12)
+        let addLeadButton = ownerReturnApp.buttons["addLeadButton"]
+        XCTAssertTrue(addLeadButton.waitForExistence(timeout: 12), "Map add-lead button should appear")
+        XCTAssertTrue(addLeadButton.isHittable, "Map add-lead button should be directly tappable")
+        addLeadButton.tap()
+        waitForIdentifiedElement(ownerReturnApp, "addLeadNameField", timeout: 12)
         scrollToIdentifiedElement(ownerReturnApp, "addLeadTechnicianMenu", direction: .down)
         scrollToIdentifiedElement(ownerReturnApp, "addLeadTechnicianArrivalDatePicker", direction: .down)
         scrollToIdentifiedElement(ownerReturnApp, "addLeadTechnicianDurationStepper", direction: .down, requireHittable: false)
@@ -1546,6 +1563,144 @@ final class D2D_AdvancerUITests: XCTestCase {
             app.buttons["teamJoinTeamButton"].exists,
             "The data-preserving preflight should stop with Join Team visible and must not accept membership."
         )
+    }
+
+    @MainActor
+    func testTeamExistingOwnerSeesReadOnlyGracePeriod() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+
+        let app = makeExistingTeamAccountApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForText(app, "My Team", timeout: 30)
+        waitForText(app, "Read-only grace period", timeout: 30)
+        waitForText(
+            app,
+            "Renew through Apple to restore Team edits before the read-only grace period ends.",
+            timeout: 20
+        )
+        screenshot(app, name: "Owner Team grace period")
+    }
+
+    @MainActor
+    func testTeamExistingOwnerSeesActivePlan() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+
+        let app = makeExistingTeamAccountApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForText(app, "My Team", timeout: 30)
+        waitForText(app, "Team plan active", timeout: 30)
+        XCTAssertFalse(app.buttons["teamRenewPlanButton"].exists)
+        screenshot(app, name: "Owner Team plan active")
+    }
+
+    @MainActor
+    func testTeamExistingOwnerRestorePurchasesReportsResult() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+
+        let app = makeExistingTeamAccountApp()
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForText(app, "My Team", timeout: 30)
+        let renewButton = scrollToButtonEitherDirection(app, "teamRenewPlanButton")
+        tapElement(app, renewButton, description: "teamRenewPlanButton")
+        waitForIdentifiedElement(app, "paywallScreen", timeout: 15)
+
+        let restoreButton = waitForIdentifiedElement(app, "paywallRestoreButton", timeout: 10)
+        tapElement(app, restoreButton, description: "paywallRestoreButton")
+
+        let outcomeTitles = [
+            "Purchases Restored",
+            "No Purchase Found",
+            "Test Purchase Not Restored",
+            "Team Purchase Needs Attention",
+            "Restore Taking Too Long",
+            "Restore Failed"
+        ]
+        let timeoutMessage = "The App Store did not finish the restore request. Check your connection, close and reopen D2D Advancer, then tap Restore Purchases again. Restoring never charges you."
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        var outcomeTitle: String?
+        var sawSystemAuthenticationPrompt = false
+        let deadline = Date().addingTimeInterval(120)
+        while Date() < deadline, outcomeTitle == nil {
+            outcomeTitle = outcomeTitles.first { app.staticTexts[$0].exists }
+            if outcomeTitle == nil, app.staticTexts[timeoutMessage].exists {
+                outcomeTitle = "Restore Taking Too Long"
+            }
+            if springboard.alerts.firstMatch.exists {
+                if !sawSystemAuthenticationPrompt {
+                    sawSystemAuthenticationPrompt = true
+                    let systemLabels = springboard.staticTexts.allElementsBoundByIndex
+                        .map(\.label)
+                        .filter { !$0.isEmpty }
+                        .joined(separator: " | ")
+                    let attachment = XCTAttachment(string: "STOREKIT_SYSTEM_PROMPT=\(systemLabels)")
+                    attachment.name = "StoreKit system prompt"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
+                    print("TEAM_RESTORE_AUTHENTICATION_REQUIRED")
+                }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+
+        guard let outcomeTitle else {
+            let visibleText = app.staticTexts.allElementsBoundByIndex
+                .map(\.label)
+                .filter { !$0.isEmpty }
+                .joined(separator: " | ")
+            let authenticationContext = sawSystemAuthenticationPrompt
+                ? " Apple authentication was requested but did not finish during the test."
+                : ""
+            XCTFail("Restore Purchases did not report a result.\(authenticationContext) Visible text: \(visibleText)")
+            return
+        }
+
+        let visibleText = app.staticTexts.allElementsBoundByIndex
+            .map(\.label)
+            .filter { !$0.isEmpty }
+            .joined(separator: " | ")
+        let attachment = XCTAttachment(
+            string: "TEAM_RESTORE_OUTCOME=\(outcomeTitle)\nVISIBLE_TEXT=\(visibleText)"
+        )
+        attachment.name = "Team restore outcome"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        screenshot(app, name: "Owner Team restore - \(outcomeTitle)")
+
+        if outcomeTitle == "Purchases Restored" {
+            app.alerts.buttons["Continue"].tap()
+            waitForText(app, "Team plan active", timeout: 30)
+        }
+    }
+
+    @MainActor
+    func testTeamExistingMemberPreviewsReadOnlyInviteWithoutJoining() throws {
+        try requireExistingTeamAccountPhysicalUITestHarness()
+
+        let inviteCode = try existingTeamInviteCode()
+        let app = makeExistingTeamAccountApp(pendingInviteCode: inviteCode)
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        let inviteCardMarker = app.descendants(matching: .any)
+            .matching(identifier: "teamInviteReviewCard")
+            .firstMatch
+        XCTAssertTrue(
+            inviteCardMarker.waitForExistence(timeout: 30),
+            "Expected the universal invite review card without accepting membership."
+        )
+        waitForText(app, "The owner needs to renew the Team plan before you can join.", timeout: 30)
+        XCTAssertFalse(
+            app.buttons["teamInviteReviewJoinButton"].exists,
+            "A grace-period invite must not expose a Join action."
+        )
+        XCTAssertFalse(app.staticTexts["Joined team."].exists)
+        screenshot(app, name: "Rep invite blocked by owner grace")
     }
 
     @MainActor
@@ -2885,6 +3040,44 @@ final class D2D_AdvancerUITests: XCTestCase {
             app.descendants(matching: .any)["paywallScreen"].waitForNonExistence(timeout: 5),
             "Paywall should dismiss cleanly from the close button"
         )
+    }
+
+    @MainActor
+    func testRestorePurchasesAlwaysShowsAnExplicitResult() throws {
+        let app = makePaywallApp(showTeamOffer: true)
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForIdentifiedElement(app, "paywallScreen", timeout: 12)
+        let restoreButton = waitForIdentifiedElement(app, "paywallRestoreButton", timeout: 8)
+        XCTAssertGreaterThanOrEqual(restoreButton.frame.height, 44)
+        restoreButton.tap()
+        waitForText(app, "No Purchase Found", timeout: 8)
+        waitForText(
+            app,
+            "No active D2D Advancer subscription was found for this Apple ID.",
+            timeout: 8
+        )
+        screenshot(app, name: "Restore purchases explicit result")
+        app.alerts.buttons["OK"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["paywallScreen"].exists)
+    }
+
+    @MainActor
+    func testRestorePurchasesTimesOutWithExplicitGuidance() throws {
+        let app = makePaywallApp(showTeamOffer: true)
+        app.launchArguments.append("-simulateStoreKitRestoreTimeoutForUITests")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForIdentifiedElement(app, "paywallScreen", timeout: 12)
+        let restoreButton = waitForIdentifiedElement(app, "paywallRestoreButton", timeout: 8)
+        XCTAssertGreaterThanOrEqual(restoreButton.frame.height, 44)
+        restoreButton.tap()
+        waitForText(app, "Restore Taking Too Long", timeout: 8)
+        waitForTextContaining(app, "The App Store did not finish", timeout: 8)
+        screenshot(app, name: "Restore purchases timeout guidance")
+        XCTAssertTrue(app.descendants(matching: .any)["paywallScreen"].exists)
     }
 
     @MainActor

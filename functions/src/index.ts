@@ -19,6 +19,7 @@ import {
   evaluateTeamUsage,
   FixedWindowRateLimitPolicy,
   FixedWindowRateLimitState,
+  INVITE_PREVIEW_RATE_LIMIT,
   METERED_TEAM_COLLECTIONS,
   SYNC_ENTITLEMENT_RATE_LIMIT,
   TEAM_BUDGET_TOPIC,
@@ -39,6 +40,7 @@ import {
   cleanOptionalText,
   cleanRequiredText,
   deriveTeamEntitlementState,
+  deriveStoredTeamPlanStatus,
   normalizeTeamTransaction,
   NormalizedTeamTransaction,
   selectTeamWorkspaceTransaction,
@@ -339,6 +341,21 @@ function teamPlanData(
   };
 }
 
+function timestampMillis(value: unknown): number | null {
+  return value instanceof Timestamp ? value.toMillis() : null;
+}
+
+function normalizedInviteCode(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", "Enter a valid Team invite code.");
+  }
+  const code = value.trim().toUpperCase();
+  if (!/^[0-9A-F]{8}$/.test(code)) {
+    throw new HttpsError("invalid-argument", "Enter a valid Team invite code.");
+  }
+  return code;
+}
+
 function validatePurchaseBinding(
   ownerUserId: string,
   bindingOwnerUserId: unknown,
@@ -609,6 +626,52 @@ export const syncTeamEntitlement = onCall(TEAM_CALLABLE_OPTIONS, async (request)
     request.data?.signedTransaction
   );
   return syncEntitlementForOwner(ownerUserId, transaction);
+});
+
+export const getTeamInvitePreview = onCall(TEAM_CALLABLE_OPTIONS, async (request) => {
+  const userId = request.auth?.uid;
+  if (!userId) {
+    throw new HttpsError("unauthenticated", "Sign in with Apple before reviewing a Team invite.");
+  }
+
+  await enforceUserRateLimit(userId, "invite-preview", INVITE_PREVIEW_RATE_LIMIT);
+
+  const code = normalizedInviteCode(request.data?.inviteCode);
+  const db = getFirestore();
+  const inviteSnapshot = await db.collection("teamInvites").doc(code).get();
+  const invite = inviteSnapshot.data();
+  const nowMillis = Date.now();
+  const expiresAtMillis = timestampMillis(invite?.expiresAt);
+  if (
+    !inviteSnapshot.exists
+    || invite?.status !== "pending"
+    || expiresAtMillis === null
+    || expiresAtMillis <= nowMillis
+    || typeof invite?.teamId !== "string"
+  ) {
+    throw new HttpsError("failed-precondition", "This invite code is invalid, expired, or already used.");
+  }
+
+  const teamSnapshot = await db.collection("teams").doc(invite.teamId).get();
+  const team = teamSnapshot.data();
+  if (!teamSnapshot.exists || !team) {
+    throw new HttpsError("failed-precondition", "This Team workspace is no longer available.");
+  }
+
+  return {
+    code,
+    expiresAtMillis,
+    ownerDisplayName: typeof invite.ownerDisplayName === "string" ? invite.ownerDisplayName : null,
+    planStatus: deriveStoredTeamPlanStatus({
+      billingSource: typeof team.billingSource === "string" ? team.billingSource : undefined,
+      graceEndsAtMillis: timestampMillis(team.graceEndsAt),
+      planExpiresAtMillis: timestampMillis(team.planExpiresAt),
+      planStatus: typeof team.planStatus === "string" ? team.planStatus : undefined
+    }, nowMillis),
+    teamId: invite.teamId,
+    teamName: typeof team.name === "string" ? team.name : null,
+    workType: typeof invite.workType === "string" ? invite.workType : "sales_rep"
+  };
 });
 
 export const createTeamWorkspace = onCall(TEAM_CALLABLE_OPTIONS, async (request) => {

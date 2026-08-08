@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { test } from "node:test";
 import { initializeApp, deleteApp } from "firebase/app";
 import {
@@ -39,7 +40,7 @@ test("created owner and rep Firebase accounts can create and join a team", async
   assert.ok(firestoreHost, "FIRESTORE_EMULATOR_HOST must be set by firebase emulators:exec");
 
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const inviteCode = `E2E${runId.replace(/[^A-Z0-9]/gi, "").slice(-6).toUpperCase()}`;
+  const inviteCode = randomBytes(4).toString("hex").toUpperCase();
 
   const owner = await createTestAccount("owner", runId, "Owner E2E");
   const rep = await createTestAccount("rep", runId, "Rep E2E");
@@ -54,6 +55,12 @@ test("created owner and rep Firebase accounts can create and join a team", async
       inviteCode
     });
 
+    const preview = await httpsCallable(rep.functions, "getTeamInvitePreview")({ inviteCode });
+    assert.equal(preview.data.teamId, teamId);
+    assert.equal(preview.data.teamName, "E2E Team");
+    assert.equal(preview.data.planStatus, "active");
+    assert.equal(preview.data.workType, "sales_rep");
+
     await joinTeam(rep.db, {
       teamId,
       repUserId: rep.uid,
@@ -61,7 +68,7 @@ test("created owner and rep Firebase accounts can create and join a team", async
       inviteCode
     });
 
-    const technicianInviteCode = `${inviteCode}T`;
+    const technicianInviteCode = randomBytes(4).toString("hex").toUpperCase();
     await createInvite(owner.db, {
       teamId,
       ownerUserId: owner.uid,

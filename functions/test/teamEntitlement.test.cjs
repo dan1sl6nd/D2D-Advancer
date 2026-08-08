@@ -3,6 +3,7 @@ const { describe, it } = require("node:test");
 const {
   cleanOptionalText,
   cleanRequiredText,
+  deriveStoredTeamPlanStatus,
   deriveTeamEntitlementState,
   normalizeTeamTransaction,
   selectTeamWorkspaceTransaction,
@@ -34,6 +35,29 @@ describe("Team entitlement migration policy", () => {
       deriveTeamEntitlementState({ expiresAtMillis: now + 60_000, revocationAtMillis: now }, now).planStatus,
       "paused"
     );
+  });
+
+  it("derives current invite availability from stored Team billing dates", () => {
+    assert.equal(deriveStoredTeamPlanStatus({
+      billingSource: "app_store",
+      planStatus: "active",
+      planExpiresAtMillis: now + 60_000,
+      graceEndsAtMillis: now + TEAM_GRACE_PERIOD_MS
+    }, now), "active");
+
+    assert.equal(deriveStoredTeamPlanStatus({
+      billingSource: "app_store",
+      planStatus: "active",
+      planExpiresAtMillis: now - 1,
+      graceEndsAtMillis: now + TEAM_GRACE_PERIOD_MS
+    }, now), "grace");
+
+    assert.equal(deriveStoredTeamPlanStatus({
+      billingSource: "app_store",
+      planStatus: "grace",
+      planExpiresAtMillis: now - TEAM_GRACE_PERIOD_MS,
+      graceEndsAtMillis: now - 1
+    }, now), "paused");
   });
 
   it("accepts only linked Team products", () => {

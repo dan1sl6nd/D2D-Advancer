@@ -7,6 +7,8 @@ struct PaywallView: View {
     @StateObject private var paywallManager = PaywallManager.shared
     @State private var selectedPlan: PaywallManager.SubscriptionPlan = PaywallManager.shared.defaultPlan
     @State private var showingSampleWorkspace = false
+    @State private var isRestoringPurchases = false
+    @State private var restoreResult: PurchaseRestoreResult?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -41,6 +43,17 @@ struct PaywallView: View {
         }
         .fullScreenCover(isPresented: $showingSampleWorkspace) {
             SubscriptionSampleWorkspaceView(offering: paywallManager.offering)
+        }
+        .alert(item: $restoreResult) { result in
+            Alert(
+                title: Text(result.title),
+                message: Text(result.message),
+                dismissButton: .default(Text(result.isSuccess ? "Continue" : "OK")) {
+                    if result.isSuccess {
+                        dismiss()
+                    }
+                }
+            )
         }
         .onAppear {
             selectedPlan = paywallManager.defaultPlan
@@ -390,11 +403,22 @@ struct PaywallView: View {
                 .accessibilityIdentifier("paywallPurchaseButton")
 
                 HStack(spacing: 14) {
-                    Button("Restore Purchases") {
+                    Button {
                         restorePurchases()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if isRestoringPurchases {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .tint(.textSecondary)
+                            }
+                            Text(isRestoringPurchases ? "Restoring..." : "Restore Purchases")
+                        }
                     }
                     .font(.obsidianCaption)
                     .foregroundColor(.textSecondary)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                     .disabled(paywallManager.isPurchasing)
                     .accessibilityIdentifier("paywallRestoreButton")
 
@@ -406,6 +430,8 @@ struct PaywallView: View {
                         Text("Privacy")
                             .font(.obsidianCaption)
                             .foregroundColor(.textSecondary)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityIdentifier("paywallPrivacyButton")
 
@@ -413,6 +439,8 @@ struct PaywallView: View {
                         Text("Terms")
                             .font(.obsidianCaption)
                             .foregroundColor(.textSecondary)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityIdentifier("paywallTermsButton")
                 }
@@ -444,9 +472,15 @@ struct PaywallView: View {
     private var purchaseStatusBanner: some View {
         if let message = paywallManager.purchaseStatusMessage {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: paywallManager.purchaseStatusIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                    .font(.obsidianFootnote)
-                    .foregroundColor(paywallManager.purchaseStatusIsError ? .statusNotHome : .statusInterested)
+                if isRestoringPurchases {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.textSecondary)
+                } else {
+                    Image(systemName: paywallManager.purchaseStatusIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .font(.obsidianFootnote)
+                        .foregroundColor(paywallManager.purchaseStatusIsError ? .statusNotHome : .statusInterested)
+                }
 
                 Text(message)
                     .font(.obsidianCaption)
@@ -513,12 +547,12 @@ struct PaywallView: View {
 
     private func restorePurchases() {
         Task {
-            await paywallManager.restorePurchases()
-            let purchaseIsActive = paywallManager.offering == .team
-                ? paywallManager.hasVerifiedTeamBillingEntitlement
-                : paywallManager.isPremium
-            if purchaseIsActive {
-                dismiss()
+            isRestoringPurchases = true
+            restoreResult = nil
+            let result = await paywallManager.restorePurchases()
+            isRestoringPurchases = false
+            if let result {
+                restoreResult = result
             }
         }
     }

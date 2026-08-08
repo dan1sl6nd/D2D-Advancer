@@ -139,6 +139,12 @@ struct D2D_AdvancerApp: App {
                 AppRouter.shared.selectedTab = MainAppTab.map.rawValue
             }
         }
+        #if DEBUG
+        if let inviteArgumentIndex = launchArguments.firstIndex(of: "-teamInviteForUITests"),
+           launchArguments.indices.contains(inviteArgumentIndex + 1) {
+            AppRouter.shared.openTeamInvite(launchArguments[inviteArgumentIndex + 1])
+        }
+        #endif
         print("🚀 D2D Advancer App Starting...")
 
         // Check for Apple Search Ads attribution

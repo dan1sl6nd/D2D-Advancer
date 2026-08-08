@@ -63,6 +63,11 @@ export const CREATE_TEAM_RATE_LIMIT: FixedWindowRateLimitPolicy = {
   windowMs: 60 * 60 * 1_000
 };
 
+export const INVITE_PREVIEW_RATE_LIMIT: FixedWindowRateLimitPolicy = {
+  maxRequests: 60,
+  windowMs: 60 * 60 * 1_000
+};
+
 export const SYNC_ENTITLEMENT_RATE_LIMIT: FixedWindowRateLimitPolicy = {
   maxRequests: 30,
   windowMs: 60 * 60 * 1_000

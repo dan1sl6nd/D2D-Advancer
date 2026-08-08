@@ -91,6 +91,75 @@ struct TeamStoreTransactionCandidate {
     }
 }
 
+struct PurchaseRestoreResult: Identifiable {
+    enum Kind: Equatable {
+        case restored
+        case noPurchaseFound
+        case testPurchase
+        case accountLinkRequired
+        case timedOut
+        case failed
+    }
+
+    let id = UUID()
+    let kind: Kind
+    let message: String
+
+    var title: String {
+        switch kind {
+        case .restored:
+            return "Purchases Restored"
+        case .noPurchaseFound:
+            return "No Purchase Found"
+        case .testPurchase:
+            return "Test Purchase Not Restored"
+        case .accountLinkRequired:
+            return "Team Purchase Needs Attention"
+        case .timedOut:
+            return "Restore Taking Too Long"
+        case .failed:
+            return "Restore Failed"
+        }
+    }
+
+    var isSuccess: Bool {
+        kind == .restored
+    }
+}
+
+private actor AppStoreSyncAttempt {
+    enum Outcome {
+        case completed
+        case failed(String)
+    }
+
+    private var hasStarted = false
+    private var outcome: Outcome?
+    private let operation: @Sendable () async throws -> Void
+
+    init(operation: @escaping @Sendable () async throws -> Void = {
+        try await AppStore.sync()
+    }) {
+        self.operation = operation
+    }
+
+    func start() async {
+        guard !hasStarted else { return }
+        hasStarted = true
+
+        do {
+            try await operation()
+            outcome = .completed
+        } catch {
+            outcome = .failed(error.localizedDescription)
+        }
+    }
+
+    func currentOutcome() -> Outcome? {
+        outcome
+    }
+}
+
 class PaywallManager: ObservableObject {
     enum Offering: Equatable {
         case solo
@@ -145,8 +214,12 @@ class PaywallManager: ObservableObject {
     private var allowsLocalStoreKitTransactions: Bool {
         ProcessInfo.processInfo.arguments.contains("-allowLocalStoreKitTransactions")
     }
+    private var simulatesStoreKitRestoreTimeoutForUITests: Bool {
+        ProcessInfo.processInfo.arguments.contains("-simulateStoreKitRestoreTimeoutForUITests")
+    }
 
     private var updateListenerTask: Task<Void, Error>?
+    private var activeAppStoreSyncAttempt: AppStoreSyncAttempt?
 
     private init() {
         loadPremiumStatus()
@@ -644,57 +717,162 @@ class PaywallManager: ObservableObject {
     }
 
     @MainActor
-    func restorePurchases() async {
-        guard !isPurchasing else { return }
+    func restorePurchases() async -> PurchaseRestoreResult? {
+        guard !isPurchasing else { return nil }
 
         isPurchasing = true
-        setPurchaseStatus(nil)
+        setPurchaseStatus("Checking the App Store for previous purchases...")
 
         defer {
             isPurchasing = false
         }
 
-        do {
-            try await AppStore.sync()
+#if DEBUG
+        if isStoreKitDisabledForUITests, !simulatesStoreKitRestoreTimeoutForUITests {
+            return completeRestore(
+                kind: .noPurchaseFound,
+                message: "No active D2D Advancer subscription was found for this Apple ID."
+            )
+        }
+#endif
+
+        switch await synchronizeAppStore() {
+        case .completed:
             await checkSubscriptionStatus()
 
             if offering == .team, hasIgnoredLocalTeamTransaction, !hasActiveTeamStoreSubscription {
-                setPurchaseStatus(
-                    "A local Xcode test purchase was ignored. Choose a Team plan below to subscribe through the App Store.",
-                    isError: true
+                return completeRestore(
+                    kind: .testPurchase,
+                    message: "A local Xcode test purchase was ignored. Choose a Team plan below to subscribe through the App Store."
                 )
             } else if offering == .team, hasActiveTeamStoreSubscription, !hasVerifiedTeamBillingEntitlement {
                 switch activeTeamServerEligibility {
                 case .xcode:
-                    setPurchaseStatus(
-                        "This is an Xcode test subscription. Use an App Store Sandbox or live Team subscription for a real workspace.",
-                        isError: true
+                    return completeRestore(
+                        kind: .testPurchase,
+                        message: "This is an Xcode test subscription. Use an App Store Sandbox or live Team subscription for a real workspace."
                     )
                 case .missingAccountToken:
-                    setPurchaseStatus(
-                        "Apple found an older Team subscription. Restore it while signed in to link it to this owner.",
-                        isError: true
+                    return completeRestore(
+                        kind: .accountLinkRequired,
+                        message: "Apple found an older Team subscription, but it is not linked to this signed-in owner. Contact support before purchasing again."
                     )
                 case .eligible, .none:
-                    setPurchaseStatus(
-                        "Apple found a Team subscription, but it is not linked to this signed-in owner. Use the D2D account that purchased it, then try Restore Purchases again.",
-                        isError: true
+                    return completeRestore(
+                        kind: .accountLinkRequired,
+                        message: "Apple found a Team subscription, but it is not linked to this signed-in owner. Sign in with the D2D account that purchased it, then try again."
                     )
                 }
             } else if offering == .team, hasVerifiedTeamBillingEntitlement {
-                setPurchaseStatus("Team purchase restored and verified for this owner.")
                 print("✅ Team purchase restored")
+                return completeRestore(
+                    kind: .restored,
+                    message: "Team purchase restored and verified for this owner."
+                )
             } else if hasStoreEntitlement {
-                setPurchaseStatus("Purchases restored. Pro access is active.")
                 print("✅ Purchases restored")
+                return completeRestore(
+                    kind: .restored,
+                    message: "Purchases restored. Pro access is active."
+                )
             } else {
-                setPurchaseStatus("No active subscription was found for this Apple ID.", isError: true)
                 print("ℹ️ Restore completed with no active subscription")
+                return completeRestore(
+                    kind: .noPurchaseFound,
+                    message: "No active D2D Advancer subscription was found for this Apple ID."
+                )
             }
-        } catch {
-            setPurchaseStatus("Restore failed: \(error.localizedDescription)", isError: true)
-            print("❌ Restore failed: \(error)")
+        case .failed(let message):
+            print("❌ Restore failed: \(message)")
+            return completeRestore(
+                kind: .failed,
+                message: "Restore failed: \(message)"
+            )
+        case .timedOut:
+            print("⚠️ Restore timed out while waiting for App Store.sync()")
+            return completeRestore(
+                kind: .timedOut,
+                message: "The App Store did not finish the restore request. Check your connection, close and reopen D2D Advancer, then tap Restore Purchases again. Restoring never charges you."
+            )
         }
+    }
+
+    private enum AppStoreSyncResult {
+        case completed
+        case failed(String)
+        case timedOut
+    }
+
+    @MainActor
+    private func synchronizeAppStore() async -> AppStoreSyncResult {
+        let attempt: AppStoreSyncAttempt
+        if let activeAppStoreSyncAttempt {
+            attempt = activeAppStoreSyncAttempt
+        } else {
+            let newAttempt: AppStoreSyncAttempt
+#if DEBUG
+            if simulatesStoreKitRestoreTimeoutForUITests {
+                newAttempt = AppStoreSyncAttempt {
+                    try await Task.sleep(for: .seconds(30))
+                }
+            } else {
+                newAttempt = AppStoreSyncAttempt()
+            }
+#else
+            newAttempt = AppStoreSyncAttempt()
+#endif
+            activeAppStoreSyncAttempt = newAttempt
+            attempt = newAttempt
+            Task {
+                await newAttempt.start()
+            }
+        }
+
+        let clock = ContinuousClock()
+        let timeout: Duration = simulatesStoreKitRestoreTimeoutForUITests
+            ? .seconds(1)
+            : .seconds(60)
+        let deadline = clock.now.advanced(by: timeout)
+
+        while clock.now < deadline {
+            if let outcome = await attempt.currentOutcome() {
+                activeAppStoreSyncAttempt = nil
+                switch outcome {
+                case .completed:
+                    return .completed
+                case .failed(let message):
+                    return .failed(message)
+                }
+            }
+
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                return .failed("The restore request was cancelled.")
+            }
+        }
+
+        if let outcome = await attempt.currentOutcome() {
+            activeAppStoreSyncAttempt = nil
+            switch outcome {
+            case .completed:
+                return .completed
+            case .failed(let message):
+                return .failed(message)
+            }
+        }
+
+        return .timedOut
+    }
+
+    @MainActor
+    private func completeRestore(
+        kind: PurchaseRestoreResult.Kind,
+        message: String
+    ) -> PurchaseRestoreResult {
+        let result = PurchaseRestoreResult(kind: kind, message: message)
+        setPurchaseStatus(message, isError: !result.isSuccess)
+        return result
     }
 
     // MARK: - Subscription Status

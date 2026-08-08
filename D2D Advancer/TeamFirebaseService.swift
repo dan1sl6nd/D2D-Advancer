@@ -216,6 +216,24 @@ final class TeamFirebaseService: ObservableObject {
         ].contains(nsError.code)
     }
 
+    nonisolated static func isFirebaseInternalAuthError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == AuthErrors.domain
+            && nsError.code == AuthErrorCode.internalError.rawValue
+    }
+
+    nonisolated static func shouldRequireFirebaseReauthentication(
+        afterForcedRefreshError forcedRefreshError: Error,
+        cachedTokenError: Error
+    ) -> Bool {
+        shouldInvalidateFirebaseSession(after: forcedRefreshError)
+            || shouldInvalidateFirebaseSession(after: cachedTokenError)
+            || (
+                isFirebaseInternalAuthError(forcedRefreshError)
+                    && isFirebaseInternalAuthError(cachedTokenError)
+            )
+    }
+
     nonisolated static func shouldClearMemberSessionAfterPermissionError(
         error: Error,
         profileRole: TeamRole?,
@@ -488,31 +506,7 @@ final class TeamFirebaseService: ObservableObject {
         guard let code = TeamInviteLink.normalizedCode(inviteCode) else {
             throw TeamFirebaseServiceError.invalidInvite
         }
-
-        let snapshot = try await getServerDocument(inviteRef(code))
-        guard let data = snapshot.data(),
-              let teamId = data[TeamFirebaseSchema.Field.teamId] as? String,
-              let status = data[TeamFirebaseSchema.Field.status] as? String,
-              status == TeamFirebaseSchema.InviteStatus.pending,
-              let expiresAt = Self.dateValue(data[TeamFirebaseSchema.Field.expiresAt]),
-              expiresAt > Date() else {
-            throw TeamFirebaseServiceError.invalidInvite
-        }
-
-        let workType = (data[TeamFirebaseSchema.Field.workType] as? String)
-            .flatMap(TeamMemberWorkType.init(rawValue:)) ?? .salesRep
-        let planStatus = (data[TeamFirebaseSchema.Field.planStatus] as? String)
-            .flatMap(TeamPlanStatus.init(rawValue:)) ?? .active
-
-        return TeamInvitePreview(
-            code: code,
-            teamId: teamId,
-            teamName: data[TeamFirebaseSchema.Field.teamName] as? String,
-            ownerDisplayName: data[TeamFirebaseSchema.Field.ownerDisplayName] as? String,
-            workType: workType,
-            expiresAt: expiresAt,
-            planStatus: planStatus
-        )
+        return try await TeamBillingService.shared.fetchInvitePreview(inviteCode: code)
     }
 
     func joinTeam(inviteCode: String, displayName: String?, email: String?) async throws {
@@ -523,27 +517,25 @@ final class TeamFirebaseService: ObservableObject {
         let code = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !code.isEmpty else { throw TeamFirebaseServiceError.invalidInvite }
 
+        let livePreview = try await fetchInvitePreview(inviteCode: code)
+        guard livePreview.planStatus.allowsTeamWrite else {
+            throw TeamFirebaseServiceError.writeBlocked
+        }
+
         let inviteSnapshot = try await getServerDocument(inviteRef(code))
         guard let inviteData = inviteSnapshot.data(),
               let teamId = inviteData[TeamFirebaseSchema.Field.teamId] as? String,
+              teamId == livePreview.teamId,
               let status = inviteData[TeamFirebaseSchema.Field.status] as? String,
               status == TeamFirebaseSchema.InviteStatus.pending,
               let expiresAt = Self.dateValue(inviteData[TeamFirebaseSchema.Field.expiresAt]),
               expiresAt > Date() else {
             throw TeamFirebaseServiceError.invalidInvite
         }
-        let invitePlanStatus = (inviteData[TeamFirebaseSchema.Field.planStatus] as? String)
-            .flatMap(TeamPlanStatus.init(rawValue:))
-        guard invitePlanStatus?.allowsTeamWrite ?? true else {
-            throw TeamFirebaseServiceError.writeBlocked
-        }
         guard let ownerUserId = inviteData[TeamFirebaseSchema.Field.createdByUserId] as? String,
               !ownerUserId.isEmpty else {
             throw TeamFirebaseServiceError.invalidInvite
         }
-        let inviteWorkType = (inviteData[TeamFirebaseSchema.Field.workType] as? String)
-            .flatMap(TeamMemberWorkType.init(rawValue:))
-
         let existingProfile = try await getServerDocument(teamProfileRef(userId: user.uid))
         if existingProfile.exists {
             throw TeamFirebaseServiceError.alreadyInTeam
@@ -552,11 +544,11 @@ final class TeamFirebaseService: ObservableObject {
         let now = Date()
         let team = TeamWorkspace(
             id: teamId,
-            name: Self.nilIfBlank(inviteData[TeamFirebaseSchema.Field.teamName] as? String) ?? "Team",
+            name: livePreview.teamName,
             ownerUserId: ownerUserId,
             createdAt: Self.dateValue(inviteData[TeamFirebaseSchema.Field.createdAt]) ?? now,
             updatedAt: now,
-            planStatus: invitePlanStatus ?? .active,
+            planStatus: livePreview.planStatus,
             planExpiresAt: nil,
             graceEndsAt: nil,
             memberLimit: TeamWorkspace.includedMemberLimit
@@ -568,7 +560,7 @@ final class TeamFirebaseService: ObservableObject {
             displayName: Self.nilIfBlank(displayName) ?? Self.nilIfBlank(user.displayName) ?? "Team Rep",
             email: Self.nilIfBlank(email) ?? user.email,
             acceptedInviteId: code,
-            workType: inviteWorkType ?? .salesRep,
+            workType: livePreview.workType,
             joinedAt: now
         )
 
@@ -591,11 +583,20 @@ final class TeamFirebaseService: ObservableObject {
             targetUserId: member.userId,
             createdAt: now
         )
-        try await commitTeamBatch(
-            batch,
-            pendingWriteCount: 5,
-            allowsLocalQueueFallback: false
-        )
+        do {
+            try await commitTeamBatch(
+                batch,
+                pendingWriteCount: 5,
+                allowsLocalQueueFallback: false
+            )
+        } catch {
+            if Self.isPermissionDeniedError(error),
+               let refreshedPreview = try? await fetchInvitePreview(inviteCode: code),
+               !refreshedPreview.planStatus.allowsTeamWrite {
+                throw TeamFirebaseServiceError.writeBlocked
+            }
+            throw error
+        }
 
         stopTeamRealtimeListeners()
         activeTeam = team
@@ -1716,7 +1717,7 @@ enum TeamFirebaseServiceError: LocalizedError {
         case .teamPlanRequired:
             return "Choose an active Team plan before creating a workspace."
         case .writeBlocked:
-            return "Team edits are currently read-only."
+            return "This Team is read-only until the owner renews the Team plan."
         case .xcodeTeamPlan:
             return "This is an Xcode test subscription. Production Team workspaces require an App Store Sandbox or live Team subscription."
         }
@@ -1798,17 +1799,27 @@ private extension TeamFirebaseService {
 
     static let teamWriteAckWaitLimit: TimeInterval = 8
     static let teamAuthenticationWaitLimit: TimeInterval = 15
+    static let teamNetworkPreparationWaitLimit: TimeInterval = 12
     static let teamServerConfirmationWaitLimit: TimeInterval = 20
 
     func prepareFirestoreForTeamUse(force: Bool = false) async throws {
         guard force || !hasPreparedFirestoreNetwork else { return }
         do {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let completion = TeamNetworkCompletionBox(continuation: continuation)
+                let timeout = DispatchWorkItem {
+                    completion.resume(throwing: TeamFirebaseServiceError.serverConfirmationTimedOut)
+                }
+                completion.setTimeoutWorkItem(timeout)
+                DispatchQueue.main.asyncAfter(
+                    deadline: .now() + Self.teamNetworkPreparationWaitLimit,
+                    execute: timeout
+                )
                 db.enableNetwork { error in
                     if let error {
-                        continuation.resume(throwing: error)
+                        completion.resume(throwing: error)
                     } else {
-                        continuation.resume()
+                        completion.resume()
                     }
                 }
             }
@@ -1920,14 +1931,41 @@ private extension TeamFirebaseService {
         do {
             _ = try await firebaseIDToken(for: user, forceRefresh: true)
             return user
-        } catch {
+        } catch let forcedRefreshError {
             hasPreparedFirestoreNetwork = false
-            AppLog.warning("Team", "Firebase Team session token refresh failed: \(error.localizedDescription)")
-            if Self.shouldInvalidateFirebaseSession(after: error) {
+            let forcedNSError = forcedRefreshError as NSError
+            AppLog.warning(
+                "Team",
+                "Firebase Team session token refresh failed: \(forcedNSError.domain) code \(forcedNSError.code) - \(forcedRefreshError.localizedDescription)"
+            )
+            if Self.shouldInvalidateFirebaseSession(after: forcedRefreshError) {
                 try? Auth.auth().signOut()
                 throw TeamFirebaseServiceError.firebaseSessionExpired
             }
-            throw error
+
+            guard Self.isFirebaseInternalAuthError(forcedRefreshError) else {
+                throw forcedRefreshError
+            }
+
+            do {
+                _ = try await firebaseIDToken(for: user, forceRefresh: false)
+                AppLog.info("Team", "Firebase Team session recovered with the cached ID token.")
+                return user
+            } catch let cachedTokenError {
+                let cachedNSError = cachedTokenError as NSError
+                AppLog.warning(
+                    "Team",
+                    "Firebase cached Team token recovery failed: \(cachedNSError.domain) code \(cachedNSError.code) - \(cachedTokenError.localizedDescription)"
+                )
+                if Self.shouldRequireFirebaseReauthentication(
+                    afterForcedRefreshError: forcedRefreshError,
+                    cachedTokenError: cachedTokenError
+                ) {
+                    try? Auth.auth().signOut()
+                    throw TeamFirebaseServiceError.firebaseSessionExpired
+                }
+                throw cachedTokenError
+            }
         }
     }
 
@@ -2946,6 +2984,49 @@ private final class TeamWriteCompletionBox: @unchecked Sendable {
         guard !didResume else {
             lock.unlock()
             lateCompletion(error)
+            return
+        }
+        didResume = true
+        let timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+
+        timeoutWorkItem?.cancel()
+        if let error {
+            continuation.resume(throwing: error)
+        } else {
+            continuation.resume()
+        }
+    }
+}
+
+private final class TeamNetworkCompletionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private let continuation: CheckedContinuation<Void, Error>
+    private var didResume = false
+    private var timeoutWorkItem: DispatchWorkItem?
+
+    init(continuation: CheckedContinuation<Void, Error>) {
+        self.continuation = continuation
+    }
+
+    func setTimeoutWorkItem(_ timeoutWorkItem: DispatchWorkItem) {
+        lock.lock()
+        self.timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+    }
+
+    func resume() {
+        finish(with: nil)
+    }
+
+    func resume(throwing error: Error) {
+        finish(with: error)
+    }
+
+    private func finish(with error: Error?) {
+        lock.lock()
+        guard !didResume else {
+            lock.unlock()
             return
         }
         didResume = true
