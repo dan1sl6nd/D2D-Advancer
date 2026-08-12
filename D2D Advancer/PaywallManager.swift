@@ -95,6 +95,7 @@ struct PurchaseRestoreResult: Identifiable {
     enum Kind: Equatable {
         case restored
         case noPurchaseFound
+        case noTeamPurchaseFound
         case testPurchase
         case accountLinkRequired
         case requestInProgress
@@ -112,6 +113,8 @@ struct PurchaseRestoreResult: Identifiable {
             return "Purchases Restored"
         case .noPurchaseFound:
             return "No Purchase Found"
+        case .noTeamPurchaseFound:
+            return "No Team Plan Found"
         case .testPurchase:
             return "Test Purchase Not Restored"
         case .accountLinkRequired:
@@ -513,7 +516,13 @@ class PaywallManager: ObservableObject {
         }
 
         if premium {
-            if shouldShowPaywall {
+            if shouldShowPaywall,
+               Self.shouldDismissPresentedPaywall(
+                   offering: offering,
+                   hasPremiumAccess: premium,
+                   hasVerifiedTeamBillingEntitlement: hasVerifiedTeamBillingEntitlement,
+                   isStoreKitOperationInProgress: isPurchasing
+               ) {
                 shouldShowPaywall = false
             }
             print("💎 Premium status updated: Active")
@@ -530,6 +539,22 @@ class PaywallManager: ObservableObject {
                 object: nil,
                 userInfo: ["isPremium": premium]
             )
+        }
+    }
+
+    static func shouldDismissPresentedPaywall(
+        offering: Offering,
+        hasPremiumAccess: Bool,
+        hasVerifiedTeamBillingEntitlement: Bool,
+        isStoreKitOperationInProgress: Bool
+    ) -> Bool {
+        guard !isStoreKitOperationInProgress else { return false }
+
+        switch offering {
+        case .solo:
+            return hasPremiumAccess
+        case .team:
+            return hasVerifiedTeamBillingEntitlement
         }
     }
 
@@ -760,8 +785,10 @@ class PaywallManager: ObservableObject {
 #if DEBUG
         if isStoreKitDisabledForUITests, !simulatesStoreKitRestoreTimeoutForUITests {
             return completeRestore(
-                kind: .noPurchaseFound,
-                message: "No active D2D Advancer subscription was found for this Apple ID."
+                kind: offering == .team ? .noTeamPurchaseFound : .noPurchaseFound,
+                message: offering == .team
+                    ? "No active D2D Advancer Team subscription was found for this Apple ID. A Solo plan cannot restore Team access."
+                    : "No active D2D Advancer subscription was found for this Apple ID."
             )
         }
 #endif
@@ -770,36 +797,49 @@ class PaywallManager: ObservableObject {
         case .completed:
             await checkSubscriptionStatus()
 
-            if offering == .team, hasIgnoredLocalTeamTransaction, !hasActiveTeamStoreSubscription {
-                return completeRestore(
-                    kind: .testPurchase,
-                    message: "A local Xcode test purchase was ignored. Choose a Team plan below to subscribe through the App Store."
-                )
-            } else if offering == .team, hasActiveTeamStoreSubscription, !hasVerifiedTeamBillingEntitlement {
-                switch activeTeamServerEligibility {
-                case .xcode:
+            if offering == .team {
+                if hasIgnoredLocalTeamTransaction, !hasActiveTeamStoreSubscription {
                     return completeRestore(
                         kind: .testPurchase,
-                        message: "This is an Xcode test subscription. Use an App Store Sandbox or live Team subscription for a real workspace."
-                    )
-                case .missingAccountToken:
-                    return completeRestore(
-                        kind: .accountLinkRequired,
-                        message: "Apple found an older Team subscription, but it is not linked to this signed-in owner. Contact support before purchasing again."
-                    )
-                case .eligible, .none:
-                    return completeRestore(
-                        kind: .accountLinkRequired,
-                        message: "Apple found a Team subscription, but it is not linked to this signed-in owner. Sign in with the D2D account that purchased it, then try again."
+                        message: "A local Xcode test purchase was ignored. Choose a Team plan below to subscribe through the App Store."
                     )
                 }
-            } else if offering == .team, hasVerifiedTeamBillingEntitlement {
-                print("✅ Team purchase restored")
+
+                if hasVerifiedTeamBillingEntitlement {
+                    print("✅ Team purchase restored")
+                    return completeRestore(
+                        kind: .restored,
+                        message: "Team purchase restored and verified for this owner."
+                    )
+                }
+
+                if hasActiveTeamStoreSubscription {
+                    switch activeTeamServerEligibility {
+                    case .xcode:
+                        return completeRestore(
+                            kind: .testPurchase,
+                            message: "This is an Xcode test subscription. Use an App Store Sandbox or live Team subscription for a real workspace."
+                        )
+                    case .missingAccountToken:
+                        return completeRestore(
+                            kind: .accountLinkRequired,
+                            message: "Apple found an older Team subscription, but it is not linked to this signed-in owner. Contact support before purchasing again."
+                        )
+                    case .eligible, .none:
+                        return completeRestore(
+                            kind: .accountLinkRequired,
+                            message: "Apple found a Team subscription, but it is not linked to this signed-in owner. Sign in with the D2D account that purchased it, then try again."
+                        )
+                    }
+                }
+
                 return completeRestore(
-                    kind: .restored,
-                    message: "Team purchase restored and verified for this owner."
+                    kind: .noTeamPurchaseFound,
+                    message: "No active D2D Advancer Team subscription was found for this Apple ID. A Solo plan cannot restore Team access."
                 )
-            } else if hasStoreEntitlement {
+            }
+
+            if hasStoreEntitlement {
                 print("✅ Purchases restored")
                 return completeRestore(
                     kind: .restored,
@@ -1010,6 +1050,7 @@ class PaywallManager: ObservableObject {
                 verifiedTeamBillingOwnerUserID = ownerUserID
                 verifiedTeamOriginalTransactionID = selectedTeamTransaction.originalTransactionID
                 hasVerifiedTeamBillingEntitlement = true
+                refreshEffectivePremiumStatus()
             } catch {
                 print("⚠️ Team entitlement sync deferred: \(error.localizedDescription)")
             }
@@ -1113,6 +1154,7 @@ class PaywallManager: ObservableObject {
         verifiedTeamBillingOwnerUserID = ownerUserID
         verifiedTeamOriginalTransactionID = transaction.originalID
         hasVerifiedTeamBillingEntitlement = true
+        refreshEffectivePremiumStatus()
     }
 
     @MainActor

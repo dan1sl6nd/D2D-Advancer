@@ -1616,6 +1616,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         let outcomeTitles = [
             "Purchases Restored",
             "No Purchase Found",
+            "No Team Plan Found",
             "Test Purchase Not Restored",
             "Team Purchase Needs Attention",
             "App Store Request in Progress",
@@ -3056,15 +3057,33 @@ final class D2D_AdvancerUITests: XCTestCase {
         let restoreButton = waitForIdentifiedElement(app, "paywallRestoreButton", timeout: 8)
         XCTAssertGreaterThanOrEqual(restoreButton.frame.height, 44)
         restoreButton.tap()
-        waitForText(app, "No Purchase Found", timeout: 8)
+        waitForText(app, "No Team Plan Found", timeout: 8)
         waitForText(
             app,
-            "No active D2D Advancer subscription was found for this Apple ID.",
+            "No active D2D Advancer Team subscription was found for this Apple ID. A Solo plan cannot restore Team access.",
             timeout: 8
         )
         screenshot(app, name: "Restore purchases explicit result")
         app.alerts.buttons["OK"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["paywallScreen"].exists)
+    }
+
+    @MainActor
+    func testTeamPaywallStaysOpenWhenSoloPremiumStatusRefreshes() throws {
+        let app = makePaywallApp(showTeamOffer: true)
+        app.launchArguments.append("-simulateSoloPremiumRefreshForUITests")
+        app.launch()
+        denySystemPermissionIfPresented(timeout: 2)
+
+        waitForIdentifiedElement(app, "paywallScreen", timeout: 12)
+        waitForText(app, "Run the crew from one workspace.", timeout: 8)
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["paywallScreen"].exists,
+            "A Solo entitlement refresh must not dismiss the Team paywall."
+        )
+        waitForIdentifiedElement(app, "paywallRestoreButton", timeout: 8)
     }
 
     @MainActor

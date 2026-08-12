@@ -365,6 +365,10 @@ struct TeamWorkspaceTests {
             kind: .noPurchaseFound,
             message: "No active D2D Advancer subscription was found for this Apple ID."
         )
+        let missingTeam = PurchaseRestoreResult(
+            kind: .noTeamPurchaseFound,
+            message: "No active D2D Advancer Team subscription was found for this Apple ID."
+        )
         let timedOut = PurchaseRestoreResult(
             kind: .timedOut,
             message: "The App Store did not finish the restore request."
@@ -378,10 +382,48 @@ struct TeamWorkspaceTests {
         #expect(restored.isSuccess)
         #expect(missing.title == "No Purchase Found")
         #expect(!missing.isSuccess)
+        #expect(missingTeam.title == "No Team Plan Found")
+        #expect(!missingTeam.isSuccess)
         #expect(timedOut.title == "Restore Taking Too Long")
         #expect(!timedOut.isSuccess)
         #expect(requestInProgress.title == "App Store Request in Progress")
         #expect(!requestInProgress.isSuccess)
+    }
+
+    @Test("Presented paywalls dismiss only for the matching verified entitlement")
+    func presentedPaywallsDismissOnlyForMatchingVerifiedEntitlement() {
+        #expect(
+            PaywallManager.shouldDismissPresentedPaywall(
+                offering: .solo,
+                hasPremiumAccess: true,
+                hasVerifiedTeamBillingEntitlement: false,
+                isStoreKitOperationInProgress: false
+            )
+        )
+        #expect(
+            !PaywallManager.shouldDismissPresentedPaywall(
+                offering: .team,
+                hasPremiumAccess: true,
+                hasVerifiedTeamBillingEntitlement: false,
+                isStoreKitOperationInProgress: false
+            )
+        )
+        #expect(
+            PaywallManager.shouldDismissPresentedPaywall(
+                offering: .team,
+                hasPremiumAccess: true,
+                hasVerifiedTeamBillingEntitlement: true,
+                isStoreKitOperationInProgress: false
+            )
+        )
+        #expect(
+            !PaywallManager.shouldDismissPresentedPaywall(
+                offering: .team,
+                hasPremiumAccess: true,
+                hasVerifiedTeamBillingEntitlement: true,
+                isStoreKitOperationInProgress: true
+            )
+        )
     }
 
     @Test func ownerAndRepMemberRecordsUseExpectedRolesAndInviteLink() {

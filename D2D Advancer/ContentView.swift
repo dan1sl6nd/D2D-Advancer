@@ -44,6 +44,11 @@ struct ContentView: View {
             if ProcessInfo.processInfo.arguments.contains("-showTeamPaywallForUITests") {
                 paywallManager.setPremiumStatus(false)
                 paywallManager.showTeamPaywall()
+#if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-simulateSoloPremiumRefreshForUITests") {
+                    paywallManager.setPremiumStatus(true)
+                }
+#endif
             } else if ProcessInfo.processInfo.arguments.contains("-showPaywallForUITests") {
                 paywallManager.setPremiumStatus(false)
                 paywallManager.showSoloPaywall()
