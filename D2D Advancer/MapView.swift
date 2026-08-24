@@ -303,15 +303,10 @@ enum MapLaunchCenteringPolicy {
 
     static func shouldPrepareOnForeground(
         isAuthorized: Bool,
-        didCenterMapOnLaunch: Bool,
-        isLaunchCenteringActive _: Bool,
-        hasUsableLocation: Bool,
-        mapIsCenteredOnUser: Bool
+        didCenterMapOnLaunch: Bool
     ) -> Bool {
         guard isAuthorized else { return false }
         return !didCenterMapOnLaunch
-            || !hasUsableLocation
-            || !mapIsCenteredOnUser
     }
 
     static func shouldApplyLaunchCenteringRequest(
@@ -1764,21 +1759,9 @@ struct MapView: View {
 
     private func prepareLaunchMapCentering() {
         if LocationManager.isAuthorized(locationManager.authorizationStatus) {
-            let currentLocation = locationManager.location
-            let hasUsableLocation = currentLocation.map {
-                LocationManager.isUsableForInitialMapCenter($0)
-            } ?? false
-            let mapIsCenteredOnUser = MapLaunchCenteringPolicy.isMapCenteredOnUser(
-                region: locationManager.region,
-                location: currentLocation
-            )
-
             guard MapLaunchCenteringPolicy.shouldPrepareOnForeground(
                 isAuthorized: true,
-                didCenterMapOnLaunch: didConfirmVisibleMapCenteredOnLaunch,
-                isLaunchCenteringActive: locationManager.shouldUseUserLocation,
-                hasUsableLocation: hasUsableLocation,
-                mapIsCenteredOnUser: mapIsCenteredOnUser
+                didCenterMapOnLaunch: didConfirmVisibleMapCenteredOnLaunch
             ) else {
                 locationManager.startLocationUpdates()
                 return
@@ -1796,21 +1779,9 @@ struct MapView: View {
     private func refreshLaunchMapCenteringAfterForeground() {
         locationManager.refreshAuthorizationStatusFromSystem(startIfAuthorized: false)
 
-        let currentLocation = locationManager.location
-        let hasUsableLocation = currentLocation.map {
-            LocationManager.isUsableForInitialMapCenter($0)
-        } ?? false
-        let mapIsCenteredOnUser = MapLaunchCenteringPolicy.isMapCenteredOnUser(
-            region: locationManager.region,
-            location: currentLocation
-        )
-
         guard MapLaunchCenteringPolicy.shouldPrepareOnForeground(
             isAuthorized: LocationManager.isAuthorized(locationManager.authorizationStatus),
-            didCenterMapOnLaunch: didCenterMapOnLaunch,
-            isLaunchCenteringActive: locationManager.shouldUseUserLocation,
-            hasUsableLocation: hasUsableLocation,
-            mapIsCenteredOnUser: mapIsCenteredOnUser
+            didCenterMapOnLaunch: didCenterMapOnLaunch
         ) else {
             locationManager.startLocationUpdates()
             return

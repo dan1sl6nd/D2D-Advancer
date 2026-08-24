@@ -2312,59 +2312,23 @@ struct D2D_AdvancerTests {
         #expect(abs(adjusted.center.longitude - region.center.longitude) < 0.0000001)
     }
 
-    @Test func mapForegroundOnlyReopensLaunchCenteringWhenStartupStillNeedsIt() async throws {
+    @Test func mapForegroundPreservesUserPositionAfterSuccessfulLaunchCenter() async throws {
         #expect(
             MapLaunchCenteringPolicy.shouldPrepareOnForeground(
                 isAuthorized: true,
-                didCenterMapOnLaunch: false,
-                isLaunchCenteringActive: false,
-                hasUsableLocation: true,
-                mapIsCenteredOnUser: true
+                didCenterMapOnLaunch: false
             )
         )
         #expect(
             !MapLaunchCenteringPolicy.shouldPrepareOnForeground(
                 isAuthorized: true,
-                didCenterMapOnLaunch: true,
-                isLaunchCenteringActive: true,
-                hasUsableLocation: true,
-                mapIsCenteredOnUser: true
-            )
-        )
-        #expect(
-            MapLaunchCenteringPolicy.shouldPrepareOnForeground(
-                isAuthorized: true,
-                didCenterMapOnLaunch: true,
-                isLaunchCenteringActive: false,
-                hasUsableLocation: false,
-                mapIsCenteredOnUser: false
-            )
-        )
-        #expect(
-            MapLaunchCenteringPolicy.shouldPrepareOnForeground(
-                isAuthorized: true,
-                didCenterMapOnLaunch: true,
-                isLaunchCenteringActive: false,
-                hasUsableLocation: true,
-                mapIsCenteredOnUser: false
-            )
-        )
-        #expect(
-            !MapLaunchCenteringPolicy.shouldPrepareOnForeground(
-                isAuthorized: true,
-                didCenterMapOnLaunch: true,
-                isLaunchCenteringActive: false,
-                hasUsableLocation: true,
-                mapIsCenteredOnUser: true
+                didCenterMapOnLaunch: true
             )
         )
         #expect(
             !MapLaunchCenteringPolicy.shouldPrepareOnForeground(
                 isAuthorized: false,
-                didCenterMapOnLaunch: false,
-                isLaunchCenteringActive: true,
-                hasUsableLocation: false,
-                mapIsCenteredOnUser: false
+                didCenterMapOnLaunch: false
             )
         )
     }
