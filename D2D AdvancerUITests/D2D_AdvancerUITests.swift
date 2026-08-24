@@ -1602,6 +1602,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         try requireExistingTeamAccountPhysicalUITestHarness()
 
         let app = XCUIApplication()
+        app.launchArguments.append("-openTeamWorkspaceForUITests")
         app.launchArguments.append("-openTeamPaywallForPhysicalUITests")
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)

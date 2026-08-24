@@ -230,6 +230,13 @@ class PaywallManager: ObservableObject {
     private var isStoreKitDisabledForUITests: Bool {
         ProcessInfo.processInfo.arguments.contains("-disableStoreKitForUITests")
     }
+    private var keepsTeamPaywallPresentedForPhysicalUITests: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-openTeamPaywallForPhysicalUITests")
+#else
+        false
+#endif
+    }
     private var allowsLocalStoreKitTransactions: Bool {
         ProcessInfo.processInfo.arguments.contains("-allowLocalStoreKitTransactions")
     }
@@ -550,6 +557,7 @@ class PaywallManager: ObservableObject {
 
         if premium {
             if shouldShowPaywall,
+               !keepsTeamPaywallPresentedForPhysicalUITests,
                Self.shouldDismissPresentedPaywall(
                    offering: offering,
                    hasPremiumAccess: premium,
