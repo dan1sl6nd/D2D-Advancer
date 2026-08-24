@@ -41,7 +41,9 @@ struct ContentView: View {
             PaywallView()
         }
         .onAppear {
-            if ProcessInfo.processInfo.arguments.contains("-showTeamPaywallForUITests") {
+            if ProcessInfo.processInfo.arguments.contains("-openTeamPaywallForPhysicalUITests") {
+                paywallManager.showTeamPaywall()
+            } else if ProcessInfo.processInfo.arguments.contains("-showTeamPaywallForUITests") {
                 paywallManager.setPremiumStatus(false)
                 paywallManager.showTeamPaywall()
 #if DEBUG

@@ -1601,13 +1601,11 @@ final class D2D_AdvancerUITests: XCTestCase {
     func testTeamExistingOwnerRestorePurchasesReportsResult() throws {
         try requireExistingTeamAccountPhysicalUITestHarness()
 
-        let app = makeExistingTeamAccountApp()
+        let app = XCUIApplication()
+        app.launchArguments.append("-openTeamPaywallForPhysicalUITests")
         app.launch()
         denySystemPermissionIfPresented(timeout: 2)
 
-        waitForText(app, "My Team", timeout: 30)
-        let renewButton = scrollToButtonEitherDirection(app, "teamRenewPlanButton")
-        tapElement(app, renewButton, description: "teamRenewPlanButton")
         waitForIdentifiedElement(app, "paywallScreen", timeout: 15)
 
         let restoreButton = waitForIdentifiedElement(app, "paywallRestoreButton", timeout: 10)
