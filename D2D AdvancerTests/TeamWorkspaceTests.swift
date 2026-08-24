@@ -426,6 +426,31 @@ struct TeamWorkspaceTests {
         )
     }
 
+    @Test("Team billing waits for Firebase authentication without discarding the StoreKit entitlement")
+    func teamBillingRefreshWaitsForOwnerAuthentication() {
+        #expect(
+            PaywallManager.teamBillingRefreshAction(
+                hasActiveTeamSubscription: true,
+                hasSelectedTeamTransaction: true,
+                ownerUserID: nil
+            ) == .deferUntilAuthentication
+        )
+        #expect(
+            PaywallManager.teamBillingRefreshAction(
+                hasActiveTeamSubscription: true,
+                hasSelectedTeamTransaction: true,
+                ownerUserID: "owner-1"
+            ) == .verify(ownerUserID: "owner-1")
+        )
+        #expect(
+            PaywallManager.teamBillingRefreshAction(
+                hasActiveTeamSubscription: false,
+                hasSelectedTeamTransaction: false,
+                ownerUserID: "owner-1"
+            ) == .clear
+        )
+    }
+
     @Test func ownerAndRepMemberRecordsUseExpectedRolesAndInviteLink() {
         let joinedAt = Date(timeIntervalSince1970: 2_000)
         let owner = TeamMember.owner(

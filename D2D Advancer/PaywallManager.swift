@@ -91,6 +91,19 @@ struct TeamStoreTransactionCandidate {
     }
 }
 
+enum TeamBillingRefreshAction: Equatable {
+    case clear
+    case deferUntilAuthentication
+    case verify(ownerUserID: String)
+}
+
+private struct StoreEntitlementSnapshot {
+    var hasActiveSubscription = false
+    var hasActiveTeamSubscription = false
+    var ignoredLocalTeamTransaction = false
+    var selectedTeamTransaction: TeamStoreTransactionCandidate?
+}
+
 struct PurchaseRestoreResult: Identifiable {
     enum Kind: Equatable {
         case restored
@@ -229,6 +242,9 @@ class PaywallManager: ObservableObject {
 
     private var updateListenerTask: Task<Void, Error>?
     private var activeAppStoreSyncAttempt: AppStoreSyncAttempt?
+    private var entitlementRefreshTask: Task<StoreEntitlementSnapshot, Never>?
+    private var entitlementRefreshID: UUID?
+    private var authStateListenerHandle: AuthStateDidChangeListenerHandle?
 
     private init() {
         loadPremiumStatus()
@@ -254,6 +270,19 @@ class PaywallManager: ObservableObject {
             name: UIApplication.didBecomeActiveNotification,
             object: nil
         )
+
+        authStateListenerHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard user != nil else {
+                    self.clearVerifiedTeamBilling()
+                    return
+                }
+
+                print("👤 Firebase owner session available - refreshing Team subscription link")
+                await self.checkSubscriptionStatus()
+            }
+        }
     }
 
     @objc private func appDidBecomeActive() {
@@ -265,6 +294,10 @@ class PaywallManager: ObservableObject {
 
     deinit {
         updateListenerTask?.cancel()
+        entitlementRefreshTask?.cancel()
+        if let authStateListenerHandle {
+            Auth.auth().removeStateDidChangeListener(authStateListenerHandle)
+        }
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -947,6 +980,20 @@ class PaywallManager: ObservableObject {
 
     // MARK: - Subscription Status
 
+    static func teamBillingRefreshAction(
+        hasActiveTeamSubscription: Bool,
+        hasSelectedTeamTransaction: Bool,
+        ownerUserID: String?
+    ) -> TeamBillingRefreshAction {
+        guard hasActiveTeamSubscription, hasSelectedTeamTransaction else {
+            return .clear
+        }
+        guard let ownerUserID else {
+            return .deferUntilAuthentication
+        }
+        return .verify(ownerUserID: ownerUserID)
+    }
+
     @MainActor
     func checkSubscriptionStatus(syncTeamBilling: Bool = true) async {
         guard !isPremiumUnlockedForUITests else {
@@ -961,11 +1008,70 @@ class PaywallManager: ObservableObject {
             return
         }
 
+        let snapshot = await currentStoreEntitlementSnapshot()
+
+        if !snapshot.hasActiveSubscription {
+            print("❌ No active subscription found")
+        }
+
+        hasActiveTeamStoreSubscription = snapshot.hasActiveTeamSubscription
+        activeTeamServerEligibility = snapshot.selectedTeamTransaction?.eligibility
+        hasIgnoredLocalTeamTransaction = snapshot.ignoredLocalTeamTransaction
+        setPremiumStatus(snapshot.hasActiveSubscription)
+
+        let refreshAction = Self.teamBillingRefreshAction(
+            hasActiveTeamSubscription: snapshot.hasActiveTeamSubscription,
+            hasSelectedTeamTransaction: snapshot.selectedTeamTransaction != nil,
+            ownerUserID: Auth.auth().currentUser?.uid
+        )
+        switch refreshAction {
+        case .clear:
+            clearVerifiedTeamBilling()
+            return
+        case .deferUntilAuthentication:
+            print("⏳ Team subscription found; owner verification deferred until Firebase restores the session")
+            return
+        case .verify(let ownerUserID):
+            guard let selectedTeamTransaction = snapshot.selectedTeamTransaction else {
+                clearVerifiedTeamBilling()
+                return
+            }
+
+            await verifyTeamBillingIfNeeded(
+                selectedTeamTransaction,
+                ownerUserID: ownerUserID,
+                syncTeamBilling: syncTeamBilling
+            )
+        }
+    }
+
+    @MainActor
+    private func currentStoreEntitlementSnapshot() async -> StoreEntitlementSnapshot {
+        if let entitlementRefreshTask {
+            print("↪️ Joining subscription status check already in progress")
+            return await entitlementRefreshTask.value
+        }
+
+        let refreshID = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return StoreEntitlementSnapshot() }
+            return await self.scanCurrentStoreEntitlements()
+        }
+        entitlementRefreshID = refreshID
+        entitlementRefreshTask = task
+
+        let snapshot = await task.value
+        if entitlementRefreshID == refreshID {
+            entitlementRefreshTask = nil
+            entitlementRefreshID = nil
+        }
+        return snapshot
+    }
+
+    @MainActor
+    private func scanCurrentStoreEntitlements() async -> StoreEntitlementSnapshot {
         print("🔍 Checking subscription status...")
-        var hasActiveSubscription = false
-        var hasActiveTeamSubscription = false
-        var ignoredLocalTeamTransaction = false
-        var selectedTeamTransaction: TeamStoreTransactionCandidate?
+        var snapshot = StoreEntitlementSnapshot()
 
         for await result in Transaction.currentEntitlements {
             do {
@@ -987,46 +1093,47 @@ class PaywallManager: ObservableObject {
                     : nil
                 if transaction.environment == .xcode && !allowsLocalStoreKitTransactions {
                     if teamEligibility != nil {
-                        ignoredLocalTeamTransaction = true
+                        snapshot.ignoredLocalTeamTransaction = true
                     }
                     print("⚠️ Ignoring local Xcode subscription outside the Local StoreKit scheme: \(transaction.productID)")
                     continue
                 }
 
-                hasActiveSubscription = true
+                snapshot.hasActiveSubscription = true
                 if let teamEligibility {
-                    hasActiveTeamSubscription = true
+                    snapshot.hasActiveTeamSubscription = true
                     let candidate = TeamStoreTransactionCandidate(
                         jwsRepresentation: result.jwsRepresentation,
                         eligibility: teamEligibility,
                         expirationDate: transaction.expirationDate ?? .distantFuture,
                         originalTransactionID: transaction.originalID
                     )
-                    if candidate.isPreferred(over: selectedTeamTransaction) {
-                        selectedTeamTransaction = candidate
+                    if candidate.isPreferred(over: snapshot.selectedTeamTransaction) {
+                        snapshot.selectedTeamTransaction = candidate
                     }
                 }
-                print("✅ Found active subscription: \(transaction.productID)")
+
+                let expiration = transaction.expirationDate?.formatted(
+                    .iso8601.year().month().day().time(includingFractionalSeconds: false)
+                ) ?? "none"
+                print(
+                    "✅ Found active subscription: \(transaction.productID), "
+                    + "environment=\(transaction.environment), expires=\(expiration)"
+                )
             } catch {
                 print("❌ Transaction verification failed: \(error)")
             }
         }
 
-        if !hasActiveSubscription {
-            print("❌ No active subscription found")
-        }
+        return snapshot
+    }
 
-        hasActiveTeamStoreSubscription = hasActiveTeamSubscription
-        activeTeamServerEligibility = selectedTeamTransaction?.eligibility
-        hasIgnoredLocalTeamTransaction = ignoredLocalTeamTransaction
-        setPremiumStatus(hasActiveSubscription)
-
-        guard hasActiveTeamSubscription,
-              let selectedTeamTransaction,
-              let ownerUserID = Auth.auth().currentUser?.uid else {
-            clearVerifiedTeamBilling()
-            return
-        }
+    @MainActor
+    private func verifyTeamBillingIfNeeded(
+        _ selectedTeamTransaction: TeamStoreTransactionCandidate,
+        ownerUserID: String,
+        syncTeamBilling: Bool
+    ) async {
 
         let alreadyVerified = verifiedTeamBillingOwnerUserID == ownerUserID
             && verifiedTeamOriginalTransactionID == selectedTeamTransaction.originalTransactionID
