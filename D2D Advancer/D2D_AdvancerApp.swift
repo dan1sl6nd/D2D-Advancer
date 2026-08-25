@@ -386,8 +386,8 @@ struct D2D_AdvancerApp: App {
                 try context.fetch(request).forEach(context.delete)
 
                 let now = Date()
-                let centerLatitude = 37.7858
-                let centerLongitude = -122.4064
+                let centerLatitude = 37.7749
+                let centerLongitude = -122.4194
                 for index in 0..<2_000 {
                     let row = index / 50
                     let column = index % 50

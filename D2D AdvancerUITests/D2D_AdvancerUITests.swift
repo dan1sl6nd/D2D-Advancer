@@ -521,6 +521,20 @@ final class D2D_AdvancerUITests: XCTestCase {
         return element.exists
     }
 
+    private func waitForElementCount(
+        _ query: XCUIElementQuery,
+        atLeast minimumCount: Int,
+        timeout: TimeInterval
+    ) -> Int {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        repeat {
+            let count = query.count
+            if count >= minimumCount { return count }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while ProcessInfo.processInfo.systemUptime < deadline
+        return query.count
+    }
+
     private func tapButton(_ app: XCUIApplication, _ identifier: String, timeout: TimeInterval = 8) {
         let button = app.buttons.matching(identifier: identifier).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: timeout), "Expected button to appear: \(identifier)")
@@ -3727,6 +3741,24 @@ final class D2D_AdvancerUITests: XCTestCase {
         )
         wait(for: [completeSnapshot], timeout: 5)
         screenshot(app, name: "Map - 2000 lead complete coverage")
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 3), "Complete coverage should remain on an interactive map")
+        map.pinch(withScale: 2.5, velocity: 2.0)
+        let expandedLeadMarkers = app.otherElements.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "UI Map Perf ")
+        )
+        let expandedMarkerCount = waitForElementCount(
+            expandedLeadMarkers,
+            atLeast: 8,
+            timeout: 5
+        )
+        XCTAssertGreaterThanOrEqual(
+            expandedMarkerCount,
+            8,
+            "Zooming into complete coverage should expand nearby clusters into named lead pins"
+        )
+        screenshot(app, name: "Map - complete coverage expanded after zoom")
 
         let legalLink = app.links["Legal"]
         let addLeadButton = app.buttons["addLeadButton"]

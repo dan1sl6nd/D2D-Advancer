@@ -3938,7 +3938,6 @@ struct D2D_AdvancerTests {
     @Test func completeCoverageScanPlanRepresentsEveryLeadWithBoundedAnnotations() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
-        let center = CLLocationCoordinate2D(latitude: 43.5597, longitude: -79.7072)
 
         let pins = try (0..<2_000).map { index in
             let lead = Lead.create(in: context)
@@ -3950,22 +3949,105 @@ struct D2D_AdvancerTests {
                 : Lead.Status.notContacted.rawValue
             return try #require(MapLeadPin(lead: lead))
         }
-        let centerPoint = MKMapPoint(center)
-        let visibleRect = MKMapRect(
-            x: centerPoint.x,
-            y: centerPoint.y,
-            width: 1,
-            height: 1
-        )
-
         let clusters = LeadMapScanClusteringPolicy.clusters(
             for: pins,
-            visibleMapRect: visibleRect
+            visibleMapRect: .world
         )
 
         #expect(clusters.count <= LeadMapScanClusteringPolicy.maximumRenderedAnnotations)
         #expect(clusters.reduce(0) { $0 + $1.pins.count } == pins.count)
         #expect(clusters.first?.pins.first?.status == .converted)
+    }
+
+    @MainActor
+    @Test func completeCoverageExpandsEveryVisibleLeadAfterZoomingIntoLargeDataset() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let center = CLLocationCoordinate2D(latitude: 43.5597, longitude: -79.7072)
+
+        let visiblePins = try (0..<140).map { index in
+            let lead = Lead.create(in: context)
+            lead.name = "Visible \(index)"
+            lead.latitude = center.latitude + (Double(index / 14) - 4.5) * 0.00035
+            lead.longitude = center.longitude + (Double(index % 14) - 6.5) * 0.00035
+            lead.status = index.isMultiple(of: 20)
+                ? Lead.Status.converted.rawValue
+                : Lead.Status.notContacted.rawValue
+            return try #require(MapLeadPin(lead: lead))
+        }
+        let distantPins = try (0..<600).map { index in
+            let lead = Lead.create(in: context)
+            lead.name = "Distant \(index)"
+            lead.latitude = 15 + Double(index % 60) * 0.7
+            lead.longitude = -150 + Double((index * 17) % 140) * 0.8
+            return try #require(MapLeadPin(lead: lead))
+        }
+        let northWest = MKMapPoint(
+            CLLocationCoordinate2D(latitude: center.latitude + 0.01, longitude: center.longitude - 0.01)
+        )
+        let southEast = MKMapPoint(
+            CLLocationCoordinate2D(latitude: center.latitude - 0.01, longitude: center.longitude + 0.01)
+        )
+        let visibleRect = MKMapRect(
+            x: min(northWest.x, southEast.x),
+            y: min(northWest.y, southEast.y),
+            width: abs(southEast.x - northWest.x),
+            height: abs(southEast.y - northWest.y)
+        )
+
+        let clusters = LeadMapScanClusteringPolicy.clusters(
+            for: visiblePins + distantPins,
+            visibleMapRect: visibleRect
+        )
+        let representedNames = Set(clusters.flatMap(\.pins).map(\.name))
+
+        #expect(clusters.count == visiblePins.count)
+        #expect(clusters.allSatisfy { $0.pins.count == 1 })
+        #expect(representedNames == Set(visiblePins.map(\.name)))
+    }
+
+    @MainActor
+    @Test func completeCoverageClustersDenseViewportWithoutSpendingBudgetOffscreen() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let center = CLLocationCoordinate2D(latitude: 43.5597, longitude: -79.7072)
+
+        let visiblePins = try (0..<500).map { index in
+            let lead = Lead.create(in: context)
+            lead.name = "Dense visible \(index)"
+            lead.latitude = center.latitude + (Double(index / 25) - 9.5) * 0.00035
+            lead.longitude = center.longitude + (Double(index % 25) - 12) * 0.00035
+            return try #require(MapLeadPin(lead: lead))
+        }
+        let distantPins = try (0..<500).map { index in
+            let lead = Lead.create(in: context)
+            lead.name = "Dense distant \(index)"
+            lead.latitude = 20 + Double(index % 50) * 0.8
+            lead.longitude = -140 + Double((index * 13) % 120) * 0.9
+            return try #require(MapLeadPin(lead: lead))
+        }
+        let northWest = MKMapPoint(
+            CLLocationCoordinate2D(latitude: center.latitude + 0.02, longitude: center.longitude - 0.02)
+        )
+        let southEast = MKMapPoint(
+            CLLocationCoordinate2D(latitude: center.latitude - 0.02, longitude: center.longitude + 0.02)
+        )
+        let visibleRect = MKMapRect(
+            x: min(northWest.x, southEast.x),
+            y: min(northWest.y, southEast.y),
+            width: abs(southEast.x - northWest.x),
+            height: abs(southEast.y - northWest.y)
+        )
+
+        let clusters = LeadMapScanClusteringPolicy.clusters(
+            for: visiblePins + distantPins,
+            visibleMapRect: visibleRect
+        )
+        let representedNames = Set(clusters.flatMap(\.pins).map(\.name))
+
+        #expect(clusters.count <= LeadMapScanClusteringPolicy.maximumRenderedAnnotations)
+        #expect(clusters.reduce(0) { $0 + $1.pins.count } == visiblePins.count)
+        #expect(representedNames == Set(visiblePins.map(\.name)))
     }
 
     @MainActor

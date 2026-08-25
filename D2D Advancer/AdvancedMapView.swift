@@ -45,6 +45,7 @@ enum LeadMapScanClusteringPolicy {
     static let maximumRenderedAnnotations = 220
     private static let targetColumns = 12.0
     private static let targetRows = 16.0
+    private static let prefetchMarginRatio = 0.15
 
     private struct Cell: Hashable {
         let column: Int
@@ -59,26 +60,49 @@ enum LeadMapScanClusteringPolicy {
         guard !pins.isEmpty else { return [] }
 
         let targetCount = max(1, maximumAnnotationCount)
-        if pins.count <= targetCount {
-            return MapLeadPinClusterSummary.sortedPins(pins).map { pin in
+        let hasUsableViewport = !visibleMapRect.isNull
+            && visibleMapRect.width > 0
+            && visibleMapRect.height > 0
+        let usableRect = hasUsableViewport ? visibleMapRect : MKMapRect.world
+        let visiblePins = pins.filter { pin in
+            usableRect.contains(MKMapPoint(pin.coordinate))
+        }
+
+        if visiblePins.count <= targetCount {
+            var pinsToRender = MapLeadPinClusterSummary.sortedPins(visiblePins)
+            let remainingCapacity = targetCount - pinsToRender.count
+
+            if remainingCapacity > 0, hasUsableViewport {
+                let prefetchRect = usableRect.insetBy(
+                    dx: -usableRect.width * prefetchMarginRatio,
+                    dy: -usableRect.height * prefetchMarginRatio
+                )
+                let nearbyPins = pins.filter { pin in
+                    let point = MKMapPoint(pin.coordinate)
+                    return !usableRect.contains(point) && prefetchRect.contains(point)
+                }
+                pinsToRender.append(
+                    contentsOf: MapLeadPinClusterSummary.sortedPins(nearbyPins)
+                        .prefix(remainingCapacity)
+                )
+            }
+
+            return pinsToRender.map { pin in
                 LeadMapScanCluster(pins: [pin], coordinate: pin.coordinate)
             }
         }
 
-        let usableRect = visibleMapRect.isNull
-            || visibleMapRect.width <= 0
-            || visibleMapRect.height <= 0
-            ? MKMapRect.world
-            : visibleMapRect
         var cellWidth = max(usableRect.width / targetColumns, 1)
         var cellHeight = max(usableRect.height / targetRows, 1)
         var result: [LeadMapScanCluster] = []
 
-        // Coarsen globally until even geographically sparse lead sets stay
-        // within MapKit's inexpensive annotation range.
+        // Spend the annotation budget on the current viewport. The complete
+        // snapshot still retains every lead, so panning or zooming can rebuild
+        // this inexpensive presentation without distant pins blocking local
+        // clusters from expanding.
         for _ in 0..<32 {
             result = makeClusters(
-                pins: pins,
+                pins: visiblePins,
                 cellWidth: cellWidth,
                 cellHeight: cellHeight
             )
@@ -133,6 +157,9 @@ enum LeadMapScanClusteringPolicy {
 }
 
 private struct LeadMapScanViewportSignature: Equatable {
+    private static let centerBucketsPerViewport = 8.0
+    private static let zoomBucketsPerOctave = 8.0
+
     let centerXBucket: Int
     let centerYBucket: Int
     let widthBucket: Int
@@ -141,10 +168,14 @@ private struct LeadMapScanViewportSignature: Equatable {
     init(mapRect: MKMapRect) {
         let width = max(mapRect.width, 1)
         let height = max(mapRect.height, 1)
-        centerXBucket = Int((mapRect.midX / max(width / 4, 1)).rounded())
-        centerYBucket = Int((mapRect.midY / max(height / 4, 1)).rounded())
-        widthBucket = Int(log2(width).rounded())
-        heightBucket = Int(log2(height).rounded())
+        centerXBucket = Int(
+            (mapRect.midX / max(width / Self.centerBucketsPerViewport, 1)).rounded()
+        )
+        centerYBucket = Int(
+            (mapRect.midY / max(height / Self.centerBucketsPerViewport, 1)).rounded()
+        )
+        widthBucket = Int((log2(width) * Self.zoomBucketsPerOctave).rounded())
+        heightBucket = Int((log2(height) * Self.zoomBucketsPerOctave).rounded())
     }
 }
 
