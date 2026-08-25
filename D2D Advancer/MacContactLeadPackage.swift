@@ -62,7 +62,7 @@ enum MacContactLeadPackageError: LocalizedError, Equatable {
 enum AppleContactLeadPricePolicy {
     private static let amountPatterns: [NSRegularExpression] = [
         try! NSRegularExpression(
-            pattern: #"\b(?:price|quote(?:d)?|estimate(?:d)?|value)\b\s*(?:is\s*)?(?:[:=\-]\s*)?(?:(?:cad|ca)\s*)?(?:\$\s*)?([0-9]+(?:[, ]?[0-9]{3})*(?:\.[0-9]{1,2})?)"#,
+            pattern: #"\b(?:price|quote(?:d)?|estimate(?:d)?|value|amount|total|paid|sold|sale|invoice)\b\s*(?:is\s*)?(?:[:=\-]\s*)?(?:(?:cad|ca)\s*)?(?:\$\s*)?([0-9]+(?:[, ]?[0-9]{3})*(?:\.[0-9]{1,2})?)"#,
             options: [.caseInsensitive]
         ),
         try! NSRegularExpression(
@@ -70,8 +70,12 @@ enum AppleContactLeadPricePolicy {
             options: [.caseInsensitive]
         ),
         try! NSRegularExpression(
-            pattern: #"^\s*(?:(?:cad|ca)\s*)?\$?\s*([0-9]+(?:[, ]?[0-9]{3})*(?:\.[0-9]{1,2})?)\s*(?:cad)?\s*$"#,
+            pattern: #"\b(?:window|gutter)\s+cleaning\b\s*(?:(?:price|quote(?:d)?|estimate(?:d)?|sold|paid|total)\b\s*)?(?:[:=\-]\s*)?(?:(?:cad|ca)\s*)?(?:\$\s*)?([0-9]+(?:[, ]?[0-9]{3})*(?:\.[0-9]{1,2})?)\s*(?:cad|\$)?"#,
             options: [.caseInsensitive]
+        ),
+        try! NSRegularExpression(
+            pattern: #"^\s*(?:(?:cad|ca)\s*)?\$?\s*([0-9]+(?:[, ]?[0-9]{3})*(?:\.[0-9]{1,2})?)\s*(?:cad|\$)?\s*$"#,
+            options: [.caseInsensitive, .anchorsMatchLines]
         )
     ]
 

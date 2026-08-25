@@ -55,6 +55,7 @@ struct AppleContactLeadImportView: View {
     @State private var duplicateCandidateIDs: Set<String> = []
     @State private var updateCandidateIDs: Set<String> = []
     @State private var existingLeadIDByCandidateID: [String: UUID] = [:]
+    @State private var existingLeadStatusByCandidateID: [String: Lead.Status] = [:]
     @State private var hasLimitedAccess = false
     @State private var errorMessage: String?
     @State private var permissionNeedsSettings = false
@@ -335,6 +336,7 @@ struct AppleContactLeadImportView: View {
             && !duplicateCandidateIDs.contains(candidate.id)
             && !phase.isBusy
         let selected = selectedCandidateIDs.contains(candidate.id)
+        let intendedStatus = intendedStatus(for: candidate)
         let status = candidateStatus(candidate)
 
         return Button {
@@ -385,7 +387,7 @@ struct AppleContactLeadImportView: View {
                             .lineLimit(2)
                     }
 
-                    if let price = candidate.price {
+                    if let price = AppleContactLeadImportStatusPolicy.salePrice(for: candidate) {
                         Label(
                             price.formatted(
                                 .currency(code: "CAD")
@@ -394,7 +396,7 @@ struct AppleContactLeadImportView: View {
                             systemImage: "dollarsign.circle.fill"
                         )
                         .font(.obsidianFootnote)
-                        .foregroundColor(Color.statusInterested)
+                        .foregroundColor(intendedStatus.swiftUIColor)
                     }
 
                     if let notes = candidate.notes {
@@ -425,8 +427,13 @@ struct AppleContactLeadImportView: View {
     }
 
     private func candidateStatus(_ candidate: AppleContactLeadCandidate) -> (text: String, icon: String, tint: Color) {
+        let intendedStatus = intendedStatus(for: candidate)
         if updateCandidateIDs.contains(candidate.id) {
-            return ("Update Details & Status", "arrow.triangle.2.circlepath", Color.statusInterested)
+            return (
+                "Will update as \(intendedStatus.displayName)",
+                intendedStatus.icon,
+                intendedStatus.swiftUIColor
+            )
         }
         if duplicateCandidateIDs.contains(candidate.id) {
             return ("Already in Leads", "checkmark.circle", Color.statusNotHome)
@@ -435,12 +442,26 @@ struct AppleContactLeadImportView: View {
             return ("No postal address", "mappin.slash", Color.statusNotInterested)
         }
         if candidate.isReadyForImport {
-            return ("Ready for Map", "map.fill", Color.statusInterested)
+            return (
+                "Will import as \(intendedStatus.displayName)",
+                intendedStatus.icon,
+                intendedStatus.swiftUIColor
+            )
         }
         if candidate.didAttemptGeocoding {
             return ("Address not found", "location.slash.fill", Color.statusNotInterested)
         }
         return ("Checking address", "location.magnifyingglass", Color.textSecondary)
+    }
+
+    private func intendedStatus(for candidate: AppleContactLeadCandidate) -> Lead.Status {
+        guard let existingStatus = existingLeadStatusByCandidateID[candidate.id] else {
+            return AppleContactLeadImportStatusPolicy.status(forNew: candidate)
+        }
+        return AppleContactLeadImportStatusPolicy.status(
+            forExisting: existingStatus,
+            candidate: candidate
+        )
     }
 
     private var importActionBar: some View {
@@ -568,6 +589,7 @@ struct AppleContactLeadImportView: View {
         duplicateCandidateIDs.removeAll()
         updateCandidateIDs.removeAll()
         existingLeadIDByCandidateID.removeAll()
+        existingLeadStatusByCandidateID.removeAll()
     }
 
     @MainActor
@@ -584,11 +606,13 @@ struct AppleContactLeadImportView: View {
         var duplicates: Set<String> = []
         var updates: Set<String> = []
         var matchedLeadIDs: [String: UUID] = [:]
+        var matchedLeadStatuses: [String: Lead.Status] = [:]
 
         for candidate in candidates {
             if let leadID = matchIndex.matchingLeadID(for: candidate),
                let existingLead = leadByID[leadID] {
                 matchedLeadIDs[candidate.id] = leadID
+                matchedLeadStatuses[candidate.id] = existingLead.leadStatus
                 if candidateSource == .macPackage,
                    AppleContactLeadImportService.canUpdateLead(existingLead, from: candidate)
                     || AppleContactLeadImportService.needsGeocodingForUpdate(
@@ -607,6 +631,7 @@ struct AppleContactLeadImportView: View {
         duplicateCandidateIDs = duplicates
         updateCandidateIDs = updates
         existingLeadIDByCandidateID = matchedLeadIDs
+        existingLeadStatusByCandidateID = matchedLeadStatuses
 
         let indicesToGeocode = candidates.indices.filter { index in
             let candidate = candidates[index]

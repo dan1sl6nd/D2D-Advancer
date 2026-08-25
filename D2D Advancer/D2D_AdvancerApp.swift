@@ -203,6 +203,51 @@ struct D2D_AdvancerApp: App {
             }
         }
 
+        let completedAppleContactStatusRepairVersion = UserDefaults.standard.integer(
+            forKey: StartupMaintenancePolicy.appleContactStatusRepairVersionKey
+        )
+        if !isRunningUITests,
+           StartupMaintenancePolicy.shouldRunAppleContactStatusRepair(
+               completedVersion: completedAppleContactStatusRepairVersion
+           ) {
+            let persistence = persistenceController
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.75) {
+                guard persistence.hasPersistentStore else {
+                    print("⏭️ Skipping Apple Contacts status repair: Core Data store not ready yet")
+                    return
+                }
+
+                let repairContext = persistence.container.newBackgroundContext()
+                repairContext.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
+                repairContext.perform {
+                    do {
+                        let summary = try AppleContactLeadImportService.repairImportedLeadStatuses(
+                            in: repairContext
+                        )
+                        if repairContext.hasChanges {
+                            try repairContext.save()
+                        }
+                        UserDefaults.standard.set(
+                            StartupMaintenancePolicy.appleContactStatusRepairVersion,
+                            forKey: StartupMaintenancePolicy.appleContactStatusRepairVersionKey
+                        )
+
+                        guard summary.changedLeadCount > 0 else { return }
+                        print(
+                            "🧹 Repaired \(summary.repairedStatusCount) Apple Contacts status(es) "
+                                + "and recovered \(summary.recoveredPriceCount) price(s)"
+                        )
+                        Task { @MainActor in
+                            NotificationService.shared.refreshAllNotifications()
+                            UserDataSyncManager.shared.syncWithServer()
+                        }
+                    } catch {
+                        print("⚠️ Apple Contacts status repair failed: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+
         Task<Void, Never> { @MainActor in
             if !isRunningUITests {
                 AppleSignInManager.shared.verifyCredentialState()

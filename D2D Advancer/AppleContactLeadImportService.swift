@@ -259,7 +259,8 @@ enum AppleContactLeadMergePolicy {
         let shouldFillCoordinates = candidateHasValidCoordinate
             && !hasValidCoordinate(existing)
             && (existingAddress == nil || addressesMatch)
-        let resolvedPrice = existing.price > 0 ? existing.price : (candidate.price ?? existing.price)
+        let importedPrice = AppleContactLeadImportStatusPolicy.salePrice(for: candidate)
+        let resolvedPrice = existing.price > 0 ? existing.price : (importedPrice ?? existing.price)
         let resolvedEstimatedValue = existing.estimatedValue > 0
             ? existing.estimatedValue
             : (resolvedPrice > 0 ? resolvedPrice : existing.estimatedValue)
@@ -305,16 +306,28 @@ enum AppleContactLeadMergePolicy {
 }
 
 enum AppleContactLeadImportStatusPolicy {
+    static func salePrice(for candidate: AppleContactLeadCandidate) -> Double? {
+        AppleContactLeadPricePolicy.resolvedPrice(
+            explicitPrice: candidate.price,
+            note: candidate.notes
+        )
+    }
+
     static func status(forNew candidate: AppleContactLeadCandidate) -> Lead.Status {
-        candidate.price.map { $0 > 0 } == true ? .converted : .interested
+        salePrice(for: candidate) != nil ? .converted : .interested
     }
 
     static func status(
         forExisting currentStatus: Lead.Status,
         candidate: AppleContactLeadCandidate
     ) -> Lead.Status {
-        if candidate.price.map({ $0 > 0 }) == true {
-            return .converted
+        if salePrice(for: candidate) != nil {
+            switch currentStatus {
+            case .notHome, .notInterested:
+                return currentStatus
+            case .converted, .notContacted, .interested:
+                return .converted
+            }
         }
 
         switch currentStatus {
@@ -390,7 +403,9 @@ enum AppleContactLeadCandidateConsolidator {
     private static func mergedCandidate(
         _ candidates: [AppleContactLeadCandidate]
     ) -> AppleContactLeadCandidate {
-        let preferred = candidates.first { $0.price.map({ $0 > 0 }) == true }
+        let preferred = candidates.first {
+            AppleContactLeadImportStatusPolicy.salePrice(for: $0) != nil
+        }
             ?? candidates[0]
         let address = cleaned(preferred.address)
             ?? candidates.lazy.compactMap { cleaned($0.address) }.first
@@ -415,7 +430,7 @@ enum AppleContactLeadCandidateConsolidator {
             address: address,
             service: preferred.service,
             notes: notes,
-            price: preferred.price,
+            price: AppleContactLeadImportStatusPolicy.salePrice(for: preferred),
             coordinate: coordinate,
             didAttemptGeocoding: candidates.contains(where: \.didAttemptGeocoding)
         )
@@ -616,6 +631,71 @@ final class AppleContactLeadImportService {
         return updateCount
     }
 
+    struct StatusRepairSummary: Equatable, Sendable {
+        let scannedLeadCount: Int
+        let changedLeadCount: Int
+        let repairedStatusCount: Int
+        let recoveredPriceCount: Int
+    }
+
+    static func repairImportedLeadStatuses(
+        in context: NSManagedObjectContext,
+        now: Date = Date()
+    ) throws -> StatusRepairSummary {
+        let request = Lead.fetchRequest(in: context)
+        request.predicate = NSPredicate(
+            format: "source ==[c] %@ OR source ==[c] %@",
+            "Apple Contacts",
+            "Mac Contacts"
+        )
+
+        let importedLeads = try context.fetch(request)
+        var changedLeadCount = 0
+        var repairedStatusCount = 0
+        var recoveredPriceCount = 0
+
+        for lead in importedLeads {
+            let resolvedPrice = AppleContactLeadPricePolicy.resolvedPrice(
+                explicitPrice: lead.price > 0 ? lead.price : nil,
+                note: lead.notes
+            )
+            guard let resolvedPrice else { continue }
+
+            var didChange = false
+            if lead.price <= 0 {
+                lead.price = resolvedPrice
+                recoveredPriceCount += 1
+                didChange = true
+            }
+            if lead.estimatedValue <= 0 {
+                lead.estimatedValue = resolvedPrice
+                didChange = true
+            }
+
+            switch lead.leadStatus {
+            case .interested, .notContacted:
+                lead.status = Lead.Status.converted.rawValue
+                lead.followUpDate = nil
+                repairedStatusCount += 1
+                didChange = true
+            case .converted, .notHome, .notInterested:
+                break
+            }
+
+            if didChange {
+                lead.updatedDate = now
+                changedLeadCount += 1
+            }
+        }
+
+        return StatusRepairSummary(
+            scannedLeadCount: importedLeads.count,
+            changedLeadCount: changedLeadCount,
+            repairedStatusCount: repairedStatusCount,
+            recoveredPriceCount: recoveredPriceCount
+        )
+    }
+
     static func createLead(
         from candidate: AppleContactLeadCandidate,
         in context: NSManagedObjectContext
@@ -636,7 +716,7 @@ final class AppleContactLeadImportService {
         lead.serviceCategory = candidate.service.serviceCategoryID
         lead.source = "Apple Contacts"
         lead.notes = candidate.notes
-        if let price = candidate.price {
+        if let price = AppleContactLeadImportStatusPolicy.salePrice(for: candidate) {
             lead.price = price
             lead.estimatedValue = price
         }

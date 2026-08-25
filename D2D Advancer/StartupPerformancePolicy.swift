@@ -3,11 +3,17 @@ import Foundation
 enum StartupMaintenancePolicy {
     static let leadCleanupVersion = 1
     static let leadCleanupVersionKey = "startup.leadCleanupVersion"
+    static let appleContactStatusRepairVersion = 1
+    static let appleContactStatusRepairVersionKey = "startup.appleContactStatusRepairVersion"
     static let integrityCheckDateKey = "startup.lastIntegrityCheckDate"
     static let integrityCheckInterval: TimeInterval = 7 * 24 * 60 * 60
 
     static func shouldRunLeadCleanup(completedVersion: Int) -> Bool {
         completedVersion < leadCleanupVersion
+    }
+
+    static func shouldRunAppleContactStatusRepair(completedVersion: Int) -> Bool {
+        completedVersion < appleContactStatusRepairVersion
     }
 
     static func shouldRunIntegrityCheck(lastRunAt: Date?, now: Date = Date()) -> Bool {
