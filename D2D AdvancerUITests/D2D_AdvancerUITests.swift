@@ -804,6 +804,23 @@ final class D2D_AdvancerUITests: XCTestCase {
         tapElement(app, element, description: identifier, excludingBottomChrome: true)
     }
 
+    private func tapVisibleIdentifiedElement(
+        _ app: XCUIApplication,
+        _ identifier: String,
+        timeout: TimeInterval = 8
+    ) {
+        let query = app.descendants(matching: .any).matching(identifier: identifier)
+        XCTAssertTrue(query.firstMatch.waitForExistence(timeout: timeout), "Expected element to appear: \(identifier)")
+        let visibleElement = query.allElementsBoundByIndex.first {
+            hasVisibleTapFrame($0, in: app, excludingBottomChrome: true)
+        }
+        guard let visibleElement else {
+            XCTFail("Expected a visible instance of element: \(identifier)")
+            return
+        }
+        tapElement(app, visibleElement, description: identifier, excludingBottomChrome: true)
+    }
+
     private func tapFollowUpHistoryAddCheckInButton(_ app: XCUIApplication) {
         let button = app.descendants(matching: .any)
             .matching(identifier: "followUpHistoryAddCheckInButton")
@@ -3691,6 +3708,26 @@ final class D2D_AdvancerUITests: XCTestCase {
         wait(for: [stableSnapshot], timeout: 3)
         screenshot(app, name: "Map - 2000 lead stable opening snapshot")
 
+        mapToolsButton.tap()
+        let completeCoverageToggle = app.switches["mapCompleteCoverageToggle"]
+        XCTAssertTrue(
+            completeCoverageToggle.waitForExistence(timeout: 3),
+            "Complete coverage should be available without crowding the map"
+        )
+        completeCoverageToggle.tap()
+        tapButton(app, "Close map tools", timeout: 2)
+
+        let completeSnapshot = expectation(
+            for: NSPredicate(
+                format: "value == %@ OR value == %@",
+                "2000 rendered pins",
+                "2,000 rendered pins"
+            ),
+            evaluatedWith: summary
+        )
+        wait(for: [completeSnapshot], timeout: 5)
+        screenshot(app, name: "Map - 2000 lead complete coverage")
+
         let legalLink = app.links["Legal"]
         let addLeadButton = app.buttons["addLeadButton"]
         XCTAssertTrue(legalLink.waitForExistence(timeout: 4), "Maps Legal attribution should be visible")
@@ -3707,7 +3744,12 @@ final class D2D_AdvancerUITests: XCTestCase {
         )
 
         mapToolsButton.tap()
-        tapIdentifiedElement(app, "mapWorkflowMode_hot", timeout: 3)
+        XCTAssertTrue(
+            completeCoverageToggle.waitForExistence(timeout: 3),
+            "Complete coverage should remain available after the scan assertion"
+        )
+        completeCoverageToggle.tap()
+        tapVisibleIdentifiedElement(app, "mapWorkflowMode_hot", timeout: 3)
         let interestedMarker = app.otherElements.matching(
             NSPredicate(
                 format: "label BEGINSWITH %@ AND label CONTAINS[c] %@",
@@ -3722,7 +3764,7 @@ final class D2D_AdvancerUITests: XCTestCase {
         screenshot(app, name: "Map - Interested lead names")
 
         mapToolsButton.tap()
-        tapIdentifiedElement(app, "mapWorkflowMode_all", timeout: 3)
+        tapVisibleIdentifiedElement(app, "mapWorkflowMode_all", timeout: 3)
 
         let moreTab = app.buttons.matching(identifier: "tab_More").firstMatch
         moreTab.tap()
@@ -3774,6 +3816,7 @@ final class D2D_AdvancerUITests: XCTestCase {
             "mapWorkflowMode_hot",
             "mapWorkflowMode_due",
             "mapWorkflowMode_sold",
+            "mapCompleteCoverageToggle",
             "nextBestLeadButton",
             "routePlannerButton"
         ] {

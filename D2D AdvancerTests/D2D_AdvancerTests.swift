@@ -3890,6 +3890,112 @@ struct D2D_AdvancerTests {
     }
 
     @MainActor
+    @Test func completeMapCoverageReturnsEveryMappedLeadBeyondOptimizedBudget() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 43.55, longitude: -79.70),
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        )
+
+        let pins = try (0..<420).map { index in
+            let lead = Lead.create(in: context)
+            lead.name = "Coverage \(index)"
+            lead.latitude = 43.40 + (Double(index % 30) * 0.01)
+            lead.longitude = -79.55 - (Double(index % 30) * 0.01)
+            return try #require(MapLeadPin(lead: lead))
+        }
+
+        let optimized = MapLeadPinVisibilityPolicy.renderedPinSelection(
+            from: pins,
+            mode: .all,
+            region: region,
+            fallbackCenter: region.center
+        )
+        let complete = MapLeadPinVisibilityPolicy.renderedPinSelection(
+            from: pins,
+            mode: .all,
+            region: region,
+            fallbackCenter: region.center,
+            coverageMode: .complete
+        )
+
+        #expect(optimized.renderedPins.count <= MapLeadVisibilityPolicy.defaultRenderedLeadBudget)
+        #expect(complete.renderedPins.count == pins.count)
+        #expect(complete.matchingLeadCount == pins.count)
+        #expect(!MapLeadCoverageMode.complete.refreshesForViewportChanges)
+    }
+
+    @Test func mapAnnotationBatchPolicyLoadsLargeClusterSetsPromptly() {
+        #expect(LeadMapAnnotationBatchPolicy.batchSize(for: 24) == 48)
+        #expect(LeadMapAnnotationBatchPolicy.batchSize(for: 180) == 72)
+        #expect(LeadMapAnnotationBatchPolicy.batchSize(for: 700) == 128)
+        #expect(LeadMapAnnotationBatchPolicy.batchSize(for: 2_000) == 2_000)
+        #expect(LeadMapAnnotationBatchPolicy.delay(forBatchIndex: 10) <= 0.12)
+    }
+
+    @MainActor
+    @Test func completeCoverageScanPlanRepresentsEveryLeadWithBoundedAnnotations() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let center = CLLocationCoordinate2D(latitude: 43.5597, longitude: -79.7072)
+
+        let pins = try (0..<2_000).map { index in
+            let lead = Lead.create(in: context)
+            lead.name = "Scan \(index)"
+            lead.latitude = -80 + Double(index % 161)
+            lead.longitude = -179 + Double((index * 37) % 359)
+            lead.status = index == 0
+                ? Lead.Status.converted.rawValue
+                : Lead.Status.notContacted.rawValue
+            return try #require(MapLeadPin(lead: lead))
+        }
+        let centerPoint = MKMapPoint(center)
+        let visibleRect = MKMapRect(
+            x: centerPoint.x,
+            y: centerPoint.y,
+            width: 1,
+            height: 1
+        )
+
+        let clusters = LeadMapScanClusteringPolicy.clusters(
+            for: pins,
+            visibleMapRect: visibleRect
+        )
+
+        #expect(clusters.count <= LeadMapScanClusteringPolicy.maximumRenderedAnnotations)
+        #expect(clusters.reduce(0) { $0 + $1.pins.count } == pins.count)
+        #expect(clusters.first?.pins.first?.status == .converted)
+    }
+
+    @MainActor
+    @Test func completeCoverageScanPlanKeepsFilteredLeadNamesBelowItsSafetyLimit() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let center = CLLocationCoordinate2D(latitude: 43.5597, longitude: -79.7072)
+
+        let pins = try (0..<100).map { index in
+            let lead = Lead.create(in: context)
+            lead.name = "Filtered \(index)"
+            lead.latitude = center.latitude + (Double(index / 10) * 0.00045)
+            lead.longitude = center.longitude + (Double(index % 10) * 0.00045)
+            lead.status = index == 0
+                ? Lead.Status.converted.rawValue
+                : Lead.Status.interested.rawValue
+            return try #require(MapLeadPin(lead: lead))
+        }
+
+        let clusters = LeadMapScanClusteringPolicy.clusters(
+            for: pins,
+            visibleMapRect: MKMapRect.world
+        )
+
+        #expect(clusters.count == pins.count)
+        #expect(clusters.allSatisfy { $0.pins.count == 1 })
+        #expect(clusters.first?.pins.first?.status == .converted)
+    }
+
+    @MainActor
     @Test func mapLeadCacheInvalidationIgnoresUnrelatedContextChanges() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
@@ -4861,6 +4967,7 @@ struct D2D_AdvancerTests {
             launchLocationCenterRevision: 0,
             leads: [],
             leadAnnotationRevision: MapLeadAnnotationRevision(pins: []),
+            coverageMode: .optimized,
             isVisible: true,
             searchPin: .constant(nil),
             showsUserLocation: true,

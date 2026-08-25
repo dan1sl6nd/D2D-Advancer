@@ -11,6 +11,143 @@ enum MapPerformanceTrace {
     )
 }
 
+enum LeadMapAnnotationBatchPolicy {
+    static let interBatchDelay: TimeInterval = 0.012
+    static let bulkInsertThreshold = 1_500
+
+    static func batchSize(for annotationCount: Int) -> Int {
+        switch annotationCount {
+        case bulkInsertThreshold...:
+            // Repeated addAnnotations calls force MapKit to rebuild the same
+            // dense cluster graph. One bulk insert is substantially cheaper.
+            return annotationCount
+        case 600...:
+            return 128
+        case 180...:
+            return 72
+        default:
+            return 48
+        }
+    }
+
+    static func delay(forBatchIndex batchIndex: Int) -> TimeInterval {
+        guard batchIndex > 0 else { return 0 }
+        return Double(batchIndex) * interBatchDelay
+    }
+}
+
+struct LeadMapScanCluster {
+    let pins: [MapLeadPin]
+    let coordinate: CLLocationCoordinate2D
+}
+
+enum LeadMapScanClusteringPolicy {
+    static let maximumRenderedAnnotations = 220
+    private static let targetColumns = 12.0
+    private static let targetRows = 16.0
+
+    private struct Cell: Hashable {
+        let column: Int
+        let row: Int
+    }
+
+    static func clusters(
+        for pins: [MapLeadPin],
+        visibleMapRect: MKMapRect,
+        maximumAnnotationCount: Int = maximumRenderedAnnotations
+    ) -> [LeadMapScanCluster] {
+        guard !pins.isEmpty else { return [] }
+
+        let targetCount = max(1, maximumAnnotationCount)
+        if pins.count <= targetCount {
+            return MapLeadPinClusterSummary.sortedPins(pins).map { pin in
+                LeadMapScanCluster(pins: [pin], coordinate: pin.coordinate)
+            }
+        }
+
+        let usableRect = visibleMapRect.isNull
+            || visibleMapRect.width <= 0
+            || visibleMapRect.height <= 0
+            ? MKMapRect.world
+            : visibleMapRect
+        var cellWidth = max(usableRect.width / targetColumns, 1)
+        var cellHeight = max(usableRect.height / targetRows, 1)
+        var result: [LeadMapScanCluster] = []
+
+        // Coarsen globally until even geographically sparse lead sets stay
+        // within MapKit's inexpensive annotation range.
+        for _ in 0..<32 {
+            result = makeClusters(
+                pins: pins,
+                cellWidth: cellWidth,
+                cellHeight: cellHeight
+            )
+            if result.count <= targetCount {
+                return result
+            }
+            cellWidth *= 2
+            cellHeight *= 2
+        }
+
+        return result
+    }
+
+    private static func makeClusters(
+        pins: [MapLeadPin],
+        cellWidth: Double,
+        cellHeight: Double
+    ) -> [LeadMapScanCluster] {
+        var buckets: [Cell: [MapLeadPin]] = [:]
+        buckets.reserveCapacity(min(pins.count, maximumRenderedAnnotations))
+
+        for pin in pins {
+            let point = MKMapPoint(pin.coordinate)
+            guard point.x.isFinite, point.y.isFinite else { continue }
+            let cell = Cell(
+                column: Int(floor(point.x / cellWidth)),
+                row: Int(floor(point.y / cellHeight))
+            )
+            buckets[cell, default: []].append(pin)
+        }
+
+        return buckets.values.map { bucket in
+            let sortedPins = MapLeadPinClusterSummary.sortedPins(bucket)
+            let coordinate = CLLocationCoordinate2D(
+                latitude: bucket.reduce(0) { $0 + $1.latitude } / Double(bucket.count),
+                longitude: bucket.reduce(0) { $0 + $1.longitude } / Double(bucket.count)
+            )
+            return LeadMapScanCluster(pins: sortedPins, coordinate: coordinate)
+        }
+        .sorted { lhs, rhs in
+            guard let left = lhs.pins.first, let right = rhs.pins.first else {
+                return lhs.pins.count > rhs.pins.count
+            }
+            let leftKey = MapLeadPinClusterSummary.prioritySortKey(for: left)
+            let rightKey = MapLeadPinClusterSummary.prioritySortKey(for: right)
+            if leftKey != rightKey {
+                return leftKey > rightKey
+            }
+            return lhs.pins.count > rhs.pins.count
+        }
+    }
+}
+
+private struct LeadMapScanViewportSignature: Equatable {
+    let centerXBucket: Int
+    let centerYBucket: Int
+    let widthBucket: Int
+    let heightBucket: Int
+
+    init(mapRect: MKMapRect) {
+        let width = max(mapRect.width, 1)
+        let height = max(mapRect.height, 1)
+        centerXBucket = Int((mapRect.midX / max(width / 4, 1)).rounded())
+        centerYBucket = Int((mapRect.midY / max(height / 4, 1)).rounded())
+        widthBucket = Int(log2(width).rounded())
+        heightBucket = Int(log2(height).rounded())
+    }
+}
+
 struct MapLeadAnnotationSignature: Equatable, Hashable {
     let objectID: NSManagedObjectID
     let latitude: Double
@@ -64,6 +201,7 @@ struct AdvancedMapView: UIViewRepresentable {
 
     let leads: [MapLeadPin]
     let leadAnnotationRevision: MapLeadAnnotationRevision
+    let coverageMode: MapLeadCoverageMode
     let isVisible: Bool
     @Binding var searchPin: SearchPin?
     let showsUserLocation: Bool
@@ -151,7 +289,8 @@ struct AdvancedMapView: UIViewRepresentable {
             coordinator.updateHiddenAnnotationsIfNeeded(
                 mapView: mapView,
                 leads: leads,
-                revision: leadAnnotationRevision
+                revision: leadAnnotationRevision,
+                coverageMode: coverageMode
             )
             return
         }
@@ -319,7 +458,8 @@ struct AdvancedMapView: UIViewRepresentable {
         coordinator.updateAnnotationsIfNeeded(
             mapView: mapView,
             leads: leads,
-            revision: leadAnnotationRevision
+            revision: leadAnnotationRevision,
+            coverageMode: coverageMode
         )
         coordinator.updateSearchPin(mapView: mapView, searchPin: searchPin)
     }
@@ -687,12 +827,13 @@ struct AdvancedMapView: UIViewRepresentable {
     
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: AdvancedMapView
-        private static let annotationBatchSize = 12
-        private static let annotationBatchDelay: TimeInterval = 0.022
         private var currentAnnotations: [LeadMapAnnotation] = []
+        private var currentScanAnnotations: [MKAnnotation] = []
         private var currentSearchPinAnnotation: MKPointAnnotation?
         private var currentAnnotationSignature: [MapLeadAnnotationSignature] = []
         private var currentAnnotationRevision: MapLeadAnnotationRevision?
+        private var currentScanAnnotationRevision: MapLeadAnnotationRevision?
+        private var currentScanViewportSignature: LeadMapScanViewportSignature?
         private var currentLeadClusteringMode: LeadClusterDisplayPolicy.Mode?
         private var annotationUpdateGeneration = 0
         private var pendingAnnotationWorkItems: [DispatchWorkItem] = []
@@ -865,8 +1006,26 @@ struct AdvancedMapView: UIViewRepresentable {
         func updateAnnotationsIfNeeded(
             mapView: MKMapView,
             leads: [MapLeadPin],
-            revision: MapLeadAnnotationRevision
+            revision: MapLeadAnnotationRevision,
+            coverageMode: MapLeadCoverageMode
         ) {
+            if coverageMode == .complete {
+                updateScanAnnotationsIfNeeded(
+                    mapView: mapView,
+                    leads: leads,
+                    revision: revision
+                )
+                return
+            }
+
+            if !currentScanAnnotations.isEmpty {
+                mapView.removeAnnotations(currentScanAnnotations)
+                currentScanAnnotations.removeAll()
+                currentScanAnnotationRevision = nil
+                currentScanViewportSignature = nil
+                currentAnnotationRevision = nil
+            }
+
             guard revision != currentAnnotationRevision else { return }
 
             let signpostID = OSSignpostID(log: MapPerformanceTrace.log)
@@ -939,7 +1098,64 @@ struct AdvancedMapView: UIViewRepresentable {
             AppLog.debug("Map", "Updated map annotations: \(currentAnnotations.count) leads displayed")
         }
 
+        private func updateScanAnnotationsIfNeeded(
+            mapView: MKMapView,
+            leads: [MapLeadPin],
+            revision: MapLeadAnnotationRevision
+        ) {
+            let viewportSignature = LeadMapScanViewportSignature(mapRect: mapView.visibleMapRect)
+            guard revision != currentScanAnnotationRevision
+                    || viewportSignature != currentScanViewportSignature else { return }
+
+            annotationUpdateGeneration += 1
+            cancelPendingAnnotationUpdates()
+
+            if !currentAnnotations.isEmpty {
+                mapView.removeAnnotations(currentAnnotations)
+                currentAnnotations.removeAll()
+                currentAnnotationSignature.removeAll()
+                currentAnnotationRevision = nil
+                currentLeadClusteringMode = nil
+            }
+            if !currentScanAnnotations.isEmpty {
+                mapView.removeAnnotations(currentScanAnnotations)
+            }
+
+            let clusters = LeadMapScanClusteringPolicy.clusters(
+                for: leads,
+                visibleMapRect: mapView.visibleMapRect
+            )
+            currentScanAnnotations = clusters.map { cluster in
+                if cluster.pins.count == 1, let pin = cluster.pins.first {
+                    return LeadMapAnnotation(pin: pin, allowsNativeClustering: false)
+                }
+                return LeadMapScanClusterAnnotation(
+                    pins: cluster.pins,
+                    coordinate: cluster.coordinate
+                )
+            }
+            if !currentScanAnnotations.isEmpty {
+                mapView.addAnnotations(currentScanAnnotations)
+            }
+
+            currentScanAnnotationRevision = revision
+            currentScanViewportSignature = viewportSignature
+            AppLog.debug(
+                "Map",
+                "Fast scan represents \(leads.count) leads with \(currentScanAnnotations.count) annotations"
+            )
+        }
+
         func updateLeadClusteringModeIfNeeded(mapView: MKMapView) {
+            if parent.coverageMode == .complete {
+                updateScanAnnotationsIfNeeded(
+                    mapView: mapView,
+                    leads: parent.leads,
+                    revision: parent.leadAnnotationRevision
+                )
+                return
+            }
+
             let nextMode = LeadClusterDisplayPolicy.mode(
                 for: mapView.region,
                 visibleLeadCount: visibleLeadAnnotationCount(currentAnnotations, in: mapView)
@@ -973,9 +1189,15 @@ struct AdvancedMapView: UIViewRepresentable {
         func updateHiddenAnnotationsIfNeeded(
             mapView: MKMapView,
             leads: [MapLeadPin],
-            revision: MapLeadAnnotationRevision
+            revision: MapLeadAnnotationRevision,
+            coverageMode: MapLeadCoverageMode
         ) {
-            updateAnnotationsIfNeeded(mapView: mapView, leads: leads, revision: revision)
+            updateAnnotationsIfNeeded(
+                mapView: mapView,
+                leads: leads,
+                revision: revision,
+                coverageMode: coverageMode
+            )
         }
 
         private func cancelPendingAnnotationUpdates() {
@@ -990,7 +1212,9 @@ struct AdvancedMapView: UIViewRepresentable {
         ) {
             guard !annotations.isEmpty else { return }
 
-            if annotations.count <= Self.annotationBatchSize {
+            let batchSize = LeadMapAnnotationBatchPolicy.batchSize(for: annotations.count)
+
+            if annotations.count <= batchSize {
                 mapView.addAnnotations(annotations)
                 return
             }
@@ -1000,7 +1224,7 @@ struct AdvancedMapView: UIViewRepresentable {
             while startIndex < annotations.endIndex {
                 let endIndex = annotations.index(
                     startIndex,
-                    offsetBy: Self.annotationBatchSize,
+                    offsetBy: batchSize,
                     limitedBy: annotations.endIndex
                 ) ?? annotations.endIndex
                 let batch = Array(annotations[startIndex..<endIndex])
@@ -1016,7 +1240,7 @@ struct AdvancedMapView: UIViewRepresentable {
                     }
                     pendingAnnotationWorkItems.append(workItem)
                     DispatchQueue.main.asyncAfter(
-                        deadline: .now() + (Double(batchIndex) * Self.annotationBatchDelay),
+                        deadline: .now() + LeadMapAnnotationBatchPolicy.delay(forBatchIndex: batchIndex),
                         execute: workItem
                     )
                 }
@@ -1116,6 +1340,25 @@ struct AdvancedMapView: UIViewRepresentable {
                 return clusterView
             }
 
+            if let scanCluster = annotation as? LeadMapScanClusterAnnotation {
+                let clusterView = mapView.dequeueReusableAnnotationView(
+                    withIdentifier: "LeadCluster",
+                    for: scanCluster
+                ) as! MKMarkerAnnotationView
+                let summary = MapLeadPinClusterSummary(pins: scanCluster.pins)
+                clusterView.annotation = scanCluster
+                clusterView.glyphText = summary.glyphText
+                clusterView.markerTintColor = summary.uiColor
+                clusterView.glyphTintColor = .white
+                clusterView.displayPriority = LeadMapAnnotationPriorityPolicy.clusterDisplayPriority(for: summary)
+                clusterView.collisionMode = .circle
+                clusterView.canShowCallout = false
+                clusterView.titleVisibility = .hidden
+                clusterView.subtitleVisibility = .hidden
+                clusterView.clusteringIdentifier = nil
+                return clusterView
+            }
+
             guard let leadAnnotation = annotation as? LeadMapAnnotation else {
                 return nil
             }
@@ -1134,9 +1377,11 @@ struct AdvancedMapView: UIViewRepresentable {
                 name: pin.name
             ) ? .visible : .hidden
             annotationView.subtitleVisibility = .hidden
-            annotationView.clusteringIdentifier = LeadClusterDisplayPolicy.clusteringIdentifier(
-                for: currentLeadClusteringMode ?? LeadClusterDisplayPolicy.mode(for: mapView.region)
-            )
+            annotationView.clusteringIdentifier = leadAnnotation.allowsNativeClustering
+                ? LeadClusterDisplayPolicy.clusteringIdentifier(
+                    for: currentLeadClusteringMode ?? LeadClusterDisplayPolicy.mode(for: mapView.region)
+                )
+                : nil
             annotationView.displayPriority = displayPriority(for: pin)
 
             // Customize based on lead status
@@ -1176,18 +1421,27 @@ struct AdvancedMapView: UIViewRepresentable {
         }
         
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
-            if let cluster = view.annotation as? MKClusterAnnotation {
+            if let scanCluster = view.annotation as? LeadMapScanClusterAnnotation {
+                let pins = MapLeadPinClusterSummary.sortedPins(scanCluster.pins)
+                mapView.deselectAnnotation(scanCluster, animated: false)
+                handleClusterSelection(
+                    pins: pins,
+                    coordinates: pins.map(\.coordinate),
+                    clusterCoordinate: scanCluster.coordinate,
+                    mapView: mapView
+                )
+            } else if let cluster = view.annotation as? MKClusterAnnotation {
                 let pins = MapLeadPinClusterSummary.sortedPins(
                     cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.pin }
                 )
                 guard !pins.isEmpty else { return }
                 mapView.deselectAnnotation(cluster, animated: false)
-
-                if shouldOpenClusterSheet(mapView: mapView, cluster: cluster) {
-                    parent.onLeadClusterTap(pins, cluster.coordinate)
-                } else {
-                    zoomIntoCluster(cluster, on: mapView)
-                }
+                handleClusterSelection(
+                    pins: pins,
+                    coordinates: cluster.memberAnnotations.map(\.coordinate),
+                    clusterCoordinate: cluster.coordinate,
+                    mapView: mapView
+                )
             } else if let leadAnnotation = view.annotation as? LeadMapAnnotation {
                 parent.onLeadTap(leadAnnotation.pin)
             } else if view.annotation is MKPointAnnotation,
@@ -1221,19 +1475,42 @@ struct AdvancedMapView: UIViewRepresentable {
             }
         }
 
-        private func shouldOpenClusterSheet(mapView: MKMapView, cluster: MKClusterAnnotation) -> Bool {
+        private func handleClusterSelection(
+            pins: [MapLeadPin],
+            coordinates: [CLLocationCoordinate2D],
+            clusterCoordinate: CLLocationCoordinate2D,
+            mapView: MKMapView
+        ) {
+            guard !pins.isEmpty else { return }
+            if shouldOpenClusterSheet(
+                mapView: mapView,
+                pins: pins,
+                coordinates: coordinates
+            ) {
+                parent.onLeadClusterTap(pins, clusterCoordinate)
+            } else {
+                zoomIntoCluster(coordinates: coordinates, on: mapView)
+            }
+        }
+
+        private func shouldOpenClusterSheet(
+            mapView: MKMapView,
+            pins: [MapLeadPin],
+            coordinates: [CLLocationCoordinate2D]
+        ) -> Bool {
             let maxSpan = max(mapView.region.span.latitudeDelta, mapView.region.span.longitudeDelta)
-            let pins = cluster.memberAnnotations.compactMap { ($0 as? LeadMapAnnotation)?.pin }
             return LeadClusterInteractionPolicy.route(
                 mapSpan: maxSpan,
-                coordinateSpread: coordinateSpread(for: cluster),
-                memberCount: cluster.memberAnnotations.count,
+                coordinateSpread: coordinateSpread(for: coordinates),
+                memberCount: pins.count,
                 containsUrgentLead: pins.contains(where: MapLeadPinClusterSummary.isUrgent)
             ) == .openSheet
         }
 
-        private func zoomIntoCluster(_ cluster: MKClusterAnnotation, on mapView: MKMapView) {
-            let coordinates = cluster.memberAnnotations.map(\.coordinate)
+        private func zoomIntoCluster(
+            coordinates: [CLLocationCoordinate2D],
+            on mapView: MKMapView
+        ) {
             guard let region = paddedRegion(containing: coordinates, currentRegion: mapView.region) else { return }
             userHasInteracted = true
             resetStartupCenterVerification()
@@ -1274,8 +1551,9 @@ struct AdvancedMapView: UIViewRepresentable {
             )
         }
 
-        private func coordinateSpread(for cluster: MKClusterAnnotation) -> CLLocationDegrees {
-            let coordinates = cluster.memberAnnotations.map(\.coordinate)
+        private func coordinateSpread(
+            for coordinates: [CLLocationCoordinate2D]
+        ) -> CLLocationDegrees {
             guard let first = coordinates.first else { return 0 }
 
             var minLatitude = first.latitude
@@ -1546,8 +1824,20 @@ enum LeadMapAnnotationLabelPolicy {
     }
 }
 
+class LeadMapScanClusterAnnotation: NSObject, MKAnnotation {
+    let pins: [MapLeadPin]
+    let coordinate: CLLocationCoordinate2D
+
+    init(pins: [MapLeadPin], coordinate: CLLocationCoordinate2D) {
+        self.pins = pins
+        self.coordinate = coordinate
+        super.init()
+    }
+}
+
 class LeadMapAnnotation: NSObject, MKAnnotation {
     let pin: MapLeadPin
+    let allowsNativeClustering: Bool
     // Cache coordinate at creation time so accessing a deleted managed object won't crash
     private let cachedCoordinate: CLLocationCoordinate2D
     private let cachedTitle: String?
@@ -1565,8 +1855,9 @@ class LeadMapAnnotation: NSObject, MKAnnotation {
         return cachedSubtitle
     }
     
-    init(pin: MapLeadPin) {
+    init(pin: MapLeadPin, allowsNativeClustering: Bool = true) {
         self.pin = pin
+        self.allowsNativeClustering = allowsNativeClustering
         self.cachedCoordinate = pin.coordinate
         self.cachedTitle = pin.title
         self.cachedSubtitle = pin.subtitle

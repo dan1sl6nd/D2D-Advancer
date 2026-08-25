@@ -99,6 +99,24 @@ enum MapWorkflowMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum MapLeadCoverageMode: String, Equatable {
+    case optimized
+    case complete
+
+    var renderBudget: Int {
+        switch self {
+        case .optimized:
+            return MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+        case .complete:
+            return .max
+        }
+    }
+
+    var refreshesForViewportChanges: Bool {
+        self == .optimized
+    }
+}
+
 enum MapAddressSource {
     case mapSearchAddress
     case streetAddress
@@ -384,6 +402,7 @@ struct MapView: View {
     @State private var teamFieldMapSummary: TeamWorkspaceSurfaceSummary?
     @State private var selectedTeamRepUserId: String?
     @State private var selectedMapMode: MapWorkflowMode = .all
+    @State private var mapLeadCoverageMode: MapLeadCoverageMode = .optimized
     @State private var visibleMapRegion: MKCoordinateRegion = LocationManager.shared.region
     @State private var mapLeadRenderSnapshot = MapLeadRenderSnapshot.empty
     @State private var mapLeadPinCache = MapLeadPinCache.empty
@@ -497,19 +516,19 @@ struct MapView: View {
             }
             .onChange(of: visibleMapRegion.center.latitude) { _, _ in
                 guard isVisible else { return }
-                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
+                scheduleViewportMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: visibleMapRegion.center.longitude) { _, _ in
                 guard isVisible else { return }
-                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
+                scheduleViewportMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: visibleMapRegion.span.latitudeDelta) { _, _ in
                 guard isVisible else { return }
-                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
+                scheduleViewportMapLeadRenderUpdate(after: 0.18)
             }
             .onChange(of: visibleMapRegion.span.longitudeDelta) { _, _ in
                 guard isVisible else { return }
-                scheduleInteractiveMapLeadRenderUpdate(after: 0.18)
+                scheduleViewportMapLeadRenderUpdate(after: 0.18)
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { notification in
                 guard MapLeadCacheInvalidationPolicy.shouldInvalidate(for: notification) else { return }
@@ -638,9 +657,13 @@ struct MapView: View {
             .sheet(isPresented: $showingMapTools) {
                 MapToolsSheetHost(
                     selectedMode: selectedMapMode,
-                    isLeadSnapshotReady: mapLeadRenderSnapshot.isReady,
+                    coverageMode: mapLeadCoverageMode,
+                    isLeadSnapshotReady: mapLeadRenderSnapshot.isReady
+                        && mapLeadRenderSnapshot.coverageMode == mapLeadCoverageMode,
+                    renderedLeadCount: mapLeadRenderSnapshot.renderedPins.count,
                     matchingLeadCount: mapLeadRenderSnapshot.matchingLeadCount,
                     onSelectMode: setMapMode,
+                    onSetCoverageMode: setMapLeadCoverageMode,
                     onOpenRoutePlanner: {
                         showingRoutePlanner = true
                     },
@@ -727,6 +750,17 @@ struct MapView: View {
     private func scheduleOpeningMapLeadRenderUpdate() {
         cancelMapLeadCachePrewarm()
 
+        if mapLeadCoverageMode == .complete {
+            guard !mapLeadRenderSnapshot.isReady
+                    || mapLeadRenderSnapshot.coverageMode != .complete else { return }
+            mapLeadOpeningGuardUntil = .distantPast
+            scheduleMapLeadRenderUpdate(
+                after: 0,
+                maxRenderedLeads: mapLeadCoverageMode.renderBudget
+            )
+            return
+        }
+
         guard MapLeadOpeningRenderPolicy.shouldScheduleRenderOnOpen(
             cacheIsReady: mapLeadPinCache.isReady,
             snapshotIsReady: mapLeadRenderSnapshot.isReady,
@@ -800,9 +834,12 @@ struct MapView: View {
                 let snapshot = await MapLeadRenderSnapshot.makeAsync(
                     from: cache,
                     mode: selectedMapMode,
+                    coverageMode: mapLeadCoverageMode,
                     region: visibleMapRegion,
                     fallbackCenter: locationManager.region.center,
-                    maxRenderedLeads: MapLeadOpeningRenderPolicy.previewRenderedLeadBudget
+                    maxRenderedLeads: mapLeadCoverageMode == .complete
+                        ? mapLeadCoverageMode.renderBudget
+                        : MapLeadOpeningRenderPolicy.previewRenderedLeadBudget
                 )
                 guard !Task.isCancelled else {
                     mapLeadCachePrewarmTask = nil
@@ -839,9 +876,14 @@ struct MapView: View {
             mapLeadExpansionTask = nil
             scheduleMapLeadRenderUpdate(
                 after: 0,
-                maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+                maxRenderedLeads: mapLeadCoverageMode.renderBudget
             )
         }
+    }
+
+    private func scheduleViewportMapLeadRenderUpdate(after delay: TimeInterval) {
+        guard mapLeadCoverageMode.refreshesForViewportChanges else { return }
+        scheduleInteractiveMapLeadRenderUpdate(after: delay)
     }
 
     private func scheduleInteractiveMapLeadRenderUpdate(after delay: TimeInterval) {
@@ -859,23 +901,26 @@ struct MapView: View {
 
         scheduleMapLeadRenderUpdate(
             after: guardedDelay,
-            maxRenderedLeads: MapLeadVisibilityPolicy.defaultRenderedLeadBudget
+            maxRenderedLeads: mapLeadCoverageMode.renderBudget
         )
     }
 
     private func scheduleMapLeadRenderUpdate(
         after delay: TimeInterval,
-        maxRenderedLeads: Int
+        maxRenderedLeads: Int,
+        coverageMode requestedCoverageMode: MapLeadCoverageMode? = nil
     ) {
         guard isVisible else { return }
 
         guard let persistentStoreCoordinator = viewContext.persistentStoreCoordinator else { return }
 
         let mode = selectedMapMode
+        let coverageMode = requestedCoverageMode ?? mapLeadCoverageMode
         let region = visibleMapRegion
         let fallbackCenter = locationManager.region.center
         let requestSignature = MapLeadRenderRequestSignature(
             mode: mode,
+            coverageMode: coverageMode,
             region: region,
             fallbackCenter: fallbackCenter,
             maxRenderedLeads: maxRenderedLeads,
@@ -902,6 +947,7 @@ struct MapView: View {
                 persistentStoreCoordinator: persistentStoreCoordinator,
                 cachedPins: mapLeadPinCache,
                 mode: mode,
+                coverageMode: coverageMode,
                 region: region,
                 fallbackCenter: fallbackCenter,
                 maxRenderedLeads: maxRenderedLeads
@@ -928,6 +974,7 @@ struct MapView: View {
         persistentStoreCoordinator: NSPersistentStoreCoordinator,
         cachedPins: MapLeadPinCache,
         mode: MapWorkflowMode,
+        coverageMode: MapLeadCoverageMode,
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
         maxRenderedLeads: Int
@@ -942,6 +989,7 @@ struct MapView: View {
         return await MapLeadRenderSnapshot.makeAsync(
             from: cache,
             mode: mode,
+            coverageMode: coverageMode,
             region: region,
             fallbackCenter: fallbackCenter,
             maxRenderedLeads: maxRenderedLeads
@@ -960,6 +1008,10 @@ struct MapView: View {
             launchLocationCenterRevision: locationManager.initialMapCenterRevision,
             leads: mapLeadRenderSnapshot.renderedPins,
             leadAnnotationRevision: mapLeadRenderSnapshot.annotationRevision,
+            // Keep MapKit on the snapshot's rendering strategy until the async
+            // replacement is ready. This prevents a complete snapshot from
+            // briefly becoming thousands of raw optimized annotations.
+            coverageMode: mapLeadRenderSnapshot.coverageMode,
             isVisible: isVisible,
             searchPin: $searchPin,
             // Keep the authorized user-location layer warm on the retained map.
@@ -1798,6 +1850,19 @@ struct MapView: View {
         if mode == .next {
             focusNextBestLead(openDetail: false)
         }
+    }
+
+    private func setMapLeadCoverageMode(_ mode: MapLeadCoverageMode) {
+        guard mapLeadCoverageMode != mode else { return }
+
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        mapLeadCoverageMode = mode
+        mapLeadOpeningGuardUntil = .distantPast
+        scheduleMapLeadRenderUpdate(
+            after: 0,
+            maxRenderedLeads: mode.renderBudget,
+            coverageMode: mode
+        )
     }
 
     private func focusNextBestLead(openDetail: Bool) {
@@ -3720,6 +3785,7 @@ private struct MapLeadCacheMutation {
 
 private struct MapLeadRenderRequestSignature: Equatable {
     let mode: MapWorkflowMode
+    let coverageMode: MapLeadCoverageMode
     let centerLatitudeBucket: Int
     let centerLongitudeBucket: Int
     let latitudeSpanBucket: Int
@@ -3729,6 +3795,7 @@ private struct MapLeadRenderRequestSignature: Equatable {
 
     init(
         mode: MapWorkflowMode,
+        coverageMode: MapLeadCoverageMode,
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
         maxRenderedLeads: Int,
@@ -3736,6 +3803,7 @@ private struct MapLeadRenderRequestSignature: Equatable {
     ) {
         let center = CLLocationCoordinate2DIsValid(region.center) ? region.center : fallbackCenter
         self.mode = mode
+        self.coverageMode = coverageMode
         self.centerLatitudeBucket = Self.coordinateBucket(center.latitude)
         self.centerLongitudeBucket = Self.coordinateBucket(center.longitude)
         self.latitudeSpanBucket = Self.spanBucket(region.span.latitudeDelta)
@@ -3762,6 +3830,7 @@ private struct MapLeadRenderSnapshot {
     let matchingLeadCount: Int
     let isReady: Bool
     let cache: MapLeadPinCache
+    let coverageMode: MapLeadCoverageMode
 
     static let empty = MapLeadRenderSnapshot(
         renderedPins: [],
@@ -3769,7 +3838,8 @@ private struct MapLeadRenderSnapshot {
         totalLeadCount: 0,
         matchingLeadCount: 0,
         isReady: false,
-        cache: .empty
+        cache: .empty,
+        coverageMode: .optimized
     )
 
     func limited(to maxRenderedLeads: Int) -> MapLeadRenderSnapshot {
@@ -3783,13 +3853,15 @@ private struct MapLeadRenderSnapshot {
             totalLeadCount: totalLeadCount,
             matchingLeadCount: matchingLeadCount,
             isReady: isReady,
-            cache: cache
+            cache: cache,
+            coverageMode: coverageMode
         )
     }
 
     static func make(
         from cache: MapLeadPinCache,
         mode: MapWorkflowMode,
+        coverageMode: MapLeadCoverageMode = .optimized,
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
         maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
@@ -3801,6 +3873,7 @@ private struct MapLeadRenderSnapshot {
             region: region,
             fallbackCenter: fallbackCenter,
             maxRenderedLeads: maxRenderedLeads,
+            coverageMode: coverageMode,
             now: now
         )
 
@@ -3810,13 +3883,15 @@ private struct MapLeadRenderSnapshot {
             totalLeadCount: cache.totalLeadCount,
             matchingLeadCount: renderResult.matchingLeadCount,
             isReady: cache.isReady,
-            cache: cache
+            cache: cache,
+            coverageMode: coverageMode
         )
     }
 
     static func makeAsync(
         from cache: MapLeadPinCache,
         mode: MapWorkflowMode,
+        coverageMode: MapLeadCoverageMode = .optimized,
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
         maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
@@ -3837,6 +3912,7 @@ private struct MapLeadRenderSnapshot {
                 let snapshot = make(
                     from: cache,
                     mode: mode,
+                    coverageMode: coverageMode,
                     region: region,
                     fallbackCenter: fallbackCenter,
                     maxRenderedLeads: maxRenderedLeads,
@@ -3856,7 +3932,7 @@ private struct MapLeadRenderSnapshot {
     }
 }
 
-private enum MapLeadPinVisibilityPolicy {
+enum MapLeadPinVisibilityPolicy {
     private static let viewportPaddingMultiplier = 1.8
 
     static func renderedPinSelection<Pins: Collection>(
@@ -3865,8 +3941,10 @@ private enum MapLeadPinVisibilityPolicy {
         region: MKCoordinateRegion,
         fallbackCenter: CLLocationCoordinate2D,
         maxRenderedLeads: Int = MapLeadVisibilityPolicy.defaultRenderedLeadBudget,
+        coverageMode: MapLeadCoverageMode = .optimized,
         now: Date = Date()
     ) -> MapLeadPinSelection where Pins.Element == MapLeadPin {
+        let effectiveRenderedLeadBudget = coverageMode == .complete ? Int.max : maxRenderedLeads
         var matchingLeadCount = 0
         var matchingCoordinateCount = 0
         var allCandidates: [MapLeadPinRenderCandidate] = []
@@ -3884,7 +3962,7 @@ private enum MapLeadPinVisibilityPolicy {
                 sortKey: MapLeadPinClusterSummary.prioritySortKey(for: pin, now: now)
             )
 
-            if allCandidates.count < maxRenderedLeads {
+            if allCandidates.count < effectiveRenderedLeadBudget {
                 allCandidates.append(candidate)
             }
 
@@ -3895,11 +3973,11 @@ private enum MapLeadPinVisibilityPolicy {
             }
         }
 
-        guard maxRenderedLeads > 0 else {
+        guard effectiveRenderedLeadBudget > 0 else {
             return MapLeadPinSelection(renderedPins: [], matchingLeadCount: matchingLeadCount)
         }
 
-        if matchingCoordinateCount <= maxRenderedLeads {
+        if matchingCoordinateCount <= effectiveRenderedLeadBudget {
             return MapLeadPinSelection(
                 renderedPins: sortedPins(from: allCandidates),
                 matchingLeadCount: matchingLeadCount
@@ -3907,16 +3985,16 @@ private enum MapLeadPinVisibilityPolicy {
         }
 
         let viewportPins = sortedPins(from: viewportCandidates)
-        if viewportPins.count >= maxRenderedLeads {
+        if viewportPins.count >= effectiveRenderedLeadBudget {
             return MapLeadPinSelection(
-                renderedPins: Array(viewportPins.prefix(maxRenderedLeads)),
+                renderedPins: Array(viewportPins.prefix(effectiveRenderedLeadBudget)),
                 matchingLeadCount: matchingLeadCount
             )
         }
 
         var selectedPins = viewportPins
         var selectedObjectIDs = Set(selectedPins.map(\.objectID))
-        let remainingBudget = maxRenderedLeads - selectedPins.count
+        let remainingBudget = effectiveRenderedLeadBudget - selectedPins.count
         if remainingBudget > 0 {
             let priorityOutsideViewport = sortedPins(from: priorityOutsideViewportCandidates).lazy.filter { pin in
                 !selectedObjectIDs.contains(pin.objectID) && isMapPriorityLead(pin, now: now)
@@ -3982,7 +4060,7 @@ private enum MapLeadPinVisibilityPolicy {
     }
 }
 
-private struct MapLeadPinSelection {
+struct MapLeadPinSelection {
     let renderedPins: [MapLeadPin]
     let matchingLeadCount: Int
 }
@@ -4318,9 +4396,12 @@ private struct MapToolsSheetHost: View {
     @ObservedObject private var syncManager = UserDataSyncManager.shared
 
     let selectedMode: MapWorkflowMode
+    let coverageMode: MapLeadCoverageMode
     let isLeadSnapshotReady: Bool
+    let renderedLeadCount: Int
     let matchingLeadCount: Int
     let onSelectMode: (MapWorkflowMode) -> Void
+    let onSetCoverageMode: (MapLeadCoverageMode) -> Void
     let onOpenRoutePlanner: () -> Void
     let onOpenTeamMap: () -> Void
 
@@ -4334,6 +4415,11 @@ private struct MapToolsSheetHost: View {
 
         if syncManager.syncStatus.isBusy {
             return syncManager.syncStatus.displayText
+        }
+
+        if coverageMode == .complete {
+            guard isLeadSnapshotReady else { return "Loading complete coverage" }
+            return "\(renderedLeadCount) mapped leads loaded"
         }
 
         if selectedMode != .all {
@@ -4362,9 +4448,11 @@ private struct MapToolsSheetHost: View {
     var body: some View {
         MapToolsSheet(
             selectedMode: selectedMode,
+            coverageMode: coverageMode,
             workflowStatusText: workflowStatusText,
             teamSummary: teamSummary,
             onSelectMode: onSelectMode,
+            onSetCoverageMode: onSetCoverageMode,
             onOpenRoutePlanner: onOpenRoutePlanner,
             onOpenTeamMap: onOpenTeamMap
         )
@@ -4376,9 +4464,11 @@ private struct MapToolsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let selectedMode: MapWorkflowMode
+    let coverageMode: MapLeadCoverageMode
     let workflowStatusText: String?
     let teamSummary: TeamWorkspaceSurfaceSummary?
     let onSelectMode: (MapWorkflowMode) -> Void
+    let onSetCoverageMode: (MapLeadCoverageMode) -> Void
     let onOpenRoutePlanner: () -> Void
     let onOpenTeamMap: () -> Void
 
@@ -4411,6 +4501,21 @@ private struct MapToolsSheet: View {
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    MapToolSection(title: "Coverage") {
+                        MapToolToggleRow(
+                            title: "Complete coverage",
+                            subtitle: coverageMode == .complete
+                                ? "Every matching lead is represented in fast, zoom-aware clusters."
+                                : "Represent every matching lead for fast area scanning.",
+                            icon: "square.3.layers.3d.down.right.fill",
+                            color: Color.electricViolet,
+                            isOn: coverageMode == .complete,
+                            accessibilityIdentifier: "mapCompleteCoverageToggle"
+                        ) { isOn in
+                            onSetCoverageMode(isOn ? .complete : .optimized)
                         }
                     }
 
@@ -4564,6 +4669,10 @@ private struct MapToolOptionButton: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
@@ -4608,6 +4717,49 @@ private struct MapToolActionRow: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+private struct MapToolToggleRow: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+    let isOn: Bool
+    let accessibilityIdentifier: String
+    let onChange: (Bool) -> Void
+
+    var body: some View {
+        Toggle(
+            isOn: Binding(
+                get: { isOn },
+                set: onChange
+            )
+        ) {
+            HStack(spacing: 12) {
+                ObsidianIconTile(icon: icon, tint: color, size: 38)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.obsidianCallout)
+                        .foregroundColor(Color.textPrimary)
+
+                    Text(subtitle)
+                        .font(.obsidianFootnote)
+                        .foregroundColor(Color.textSecondary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .toggleStyle(SwitchToggleStyle(tint: color))
+        .padding(14)
+        .background(Color.obsidianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.obsidianBorder.opacity(0.55), lineWidth: 0.5)
+        )
         .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
