@@ -156,6 +156,245 @@ enum LeadMapScanClusteringPolicy {
     }
 }
 
+struct LeadMapCoverageDot {
+    let mapPoint: MKMapPoint
+    let status: Lead.Status
+}
+
+enum LeadMapCoverageDotStyle {
+    static let statusDrawOrder: [Lead.Status] = [
+        .notInterested,
+        .notContacted,
+        .notHome,
+        .interested,
+        .converted
+    ]
+
+    static func drawOrder(for status: Lead.Status) -> Int {
+        statusDrawOrder.firstIndex(of: status) ?? 0
+    }
+
+    static func diameter(for status: Lead.Status) -> CGFloat {
+        switch status {
+        case .notInterested:
+            return 4.5
+        case .notContacted:
+            return 5
+        case .notHome:
+            return 5.5
+        case .interested:
+            return 7
+        case .converted:
+            return 8
+        }
+    }
+
+    static func uiColor(for status: Lead.Status) -> UIColor {
+        switch status {
+        case .notContacted:
+            return .systemGray
+        case .interested:
+            return .systemOrange
+        case .converted:
+            return .systemGreen
+        case .notInterested:
+            return .systemRed
+        case .notHome:
+            return .brown
+        }
+    }
+
+    static func fillColor(for status: Lead.Status) -> CGColor {
+        uiColor(for: status).cgColor
+    }
+}
+
+final class LeadMapCoverageDotsOverlay: NSObject, MKOverlay {
+    let dots: [LeadMapCoverageDot]
+    let coordinate: CLLocationCoordinate2D
+    let boundingMapRect: MKMapRect
+
+    init(pins: [MapLeadPin]) {
+        dots = pins.map { pin in
+            LeadMapCoverageDot(
+                mapPoint: MKMapPoint(pin.coordinate),
+                status: pin.status
+            )
+        }
+        .sorted { lhs, rhs in
+            let leftOrder = LeadMapCoverageDotStyle.drawOrder(for: lhs.status)
+            let rightOrder = LeadMapCoverageDotStyle.drawOrder(for: rhs.status)
+            if leftOrder != rightOrder { return leftOrder < rightOrder }
+            if lhs.mapPoint.x != rhs.mapPoint.x { return lhs.mapPoint.x < rhs.mapPoint.x }
+            return lhs.mapPoint.y < rhs.mapPoint.y
+        }
+
+        boundingMapRect = .world
+        if let first = dots.first {
+            coordinate = first.mapPoint.coordinate
+        } else {
+            coordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0)
+        }
+        super.init()
+    }
+}
+
+final class LeadMapCoverageDotsRenderer: MKOverlayRenderer {
+    private let coverageOverlay: LeadMapCoverageDotsOverlay
+
+    init(overlay: LeadMapCoverageDotsOverlay) {
+        coverageOverlay = overlay
+        super.init(overlay: overlay)
+    }
+
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        guard zoomScale.isFinite, zoomScale > 0, !coverageOverlay.dots.isEmpty else { return }
+
+        let maximumRadius = LeadMapCoverageDotStyle.diameter(for: .converted) / (2 * zoomScale)
+        let drawingMapRect = mapRect.insetBy(dx: -maximumRadius, dy: -maximumRadius)
+        let strokeWidth = 0.8 / zoomScale
+        var currentStatus: Lead.Status?
+
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.setAllowsAntialiasing(true)
+        context.setShouldAntialias(true)
+        context.setStrokeColor(UIColor.white.withAlphaComponent(0.9).cgColor)
+        context.setLineWidth(strokeWidth)
+
+        for dot in coverageOverlay.dots where drawingMapRect.contains(dot.mapPoint) {
+            if currentStatus != dot.status {
+                currentStatus = dot.status
+                context.setFillColor(LeadMapCoverageDotStyle.fillColor(for: dot.status))
+            }
+
+            let center = point(for: dot.mapPoint)
+            let diameter = LeadMapCoverageDotStyle.diameter(for: dot.status) / zoomScale
+            let dotRect = CGRect(
+                x: center.x - diameter / 2,
+                y: center.y - diameter / 2,
+                width: diameter,
+                height: diameter
+            )
+            context.fillEllipse(in: dotRect)
+            context.strokeEllipse(in: dotRect)
+        }
+    }
+}
+
+enum LeadMapCoveragePresentationPolicy {
+    enum Mode: Equatable {
+        case overview
+        case compact
+        case detail
+    }
+
+    static func mode(for region: MKCoordinateRegion) -> Mode {
+        mode(mapSpan: max(region.span.latitudeDelta, region.span.longitudeDelta))
+    }
+
+    static func mode(mapSpan: CLLocationDegrees) -> Mode {
+        if mapSpan > 0.06 { return .overview }
+        if mapSpan > 0.006 { return .compact }
+        return .detail
+    }
+
+    static func representativeDotDiameter(for mode: Mode) -> CGFloat {
+        switch mode {
+        case .overview:
+            return 14
+        case .compact:
+            return 18
+        case .detail:
+            return 22
+        }
+    }
+
+    static func clusterDiameter(for mode: Mode) -> CGFloat {
+        switch mode {
+        case .overview:
+            return 24
+        case .compact:
+            return 28
+        case .detail:
+            return 30
+        }
+    }
+
+    static func showsLeadNames(in mode: Mode) -> Bool {
+        mode == .detail
+    }
+}
+
+enum LeadMapCompactAnnotationImageFactory {
+    private static let cache = NSCache<NSString, UIImage>()
+
+    static func leadDot(status: Lead.Status, diameter: CGFloat) -> UIImage {
+        let key = "lead-\(status.rawValue)-\(Int(diameter.rounded()))" as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+
+        let image = circleImage(
+            diameter: diameter,
+            fillColor: LeadMapCoverageDotStyle.uiColor(for: status),
+            text: nil
+        )
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
+    static func clusterBadge(
+        text: String,
+        fillColor: UIColor,
+        diameter: CGFloat,
+        cacheKey: String
+    ) -> UIImage {
+        let key = "cluster-\(cacheKey)-\(Int(diameter.rounded()))" as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+
+        let image = circleImage(
+            diameter: diameter,
+            fillColor: fillColor,
+            text: text
+        )
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
+    private static func circleImage(
+        diameter: CGFloat,
+        fillColor: UIColor,
+        text: String?
+    ) -> UIImage {
+        let size = CGSize(width: diameter, height: diameter)
+        return UIGraphicsImageRenderer(size: size).image { rendererContext in
+            let circleRect = CGRect(x: 1, y: 1, width: diameter - 2, height: diameter - 2)
+            rendererContext.cgContext.setFillColor(fillColor.cgColor)
+            rendererContext.cgContext.fillEllipse(in: circleRect)
+            rendererContext.cgContext.setStrokeColor(UIColor.white.withAlphaComponent(0.95).cgColor)
+            rendererContext.cgContext.setLineWidth(2)
+            rendererContext.cgContext.strokeEllipse(in: circleRect)
+
+            guard let text else { return }
+            let fontSize: CGFloat = text.count > 2 ? 8.5 : 11
+            let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: UIColor.white,
+                .paragraphStyle: paragraph
+            ]
+            let textRect = CGRect(
+                x: 0,
+                y: (diameter - font.lineHeight) / 2 - 0.5,
+                width: diameter,
+                height: font.lineHeight
+            )
+            text.draw(in: textRect, withAttributes: attributes)
+        }
+    }
+}
+
 private struct LeadMapScanViewportSignature: Equatable {
     private static let centerBucketsPerViewport = 8.0
     private static let zoomBucketsPerOctave = 8.0
@@ -260,6 +499,8 @@ struct AdvancedMapView: UIViewRepresentable {
         mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "SearchPin")
         mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "LeadCluster")
         mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "LeadAnnotation")
+        mapView.register(MKAnnotationView.self, forAnnotationViewWithReuseIdentifier: "LeadScanCluster")
+        mapView.register(MKAnnotationView.self, forAnnotationViewWithReuseIdentifier: "LeadCoverageDot")
 
         let shouldFollowLaunchLocation = Self.shouldCenterUserLocationOnLaunch(
             showsUserLocation: showsUserLocation,
@@ -865,6 +1106,8 @@ struct AdvancedMapView: UIViewRepresentable {
         private var currentAnnotationRevision: MapLeadAnnotationRevision?
         private var currentScanAnnotationRevision: MapLeadAnnotationRevision?
         private var currentScanViewportSignature: LeadMapScanViewportSignature?
+        private var currentCoverageDotsOverlay: LeadMapCoverageDotsOverlay?
+        private var currentCoverageDotsRevision: MapLeadAnnotationRevision?
         private var currentLeadClusteringMode: LeadClusterDisplayPolicy.Mode?
         private var annotationUpdateGeneration = 0
         private var pendingAnnotationWorkItems: [DispatchWorkItem] = []
@@ -1041,6 +1284,11 @@ struct AdvancedMapView: UIViewRepresentable {
             coverageMode: MapLeadCoverageMode
         ) {
             if coverageMode == .complete {
+                updateCoverageDotsOverlayIfNeeded(
+                    mapView: mapView,
+                    leads: leads,
+                    revision: revision
+                )
                 updateScanAnnotationsIfNeeded(
                     mapView: mapView,
                     leads: leads,
@@ -1048,6 +1296,8 @@ struct AdvancedMapView: UIViewRepresentable {
                 )
                 return
             }
+
+            removeCoverageDotsOverlayIfNeeded(from: mapView)
 
             if !currentScanAnnotations.isEmpty {
                 mapView.removeAnnotations(currentScanAnnotations)
@@ -1127,6 +1377,35 @@ struct AdvancedMapView: UIViewRepresentable {
             currentAnnotationRevision = revision
 
             AppLog.debug("Map", "Updated map annotations: \(currentAnnotations.count) leads displayed")
+        }
+
+        private func updateCoverageDotsOverlayIfNeeded(
+            mapView: MKMapView,
+            leads: [MapLeadPin],
+            revision: MapLeadAnnotationRevision
+        ) {
+            guard revision != currentCoverageDotsRevision || currentCoverageDotsOverlay == nil else {
+                return
+            }
+
+            removeCoverageDotsOverlayIfNeeded(from: mapView)
+            guard !leads.isEmpty else {
+                currentCoverageDotsRevision = revision
+                return
+            }
+
+            let overlay = LeadMapCoverageDotsOverlay(pins: leads)
+            currentCoverageDotsOverlay = overlay
+            currentCoverageDotsRevision = revision
+            mapView.addOverlay(overlay, level: .aboveRoads)
+        }
+
+        private func removeCoverageDotsOverlayIfNeeded(from mapView: MKMapView) {
+            if let overlay = currentCoverageDotsOverlay {
+                mapView.removeOverlay(overlay)
+            }
+            currentCoverageDotsOverlay = nil
+            currentCoverageDotsRevision = nil
         }
 
         private func updateScanAnnotationsIfNeeded(
@@ -1333,6 +1612,13 @@ struct AdvancedMapView: UIViewRepresentable {
             }
         }
         
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let coverageOverlay = overlay as? LeadMapCoverageDotsOverlay {
+                return LeadMapCoverageDotsRenderer(overlay: coverageOverlay)
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             // Search pin — blue marker with magnifying glass
             if annotation is MKPointAnnotation && !(annotation is LeadMapAnnotation) && !(annotation is MKUserLocation) {
@@ -1365,6 +1651,7 @@ struct AdvancedMapView: UIViewRepresentable {
                 clusterView.glyphTintColor = .white
                 clusterView.displayPriority = LeadMapAnnotationPriorityPolicy.clusterDisplayPriority(for: summary)
                 clusterView.collisionMode = .circle
+                clusterView.transform = .identity
                 clusterView.canShowCallout = false
                 clusterView.titleVisibility = .hidden
                 clusterView.subtitleVisibility = .hidden
@@ -1373,20 +1660,34 @@ struct AdvancedMapView: UIViewRepresentable {
 
             if let scanCluster = annotation as? LeadMapScanClusterAnnotation {
                 let clusterView = mapView.dequeueReusableAnnotationView(
-                    withIdentifier: "LeadCluster",
+                    withIdentifier: "LeadScanCluster",
                     for: scanCluster
-                ) as! MKMarkerAnnotationView
+                )
                 let summary = MapLeadPinClusterSummary(pins: scanCluster.pins)
                 clusterView.annotation = scanCluster
-                clusterView.glyphText = summary.glyphText
-                clusterView.markerTintColor = summary.uiColor
-                clusterView.glyphTintColor = .white
-                clusterView.displayPriority = LeadMapAnnotationPriorityPolicy.clusterDisplayPriority(for: summary)
-                clusterView.collisionMode = .circle
+                let presentationMode = LeadMapCoveragePresentationPolicy.mode(for: mapView.region)
+                let diameter = LeadMapCoveragePresentationPolicy.clusterDiameter(for: presentationMode)
+                let topStatus = scanCluster.pins.first?.status.rawValue ?? "none"
+                let cacheKey = [
+                    summary.glyphText,
+                    topStatus,
+                    String(summary.soldCount),
+                    String(summary.interestedCount),
+                    String(summary.dueFollowUpCount)
+                ].joined(separator: "-")
+                clusterView.image = LeadMapCompactAnnotationImageFactory.clusterBadge(
+                    text: summary.glyphText,
+                    fillColor: summary.uiColor,
+                    diameter: diameter,
+                    cacheKey: cacheKey
+                )
+                clusterView.displayPriority = .required
+                clusterView.collisionMode = .none
+                clusterView.centerOffset = .zero
+                clusterView.transform = .identity
                 clusterView.canShowCallout = false
-                clusterView.titleVisibility = .hidden
-                clusterView.subtitleVisibility = .hidden
                 clusterView.clusteringIdentifier = nil
+                clusterView.accessibilityLabel = "\(summary.count) leads"
                 return clusterView
             }
 
@@ -1395,6 +1696,32 @@ struct AdvancedMapView: UIViewRepresentable {
             }
 
             let pin = leadAnnotation.pin
+            let coveragePresentationMode = LeadMapCoveragePresentationPolicy.mode(for: mapView.region)
+            let isCompleteCoverageLead = !leadAnnotation.allowsNativeClustering
+
+            if isCompleteCoverageLead, coveragePresentationMode != .detail {
+                let annotationView = mapView.dequeueReusableAnnotationView(
+                    withIdentifier: "LeadCoverageDot",
+                    for: annotation
+                )
+                let diameter = LeadMapCoveragePresentationPolicy.representativeDotDiameter(
+                    for: coveragePresentationMode
+                )
+                annotationView.annotation = annotation
+                annotationView.image = LeadMapCompactAnnotationImageFactory.leadDot(
+                    status: pin.status,
+                    diameter: diameter
+                )
+                annotationView.centerOffset = .zero
+                annotationView.canShowCallout = false
+                annotationView.clusteringIdentifier = nil
+                annotationView.displayPriority = .required
+                annotationView.collisionMode = .none
+                annotationView.transform = .identity
+                annotationView.accessibilityLabel = "\(pin.title), \(pin.status.displayName)"
+                return annotationView
+            }
+
             let identifier = "LeadAnnotation"
             let annotationView = mapView.dequeueReusableAnnotationView(
                 withIdentifier: identifier,
@@ -1403,10 +1730,18 @@ struct AdvancedMapView: UIViewRepresentable {
 
             annotationView.annotation = annotation
             annotationView.canShowCallout = false
-            annotationView.titleVisibility = LeadMapAnnotationLabelPolicy.showsName(
+            let hasVisibleName = LeadMapAnnotationLabelPolicy.showsName(
                 status: pin.status,
                 name: pin.name
-            ) ? .visible : .hidden
+            )
+            if isCompleteCoverageLead {
+                annotationView.titleVisibility = hasVisibleName
+                    && LeadMapCoveragePresentationPolicy.showsLeadNames(in: coveragePresentationMode)
+                    ? .adaptive
+                    : .hidden
+            } else {
+                annotationView.titleVisibility = hasVisibleName ? .visible : .hidden
+            }
             annotationView.subtitleVisibility = .hidden
             annotationView.clusteringIdentifier = leadAnnotation.allowsNativeClustering
                 ? LeadClusterDisplayPolicy.clusteringIdentifier(
@@ -1414,6 +1749,8 @@ struct AdvancedMapView: UIViewRepresentable {
                 )
                 : nil
             annotationView.displayPriority = displayPriority(for: pin)
+            annotationView.collisionMode = .circle
+            annotationView.transform = .identity
 
             // Customize based on lead status
             switch pin.status {

@@ -3934,6 +3934,71 @@ struct D2D_AdvancerTests {
         #expect(LeadMapAnnotationBatchPolicy.delay(forBatchIndex: 10) <= 0.12)
     }
 
+    @Test func completeCoverageDotStyleKeepsPriorityStatusesOnTop() {
+        #expect(
+            LeadMapCoverageDotStyle.drawOrder(for: .converted)
+                > LeadMapCoverageDotStyle.drawOrder(for: .interested)
+        )
+        #expect(
+            LeadMapCoverageDotStyle.drawOrder(for: .interested)
+                > LeadMapCoverageDotStyle.drawOrder(for: .notHome)
+        )
+        #expect(
+            LeadMapCoverageDotStyle.diameter(for: .converted)
+                > LeadMapCoverageDotStyle.diameter(for: .interested)
+        )
+        #expect(
+            LeadMapCoverageDotStyle.diameter(for: .interested)
+                > LeadMapCoverageDotStyle.diameter(for: .notContacted)
+        )
+    }
+
+    @Test func completeCoveragePresentationUsesSemanticZoomLevels() {
+        #expect(LeadMapCoveragePresentationPolicy.mode(mapSpan: 0.2) == .overview)
+        #expect(LeadMapCoveragePresentationPolicy.mode(mapSpan: 0.04) == .compact)
+        #expect(LeadMapCoveragePresentationPolicy.mode(mapSpan: 0.01) == .compact)
+        #expect(LeadMapCoveragePresentationPolicy.mode(mapSpan: 0.004) == .detail)
+        #expect(!LeadMapCoveragePresentationPolicy.showsLeadNames(in: .overview))
+        #expect(!LeadMapCoveragePresentationPolicy.showsLeadNames(in: .compact))
+        #expect(LeadMapCoveragePresentationPolicy.showsLeadNames(in: .detail))
+        #expect(
+            LeadMapCoveragePresentationPolicy.clusterDiameter(for: .overview)
+                < LeadMapCoveragePresentationPolicy.clusterDiameter(for: .detail)
+        )
+        #expect(
+            LeadMapCoveragePresentationPolicy.representativeDotDiameter(for: .overview)
+                < LeadMapCoveragePresentationPolicy.representativeDotDiameter(for: .compact)
+        )
+    }
+
+    @MainActor
+    @Test func completeCoverageDotOverlayRetainsEveryLeadAndSortsPriorityLast() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let statuses: [Lead.Status] = [
+            .converted,
+            .notContacted,
+            .notHome,
+            .interested,
+            .notInterested
+        ]
+
+        let pins = try statuses.enumerated().map { index, status in
+            let lead = Lead.create(in: context)
+            lead.name = "Coverage dot \(index)"
+            lead.latitude = 43.55 + Double(index) * 0.001
+            lead.longitude = -79.70 - Double(index) * 0.001
+            lead.status = status.rawValue
+            return try #require(MapLeadPin(lead: lead))
+        }
+
+        let overlay = LeadMapCoverageDotsOverlay(pins: pins)
+
+        #expect(overlay.dots.count == pins.count)
+        #expect(overlay.dots.first?.status == .notInterested)
+        #expect(overlay.dots.suffix(2).map(\.status) == [.interested, .converted])
+    }
+
     @MainActor
     @Test func completeCoverageScanPlanRepresentsEveryLeadWithBoundedAnnotations() throws {
         let persistence = PersistenceController(inMemory: true)

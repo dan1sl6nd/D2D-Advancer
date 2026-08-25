@@ -4508,8 +4508,8 @@ private struct MapToolsSheet: View {
                         MapToolToggleRow(
                             title: "Complete coverage",
                             subtitle: coverageMode == .complete
-                                ? "Every visible lead expands as you move and zoom."
-                                : "Load every matching lead for fast area scanning.",
+                                ? "All leads stay visible as status dots; zoom in for markers and names."
+                                : "Show every matching lead as a fast status-dot layer.",
                             icon: "square.3.layers.3d.down.right.fill",
                             color: Color.electricViolet,
                             isOn: coverageMode == .complete,
