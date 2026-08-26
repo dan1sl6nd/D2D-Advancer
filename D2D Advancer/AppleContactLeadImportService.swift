@@ -305,6 +305,41 @@ enum AppleContactLeadMergePolicy {
     }
 }
 
+enum AppleContactLeadNoteStatusPolicy {
+    static func explicitStatus(in note: String?) -> Lead.Status? {
+        guard let note else { return nil }
+
+        var foundInterested = false
+        for line in note.components(separatedBy: .newlines) {
+            let fields = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+            guard fields.count == 2 else { continue }
+
+            let key = fields[0]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+                .lowercased()
+            guard key == "status" || key == "lead status" else { continue }
+
+            let value = String(fields[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let normalized = Lead.Status.normalizedRawValue(from: value),
+                  let status = Lead.Status(rawValue: normalized) else {
+                continue
+            }
+
+            switch status {
+            case .converted:
+                return .converted
+            case .interested:
+                foundInterested = true
+            case .notContacted, .notHome, .notInterested:
+                continue
+            }
+        }
+
+        return foundInterested ? .interested : nil
+    }
+}
+
 enum AppleContactLeadImportStatusPolicy {
     static func salePrice(for candidate: AppleContactLeadCandidate) -> Double? {
         AppleContactLeadPricePolicy.resolvedPrice(
@@ -314,14 +349,48 @@ enum AppleContactLeadImportStatusPolicy {
     }
 
     static func status(forNew candidate: AppleContactLeadCandidate) -> Lead.Status {
-        salePrice(for: candidate) != nil ? .converted : .interested
+        status(explicitPrice: candidate.price, note: candidate.notes)
+    }
+
+    static func status(explicitPrice: Double?, note: String?) -> Lead.Status {
+        if let explicitStatus = AppleContactLeadNoteStatusPolicy.explicitStatus(in: note) {
+            return explicitStatus
+        }
+        return AppleContactLeadPricePolicy.resolvedPrice(
+            explicitPrice: explicitPrice,
+            note: note
+        ) != nil ? .converted : .interested
     }
 
     static func status(
         forExisting currentStatus: Lead.Status,
         candidate: AppleContactLeadCandidate
     ) -> Lead.Status {
-        if salePrice(for: candidate) != nil {
+        status(
+            forExisting: currentStatus,
+            explicitPrice: candidate.price,
+            note: candidate.notes
+        )
+    }
+
+    static func status(
+        forExisting currentStatus: Lead.Status,
+        explicitPrice: Double?,
+        note: String?
+    ) -> Lead.Status {
+        if let explicitStatus = AppleContactLeadNoteStatusPolicy.explicitStatus(in: note) {
+            switch currentStatus {
+            case .notHome, .notInterested:
+                return currentStatus
+            case .converted, .notContacted, .interested:
+                return explicitStatus
+            }
+        }
+
+        if AppleContactLeadPricePolicy.resolvedPrice(
+            explicitPrice: explicitPrice,
+            note: note
+        ) != nil {
             switch currentStatus {
             case .notHome, .notInterested:
                 return currentStatus
@@ -404,8 +473,11 @@ enum AppleContactLeadCandidateConsolidator {
         _ candidates: [AppleContactLeadCandidate]
     ) -> AppleContactLeadCandidate {
         let preferred = candidates.first {
-            AppleContactLeadImportStatusPolicy.salePrice(for: $0) != nil
+            AppleContactLeadNoteStatusPolicy.explicitStatus(in: $0.notes) == .converted
         }
+            ?? candidates.first {
+                AppleContactLeadImportStatusPolicy.salePrice(for: $0) != nil
+            }
             ?? candidates[0]
         let address = cleaned(preferred.address)
             ?? candidates.lazy.compactMap { cleaned($0.address) }.first
@@ -430,7 +502,9 @@ enum AppleContactLeadCandidateConsolidator {
             address: address,
             service: preferred.service,
             notes: notes,
-            price: AppleContactLeadImportStatusPolicy.salePrice(for: preferred),
+            price: candidates.lazy.compactMap {
+                AppleContactLeadImportStatusPolicy.salePrice(for: $0)
+            }.first,
             coordinate: coordinate,
             didAttemptGeocoding: candidates.contains(where: \.didAttemptGeocoding)
         )
@@ -659,27 +733,32 @@ final class AppleContactLeadImportService {
                 explicitPrice: lead.price > 0 ? lead.price : nil,
                 note: lead.notes
             )
-            guard let resolvedPrice else { continue }
+            let explicitStatus = AppleContactLeadNoteStatusPolicy.explicitStatus(in: lead.notes)
+            guard explicitStatus != nil || resolvedPrice != nil else { continue }
 
             var didChange = false
-            if lead.price <= 0 {
+            if lead.price <= 0, let resolvedPrice {
                 lead.price = resolvedPrice
                 recoveredPriceCount += 1
                 didChange = true
             }
-            if lead.estimatedValue <= 0 {
+            if lead.estimatedValue <= 0, let resolvedPrice {
                 lead.estimatedValue = resolvedPrice
                 didChange = true
             }
 
-            switch lead.leadStatus {
-            case .interested, .notContacted:
-                lead.status = Lead.Status.converted.rawValue
-                lead.followUpDate = nil
+            let repairedStatus = AppleContactLeadImportStatusPolicy.status(
+                forExisting: lead.leadStatus,
+                explicitPrice: resolvedPrice,
+                note: lead.notes
+            )
+            if repairedStatus != lead.leadStatus {
+                lead.status = repairedStatus.rawValue
+                if !repairedStatus.allowsActiveFollowUp {
+                    lead.followUpDate = nil
+                }
                 repairedStatusCount += 1
                 didChange = true
-            case .converted, .notHome, .notInterested:
-                break
             }
 
             if didChange {

@@ -73,7 +73,8 @@ struct D2D_AdvancerTests {
         #expect(StartupMaintenancePolicy.shouldRunLeadCleanup(completedVersion: 0))
         #expect(!StartupMaintenancePolicy.shouldRunLeadCleanup(completedVersion: 1))
         #expect(StartupMaintenancePolicy.shouldRunAppleContactStatusRepair(completedVersion: 0))
-        #expect(!StartupMaintenancePolicy.shouldRunAppleContactStatusRepair(completedVersion: 1))
+        #expect(StartupMaintenancePolicy.shouldRunAppleContactStatusRepair(completedVersion: 1))
+        #expect(!StartupMaintenancePolicy.shouldRunAppleContactStatusRepair(completedVersion: 2))
 
         let now = Date(timeIntervalSince1970: 2_000_000)
         #expect(StartupMaintenancePolicy.shouldRunIntegrityCheck(lastRunAt: nil, now: now))
@@ -510,6 +511,57 @@ struct D2D_AdvancerTests {
         #expect(AppleContactLeadPricePolicy.price(in: "Window cleaning appointment 2026-07-18") == nil)
     }
 
+    @Test func appleContactImportUsesStructuredAppStatusBeforePriceEvidence() {
+        let interestedNote = """
+        D2D Lead - Jul 18, 2026
+        Quote: $249
+        Status: Interested
+        Service: Window Cleaning
+        """
+        let soldNote = """
+        D2D Lead - Jul 18, 2026
+        Status: Sold
+        Service: Gutter Cleaning
+        """
+        let conflictingMergedNote = """
+        Status: Interested
+
+        Imported from Apple Contacts:
+        Status: Sold
+        """
+
+        #expect(AppleContactLeadNoteStatusPolicy.explicitStatus(in: interestedNote) == .interested)
+        #expect(AppleContactLeadNoteStatusPolicy.explicitStatus(in: soldNote) == .converted)
+        #expect(AppleContactLeadNoteStatusPolicy.explicitStatus(in: conflictingMergedNote) == .converted)
+        #expect(AppleContactLeadNoteStatusPolicy.explicitStatus(in: "Customer seems interested.") == nil)
+        #expect(
+            AppleContactLeadImportStatusPolicy.status(
+                explicitPrice: 249,
+                note: interestedNote
+            ) == .interested
+        )
+        #expect(
+            AppleContactLeadImportStatusPolicy.status(
+                explicitPrice: nil,
+                note: soldNote
+            ) == .converted
+        )
+        #expect(
+            AppleContactLeadImportStatusPolicy.status(
+                forExisting: .converted,
+                explicitPrice: 249,
+                note: interestedNote
+            ) == .interested
+        )
+        #expect(
+            AppleContactLeadImportStatusPolicy.status(
+                forExisting: .notInterested,
+                explicitPrice: nil,
+                note: soldNote
+            ) == .notInterested
+        )
+    }
+
     @MainActor
     @Test func macContactPackageImportsNotesPriceAndMapReadyLeadFields() throws {
         let record = MacContactPackageRecord(
@@ -943,6 +995,70 @@ struct D2D_AdvancerTests {
             now: repairDate.addingTimeInterval(60)
         )
         #expect(secondSummary.scannedLeadCount == 4)
+        #expect(secondSummary.changedLeadCount == 0)
+        #expect(secondSummary.repairedStatusCount == 0)
+        #expect(secondSummary.recoveredPriceCount == 0)
+    }
+
+    @MainActor
+    @Test func importedContactStatusRepairUsesStructuredAppStatusBeforeQuotePrice() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let repairDate = Date(timeIntervalSince1970: 3_100_000)
+
+        func makeImportedLead(
+            name: String,
+            status: Lead.Status,
+            price: Double = 0,
+            notes: String
+        ) -> Lead {
+            let lead = Lead.create(in: context)
+            lead.name = name
+            lead.source = "Apple Contacts"
+            lead.status = status.rawValue
+            lead.price = price
+            lead.estimatedValue = price
+            lead.notes = notes
+            return lead
+        }
+
+        let quotedInterestedLead = makeImportedLead(
+            name: "Quoted but Interested",
+            status: .converted,
+            price: 249,
+            notes: "D2D Lead - Jul 18, 2026\nQuote: $249\nStatus: Interested\nService: Window Cleaning"
+        )
+        let soldWithoutPriceLead = makeImportedLead(
+            name: "Sold without Price",
+            status: .interested,
+            notes: "D2D Lead - Jul 18, 2026\nStatus: Sold\nService: Gutter Cleaning"
+        )
+        soldWithoutPriceLead.followUpDate = repairDate.addingTimeInterval(3_600)
+        let manuallyPassedLead = makeImportedLead(
+            name: "Manual Pass",
+            status: .notInterested,
+            notes: "D2D Lead - Jul 18, 2026\nStatus: Sold\nService: Window Cleaning"
+        )
+
+        let summary = try AppleContactLeadImportService.repairImportedLeadStatuses(
+            in: context,
+            now: repairDate
+        )
+
+        #expect(summary.scannedLeadCount == 3)
+        #expect(summary.changedLeadCount == 2)
+        #expect(summary.repairedStatusCount == 2)
+        #expect(summary.recoveredPriceCount == 0)
+        #expect(quotedInterestedLead.leadStatus == .interested)
+        #expect(quotedInterestedLead.price == 249)
+        #expect(soldWithoutPriceLead.leadStatus == .converted)
+        #expect(soldWithoutPriceLead.followUpDate == nil)
+        #expect(manuallyPassedLead.leadStatus == .notInterested)
+
+        let secondSummary = try AppleContactLeadImportService.repairImportedLeadStatuses(
+            in: context,
+            now: repairDate.addingTimeInterval(60)
+        )
         #expect(secondSummary.changedLeadCount == 0)
         #expect(secondSummary.repairedStatusCount == 0)
         #expect(secondSummary.recoveredPriceCount == 0)
