@@ -8,7 +8,7 @@ description: Privacy Policy for the D2D Advancer iOS app
 
 **Effective date:** July 12, 2026
 
-**Last updated:** July 18, 2026
+**Last updated:** September 1, 2026
 
 D2D Advancer ("we," "our," or "us") is a field-sales and service-work management app. This policy explains what information the app handles, why it is used, where it is stored, and the choices available to you.
 
@@ -37,6 +37,8 @@ If you choose these features, the app can attach photos to leads, record voice n
 ### Location information
 
 With permission, the app uses precise location while it is open to center the map, show nearby work, geocode selected map points, and provide navigation.
+
+Apple Look Around is the default street-imagery provider. Google Street View is optional and is not opened automatically. Before connecting, the app explains that continuing will send the selected map coordinates and standard web request information, such as IP address and browser or device details, to Google so it can provide street imagery. Google Street View then opens in the Google Maps app or your browser, outside D2D Advancer. Google may process this information under its own privacy policy and account or activity settings. D2D Advancer does not use this information for cross-app tracking.
 
 For Team members, location is shared with authorized Team users only after the member manually selects **On duty**. Sharing stops when the member selects **Off duty**. Team duty routes and location points are retained for up to 30 days and are then scheduled for deletion. Members can view their own active-hours route; Team owners can view routes for their Team. Other members cannot view one another's routes.
 
@@ -85,7 +87,10 @@ We disclose information only as needed to operate the app, when you direct us to
 
 - **Apple:** iCloud/CloudKit, Sign in with Apple, MapKit and geocoding, StoreKit, app distribution, and operating-system services.
 - **Google Firebase:** Team authentication, Team workspace database services, and server-side Team entitlement verification.
+- **Google Maps / Street View:** Optional street imagery after you confirm the in-app disclosure. Google receives the selected coordinates and standard web request information needed to open the requested view in Google Maps or your browser. See [Google's Privacy Policy](https://policies.google.com/privacy).
 - **Authorized Team users:** Team owners can view Team records and on-duty member location. Workers can view only work assigned to them, their own active-hours route, and the owner's on-duty location where enabled.
+
+Where a service provider processes personal information on our behalf, we require it to protect that information consistently with this policy and applicable law. Platform providers such as Apple and Google may also process information under their own terms and privacy policies when providing their services.
 
 We may disclose information when reasonably necessary to comply with law, protect users, investigate abuse, or protect the rights and security of D2D Advancer.
 
@@ -107,6 +112,8 @@ Within the app, you can view and update account information, edit or delete lead
 Go to **More > Account Management > Delete Account** to delete your Team identity. Email accounts confirm with their password. Sign in with Apple accounts confirm with Apple; the app then revokes the Apple authorization token and deletes the Firebase account and personal Firebase account records.
 
 Deleting a Team identity does not delete the separate personal workspace stored in your private iCloud account. Personal data can be deleted through the app's data-management controls or by removing D2D Advancer data from iCloud settings.
+
+Deleting a Team identity or deleting the app does not cancel an App Store subscription. You can manage or cancel an active subscription separately through your Apple Account's subscription settings before or after deleting the account.
 
 For access, correction, deletion, or portability questions that cannot be completed in the app, contact us using the address below. We may need to verify the request before acting on it.
 
