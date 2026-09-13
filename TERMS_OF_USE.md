@@ -8,7 +8,7 @@ description: Terms of Use (EULA) for D2D Advancer - Door-to-Door Sales Managemen
 ## D2D Advancer
 
 **Effective Date:** July 12, 2026
-**Last Updated:** July 12, 2026
+**Last Updated:** September 1, 2026
 
 ---
 
@@ -129,9 +129,12 @@ The App integrates with third-party services including:
 - **Apple iCloud and CloudKit** (personal data sync and backup)
 - **Firebase** (account authentication and Team Workspace data)
 - **Apple Maps** (mapping and location services)
+- **Google Maps / Street View** (optional street imagery after the user confirms the in-app disclosure)
 - **Apple App Store and StoreKit** (subscription processing)
 
 Your use of these services is subject to their respective terms and privacy policies.
+
+The App includes optional Google Maps features and content. Use of those features and content is subject to the current [Google Maps/Google Earth Additional Terms of Service](https://maps.google.com/help/terms_maps/) and [Google Privacy Policy](https://policies.google.com/privacy).
 
 ## 10. Disclaimers
 
